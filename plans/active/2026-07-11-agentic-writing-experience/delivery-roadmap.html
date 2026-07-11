@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ghostwriter delivery roadmap</title>
+  <link rel="stylesheet" href="../../plan.css">
+  <link rel="stylesheet" href="blueprint.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Outcome-gated delivery</p>
+      <h1>From writing kernel to story platform</h1>
+      <p class="lede">Build the dependable collaborative web writing spine first, connect manuscript and Story Canvas second, add project-aware assistants and guidance third, and earn the right to add industry or marketplace systems.</p>
+      <p class="meta"><strong>Status:</strong> proposed sequence · <strong>Planning rule:</strong> each candidate below becomes its own accepted HTML plan and feature branch only when it is next</p>
+    </header>
+
+    <nav class="artifact-nav" aria-label="Plan artifacts">
+      <a href="plan.html">Delivery plan</a>
+      <a href="experience-blueprint.html">Experience blueprint</a>
+      <a href="technical-blueprint.html">Technical blueprint</a>
+      <a href="agent-contracts.html">Agent contracts</a>
+      <a aria-current="page" href="delivery-roadmap.html">Delivery roadmap</a>
+      <a href="mockups.html">Visual mockups</a>
+      <a href="record-log.html">Record log</a>
+    </nav>
+
+    <section>
+      <h2>Sequencing rules</h2>
+      <ol>
+        <li><strong>One vertical outcome at a time.</strong> Every plan includes domain logic, UI, MCP binding or documented exception, tests, docs, and an observable writer result.</li>
+        <li><strong>Trust before intelligence.</strong> Persistence, recovery, revisions, proposals, and export exist before a real model can suggest a canonical change.</li>
+        <li><strong>Deterministic before probabilistic.</strong> Stable IDs, schemas, search, policy, evidence, and fixtures precede model evaluation.</li>
+        <li><strong>Web is the product, wrappers are conveniences.</strong> Prove the full responsive collaborative flow in the browser; add desktop or native capabilities only where they materially improve it.</li>
+        <li><strong>No phase advances on code completion alone.</strong> Reliability, usability, quality, and ownership gates matter as much as <code>pnpm verify</code>.</li>
+        <li><strong>Backlog is not commitment.</strong> Candidate plans are intentionally not active folders or branches until accepted.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Portfolio at a glance</h2>
+      <div class="phase now">
+        <p class="phase-label">Foundation + Phase 0</p>
+        <h3>Agree on the product and prove the risky edges</h3>
+        <p>Repository foundation is merged. Complete this blueprint, validate workflows with writers, and decide the initial project, storage, editor, and trust boundaries.</p>
+      </div>
+      <div class="phase next">
+        <p class="phase-label">Phase 1</p>
+        <h3>Trusted collaborative writing spine</h3>
+        <p>Authors and editors can share a multi-book project, write in a rich scene editor, comment and suggest, explore variants, recover history, and create named editions through the real-time web product—with AI turned off.</p>
+      </div>
+      <div class="phase next">
+        <p class="phase-label">Phase 2</p>
+        <h3>Project-aware intelligence</h3>
+        <p>Story knowledge, inspectable context, evidence-backed findings, bounded model workflows, proposal review, and useful MCP access become the differentiator.</p>
+      </div>
+      <div class="phase later">
+        <p class="phase-label">Phase 3</p>
+        <h3>Guided creativity and craft</h3>
+        <p>Idea-rich creators receive an optional path through premise, character, world, structure, scenes, and deliberate revision passes without creating a separate novice product.</p>
+      </div>
+      <div class="phase later">
+        <p class="phase-label">Phase 4</p>
+        <h3>Multi-surface hardening</h3>
+        <p>Responsive narrow web, optional desktop/mobile conveniences, remote/local MCP access, performance, backup, accessibility, recovery, and service reliability meet release quality.</p>
+      </div>
+      <div class="phase horizon">
+        <p class="phase-label">Conditional Phase 5 + horizon</p>
+        <h3>Advanced offline/collaboration, industry, and marketplace</h3>
+        <p>Full offline replication, large editorial teams, industry workflows, and marketplace systems enter only through explicit demand and ownership gates.</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>Foundation status</h2>
+      <p>The merged <code>feat/scaffold-foundation</code> branch proves pnpm workspaces, strict TypeScript, a platform-neutral core, a core-backed MCP server, and an Expo web export. It is scaffolding—not yet a production manuscript model, editor, persistence layer, or agent platform.</p>
+      <p class="callout"><strong>Housekeeping complete:</strong> the merged foundation plan and its known MCP smoke-test gap are reconciled under <code>plans/archive</code>.</p>
+    </section>
+
+    <section>
+      <h2>Phase 0 — Validate the blueprint</h2>
+      <div class="plan-grid">
+        <article class="candidate-plan">
+          <span class="sequence">0.1 · docs/product-experience-contract</span>
+          <h3>Accept the product contract</h3>
+          <p>Record the accepted novel/series beachhead, responsive real-time web product, Story Canvas, Git-inspired history, editorial collaboration, human/agent authority, and ADR 0002 server-authoritative v1 topology. Resolve remaining backend, AI, marketplace, and import/export choices.</p>
+          <footer>Exit: founder decisions recorded; plan package archived; next plan selected.</footer>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">0.2 · research/writer-workflow-validation</span>
+          <h3>Test five critical journeys</h3>
+          <p>Run prototype walkthroughs with 12–15 target creators across spark, import, blank, revision, and continuity flows. Include emerging and experienced writers; capture confusion, trust, and time-to-value.</p>
+          <footer>Exit: 8/10 can complete core walkthrough unaided; truth-state comprehension reaches 9/10 or the model is revised.</footer>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">0.3 · spike/platform-risk-edges</span>
+          <h3>Retire platform unknowns</h3>
+          <p>Spike server database/runtime options, identity and author/editor permissions, subscriptions and presence, scene leases, minimal unacknowledged-work recovery, Tiptap revision checks, Story Canvas scale, a 120k-word book plus three-book project, and local versus remote MCP access. Do not add Yjs or a complete offline replica.</p>
+          <footer>Exit: measured results choose or reject adapters; no production abstraction is built around an untested assumption.</footer>
+        </article>
+      </div>
+      <h3>Phase gate</h3>
+      <ul>
+        <li>Founder accepts or revises the product contract.</li>
+        <li>Prototype evidence supports a shared workspace with Guided, Balanced, and Minimal entry paths.</li>
+        <li>Storage/editor/MCP spikes produce an implementable architecture and ADR inputs.</li>
+        <li>Major failures reshape the roadmap before production code expands.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Phase 1 — Trusted collaborative writing spine</h2>
+      <div class="plan-grid">
+        <article class="candidate-plan">
+          <span class="sequence">1.1 · feat/multi-book-domain-kernel</span>
+          <h3>Project, book, manuscript, and scene model</h3>
+          <p>Define multi-book project hierarchy, project-wide story truth, book structures and editions, scene metadata, IDs, command/query boundaries, capability registry, and memory repositories. Record the domain-boundary ADR.</p>
+          <footer>Core: full · UI: fixture navigator · MCP: read fixtures · Tests: invariants and parity skeleton.</footer>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">1.2 · feat/shared-web-projects</span>
+          <h3>Identity, shared persistence, sync, and recovery</h3>
+          <p>Implement ADR 0002: server-authoritative projects, invitations, author/editor roles, live subscriptions, scene leases, minimal browser recovery for unacknowledged work, shared authorization, migrations, reconnect, and account exit.</p>
+          <footer>Exit: acknowledged edits survive crash/reconnect; revoked access takes effect; failed migration restores the prior project.</footer>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">1.3 · feat/scene-editor-workspace</span>
+          <h3>Scene-granular writing studio</h3>
+          <p>Add versioned ProseMirror schema, stable block IDs, Tiptap editing, manuscript tree, scene metadata, focus mode, keyboard navigation, save status, and a narrow editor bridge.</p>
+          <footer>Exit: create, reorder, edit, close, reopen, reconnect, and undo scenes with valid schema round trips and truthful server-acknowledged save state.</footer>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">1.4 · feat/revisions-and-proposals</span>
+          <h3>History, variants, editorial review, and apply</h3>
+          <p>Add immutable checkpoints, prose-aware revision graph, named variants, compare/combine, comments, tracked human suggestions, review requests, provenance, stale detection, transactional apply, restore, and undo—using deterministic fixture proposals only.</p>
+          <footer>Exit: stale changes apply nothing; every human or fixture suggestion is attributed, revision-linked, and reversible.</footer>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">1.5 · feat/import-export-portability</span>
+          <h3>Bring work in and take it out</h3>
+          <p>Add previewed plaintext/Markdown import, native logical archive, deterministic Markdown export, checksums, corruption handling, and export from a consistent snapshot.</p>
+          <footer>Exit: export → delete local copy → import restores an equivalent project; readable files need no Ghostwriter.</footer>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">1.6 · feat/story-canvas-foundation</span>
+          <h3>One spatial story model beside the page</h3>
+          <p>Replace Plan with a zoomable Story Canvas for scenes, notes, characters, imagery, threads, regions, outline, and timeline views. Add write-first/storyboard-first entry, stable pins, split view, the reading-order spine, and provisional ghost objects.</p>
+          <footer>Exit: Canvas and Draft reference the same scenes; no derivation or placement silently changes manuscript order or confirmed story truth.</footer>
+        </article>
+      </div>
+      <h3>Phase gate: a collaborative web product with AI turned off</h3>
+      <ul>
+        <li>An author can create or import a multi-book project, write for a long session, invite an editor, resolve tracked suggestions, compare a variant, create an edition, and export.</li>
+        <li>Crash, reconnect, authorization, conflict, and migration fixtures lose zero acknowledged edits.</li>
+        <li>Representative imports preserve at least 95% of supported headings, paragraphs, emphasis, and scene boundaries.</li>
+        <li>All proposal safety invariants pass with fixture data.</li>
+        <li>Story Canvas and Draft stay linked without duplicated scene truth; large-book and three-book performance budgets pass.</li>
+        <li>Responsive web critical paths are usable with keyboard and screen reader; wrappers remain optional.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Phase 2 — Project-aware intelligence</h2>
+      <div class="plan-grid">
+        <article class="candidate-plan">
+          <span class="sequence">2.1 · feat/story-model</span>
+          <h3>Story bible, facts, timeline, and threads</h3>
+          <p>Add typed entities, relationships, planned/confirmed/inferred/disputed facts, fictional timeline events, narrative threads, evidence links, mentions, and history.</p>
+          <footer>Exit: story views and MCP resources read the same core records; authority states cannot be confused.</footer>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">2.2 · feat/project-search-context</span>
+          <h3>Local search and context receipts</h3>
+          <p>Add revision-aware lexical search, deterministic workflow context assembly, token budgets, source reasons, derived summaries, invalidation, and a writer-visible context receipt.</p>
+          <footer>Exit: same inputs produce the same context; deleting derived indexes loses no project data.</footer>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">2.3 · feat/agent-safety-kernel</span>
+          <h3>Capabilities, consent, audit, and MCP grants</h3>
+          <p>Accept the agent-authority ADR. Implement grants, sensitivity, egress consent, proposal evidence validation, audit events, scoped resources/tools, revocation, idempotency, and parity contracts.</p>
+          <footer>Exit: authorization and adversarial suites have zero safety failures; external clients cannot apply or broaden scope.</footer>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">2.4 · feat/ai-provider-boundary</span>
+          <h3>One provider, fake provider, and bounded runs</h3>
+          <p>Choose the credential/egress posture, implement normalized streaming and structured output, cancellation, limits, content-free diagnostics, and deterministic fake-model fixtures.</p>
+          <footer>Exit: credentials never enter project/log/export; every call discloses its exact context and destination.</footer>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">2.5 · feat/candidate-fact-workflow</span>
+          <h3>First useful agent workflow</h3>
+          <p>Extract candidate characters, facts, and timeline events from selected scenes with evidence, then review them in the shared Inbox. This proves model → proposal → canon without editing prose.</p>
+          <footer>Exit: precision meets the accepted benchmark; no candidate becomes confirmed without writer action.</footer>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">2.6 · feat/continuity-review</span>
+          <h3>Evidence-backed continuity</h3>
+          <p>Run scoped contradiction, chronology, knowledge, naming, and world-rule passes; compare evidence; mark intentional ambiguity; generate optional fix proposals.</p>
+          <footer>Exit: quality gates pass on the synthetic long-form benchmark and every citation resolves.</footer>
+        </article>
+      </div>
+      <h3>Phase gate: intelligence earns trust</h3>
+      <ul>
+        <li>Every provider call shows and enforces its context receipt, network destination, and budgets.</li>
+        <li>Models cannot create canonical revision events under property and adversarial tests.</li>
+        <li>Candidate-fact and continuity quality meets accepted precision/recall gates; unsupported claims are not presented as high-confidence fact.</li>
+        <li>All meaningful shipped capabilities have core use cases and UI/MCP bindings or explicit exceptions.</li>
+        <li>In pilot testing, at least 8/10 writers understand the review flow and prefer it to copy/paste chat for the tested tasks.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Phase 3 — Guided creativity and craft</h2>
+      <div class="plan-grid">
+        <article class="candidate-plan">
+          <span class="sequence">3.1 · feat/spark-to-project</span>
+          <h3>Idea, import, and blank entry paths</h3>
+          <p>Add Creative Compass, assistance modes, preserved original spark, one-question shaping, editable project seeds, skippable setup, and a direct path to Scene 1.</p>
+          <footer>Exit: median idea-to-editable first 300 authored words is under 30 minutes in Guided tests.</footer>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">3.2 · feat/outline-and-board</span>
+          <h3>One scene model, multiple planning views</h3>
+          <p>Add outline, board, grouping, scene briefs, threads, setup/payoff, ghost-card structural proposals, custom templates, direct expert editing, and MCP proposal tools.</p>
+          <footer>Exit: reorder and proposal conflicts preserve one shared scene structure with no duplicated bodies.</footer>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">3.3 · feat/character-world-playbooks</span>
+          <h3>Guided depth without form fatigue</h3>
+          <p>Add optional character interviews, relationship and arc views, world-rule consequence prompts, lore questions, and “not relevant” paths that write into shared story records.</p>
+          <footer>Exit: guidance creates useful artifacts while median upkeep remains below the accepted session budget.</footer>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">3.4 · feat/scene-craft-workflows</span>
+          <h3>Plan, draft, and inspect a scene</h3>
+          <p>Add scene-intent prompts, next-beat options, bounded continuation drafts, scene critique against stated intent, and revision proposals linked to voice references.</p>
+          <footer>Exit: suggestions stay scoped and blind writer usefulness meets the accepted benchmark.</footer>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">3.5 · feat/revision-passes</span>
+          <h3>Revise one concern at a time</h3>
+          <p>Add developmental, character, pacing, voice, clarity, and line passes as assignments with separate evidence and proposal policies. Add edition readiness and named snapshots.</p>
+          <footer>Exit: each pass explains scope and avoids unrelated change; writers can resolve, defer, or mark intentional.</footer>
+        </article>
+      </div>
+      <h3>Phase gate: guidance expands the audience without slowing experts</h3>
+      <ul>
+        <li>Guided users reach an editable scene faster and with higher comprehension than a generic chat baseline.</li>
+        <li>Minimal-mode writers can start blank, hide coaching, and complete core actions keyboard-first.</li>
+        <li>No framework is required or used as an opaque creativity score.</li>
+        <li>9/10 tested users still distinguish planned, confirmed, inferred, and proposed states.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Phase 4 — Web release and convenience-surface hardening</h2>
+      <div class="plan-grid">
+        <article class="candidate-plan">
+          <span class="sequence">4.1 · feat/desktop-local-workspace</span>
+          <h3>Desktop conveniences and MCP</h3>
+          <p>Package the Electron shell with sandboxed renderer, secure credentials, validated IPC, exports, updates, and explicit MCP authorization to the server-authoritative shared project. Do not create a second desktop canonical store.</p>
+          <footer>Exit: desktop and stdio MCP safely use the same authorized shared project, revision rules, and account-exit exports.</footer>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">4.2 · feat/mobile-capture-review</span>
+          <h3>Responsive capture, read, decide</h3>
+          <p>Harden narrow web and optional mobile wrappers for text/voice capture, brief-disconnect recovery, unfiled Inbox, project linking, reading, one-hunk proposal review, and light scene edits.</p>
+          <footer>Exit: acknowledged capture is instant, unacknowledged work recovers after interruption, conflicts are explicit, and lifecycle smoke suites pass.</footer>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">4.3 · feat/reliability-accessibility-performance</span>
+          <h3>Release-quality long projects</h3>
+          <p>Harden backup/restore, diagnostics export, accessibility, import fault handling, large-project indexing, memory, bridge traffic, startup, and recovery across supported surfaces.</p>
+          <footer>Exit: 120k-word benchmark meets agreed budgets; clean-install restore and fault injection pass.</footer>
+        </article>
+      </div>
+      <h3>Phase gate: a dependable v1</h3>
+      <ul>
+        <li>At least 8/10 target users complete create/import → write → proposal → export without help.</li>
+        <li>Pilot activation: proposed target ≥ 50% return within seven days and ≥ 30% remain active in week four.</li>
+        <li>All authored work is exportable without an AI provider; connection requirements and recovery state are explicit, and complete account exit is tested.</li>
+        <li>Accessibility, recovery, privacy, performance, and agent safety release checklists pass on each advertised platform.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Conditional Phase 5 — Advanced offline and collaboration</h2>
+      <p>Basic shared projects and editorial collaboration are already in Phase 1. Do not treat these deeper capabilities as one feature.</p>
+      <ol>
+        <li><strong>Full offline editing:</strong> complete local project replicas, queued collaboration, conflict review, encryption, and recovery.</li>
+        <li><strong>Same-scene co-authoring:</strong> add CRDT editing, multiple cursors, and convergence only if usage justifies replacing the accepted v1 scene lease.</li>
+        <li><strong>Large editorial teams:</strong> granular roles, approvals, locked scopes, workload, and organizational audit.</li>
+        <li><strong>Cross-project story universes:</strong> controlled reuse and synchronization beyond one project boundary.</li>
+      </ol>
+      <h3>Entry gate</h3>
+      <p>A meaningful share of retained authors and editors repeatedly hits a limitation that the Phase 1 shared web workflow cannot serve, and the founder accepts the added security, merge, support, and cost implications in an ADR.</p>
+    </section>
+
+    <section>
+      <h2>Industry and marketplace horizon</h2>
+      <div class="plan-grid">
+        <article class="candidate-plan">
+          <span class="sequence">H.1 · research/rights-and-sharing</span>
+          <h3>Prove willing supply and rights language</h3>
+          <p>Test revision-pinned private submissions, editorial packages, rights metadata, creator consent, withdrawal, provenance expectations, and demand from editors or producers.</p>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">H.2 · feat/industry-interchange</span>
+          <h3>Integrate before centralizing</h3>
+          <p>Add deliberate exports and APIs for editors, publishers, screenwriting tools, audio, or studio workflows before building a multi-tenant marketplace.</p>
+        </article>
+        <article class="candidate-plan">
+          <span class="sequence">H.3 · product/marketplace-foundation</span>
+          <h3>Design a separate cloud product</h3>
+          <p>Only then plan organizations, identity, catalog, moderation, search, rights, licensing, payments, tax, analytics, delivery, abuse, and dispute processes.</p>
+        </article>
+      </div>
+      <h3>Proposed evidence threshold—not a forecast</h3>
+      <ul>
+        <li>Creation product demonstrates durable product-market fit, such as at least 30% week-eight retention among activated target writers.</li>
+        <li>At least 25% of active projects reach a meaningful export or edition snapshot.</li>
+        <li>Creators repeatedly request sharing, submission, licensing, audio, or adaptation workflows without being prompted.</li>
+        <li>Demand-side partners demonstrate a specific workflow and willingness to participate.</li>
+        <li>Rights, provenance, consent, moderation, takedown, payment, privacy, and AI-content policies are legally and operationally viable.</li>
+      </ul>
+      <p class="callout"><strong>Permanent invariant:</strong> marketplace removal or account closure cannot strand a writer’s local project or block export. Published content is an explicit revision-pinned copy, never silent access to the private working project.</p>
+    </section>
+
+    <section>
+      <h2>Cross-phase definition of done</h2>
+      <ul>
+        <li>Accepted HTML plan, current record log, focused branch, and explicit out-of-scope list.</li>
+        <li>Core model and use cases first; UI and MCP bindings use them rather than duplicate logic.</li>
+        <li>Unit, adapter contract, integration, relevant end-to-end, accessibility, privacy, and failure-state tests.</li>
+        <li>Real-time, reconnect, permission-revocation, version-graph, attribution, and multi-collaborator tests for every shared content slice.</li>
+        <li>Provider calls mocked in required CI; model-quality evals versioned and run at release gates.</li>
+        <li>Docs and required ADRs updated in the same branch; open decisions remain visible.</li>
+        <li><code>pnpm verify</code> passes; manual acceptance evidence is recorded.</li>
+        <li>Handoff updated and plan archived only when its user outcome—not merely its code—is complete.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

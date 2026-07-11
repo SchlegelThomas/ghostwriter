@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ghostwriter experience blueprint</title>
+  <link rel="stylesheet" href="../../plan.css">
+  <link rel="stylesheet" href="blueprint.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Product definition</p>
+      <h1>The Ghostwriter experience</h1>
+      <p class="lede">A live creative studio for full novels and multi-book story worlds where authors, editors, rich visual planning, version history, and accountable assistants work together.</p>
+      <p class="meta"><strong>Status:</strong> core product and v1 collaboration topology accepted · <strong>Still open:</strong> concrete backend, launch import/export formats, AI provider posture, and marketplace boundary</p>
+    </header>
+
+    <nav class="artifact-nav" aria-label="Plan artifacts">
+      <a href="plan.html">Delivery plan</a>
+      <a aria-current="page" href="experience-blueprint.html">Experience blueprint</a>
+      <a href="technical-blueprint.html">Technical blueprint</a>
+      <a href="agent-contracts.html">Agent contracts</a>
+      <a href="delivery-roadmap.html">Delivery roadmap</a>
+      <a href="mockups.html">Visual mockups</a>
+      <a href="record-log.html">Record log</a>
+    </nav>
+
+    <section>
+      <h2>Product thesis</h2>
+      <p class="thesis">Ghostwriter is the trusted operating system for a story—not an AI book generator and not a chat window beside a document.</p>
+      <p>The primary product connects the work a novelist otherwise spreads across word processors, notes, wikis, index cards, whiteboards, versioned files, editorial email, and generic AI chats. The manuscript and spatial Story Canvas are linked views of the same books, scenes, characters, world, and arcs. Git-inspired history makes exploration safe without asking a writer to understand Git.</p>
+      <p><strong>Accepted first promise:</strong> “Bring Ghostwriter an idea, a draft, or a whole story world. Develop it visually, write the book, collaborate with editors and assistants, explore alternate versions, and keep every decision understandable across the full series.”</p>
+      <p class="note">The “Spotify for creative stories” analogy is useful for eventual reach and discovery, but not as an early product or ownership model. Authoring, retention, export, rights, moderation, licensing, and audience demand must be proven before a centralized marketplace deserves investment.</p>
+    </section>
+
+    <section>
+      <h2>Who it serves</h2>
+      <div class="persona-grid">
+        <article class="persona">
+          <p class="status recommended">Initial beachhead</p>
+          <h3>The novelist</h3>
+          <p>Is creating a full book with many scenes, threads, revisions, and editorial decisions. Needs deep project memory, visual and prose workflows, safe experimentation, and a dependable path to a finished edition.</p>
+          <p><strong>Hire Ghostwriter to:</strong> hold the whole novel together while preserving direct creative control.</p>
+        </article>
+        <article class="persona">
+          <p class="status recommended">Initial beachhead</p>
+          <h3>The aspiring novelist</h3>
+          <p>Has scenes, characters, worlds, or a premise but not yet a repeatable book-writing process. Needs a useful next step, editable scaffolds, and craft guidance without prompt expertise or creative takeover.</p>
+          <p><strong>Hire Ghostwriter to:</strong> turn a bold idea into a complete novel while learning a process that still feels like theirs.</p>
+        </article>
+        <article class="persona">
+          <p class="status recommended">Designed in from start</p>
+          <h3>The series storyteller</h3>
+          <p>Maintains multiple books, lore, timelines, characters, relationships, rules, and arcs across a growing canon. Needs book-level boundaries and project-wide story truth.</p>
+          <p><strong>Hire Ghostwriter to:</strong> make a bold multi-book world navigable, coherent, and reusable.</p>
+        </article>
+        <article class="persona">
+          <p class="status recommended">Core collaborator</p>
+          <h3>The editor</h3>
+          <p>Needs an invited, attributable way to comment, suggest tracked changes, compare alternatives, request revision, and review a named version without taking over the author’s workspace.</p>
+          <p><strong>Hire Ghostwriter to:</strong> keep editorial collaboration connected to the exact prose, context, and decision history.</p>
+        </article>
+        <article class="persona">
+          <p class="status deferred">Industry horizon</p>
+          <h3>The publisher, room, or studio</h3>
+          <p>Needs revision-pinned submissions, organizational roles, rights and provenance, interchange, adaptation workflows, and operational controls beyond author/editor collaboration.</p>
+          <p><strong>Entry condition:</strong> creators already finish and voluntarily share meaningful work through Ghostwriter.</p>
+        </article>
+      </div>
+      <p><strong>Cross-cutting power user:</strong> an agent-enabled creator uses Cursor, Claude, or another MCP client against a deliberately scoped project. MCP is strategic infrastructure, not the first acquisition message.</p>
+    </section>
+
+    <section>
+      <h2>Project scale and creative hierarchy</h2>
+      <div class="flow" aria-label="Novel and series hierarchy">
+        <span>Story project / universe</span><i>→</i>
+        <span>One or more books</span><i>→</i>
+        <span>Parts and chapters</span><i>→</i>
+        <span>Scenes</span><i>→</i>
+        <span>Passages and blocks</span>
+      </div>
+      <p>Characters, places, world rules, series timeline, research, and cross-book arcs may live at project scope. A book owns its manuscript order, book-specific outline, edition history, and release state. Scenes remain the primary writing and review unit while stable block IDs anchor comments, links, evidence, and tracked suggestions.</p>
+      <h3>Git-inspired, writer-facing history</h3>
+      <ul>
+        <li><strong>Working draft:</strong> live autosaved state shared with authorized collaborators.</li>
+        <li><strong>Checkpoint:</strong> immutable recovery point created automatically or by the writer.</li>
+        <li><strong>Variant:</strong> an alternate scene, passage, chapter, or book direction created without disturbing the current draft.</li>
+        <li><strong>Compare and combine:</strong> inspect differences, accept selected changes, and resolve conflicts through prose-aware review.</li>
+        <li><strong>Review request:</strong> invite an editor to a named scope and revision with comments and tracked suggestions.</li>
+        <li><strong>Edition:</strong> a named, immutable book or series snapshot suitable for export, submission, or publication.</li>
+      </ul>
+      <p class="note">These concepts borrow Git’s safety and traceability, not its interface. Writers should never need to stage files, understand commit hashes, or resolve raw textual merge markers.</p>
+    </section>
+
+    <section>
+      <h2>Jobs to be done</h2>
+      <div class="loop-grid">
+        <article class="loop">
+          <h3>Capture without losing the spark</h3>
+          <p>When an idea arrives in fragments, help me preserve it immediately and decide what to do with it later.</p>
+        </article>
+        <article class="loop">
+          <h3>Find the story inside the idea</h3>
+          <p>When I know what feels exciting but not what holds it together, ask useful questions and show editable possibilities.</p>
+        </article>
+        <article class="loop">
+          <h3>Know what happens next</h3>
+          <p>When I am stuck, reconnect me to character intent, scene purpose, setup, and consequences instead of producing generic filler.</p>
+        </article>
+        <article class="loop">
+          <h3>Hold the whole project</h3>
+          <p>When the manuscript becomes too large for working memory, surface relevant facts, promises, arcs, and prior events with evidence.</p>
+        </article>
+        <article class="loop">
+          <h3>Revise without losing myself</h3>
+          <p>When I need another perspective, offer bounded alternatives that preserve voice, explain tradeoffs, and never overwrite silently.</p>
+        </article>
+        <article class="loop">
+          <h3>Finish and leave freely</h3>
+          <p>When the project is ready, help me make deliberate passes, create a stable snapshot, and export an editable work I still own.</p>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <h2>Experience principles</h2>
+      <ol>
+        <li><strong>Artifact before assistant.</strong> A scene, character, timeline event, finding, or proposal is the durable result. Conversation is attached context, not the container for the work.</li>
+        <li><strong>One story model.</strong> Draft, Story Canvas, outline, timeline, story bible, and review use the same books, scenes, and entities; the product never maintains drifting visual, prose, or AI copies.</li>
+        <li><strong>Guidance is a dial.</strong> Guided, Balanced, and Minimal modes change pacing, explanation, and defaults—not the underlying project or feature access.</li>
+        <li><strong>Craft is a lens, not a law.</strong> Explain why a question may help, allow “not relevant,” support custom structures, and never grade creativity against one formula.</li>
+        <li><strong>Evidence earns trust.</strong> Continuity and craft findings cite the passages and project facts that produced them, state uncertainty, and can be marked intentional.</li>
+        <li><strong>The draft stays quiet.</strong> Writing is the primary action. Agent tools appear at selection, scene, review, and assignment boundaries rather than interrupting every paragraph.</li>
+        <li><strong>Every generated change is provisional.</strong> The writer can compare, edit, accept selectively, reject, undo, and inspect who or what produced it.</li>
+        <li><strong>Collaboration is attributable.</strong> Every comment, suggestion, accepted change, variant, and edition identifies its human or agent origin and the author/editor who approved it.</li>
+        <li><strong>History supports courage.</strong> Checkpoints and variants make bold experimentation cheap while merges remain prose-aware and reviewable.</li>
+        <li><strong>Ownership is observable.</strong> Server acknowledgement, connection/recovery state, network egress, export, provider, and collaborator/agent access are visible in plain language.</li>
+        <li><strong>Resume beats gamification.</strong> Restore context and suggest a useful next move; do not use streaks, guilt, or words-generated metrics as the core reward.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>The project truth model</h2>
+      <p>Writers need to know not only <em>what</em> Ghostwriter knows, but how that knowledge became authoritative. These states must be visually and technically distinct.</p>
+      <div class="truth-model">
+        <article>
+          <h3>Authored</h3>
+          <p>Accepted manuscript text and writer-authored notes. Direct human edits autosave as working state and become restorable revisions.</p>
+        </article>
+        <article>
+          <h3>Planned</h3>
+          <p>Intent that may happen: outline beats, future facts, scene goals, arc hypotheses, and creative constraints.</p>
+        </article>
+        <article>
+          <h3>Confirmed</h3>
+          <p>Writer-approved canon: entities, facts, rules, relationships, and timeline events, preferably linked to evidence.</p>
+        </article>
+        <article>
+          <h3>Inferred</h3>
+          <p>Evidence-backed observations from text. Useful for review, never promoted to canon just because a model is confident.</p>
+        </article>
+        <article>
+          <h3>Proposed</h3>
+          <p>Agent drafts, edits, findings, new facts, and structural changes waiting in the Inbox. They cannot affect canonical work until applied.</p>
+        </article>
+      </div>
+      <p class="callout"><strong>Permanent rule:</strong> automatic synchronization means “detect and prepare a reviewable update,” not “silently rewrite the story bible or manuscript.”</p>
+    </section>
+
+    <section>
+      <h2>Assistance modes</h2>
+      <div class="persona-grid">
+        <article class="persona">
+          <h3>Guided</h3>
+          <p>One useful decision at a time, examples in the writer’s genre, plain-language craft explanations, recommended next steps, and small proposal batches.</p>
+        </article>
+        <article class="persona">
+          <h3>Balanced</h3>
+          <p>Contextual prompts and optional structure with direct access to every artifact. The default for creators who want a collaborator, not a course.</p>
+        </article>
+        <article class="persona">
+          <h3>Minimal</h3>
+          <p>Blank-project entry, compact chrome, keyboard-first navigation, direct metadata editing, custom templates, and agent actions only on request.</p>
+        </article>
+      </div>
+      <p>Mode is set per project and can change at any time. It must never affect export, ownership, model quality, or access to advanced tools.</p>
+    </section>
+
+    <section>
+      <h2>From spark to finished work</h2>
+      <ol class="journey">
+        <li>
+          <h3>Enter from anywhere</h3>
+          <p>Choose <strong>Start with a spark</strong>, <strong>Import pages</strong>, or <strong>Start blank</strong>. Preserve the original input unchanged and create a project immediately; no mandatory setup gauntlet.</p>
+        </li>
+        <li>
+          <h3>Set a creative compass</h3>
+          <p>Capture the format, audience, genre promise, emotional intent, creative boundaries, and desired assistance level. Every field is editable and skippable.</p>
+        </li>
+        <li>
+          <h3>Shape the story engine</h3>
+          <p>Explore protagonist desire, opposition, stakes, change, dramatic question, and world pressure through one question at a time. Agent outputs are editable seed cards.</p>
+        </li>
+        <li>
+          <h3>Build only the structure that helps</h3>
+          <p>Create characters, places, rules, relationships, a timeline, beats, or scene cards. Choose a familiar structural lens, a custom structure, or discovery writing.</p>
+        </li>
+        <li>
+          <h3>Draft in scenes</h3>
+          <p>Write in a focused editor, storyboard on the Canvas, or use both in split view. Scene intent and linked project context stay nearby; agent actions are explicit and scoped to a selection, scene, region, or assignment.</p>
+        </li>
+        <li>
+          <h3>Curate the living story</h3>
+          <p>Ghostwriter detects candidate entities, facts, timeline changes, promises, and contradictions. The writer confirms, edits, rejects, or leaves them inferred.</p>
+        </li>
+        <li>
+          <h3>Review in deliberate passes</h3>
+          <p>Invite editors into a named scope, compare variants, and run continuity, character, structure, pacing, voice, and line-level passes separately. Human and agent suggestions share a transparent review surface.</p>
+        </li>
+        <li>
+          <h3>Finish a stable edition</h3>
+          <p>Resolve or intentionally defer findings, merge the chosen variants, create a named edition, inspect readiness, and preserve the exact book and project revisions used.</p>
+        </li>
+        <li>
+          <h3>Take it anywhere</h3>
+          <p>Export readable Markdown and publishable formats plus a lossless Ghostwriter archive. AI availability or subscription status must never block access to authored work.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>The embedded craft system</h2>
+      <p>“Best practices” should become optional, contextual playbooks rather than a giant questionnaire. Each playbook teaches through a creative decision, writes to shared project artifacts, and produces something the writer can keep.</p>
+      <div class="matrix-wrap">
+        <table>
+          <thead>
+            <tr><th>Craft layer</th><th>Useful questions</th><th>Durable artifacts</th><th>Agent help</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Creative compass</td><td>What experience are we promising? For whom? What must remain true?</td><td>Project brief, intent, boundaries, reference notes</td><td>Clarify ambiguity, propose alternatives, preserve the original spark</td></tr>
+            <tr><td>Story engine</td><td>Who wants what, what opposes them, what changes, and why now?</td><td>Premise, dramatic question, stakes, thematic tensions</td><td>Stress-test cause and effect; reveal missing pressure without prescribing an answer</td></tr>
+            <tr><td>Character</td><td>Want, need, fear, contradiction, agency, relationships, and arc?</td><td>Character profile, relationship edges, planned and confirmed facts</td><td>Interview a character, compare actions to stated motives, flag agency gaps</td></tr>
+            <tr><td>World</td><td>What rules, costs, cultures, places, systems, and history shape choices?</td><td>Entities, world rules, maps/assets, lore, timeline</td><td>Ask consequence questions, find rule violations, surface unsupported lore</td></tr>
+            <tr><td>Structure</td><td>What is set up, turned, paid off, revealed, or deliberately withheld?</td><td>Parts, chapters, scenes, beats, threads, setup/payoff links</td><td>Offer three-act, scene/sequel, genre, or custom lenses as switchable views</td></tr>
+            <tr><td>Scene</td><td>POV, time/place, goal, conflict, turn, outcome, reveal, emotional shift?</td><td>Scene brief, body, status, linked entities and threads</td><td>Plan a gap, diagnose purpose, brainstorm options, draft into the Inbox</td></tr>
+            <tr><td>Revision</td><td>What should this pass optimize without disturbing everything else?</td><td>Findings, assignments, proposals, snapshots, resolved decisions</td><td>Run separate developmental, continuity, character, pacing, voice, and line passes</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">Frameworks are selectable lenses, not hidden scoring rubrics. The system must support nonlinear narratives, unreliable narrators, intentional contradictions, experimental forms, and “none of these” as first-class choices.</p>
+    </section>
+
+    <section>
+      <h2>Core product loops</h2>
+      <div class="loop-grid">
+        <article class="loop">
+          <h3>Draft loop</h3>
+          <p>Orient → write → autosave locally → checkpoint → resume with the relevant scene intent and context.</p>
+        </article>
+        <article class="loop">
+          <h3>Canon loop</h3>
+          <p>Detect candidate fact → show source → confirm, revise, reject, or dispute → update the story model.</p>
+        </article>
+        <article class="loop">
+          <h3>Craft loop</h3>
+          <p>Declare intent → create → inspect against that intent → choose a targeted suggestion → keep the writer’s decision.</p>
+        </article>
+        <article class="loop">
+          <h3>Agent loop</h3>
+          <p>Assign goal and scope → inspect context receipt → generate one or more variants → compare evidence and prose → combine, accept selectively, or send back.</p>
+        </article>
+        <article class="loop">
+          <h3>Version loop</h3>
+          <p>Checkpoint → branch a variant → explore freely → compare → combine or restore → preserve the decision in history.</p>
+        </article>
+        <article class="loop">
+          <h3>Editorial loop</h3>
+          <p>Request review at a named revision → comment and suggest → discuss in context → author resolves → edition records attribution.</p>
+        </article>
+        <article class="loop">
+          <h3>Completion loop</h3>
+          <p>Choose revision pass → resolve or defer findings → snapshot → export → continue into another edition if desired.</p>
+        </article>
+      </div>
+      <p><strong>North-star behavior:</strong> weekly advancing projects—projects that add meaningful authored text or complete an intentional planning, review, or export milestone. Words generated is not a success metric.</p>
+    </section>
+
+    <section>
+      <h2>Information architecture</h2>
+      <div class="ia-map">
+        <strong>Ghostwriter</strong>
+        <div class="ia-row">
+          <div class="ia-node"><strong>Projects</strong><span>Story worlds, books, collaborators, recent work, recovery, import</span></div>
+          <div class="ia-node"><strong>Quick Capture</strong><span>Text, voice, image/reference; file later</span></div>
+          <div class="ia-node"><strong>Search / Command</strong><span>Local exact search, navigation, actions</span></div>
+          <div class="ia-node"><strong>Settings</strong><span>Providers, privacy, agents, export, accessibility</span></div>
+        </div>
+        <div class="ia-row">
+          <div class="ia-node"><strong>Home</strong><span>Continue, next moves, recent captures, attention</span></div>
+          <div class="ia-node"><strong>Draft</strong><span>Manuscript, parts, chapters, scenes</span></div>
+          <div class="ia-node"><strong>Canvas</strong><span>Spatial story model, outline, timeline, imagery, notes, links, threads</span></div>
+          <div class="ia-node"><strong>Story</strong><span>Characters, places, rules, relationships, timeline</span></div>
+          <div class="ia-node"><strong>Review</strong><span>Editors, comments, tracked suggestions, variants, continuity, history</span></div>
+          <div class="ia-node"><strong>Inbox</strong><span>Captures, assignments, drafts, proposals, MCP</span></div>
+          <div class="ia-node"><strong>Export</strong><span>Snapshots, readiness, formats, archive</span></div>
+        </div>
+      </div>
+      <p>The responsive web experience uses a project rail, workspace navigator, central work surface, and optional context inspector at large widths. Narrow widths prioritize Capture, Project, Draft, and Inbox decisions rather than squeezing a four-pane studio onto a phone. Every size opens the same live project.</p>
+    </section>
+
+    <section>
+      <h2>Representative storyboards</h2>
+      <article class="scenario">
+        <h3>1. Spark to first scene</h3>
+        <p>An emerging creator writes one sentence. Ghostwriter preserves it, asks one high-leverage question, prepares editable premise and character seeds, offers an optional three-scene path, and opens Scene 1 with a plain-language intention. The writer can start typing at every step.</p>
+      </article>
+      <article class="scenario">
+        <h3>2. Import and understand</h3>
+        <p>An experienced novelist imports a draft. Ghostwriter previews chapter and scene boundaries, then proposes characters and inferred facts with passages attached. The writer fixes structure, confirms only useful facts, switches to Minimal mode, and continues writing.</p>
+      </article>
+      <article class="scenario">
+        <h3>3. Revise a passage</h3>
+        <p>The writer selects a paragraph and requests “tighten without changing the weary first-person voice.” A context receipt names the selection and voice references. The Inbox shows four hunks; two are accepted, one is edited, and one is rejected before an atomic apply.</p>
+      </article>
+      <article class="scenario">
+        <h3>4. Resolve continuity</h3>
+        <p>A bounded review finds two conflicting travel times. Both passages and the planned timeline appear side by side. The writer marks one statement as a character’s mistaken belief and applies a proposal to clarify the other. That decision remains in history.</p>
+      </article>
+      <article class="scenario">
+        <h3>5. Capture then delegate</h3>
+        <p>The writer records an idea in the narrow web view during a brief connection drop. Minimal browser recovery preserves the unacknowledged note, sync confirms it after reconnect, and an external MCP assistant later proposes two linked scene cards with full provenance.</p>
+      </article>
+      <article class="scenario">
+        <h3>6. Explore three prose versions with an editor</h3>
+        <p>An assistant proposes three revision variants for a difficult scene. The author keeps the current draft untouched, invites an editor to compare the variants at the same base revision, combines one opening with another ending, and records the accepted result with both human decisions and model provenance.</p>
+      </article>
+      <article class="scenario">
+        <h3>7. Carry an arc across books</h3>
+        <p>A series author opens Book Three and inspects a character’s project-wide arc, confirmed facts, and unresolved promises from Books One and Two. A continuity review can cite earlier books while book-specific planned details remain separate from established series canon.</p>
+      </article>
+    </section>
+
+    <section>
+      <h2>Success and validation</h2>
+      <div class="metric-grid">
+        <article class="metric"><strong>&lt; 10 min</strong><span>Median launch-to-editable-manuscript target.</span></article>
+        <article class="metric"><strong>&lt; 30 min</strong><span>Idea to editable premise, starter path, and first 300 authored words in Guided mode.</span></article>
+        <article class="metric"><strong>9 / 10</strong><span>Test participants correctly distinguish authored, confirmed, inferred, and proposed content.</span></article>
+        <article class="metric"><strong>100%</strong><span>Generated manuscript changes are visibly provisional, revision-bound, and reversible.</span></article>
+        <article class="metric"><strong>0 edits lost</strong><span>Acknowledged local edits survive tested crash and restart scenarios.</span></article>
+        <article class="metric"><strong>≥ 95%</strong><span>Supported structure and emphasis preserved across benchmark imports.</span></article>
+        <article class="metric"><strong>100%</strong><span>Human comments, tracked suggestions, agent variants, merges, and editions retain attributable history.</span></article>
+      </div>
+      <h3>Discovery before implementation confidence</h3>
+      <ul>
+        <li>Interview and prototype-test with 12–15 novelists, including at least four aspiring creators who have not finished a book, three series authors, and three editors.</li>
+        <li>Test all three entries—spark, import, and blank—and all three assistance modes against the same artifacts.</li>
+        <li>Measure whether story-knowledge upkeep stays under roughly two minutes per writing session when candidate extraction is available.</li>
+        <li>Validate that writers understand exactly what an agent read and what accepting a proposal will change.</li>
+        <li>Run both a 120,000-word single-book project and a three-book shared-world project through usability, revision, Canvas, and performance spikes.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Founder decisions</h2>
+      <ol>
+        <li><strong>Accepted — beachhead:</strong> novelists and aspiring novelists creating full books and potentially multi-book arcs.</li>
+        <li><strong>Accepted — primary product:</strong> responsive real-time web with a rich manuscript editor, Story Canvas, notes, version history, and editorial collaboration.</li>
+        <li><strong>Accepted — content workflow:</strong> Git-inspired checkpoints, variants, compare/merge, attribution, review, and editions expressed through writer-facing UX.</li>
+        <li><strong>Accepted — agent role:</strong> assistants may brainstorm, draft, edit, and offer multiple versions, always in tandem with authors and authorized editors.</li>
+        <li><strong>Accepted — data authority:</strong> ADR 0002 sets server-authoritative, online-only v1 projects with minimal browser recovery for unacknowledged work and no complete offline replica.</li>
+        <li><strong>Accepted — collaboration depth:</strong> live project updates, presence, comments, tracked suggestions, and version review ship before simultaneous same-scene editing; one collaborator directly edits a scene body at a time.</li>
+        <li><strong>Open — import/export:</strong> web access is the primary portability experience; choose which external formats are required at launch versus later.</li>
+        <li><strong>AI posture:</strong> choose hosted provider, bring-your-own-key, local model, or a deliberate combination per surface.</li>
+        <li><strong>Marketplace boundary:</strong> affirm that public profiles, discovery, licensing, payments, social mechanics, and rights workflows stay outside the creation v1.</li>
+      </ol>
+    </section>
+  </main>
+</body>
+</html>

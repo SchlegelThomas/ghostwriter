@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ghostwriter agent contracts</title>
+  <link rel="stylesheet" href="../../plan.css">
+  <link rel="stylesheet" href="blueprint.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Agent integration, safety, and evaluation</p>
+      <h1>Agent contracts</h1>
+      <p class="lede">Assistants work in tandem with authors and editors: they receive bounded assignments, produce inspectable ideas or prose variants, and help hold entire books and series in view without becoming invisible co-owners.</p>
+      <p class="meta"><strong>Status:</strong> human/agent relationship accepted; detailed security and interaction contracts recommended · <strong>Required before implementation:</strong> agent-authority ADR and threat model</p>
+    </header>
+
+    <nav class="artifact-nav" aria-label="Plan artifacts">
+      <a href="plan.html">Delivery plan</a>
+      <a href="experience-blueprint.html">Experience blueprint</a>
+      <a href="technical-blueprint.html">Technical blueprint</a>
+      <a aria-current="page" href="agent-contracts.html">Agent contracts</a>
+      <a href="delivery-roadmap.html">Delivery roadmap</a>
+      <a href="mockups.html">Visual mockups</a>
+      <a href="record-log.html">Record log</a>
+    </nav>
+
+    <section>
+      <h2>Permanent authority rule</h2>
+      <p class="thesis">A model may read an approved context and submit noncanonical ideas, edits, or multiple variants. It never becomes the actor that applies canonical text or story facts.</p>
+      <p>Canonical change occurs only when an author—or an editor explicitly granted apply authority—reviews an exact revision-bound proposal, approves its content hash, and the deterministic core revalidates permission and preconditions before an atomic apply. The result creates a revision, provenance, audit events, and an undo path.</p>
+      <div class="flow" aria-label="Agent authority flow">
+        <span>Author or editor assigns</span><i>→</i>
+        <span>Policy scopes</span><i>→</i>
+        <span>Agent reads</span><i>→</i>
+        <span>Agent proposes</span><i>→</i>
+        <span>Human compares and reviews</span><i>→</i>
+        <span>Core applies</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>What “agentic” means in Ghostwriter</h2>
+      <ul>
+        <li><strong>Project-aware:</strong> an agent can use permitted scenes, characters, facts, timeline, threads, voice references, and prior decisions without repeated copy/paste.</li>
+        <li><strong>Goal-directed:</strong> assignments name an outcome, scope, constraints, output types, and completion condition—not just a conversational prompt.</li>
+        <li><strong>Tool-using but bounded:</strong> workflows may call narrow read-only project queries under externally enforced limits.</li>
+        <li><strong>Artifact-producing:</strong> agents return findings, questions, memos, candidate facts, scene cards, drafts, or typed diffs that live in the project Inbox.</li>
+        <li><strong>Variant-capable:</strong> an assistant can offer several prose directions against one immutable base so authors and editors can compare or combine them without disturbing the working draft.</li>
+        <li><strong>Accountable:</strong> every result shows its source scope, evidence, origin, provider, workflow version, status, and effect before acceptance.</li>
+        <li><strong>Interruptible:</strong> runs expose queued, running, needs-input, ready, failed, canceled, stale, and conflicted states.</li>
+      </ul>
+      <p><strong>Not in v1:</strong> open-ended autonomous swarms, arbitrary shell/filesystem/network tools, background runs without visible budgets, self-granted permissions, automatic canon updates, or a general agent plugin marketplace.</p>
+    </section>
+
+    <section>
+      <h2>Agent roles are reusable workflow lenses</h2>
+      <div class="role-grid">
+        <article class="role">
+          <p class="tag proposed">Story architect</p>
+          <h3>Shape and stress-test</h3>
+          <p>Premise options, dramatic questions, structural views, missing turns, setup/payoff, and alternate scene paths. Produces plan artifacts, never a secret outline.</p>
+        </article>
+        <article class="role">
+          <p class="tag proposed">Character coach</p>
+          <h3>Protect agency and change</h3>
+          <p>Interviews, desire/pressure analysis, relationship dynamics, contradiction, arc evidence, and options for a stuck choice.</p>
+        </article>
+        <article class="role">
+          <p class="tag proposed">Worldkeeper</p>
+          <h3>Track rules and consequences</h3>
+          <p>Candidate entities and facts, world-rule implications, timeline effects, lore gaps, and conflicting evidence.</p>
+        </article>
+        <article class="role">
+          <p class="tag proposed">Continuity reader</p>
+          <h3>Find possible conflicts</h3>
+          <p>Naming, state, knowledge, chronology, travel, setup/payoff, and rule findings with resolvable passage evidence and uncertainty.</p>
+        </article>
+        <article class="role">
+          <p class="tag proposed">Scene partner</p>
+          <h3>Help with the next move</h3>
+          <p>Questions, beat options, scene briefs, continuation drafts, and critiques bounded to the current scene and creative intent.</p>
+        </article>
+        <article class="role">
+          <p class="tag proposed">Revision editor</p>
+          <h3>Run one deliberate pass</h3>
+          <p>Developmental, character, pacing, voice, clarity, or line suggestions. The pass objective constrains what may change.</p>
+        </article>
+        <article class="role">
+          <p class="tag proposed">Research partner</p>
+          <h3>Separate evidence from invention</h3>
+          <p>Organizes writer-provided research at launch. Open-web research is later and requires separate egress, citation, and SSRF controls.</p>
+        </article>
+      </div>
+      <p>Roles are product language over versioned workflows and capability policy—not distinct autonomous personalities with unrelated memory.</p>
+    </section>
+
+    <section>
+      <h2>Assignment contract</h2>
+      <p>Every run begins with an inspectable assignment. Guided flows may fill sensible defaults, but the same contract remains visible.</p>
+      <div class="matrix-wrap">
+        <table>
+          <thead><tr><th>Field</th><th>Example</th><th>Why it matters</th></tr></thead>
+          <tbody>
+            <tr><td>Goal</td><td>“Check chapters 3–6 for knowledge leaks.”</td><td>Defines done and prevents generic critique.</td></tr>
+            <tr><td>Read scope</td><td>Selected chapters, confirmed timeline, Mara and Ilya</td><td>Bounds disclosure and retrieval.</td></tr>
+            <tr><td>Allowed output</td><td>Findings, one targeted proposal, or three labeled prose variants</td><td>Prevents unexpected artifact types or effects.</td></tr>
+            <tr><td>Creative constraints</td><td>Close third person; do not resolve the mystery</td><td>Preserves intent and voice.</td></tr>
+            <tr><td>Evidence standard</td><td>Two passages or one canon rule plus one passage</td><td>Makes a finding reviewable.</td></tr>
+            <tr><td>Budgets</td><td>8 tool calls, 40k context chars, 90 seconds</td><td>Controls cost, latency, and runaway behavior.</td></tr>
+            <tr><td>Network egress</td><td>Selected provider; no web research</td><td>Separates project read permission from disclosure.</td></tr>
+            <tr><td>Apply authority</td><td>None; submit variants or proposals to Inbox/review</td><td>Keeps model output noncanonical.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>Capability model</h2>
+      <p>Each built-in workflow, local connection, or remote MCP client receives a server-created, project-scoped grant. Client names and self-reported model details are display metadata, not trusted identity. Human author/editor roles and agent grants are related but distinct: an agent never inherits all authority merely because an editor invoked it.</p>
+      <div class="matrix-wrap">
+        <table>
+          <thead><tr><th>Tier</th><th>Capability</th><th>Launch posture</th></tr></thead>
+          <tbody>
+            <tr><td>0</td><td>Discover server version, paired project label, and granted capabilities</td><td>No global project listing</td></tr>
+            <tr><td>1</td><td>Read metadata: structure, titles, entity names, counts, revision IDs</td><td>Grant by project and resource type</td></tr>
+            <tr><td>2</td><td>Read selected manuscript, story, notes, and research content</td><td>Plain-language disclosure that a client can copy what it reads</td></tr>
+            <tr><td>3</td><td>Create noncanonical findings, drafts, candidate facts, and proposals</td><td>Default maximum for external MCP clients</td></tr>
+            <tr><td>4</td><td>Apply an already writer-approved, hash-bound proposal</td><td>First-party core path; not advertised to ordinary external clients</td></tr>
+            <tr><td>5</td><td>Delete, purge history, manage grants, security policy, or external export</td><td>First-party UI only, with separate confirmation; later scope</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Effective permission is the intersection of server policy, author-issued grant, project role, connection profile, tool contract, and requested resource scope. Egress is orthogonal: content-read permission does not grant permission to send that content to an LLM, website, or export destination.</p>
+      <h3>Suggested launch capability IDs</h3>
+      <p><code>project.readMetadata</code>, <code>scene.read</code>, <code>story.read</code>, <code>search.run</code>, <code>context.assemble</code>, <code>proposal.create</code>, <code>finding.create</code>, <code>draft.create</code>, <code>proposal.review</code>, <code>proposal.applyApproved</code>, <code>ai.run</code>, <code>project.import</code>, and <code>project.export</code>.</p>
+    </section>
+
+    <section>
+      <h2>Proposal lifecycle</h2>
+      <div class="flow" aria-label="Proposal states">
+        <span>Submitted</span><i>→</i>
+        <span>Validated / invalid</span><i>→</i>
+        <span>Ready</span><i>→</i>
+        <span>Accepted / rejected / stale</span><i>→</i>
+        <span>Applied / conflicted</span>
+      </div>
+      <ol>
+        <li>Create an immutable context bundle of authorized resource revisions.</li>
+        <li>Accept model or external-client output as untrusted typed data.</li>
+        <li>Validate schema, capability, resource scope, limits, evidence, and base revisions.</li>
+        <li>Stamp server-observed provenance and compute a proposal content hash.</li>
+        <li>Show authors and editors the outcome, impact, one or more labeled variants, before/after diff, evidence, source scope, provenance, and stale state.</li>
+        <li>Bind acceptance to the exact proposal hash; accepted subsets become a new child proposal.</li>
+        <li>Revalidate policy and every expected revision in one transaction.</li>
+        <li>Apply atomically, create immutable before/after checkpoints, emit audit events, and expose undo.</li>
+      </ol>
+      <p>Drafts have their own noncanonical lifecycle. Moving a draft into a scene creates a proposal; “promote draft” is not a direct write shortcut.</p>
+      <h3>Multiple prose variants</h3>
+      <p>A variant set has one assignment, one immutable base, and two or more independently reviewable child proposals. Each variant states its intended tradeoff—for example “quieter,” “more urgent,” or “preserve structure, sharpen voice.” Combining selections creates a new human-composed child proposal with all source variant IDs; it never splices model output directly into the live draft.</p>
+    </section>
+
+    <section>
+      <h2>Human collaboration contract</h2>
+      <div class="matrix-wrap">
+        <table>
+          <thead><tr><th>Role</th><th>Default authority</th><th>Agent relationship</th></tr></thead>
+          <tbody>
+            <tr><td>Project owner / lead author</td><td>Manage books, collaborators, canonical apply, editions, export, and grants</td><td>May assign assistants and approve any in-scope proposal</td></tr>
+            <tr><td>Co-author</td><td>Write in granted books/scenes, create variants, resolve comments, apply within scope</td><td>May assign assistants within the same scope; generated work remains attributed</td></tr>
+            <tr><td>Editor</td><td>Read granted scope, comment, create tracked human suggestions, compare variants, request revision</td><td>May request agent analysis or variants; apply authority is separately granted and never assumed</td></tr>
+            <tr><td>Commenter / reader</td><td>Read named revision and comment only</td><td>No agent content access unless explicitly granted</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Human suggestions and model proposals may share diff infrastructure, but their origin is never visually collapsed. A human editor’s words are attributed to that editor; an agent result records the initiating human, workflow, provider/model, and final human decision.</p>
+    </section>
+
+    <section>
+      <h2>Review anatomy</h2>
+      <ol>
+        <li><strong>Outcome:</strong> what is proposed and why.</li>
+        <li><strong>Impact:</strong> affected scenes, facts, structure, and estimated size.</li>
+        <li><strong>Diff:</strong> additions, removals, moves, metadata, and non-color indicators.</li>
+        <li><strong>Evidence:</strong> anchored, resolvable source passages and story records.</li>
+        <li><strong>Provenance:</strong> writer or client initiator, role, provider/model, workflow version, time, and grant.</li>
+        <li><strong>Context receipt:</strong> exactly what the workflow read and what left the device.</li>
+        <li><strong>Decision:</strong> compare variants, accept selected, combine, edit then apply, keep original, send back, or dismiss.</li>
+        <li><strong>Safety:</strong> base revision, stale/conflict status, and the persistent statement “Your draft has not changed.”</li>
+      </ol>
+      <p>“Accept all” may exist but is visually secondary. Variant comparison preserves the unchanged base beside each option. Applied work remains in history, attributable, and immediately undoable.</p>
+    </section>
+
+    <section>
+      <h2>Evidence and provenance rules</h2>
+      <div class="matrix-wrap">
+        <table>
+          <thead><tr><th>Artifact</th><th>Minimum evidence</th><th>Failure behavior</th></tr></thead>
+          <tbody>
+            <tr><td>Continuity finding</td><td>Two resolvable references, or one confirmed rule plus one conflicting passage</td><td>Fabricated or stale citation invalidates the finding</td></tr>
+            <tr><td>Candidate fact</td><td>Canonical passage evidence, or explicit <em>invented</em> classification</td><td>Remains inferred/proposed; never self-promotes</td></tr>
+            <tr><td>Voice finding</td><td>Representative project passages and observable features</td><td>No opaque voice score</td></tr>
+            <tr><td>Structure finding</td><td>Affected scenes/threads and distinction between observation and recommendation</td><td>Subjective advice cannot masquerade as an error</td></tr>
+            <tr><td>Prose draft</td><td>Full run provenance and context receipt; line-by-line evidence not required</td><td>Always noncanonical Inbox content</td></tr>
+            <tr><td>Web research</td><td>URL, retrieval time, content hash, citation, and untrusted-external label</td><td>Later capability only; no automatic URL retrieval</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Trusted provenance records who initiated, what model generated, and who applied. A model is never recorded as the applying actor.</p>
+    </section>
+
+    <section>
+      <h2>Conceptual MCP surface</h2>
+      <h3>Revision-addressable resources</h3>
+      <ul>
+        <li><code>ghostwriter://project/{projectId}/manifest</code></li>
+        <li><code>ghostwriter://project/{projectId}/manuscript/{manuscriptId}</code></li>
+        <li><code>ghostwriter://project/{projectId}/scene/{sceneId}?revision={revisionId}</code></li>
+        <li><code>ghostwriter://project/{projectId}/entity/{entityId}?revision={revisionId}</code></li>
+        <li><code>ghostwriter://project/{projectId}/timeline?revision={revisionId}</code></li>
+        <li><code>ghostwriter://project/{projectId}/proposal/{proposalId}</code></li>
+        <li><code>ghostwriter://project/{projectId}/capabilities</code></li>
+      </ul>
+      <p>Responses identify authority, sensitivity, revision, and content hash. Filesystem paths and unauthorized names/counts are never exposed.</p>
+      <h3>Task-oriented tools</h3>
+      <div class="matrix-wrap">
+        <table>
+          <thead><tr><th>Tool</th><th>Effect</th><th>Tier</th></tr></thead>
+          <tbody>
+            <tr><td><code>ghostwriter_get_capabilities</code></td><td>Return the active grant and limits</td><td>0</td></tr>
+            <tr><td><code>ghostwriter_search_project</code></td><td>Bounded authorized project search with resource and result limits</td><td>1 / 2</td></tr>
+            <tr><td><code>ghostwriter_assemble_context</code></td><td>Create an inspectable revision-bound context bundle</td><td>2</td></tr>
+            <tr><td><code>ghostwriter_analyze_continuity</code></td><td>Create noncanonical findings with evidence</td><td>2 / 3</td></tr>
+            <tr><td><code>ghostwriter_create_inbox_draft</code></td><td>Create additive noncanonical content</td><td>3</td></tr>
+            <tr><td><code>ghostwriter_propose_scene_revision</code></td><td>Submit typed edits against exact scene/block revisions</td><td>3</td></tr>
+            <tr><td><code>ghostwriter_propose_story_fact</code></td><td>Submit evidence-backed or explicitly invented candidate facts</td><td>3</td></tr>
+            <tr><td><code>ghostwriter_withdraw_proposal</code></td><td>Idempotently withdraw the caller’s pending proposal</td><td>3</td></tr>
+            <tr><td><code>ghostwriter_apply_approved_proposal</code></td><td>Apply only an approval already recorded by trusted writer interaction</td><td>4; restricted</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>No launch tool accepts arbitrary SQL, JSON Patch, shell, filesystem path, URL fetch, permission change, project deletion, or unrestricted export. MCP annotations describe effects accurately, but authorization never trusts annotations alone.</p>
+    </section>
+
+    <section>
+      <h2>UI and MCP parity contract</h2>
+      <p>Maintain a central capability registry used by the responsive web app, collaboration service, platform shells, and MCP:</p>
+      <pre><code>capability ID
+  → core command or query
+  → UI action
+  → MCP resource or tool
+  → required scopes
+  → platform exceptions
+  → audit events</code></pre>
+      <p>CI should fail when a shipped writer-facing domain capability has no MCP binding or documented platform exception. Adapter contract fixtures invoke the same use case through UI-facing and MCP-facing adapters with the same project snapshot and grant, then compare normalized result, authorization decision, domain events, audit events, stable error codes, conflict behavior, and idempotency.</p>
+      <p>Parity is capability equivalence—not permission equivalence. An author may approve, an editor may suggest or compare within scope, and an external client may only submit unless a narrower explicit grant says otherwise.</p>
+    </section>
+
+    <section>
+      <h2>Prompt injection and exfiltration defenses</h2>
+      <h3>Project and imported content</h3>
+      <ul>
+        <li>Every content block has <code>instructionAuthority: none</code>, even if it is canonical prose.</li>
+        <li>Parse imported content into inert text or validated editor JSON; strip scripts, active HTML, event handlers, remote images, and unsafe links.</li>
+        <li>Never automatically fetch a URL mentioned in manuscript, notes, model output, or MCP content.</li>
+        <li>Tag origin and sensitivity; derived summaries inherit all source restrictions.</li>
+        <li>Render imported and agent output with escaping and safe-link handling.</li>
+      </ul>
+      <h3>Runtime enforcement</h3>
+      <ul>
+        <li>Models receive narrow domain tools only—no environment, credentials, filesystem, shell, or unrestricted network.</li>
+        <li>Call, token, time, artifact-size, and egress budgets are enforced outside the model.</li>
+        <li>Every output is schema-validated; unknown operations and out-of-bundle references fail closed.</li>
+        <li>Permission revocation takes effect on the next request and stops an active run at the next enforced boundary.</li>
+        <li>Provider credentials never enter prompts, resources, errors, audit payloads, diagnostics, or exports.</li>
+      </ul>
+      <p>These controls constrain what a client can do through Ghostwriter. They do not compensate for a compromised account, browser session, collaborator device, or backend operator boundary; identity, session security, encryption, service access, backup, and incident response must be addressed by the shared-backend plan.</p>
+    </section>
+
+    <section>
+      <h2>Conflict, replay, and destructive safeguards</h2>
+      <ul>
+        <li>Every operation carries exact base revisions and target hashes. Any mismatch conflicts the proposal and applies nothing.</li>
+        <li>Overlapping pending proposals are identified before review. Launch performs no automatic prose merge.</li>
+        <li>Rebase creates a new proposal with new provenance; it never rewrites the original history.</li>
+        <li>Idempotency keys make repeated submissions and apply requests produce no duplicate effect.</li>
+        <li>Apply creates an automatic pre-apply checkpoint and one-click undo as a new revision.</li>
+        <li>No wildcard targets, hidden cascades, or external MCP deletion tools at launch.</li>
+        <li>Intentional ambiguity, unreliable narration, belief, rumor, dream, and disputed facts must be modeled so continuity checks do not “fix” them into objective canon.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Project audit model</h2>
+      <p>Use an append-only audit stream in the server-authoritative project service without making the entire product event-sourced. Record grant changes, reads and denied reads, context assembly, agent runs, egress, proposal transitions, apply/undo, schema failures, and security violations.</p>
+      <p>Events include project, sequence, actor kind, server-observed profile, action, capability, allow/deny, resource revision references, grant and policy version, correlation/idempotency IDs, proposal/run IDs, before/after revisions, provider/model metadata where relevant, egress destination/classification/byte count, and outcome.</p>
+      <p>Do not record raw manuscript text, credentials, approval secrets, full prompts, or provider responses by default.</p>
+    </section>
+
+    <section>
+      <h2>Verification and long-form evaluation</h2>
+      <h3>Deterministic safety suite</h3>
+      <ul>
+        <li>Authorization matrix for every actor, capability tier, resource class, and operation.</li>
+        <li>Property: no agent command can emit a canonical revision event.</li>
+        <li>Property: apply requires matching writer approval, proposal hash, capability, and every base revision.</li>
+        <li>State-machine, stale revision, overlap, replay, idempotency, atomicity, crash recovery, and cross-project leakage tests.</li>
+        <li>Schema fuzzing, oversized payloads, malformed URIs, Unicode edge cases, archive traversal, unsafe HTML, and malicious links.</li>
+        <li>Audit completeness plus assertions that content and credentials never enter logs.</li>
+        <li>Prompt-injection fixtures must cause zero unauthorized tool calls, writes, reads, or egress.</li>
+      </ul>
+      <h3>Original synthetic story benchmark</h3>
+      <p>Build a copyright-safe 80,000–120,000-word test novel with a gold fact ledger and timeline. Seed contradictions at short and 60,000+ word distances; aliases, object state, ages, locations, travel time, world rules, knowledge leaks, and relationship changes; intentional lies, dreams, flashbacks, rumors, unreliable narrators, and nonlinear structure; multiple POV voices; structural setups/payoffs; and embedded prompt injections, encoded instructions, tool-like JSON, hidden markup, and malicious URLs.</p>
+      <div class="metric-grid">
+        <article class="metric"><strong>100%</strong><span>Safety invariants on every evaluation run.</span></article>
+        <article class="metric"><strong>100%</strong><span>Citations resolve to the exact tested revision.</span></article>
+        <article class="metric"><strong>≥ 90%</strong><span>Precision on objective continuity findings.</span></article>
+        <article class="metric"><strong>≥ 85%</strong><span>Recall on objective continuity findings.</span></article>
+        <article class="metric"><strong>≥ 80%</strong><span>Recall for contradictions separated by 60,000+ words.</span></article>
+        <article class="metric"><strong>≥ 4 / 5</strong><span>Median blind writer usefulness score on at least 20 voice/structure cases.</span></article>
+      </div>
+      <p>PR CI uses deterministic fake model outputs. Provider-dependent evaluations run three times against pinned model and workflow versions before release and whenever either changes; quality uses the median, while safety must pass every run.</p>
+    </section>
+
+    <section>
+      <h2>Launch and later gates</h2>
+      <div class="phase now">
+        <p class="phase-label">Required before first real model</p>
+        <h3>Safety kernel</h3>
+        <p>Capability registry, truth classifications, revisions and hashes, proposal state machine, evidence validation, deterministic policy, transactional apply/undo, audit model, security ADR, and threat model.</p>
+      </div>
+      <div class="phase next">
+        <p class="phase-label">Web agentic launch</p>
+        <h3>Bounded built-in workflows, variant review, and paired MCP</h3>
+        <p>Tiers 0–3, visible context receipts, one provider decision, author/editor review roles, multi-variant comparison, revocation, provenance, parity contracts, adversarial suite, and long-form quality gates. Remote MCP is included only if the shared-project authorization ADR covers it; arbitrary web research remains out.</p>
+      </div>
+      <div class="phase later">
+        <p class="phase-label">Later hardening</p>
+        <h3>Remote access only when a real workflow needs it</h3>
+        <p>OAuth resource-bound tokens, PKCE, exact redirects, TLS, origin validation, DNS-rebinding protection, SSRF-safe research gateway, stronger client identity, encrypted traces/storage, signed updates, and continuous red-team evaluation.</p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

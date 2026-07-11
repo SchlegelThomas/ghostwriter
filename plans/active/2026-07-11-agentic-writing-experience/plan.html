@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design the agentic writing experience</title>
+  <link rel="stylesheet" href="../../plan.css">
+  <link rel="stylesheet" href="blueprint.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter product and architecture plan</p>
+      <h1>Design the agentic writing experience</h1>
+      <p class="lede">Design the complete, collaborative writing environment for ambitious novels and multi-book story worlds, with accountable assistants built into the creative workflow.</p>
+      <p class="meta"><strong>Status:</strong> active — founder direction recorded; architecture refinement in progress<br>
+        <strong>Branch:</strong> <code>docs/agentic-writing-experience</code><br>
+        <strong>Owner:</strong> founder + agent<br>
+        <strong>Decision status:</strong> beachhead, web-first product, Story Canvas, editorial workflow, human/agent authority, and server-authoritative online-only v1 topology accepted; concrete backend, AI, format, and marketplace gates remain</p>
+    </header>
+
+    <nav class="artifact-nav" aria-label="Plan artifacts">
+      <a aria-current="page" href="plan.html">Delivery plan</a>
+      <a href="experience-blueprint.html">Experience blueprint</a>
+      <a href="technical-blueprint.html">Technical blueprint</a>
+      <a href="agent-contracts.html">Agent contracts</a>
+      <a href="delivery-roadmap.html">Delivery roadmap</a>
+      <a href="mockups.html">Visual mockups</a>
+      <a href="record-log.html">Record log</a>
+    </nav>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Define how Ghostwriter supports the complete life of a novel—from spark or imported draft through worldbuilding, full-book drafting, editorial review, revision, and named editions—and scales its connected story knowledge across multi-book arcs. Experienced and aspiring novelists share one artifact model with different levels of optional guidance.</p>
+      <p>The primary product is a real-time web workspace that combines a rich manuscript editor with a spatial Story Canvas, notes, Git-inspired content history, alternate versions, tracked editorial work, and project-aware assistants. Agents may draft ideas, edit passages, and propose multiple prose variants, but always work in tandem with authors and authorized editors.</p>
+      <p>The output of this effort is a decision-ready blueprint and phased plan portfolio—not production implementation. The near-term product is the trusted creation environment. Publisher, studio, rights, discovery, commerce, and marketplace systems remain a long-horizon option that must not distort the authoring core.</p>
+      <div class="principle-strip" aria-label="Vision constraints">
+        <span>Full books and series</span>
+        <span>Canvas and manuscript are one story</span>
+        <span>History without fear</span>
+        <span>Authors and editors decide</span>
+        <span>Agents propose variants</span>
+        <span>One live project everywhere</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>Deliverables</h2>
+      <div class="link-grid">
+        <a class="artifact-card" href="experience-blueprint.html">
+          <strong>Experience blueprint</strong>
+          <span>Users, jobs, craft system, core loops, information architecture, journeys, and success measures.</span>
+        </a>
+        <a class="artifact-card" href="technical-blueprint.html">
+          <strong>Technical blueprint</strong>
+          <span>Multi-book domain, real-time web topology options, revision graph, collaboration, context assembly, AI boundaries, and ADR queue.</span>
+        </a>
+        <a class="artifact-card" href="agent-contracts.html">
+          <strong>Agent contracts</strong>
+          <span>Roles, permissions, proposals, MCP parity, provenance, safety, and long-form evaluation.</span>
+        </a>
+        <a class="artifact-card" href="delivery-roadmap.html">
+          <strong>Delivery roadmap</strong>
+          <span>Outcome-gated phases and candidate implementation plans from the writing kernel through optional industry workflows.</span>
+        </a>
+        <a class="artifact-card" href="mockups.html">
+          <strong>Visual mockups</strong>
+          <span>Plan-scoped snapshot of responsive concepts for onboarding, project home, writing studio, Story Canvas, review, and narrow-web capture.</span>
+        </a>
+        <a class="artifact-card" href="../../designs/Ghostwriter%20Mockups%202.0.html">
+          <strong>Living design source</strong>
+          <span>Ghostwriter Mockups 2.0 evolves across plans and remains the current visual and interaction source for the Story Canvas experience.</span>
+        </a>
+      </div>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ul>
+        <li>An aspiring novelist can follow one documented path from raw idea to an editable first scene without needing to understand writing jargon or prompt engineering.</li>
+        <li>An experienced novelist can import or begin blank, navigate a full book and shared series knowledge directly, use keyboard-first actions, and disable guidance.</li>
+        <li>The domain and information architecture support a project containing multiple ordered books with project-wide characters, world rules, timeline, notes, and cross-book arcs.</li>
+        <li>The Story Canvas and manuscript use the same scenes and story objects, supporting write-first, storyboard-first, split-view, and derivation workflows without duplicate truth.</li>
+        <li>Git-inspired workflows cover autosave, checkpoints, alternate versions, comparison, restoration, attribution, review requests, and named editions without exposing Git mechanics.</li>
+        <li>Authors and editors can collaborate through explicit roles, comments, tracked suggestions, version review, and accountable attribution in the primary web experience.</li>
+        <li>The blueprint names the canonical project artifacts and visibly distinguishes authored text, planned intent, confirmed canon, inferred findings, and pending proposals.</li>
+        <li>Every AI or external-agent mutation, including multiple prose variants, follows an inspectable propose → compare → review → apply → undo path; no model receives silent canonical-write authority.</li>
+        <li>Core UI capabilities have corresponding core use cases and a documented MCP binding or an explicit, justified platform exception.</li>
+        <li>The technical blueprint preserves Tiptap, the platform-neutral core, and MCP parity while making responsive real-time web the primary product and treating wrappers as conveniences.</li>
+        <li>Storage authority, offline behavior, real-time merge, provider, credential, security, and marketplace choices are separated into accepted requirements, recommendations, spikes, and founder decision gates.</li>
+        <li>The roadmap decomposes the vision into small candidate plans with dependencies, scope boundaries, tests, measurable exit gates, and intentionally deferred work.</li>
+        <li>Visual mockups cover the primary wide-web workflow, Story Canvas 2.0 direction, focused narrow-web workflow, and supplied Ghostwriter brand lockup.</li>
+        <li>The plan package links cleanly, uses semantic HTML, remains readable without JavaScript, and does not break <code>pnpm verify</code>.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks</h2>
+      <ol>
+        <li>Synthesize the founder vision, current product principles, committed architecture, and existing scaffold into a product thesis and scope boundary.</li>
+        <li>Define target users, jobs, assistance modes, craft workflows, project truth states, core loops, and the spark-to-export experience.</li>
+        <li>Specify the project information architecture, screen model, cross-surface behavior, trust interactions, and representative storyboards.</li>
+        <li>Propose the domain, server authority, browser recovery, collaboration, revision, editor, context, AI, MCP, privacy, export, and future-offline architecture with explicit decision gates.</li>
+        <li>Define agent roles, capability tiers, proposal lifecycle, provenance, MCP contracts, adversarial safeguards, parity checks, and evaluation fixtures.</li>
+        <li>Break implementation into outcome-gated candidate plans that keep the marketplace, collaboration, and cloud infrastructure out of the writing kernel.</li>
+        <li>Create visual mockups, cross-check every acceptance criterion, run repository verification, update the record log and handoff, and leave founder decisions clearly queued.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li><strong>Journey walkthroughs:</strong> trace “spark to first scene,” “import and organize a draft,” “review an agent edit,” “resolve a continuity issue,” and “capture on mobile, review on desktop.”</li>
+        <li><strong>Trust audit:</strong> every generated artifact has a visible authority state, source scope, provenance, review action, stale-state behavior, and undo path where it can affect canonical work.</li>
+        <li><strong>Parity audit:</strong> roadmap slices identify core, UI, MCP, and platform-adapter work together; exceptions are explicit.</li>
+        <li><strong>Decision audit:</strong> each durable technical recommendation maps to an ADR candidate and identifies when the decision must be made.</li>
+        <li><strong>Responsive review:</strong> inspect mockups at approximately 1440 × 960 and 390 × 844, including connected, reconnecting/recovery, empty, running, ready, stale, conflicted, and failed states.</li>
+        <li><strong>Repository check:</strong> run <code>pnpm verify</code> before handoff and inspect all changed HTML links and document structure.</li>
+        <li><strong>Future validation:</strong> test the proposed journeys with 12–15 target writers before treating product assumptions as validated requirements.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p>This plan produces recommendations only. After founder review, update <code>docs/PRODUCT.md</code> with the approved positioning, users, principles, and v1 boundary, and update <code>docs/ARCHITECTURE.md</code> with accepted package and data-flow decisions.</p>
+      <p>Likely ADRs, each created in the implementation plan that first needs it:</p>
+      <ol>
+        <li>Project truth model and scene-granular document boundaries.</li>
+        <li>Canonical editor format, stable block IDs, revisions, and provenance.</li>
+        <li>Concrete shared backend, minimal browser recovery, backup, account exit, and portable project archive under ADR 0002.</li>
+        <li><a href="../../../docs/adr/0002-server-authoritative-web-collaboration.md">ADR 0002</a> accepts server-authoritative online-only projects and editorial collaboration without same-scene co-editing; agent mutation policy still needs its own ADR.</li>
+        <li>AI provider, credentials, context egress, and web runtime boundary.</li>
+        <li>Backup, identity, sync, and collaboration architecture—only when demanded.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <div class="decision-list">
+        <article>
+          <p class="status recommended">Accepted</p>
+          <h3>Serve novelists and aspiring novelists together</h3>
+          <p>Lead with the complete novel-writing experience for full books and multi-book arcs. Guidance is optional inside one project model rather than a separate “generate my book” product.</p>
+        </article>
+        <article>
+          <p class="status recommended">Accepted</p>
+          <h3>Make the web workspace live and collaborative</h3>
+          <p>The rich editor, Story Canvas, notes, history, comments, tracked suggestions, editors, and assistants operate on one shared project available wherever a browser is convenient.</p>
+        </article>
+        <article>
+          <p class="status recommended">Accepted</p>
+          <h3>Use Git ideas without making writers use Git</h3>
+          <p>Expose checkpoints, variants, compare, restore, attribution, review, and named editions through writer language and a rich visual interface.</p>
+        </article>
+        <article>
+          <p class="status recommended">Accepted</p>
+          <h3>Keep agents in tandem with humans</h3>
+          <p>Assistants can brainstorm, draft, edit, and prepare multiple prose variants. Authors and authorized editors compare, combine, revise, accept, or reject them.</p>
+        </article>
+        <article>
+          <p class="status recommended">Accepted · ADR 0002</p>
+          <h3>Use server-authoritative online-only v1 projects</h3>
+          <p>The browser keeps minimal unacknowledged-work recovery, not a complete offline replica. Project updates, presence, comments, tracked suggestions, and version review are live; only one collaborator directly edits a scene body at a time.</p>
+        </article>
+        <article>
+          <p class="status deferred">Deferred</p>
+          <h3>Marketplace and industry architecture</h3>
+          <p>Do not build discovery, licensing, rights, payments, social, or studio tenancy until creation retention, finished exports, and real sharing demand prove the entry conditions.</p>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked disabled> Planning effort authorized and branch created from current <code>main</code></li>
+        <li><input type="checkbox" checked disabled> Experience blueprint complete</li>
+        <li><input type="checkbox" checked disabled> Technical blueprint and ADR queue complete</li>
+        <li><input type="checkbox" checked disabled> Agent contracts and evaluation strategy complete</li>
+        <li><input type="checkbox" checked disabled> Delivery roadmap and candidate plans complete</li>
+        <li><input type="checkbox" checked disabled> Responsive visual mockups complete</li>
+        <li><input type="checkbox" checked disabled> Verification and record log complete</li>
+        <li><input type="checkbox" checked disabled> Founder direction round one recorded</li>
+        <li><input type="checkbox" checked disabled> Accepted product direction promoted into <code>docs/PRODUCT.md</code></li>
+        <li><input type="checkbox" checked disabled> Web authority and editorial collaboration recorded in ADR 0002</li>
+        <li><input type="checkbox" checked disabled> Living design source documented for future agents</li>
+        <li><input type="checkbox" disabled> Founder reviews and accepts or revises decision gates</li>
+        <li><input type="checkbox" disabled> Remaining architecture direction promoted into docs and ADRs</li>
+        <li><input type="checkbox" disabled> Handoff updated and plan archived after approval</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

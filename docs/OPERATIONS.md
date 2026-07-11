@@ -1,7 +1,9 @@
 # Ghostwriter — Operations
 
 How code gets built, tested, and deployed. Everything is git- and CLI-driven so both humans
-and AI agents can operate it from a terminal. Total running cost: **$0** (details below).
+and AI agents can operate it from a terminal. The current static scaffold costs **$0**; ADR 0002
+requires a future server-authoritative shared-project backend whose provider and cost are not yet
+selected.
 
 ## Hosting decisions (2026-07-11)
 
@@ -9,12 +11,14 @@ and AI agents can operate it from a terminal. Total running cost: **$0** (detail
 |---|---|---|
 | Repo + CI/CD | GitHub + GitHub Actions | Repo already lives here; public repo → Actions free, no minute cap |
 | Web hosting | Cloudflare Pages | Free unlimited bandwidth, per-branch preview URLs, `wrangler` direct-upload deploys from any machine |
+| Shared project backend | Open decision | Required for v1 identity, canonical project state, real-time editorial updates, backup, and account exit |
 | Mobile builds (later) | Expo EAS free tier | ~30 builds/month free; EAS Update for OTA fixes |
 | Desktop distribution (later) | GitHub Releases | electron-builder artifacts attached by Actions, free |
 | MCP server | Runs locally (stdio) | No hosting needed; distribute via `npx` when it stabilizes |
 
-The only foreseeable cost is Apple's $99/yr developer account, and only once iOS
-device/TestFlight builds start. Cloudflare Pages is used in **direct-upload** mode (we build
+Expected future costs are the shared backend selected in the upcoming architecture spike and
+Apple's $99/yr developer account once iOS device/TestFlight builds start. Cloudflare Pages is
+used in **direct-upload** mode (we build
 in Actions or locally and push the artifact with `wrangler`), so Cloudflare's build-minute
 limits never apply.
 

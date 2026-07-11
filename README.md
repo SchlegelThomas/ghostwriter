@@ -4,8 +4,8 @@ An AI tool for creative writers. One TypeScript/Node.js codebase targeting web, 
 (Electron), and mobile — plus an MCP server so external AI agents can collaborate on a
 writer's project directly.
 
-> Status: pre-code. The agentic harness (docs + planning system) is in place; scaffolding
-> the monorepo is the next step.
+> Status: foundation scaffold is runnable. The active plan defines the multi-book,
+> real-time collaborative writing experience and Story Canvas before product implementation.
 
 ## Orientation
 
@@ -17,6 +17,7 @@ writer's project directly.
 | `docs/OPERATIONS.md` | CI/CD, hosting, dev/prod deploy flows |
 | `plans/WHERE-I-LEFT-OFF.html` | Current state and next step |
 | `plans/README.html` | Rich planning system and delivery loop |
+| `plans/designs/Ghostwriter Mockups 2.0.html` | Living Story Canvas and writing-experience design source |
 | `docs/adr/README.md` | How durable architecture decisions are recorded |
 
 ## Working on this repo

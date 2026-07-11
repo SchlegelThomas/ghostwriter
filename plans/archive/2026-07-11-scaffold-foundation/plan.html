@@ -11,7 +11,9 @@
     <header>
       <p class="eyebrow">Ghostwriter delivery plan</p>
       <h1>Scaffold Ghostwriter foundation</h1>
-      <p class="meta"><strong>Status:</strong> active · <strong>Branch:</strong> <code>feat/scaffold-foundation</code></p>
+      <p class="meta"><strong>Status:</strong> done · <strong>Branch:</strong> <code>feat/scaffold-foundation</code><br>
+        <strong>Delivered:</strong> <a href="https://github.com/SchlegelThomas/ghostwriter/pull/2">PR #2</a> ·
+        <a href="https://feat-scaffold-foundation.ghostwriter-di2.pages.dev">branch preview</a></p>
     </header>
 
     <section>
@@ -46,32 +48,34 @@
     <section>
       <h2>Tests and verification</h2>
       <ul>
-        <li>Vitest unit tests for core and MCP tool behavior.</li>
+        <li>Vitest unit tests for core behavior.</li>
         <li><code>pnpm verify</code> and <code>pnpm --filter client exec expo export --platform web</code>.</li>
-        <li>Run <code>./scripts/deploy-dev.sh</code> to validate the branch preview deployment path.</li>
+        <li><code>./scripts/deploy-dev.sh</code> produced the branch preview linked above.</li>
+        <li>GitHub required check <code>checks</code> passed before merge.</li>
+        <li>A dedicated MCP process test named in the proposed plan was not added; the compile-checked status tool was accepted at merge and the gap is recorded in the log.</li>
       </ul>
     </section>
 
     <section>
       <h2>Documentation and ADR impact</h2>
-      <p>Update architecture to record the initial workspace/build-tooling choice and actual package boundaries. Update operations with the verified deployment result. No new ADR is expected unless the scaffold exposes a durable new platform decision.</p>
+      <p>Updated the repository, architecture, operations, planning-harness, and ADR guidance needed for the scaffold. ADR 0001 records the HTML planning workflow. The scaffold introduced no additional durable architecture decision beyond the choices already documented.</p>
     </section>
 
     <section>
       <h2>Risks and decisions</h2>
-      <p>Use pnpm native workspace filtering rather than Turborepo initially; this keeps the first scaffold lean and is revisited when multiple buildable apps create a real orchestration need. The first deployment may reveal a Cloudflare credential or Expo static-export configuration error, which is within scope to diagnose and fix.</p>
+      <p>Used pnpm native workspace filtering rather than Turborepo to keep the first scaffold lean. TypeScript was pinned to stable 5.9.3 because the initially resolved 7.0.2 release was not supported by the installed TypeScript ESLint parser. Cloudflare account and token secrets were corrected outside the repository; no values were recorded.</p>
     </section>
 
     <section>
       <h2>Todos</h2>
       <ul class="checklist">
-        <li><input type="checkbox"> Workspace and quality tooling</li>
-        <li><input type="checkbox"> Core model and tests</li>
-        <li><input type="checkbox"> MCP app and tests</li>
-        <li><input type="checkbox"> Expo client and web export</li>
-        <li><input type="checkbox"> Architecture and operations documentation</li>
-        <li><input type="checkbox"> Local verification and dev deployment</li>
-        <li><input type="checkbox"> Handoff and archive</li>
+        <li><input type="checkbox" checked disabled> Workspace and quality tooling</li>
+        <li><input type="checkbox" checked disabled> Core model and tests</li>
+        <li><input type="checkbox" checked disabled> MCP app</li>
+        <li><input type="checkbox" checked disabled> Expo client and web export</li>
+        <li><input type="checkbox" checked disabled> Architecture and operations documentation</li>
+        <li><input type="checkbox" checked disabled> Local verification and dev deployment</li>
+        <li><input type="checkbox" checked disabled> Merged through PR #2 and archived</li>
       </ul>
     </section>
   </main>
