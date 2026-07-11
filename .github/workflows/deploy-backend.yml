@@ -58,4 +58,5 @@ jobs:
 
       - name: Deploy to Fly.io
         if: env.HAS_SECRETS == 'true'
-        run: flyctl deploy --config apps/backend/fly.toml --remote-only
+        # Build context is the repo root (the Dockerfile copies workspace manifests + core/storage).
+        run: flyctl deploy . --config apps/backend/fly.toml --dockerfile apps/backend/Dockerfile --remote-only
