@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Guard: repo is docs-only until the monorepo is scaffolded.
+      - name: Detect scaffold
+        id: scaffold
+        run: |
+          if [ -f package.json ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No package.json yet — skipping checks (pre-scaffold repo)."
+          fi
+
+      - uses: pnpm/action-setup@v4
+        if: steps.scaffold.outputs.exists == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.scaffold.outputs.exists == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        if: steps.scaffold.outputs.exists == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify (typecheck + lint + test)
+        if: steps.scaffold.outputs.exists == 'true'
+        run: pnpm verify

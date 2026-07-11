@@ -1,0 +1,51 @@
+name: Deploy web (production)
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-web-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Guard: nothing to deploy until the client app is scaffolded.
+      - name: Detect client app
+        id: client
+        run: |
+          if [ -f apps/client/package.json ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No apps/client yet — skipping deploy (pre-scaffold repo)."
+          fi
+
+      - uses: pnpm/action-setup@v4
+        if: steps.client.outputs.exists == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.client.outputs.exists == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        if: steps.client.outputs.exists == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web export
+        if: steps.client.outputs.exists == 'true'
+        run: pnpm --filter client exec expo export --platform web
+
+      - name: Deploy to Cloudflare Pages (production)
+        if: steps.client.outputs.exists == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy apps/client/dist --project-name=ghostwriter --branch=main
