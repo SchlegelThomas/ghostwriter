@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ghostwriter handoff</title>
+  <link rel="stylesheet" href="plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Session handoff</p>
+      <h1>Where we left off</h1>
+      <p><strong>Last updated:</strong> 2026-07-11 · <strong>Expected branch after merge:</strong> <code>main</code></p>
+    </header>
+
+    <section>
+      <h2>Current state</h2>
+      <p>Ghostwriter is pre-code. Its product, architecture, operations, CI/CD, protected-main, and Cloudflare deployment foundations are in place. The project is now replacing Markdown planning artifacts with rich HTML delivery plans and a documentation-first autonomous agent workflow.</p>
+    </section>
+
+    <section>
+      <h2>Latest completed work</h2>
+      <p><a href="archive/2026-07-11-html-planning-harness/plan.html">HTML planning harness</a> establishes semantic HTML plans, required delivery sections, the autonomous work loop, and ADR 0001.</p>
+      <p>No active plan is expected after this branch merges.</p>
+    </section>
+
+    <section>
+      <h2>Product and architecture decisions</h2>
+      <ul>
+        <li>Expo / React Native universal client; Electron wraps the web export.</li>
+        <li>Tiptap (ProseMirror) editor, hosted by Expo DOM components on native.</li>
+        <li>GitHub Actions CI/CD; Cloudflare Pages direct upload; protected <code>main</code>.</li>
+        <li>Platform-neutral core and MCP parity are non-negotiable.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Next product feature</h2>
+      <p>After this harness merges, start <code>feat/scaffold-monorepo</code>: pnpm workspaces, strict TypeScript, a tested <code>packages/core</code>, and a stub <code>apps/mcp</code>. Resolve build orchestration in that plan; no source scaffolding has begun.</p>
+    </section>
+
+    <section>
+      <h2>How to resume</h2>
+      <ol>
+        <li>Read this document, the active plan, and its record log.</li>
+        <li>Summarize done, incomplete, and next; ask whether to resume if the user has not already directed the work.</li>
+        <li>Refresh the plan’s acceptance criteria, tests, and docs/ADR impact before implementation if scope has changed.</li>
+      </ol>
+    </section>
+  </main>
+</body>
+</html>

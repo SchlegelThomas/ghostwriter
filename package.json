@@ -1,0 +1,19 @@
+{
+  "name": "ghostwriter",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.11.0",
+  "scripts": {
+    "verify": "pnpm typecheck && pnpm lint && pnpm test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "eslint": "latest",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "latest",
+    "vitest": "latest"
+  }
+}

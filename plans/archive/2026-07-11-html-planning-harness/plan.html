@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HTML planning harness</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan</p>
+      <h1>HTML planning harness</h1>
+      <p><strong>Status:</strong> done · <strong>Branch:</strong> <code>chore/html-planning-harness</code></p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Replace lightweight Markdown plans with rich HTML delivery plans that make product intent, verification, and documentation obligations explicit before implementation begins.</p>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ul>
+        <li>Every future plan has visible sections for intent, todos, tasks, tests, acceptance criteria, and documentation/ADR impact.</li>
+        <li>Agents begin meaningful sessions by reading the HTML handoff and creating or refreshing a plan before implementation.</li>
+        <li>Agents can work autonomously in bounded implementation-and-verification loops while preserving user checkpoints for material decisions and external side effects.</li>
+        <li>The repository documents when to create or update an ADR and how that decision is linked from the plan.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks</h2>
+      <ol>
+        <li>Define the HTML plan, handoff, record-log, and ADR conventions.</li>
+        <li>Update agent instructions with the documentation-first session and autonomous work loop.</li>
+        <li>Migrate live planning entry points to HTML and preserve existing archives as historical records.</li>
+        <li>Verify internal links and handoff guidance.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests</h2>
+      <ul>
+        <li>Open/parse the generated HTML documents and verify local links resolve.</li>
+        <li>Review the agent instructions against the delivery-plan template.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADRs</h2>
+      <p>Create an ADR index and a decision template. This change itself is an ADR because it changes the project’s development process and agent operating model.</p>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked> Write HTML planning templates and stylesheet</li>
+        <li><input type="checkbox" checked> Update AGENTS.md and planning guidance</li>
+        <li><input type="checkbox" checked> Add ADR process and decision record</li>
+        <li><input type="checkbox" checked> Migrate current handoff and README links</li>
+        <li><input type="checkbox" checked> Verify and prepare PR</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

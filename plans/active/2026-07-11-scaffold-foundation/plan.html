@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scaffold Ghostwriter foundation</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan</p>
+      <h1>Scaffold Ghostwriter foundation</h1>
+      <p class="meta"><strong>Status:</strong> active · <strong>Branch:</strong> <code>feat/scaffold-foundation</code></p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Create a runnable, tested TypeScript monorepo that proves the core architecture end to end: a platform-neutral writing domain, MCP access to that domain, and an Expo universal client that can deploy to Cloudflare Pages. Electron and future package boundaries are represented without pretending to ship desktop or editor functionality yet.</p>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ul>
+        <li><code>pnpm verify</code> typechecks, lints, and runs unit tests across the workspace.</li>
+        <li><code>packages/core</code> has no platform imports and provides tested manuscript creation and chapter addition.</li>
+        <li><code>apps/mcp</code> exposes a real MCP tool backed by the core package over stdio.</li>
+        <li><code>apps/client</code> is an Expo app that exports a web build and presents the shared core’s manuscript state.</li>
+        <li><code>apps/desktop</code> is a documented Electron shell placeholder, clearly separated from the universal client.</li>
+        <li>The existing GitHub production workflow can build the client; a feature-branch dev deployment is attempted through the CLI.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks</h2>
+      <ol>
+        <li>Set up pnpm workspaces, strict TypeScript, ESLint, Vitest, and workspace verification commands.</li>
+        <li>Implement and test the platform-neutral core manuscript model.</li>
+        <li>Add the MCP server with a core-backed capability tool and a smoke test.</li>
+        <li>Add the Expo universal client and web-export configuration.</li>
+        <li>Add explicit placeholders for desktop and future shared packages; update architecture and operations docs.</li>
+        <li>Verify local commands and attempt a branch preview deployment.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li>Vitest unit tests for core and MCP tool behavior.</li>
+        <li><code>pnpm verify</code> and <code>pnpm --filter client exec expo export --platform web</code>.</li>
+        <li>Run <code>./scripts/deploy-dev.sh</code> to validate the branch preview deployment path.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p>Update architecture to record the initial workspace/build-tooling choice and actual package boundaries. Update operations with the verified deployment result. No new ADR is expected unless the scaffold exposes a durable new platform decision.</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <p>Use pnpm native workspace filtering rather than Turborepo initially; this keeps the first scaffold lean and is revisited when multiple buildable apps create a real orchestration need. The first deployment may reveal a Cloudflare credential or Expo static-export configuration error, which is within scope to diagnose and fix.</p>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox"> Workspace and quality tooling</li>
+        <li><input type="checkbox"> Core model and tests</li>
+        <li><input type="checkbox"> MCP app and tests</li>
+        <li><input type="checkbox"> Expo client and web export</li>
+        <li><input type="checkbox"> Architecture and operations documentation</li>
+        <li><input type="checkbox"> Local verification and dev deployment</li>
+        <li><input type="checkbox"> Handoff and archive</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
