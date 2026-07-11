@@ -11,3 +11,9 @@ production deployment run 29153478112. Main is protected with up-to-date require
 `checks`; force-push and deletion are disabled. Administrator bypass remains enabled
 (`enforce_admins: false`) only for this pre-feature bootstrap; enable it once the Cloudflare
 credential smoke test passes.
+
+## 2026-07-11 08:04
+Confirmed `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are securely configured as
+GitHub repository secrets. Main protection now applies to administrators too. The first real
+Expo web export will be the credential and Pages-project smoke test; creating a dummy
+deployment artifact solely to test credentials would add non-product behavior.
