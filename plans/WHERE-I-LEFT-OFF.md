@@ -4,11 +4,12 @@ _Last updated: 2026-07-11_
 
 ## Current state
 
-Repo is pre-code. The agentic harness is set up: `AGENTS.md`, this `plans/` system,
-`docs/PRODUCT.md` (vision), and `docs/ARCHITECTURE.md` (one-codebase strategy for
-web / Electron / mobile / MCP, committed stack, open decisions table).
+Repo is pre-code. The agentic harness, CI/CD, and deployment credentials are ready:
+`AGENTS.md`, this `plans/` system, GitHub Actions, protected `main`, and Cloudflare Pages.
+See `docs/PRODUCT.md`, `docs/ARCHITECTURE.md`, and `docs/OPERATIONS.md`.
 
-No active plans. Setup plan archived at `plans/archive/2026-07-11-agentic-harness/`.
+No active plans after `chore/activate-cicd` merges. Prior work is archived in
+`plans/archive/`.
 
 ## Decisions so far
 
@@ -18,17 +19,15 @@ No active plans. Setup plan archived at `plans/archive/2026-07-11-agentic-harnes
 - 2026-07-11: **Tiptap (ProseMirror)** for the editor engine.
 - 2026-07-11: **GitHub Actions + Cloudflare Pages** for CI/CD and web hosting; feature-branch
   git workflow encoded in `AGENTS.md`; dev deploys via `scripts/deploy-dev.sh`, prod deploys
-  auto on merge to main. See `docs/OPERATIONS.md`.
+  auto on merge to main. CI is a required, up-to-date check on `main`, which is protected
+  for all users. Cloudflare credentials are stored as GitHub secrets. See `docs/OPERATIONS.md`.
 
 ## Next step
 
-1. **One-time ops setup** (user, ~10 min): Cloudflare account, `wrangler login`, create the
-   Pages project, set `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` repo secrets, protect
-   `main`. Exact commands in `docs/OPERATIONS.md`.
-2. Commit the harness to `main` as the bootstrap commit, then all future work on feature
-   branches per `AGENTS.md`.
-3. Scaffold the monorepo (first feature branch): pnpm workspaces, `packages/core` with
+1. Merge `chore/activate-cicd` to archive the completed CI/CD activation plan.
+2. Scaffold the monorepo (first product feature branch): pnpm workspaces, `packages/core` with
    strict TS + Vitest, stub `apps/mcp`, `pnpm verify` script wired so CI goes live.
+3. The first client branch will validate the Cloudflare Pages credentials with a real web export.
 
 ## Open questions for the user
 
