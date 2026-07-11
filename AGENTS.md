@@ -97,6 +97,12 @@ This repo is git- and CLI-driven. Agents are expected to drive git, not avoid it
   the web app and publishes a per-branch preview URL on Cloudflare Pages.
 - Production deploys are automatic: merge to `main` → GitHub Actions builds and deploys.
   Never deploy production manually.
+- The backend (`apps/backend`) deploys to Fly.io on merge to `main` via
+  `.github/workflows/deploy-backend.yml`, which first migrates the Lakebase `production` branch.
+- Every pull request gets its own copy-on-write Lakebase database branch via
+  `.github/workflows/db-branch.yml`; migrations run against it and it is deleted on close.
+- Database migrations are Drizzle-managed and checked in (`pnpm db:generate` / `pnpm db:migrate`);
+  Lakebase branch helpers live in `scripts/lakebase.sh`. See ADR 0004 and `docs/OPERATIONS.md`.
 - CI (`.github/workflows/ci.yml`) runs typecheck/lint/test on every PR and push to `main`.
 
 ## Architecture invariants

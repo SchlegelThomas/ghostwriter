@@ -1,14 +1,157 @@
 import { describe, expect, it } from "vitest";
-import { addChapter, createManuscript } from "./index.js";
+import {
+  BELLWETHER_FIXTURE,
+  BELLWETHER_FIXTURE_NAVIGATOR,
+  bookId,
+  createProject,
+  defineProjectRecords,
+  DomainValidationError,
+  GHOSTWRITER_CAPABILITIES,
+  projectId,
+  PROJECT_NAVIGATOR_CAPABILITY,
+  sceneId,
+  type BookId
+} from "./index.js";
 
-describe("manuscripts", () => {
-  it("adds ordered chapters without mutating the prior manuscript", () => {
-    const draft = createManuscript("manuscript-1", "The Glass Orchard");
-    const revised = addChapter(draft, "chapter-1", "The Arrival");
+function expectValidationCode(operation: () => unknown, code: string): void {
+  try {
+    operation();
+    throw new Error("Expected a domain validation error.");
+  } catch (error) {
+    expect(error).toBeInstanceOf(DomainValidationError);
+    expect((error as DomainValidationError).code).toBe(code);
+  }
+}
 
-    expect(draft.chapters).toEqual([]);
-    expect(revised.chapters).toEqual([
-      { id: "chapter-1", title: "The Arrival", order: 1 }
+describe("multi-book project records", () => {
+  it("projects the canonical book, chapter, and scene order", () => {
+    expect(BELLWETHER_FIXTURE_NAVIGATOR.title).toBe("The Bellwether Cycle");
+    expect(BELLWETHER_FIXTURE_NAVIGATOR.totals).toEqual({
+      books: 2,
+      scenes: 6,
+      storyKnowledge: 4,
+      editions: 1
+    });
+    expect(BELLWETHER_FIXTURE_NAVIGATOR.books.map((book) => book.title)).toEqual([
+      "The Signal at Bellwether",
+      "The Dark Between Tides"
     ]);
+    expect(
+      BELLWETHER_FIXTURE_NAVIGATOR.books[0]?.parts[0]?.chapters[0]?.scenes.map(
+        (scene) => scene.title
+      )
+    ).toEqual(["Arrival at Bellwether", "The dead frequency"]);
+    expect(BELLWETHER_FIXTURE_NAVIGATOR.books[0]?.unassignedScenes[0]?.title).toBe(
+      "The false rescue"
+    );
+  });
+
+  it("freezes records and ordered references", () => {
+    const bookIds = BELLWETHER_FIXTURE.project.bookIds as BookId[];
+
+    expect(Object.isFrozen(BELLWETHER_FIXTURE.project)).toBe(true);
+    expect(Object.isFrozen(BELLWETHER_FIXTURE.project.bookIds)).toBe(true);
+    expect(() => bookIds.push(bookId("book-illegal-mutation"))).toThrow();
+    expect(BELLWETHER_FIXTURE.project.bookIds).toHaveLength(2);
+  });
+
+  it("rejects empty identity and title values", () => {
+    expectValidationCode(() => projectId("   "), "EMPTY_VALUE");
+    expectValidationCode(
+      () =>
+        createProject({
+          id: projectId("project-empty-title"),
+          title: " ",
+          bookIds: [bookId("book-one")],
+          createdAt: "2026-07-11T18:00:00.000Z"
+        }),
+      "EMPTY_VALUE"
+    );
+  });
+
+  it("rejects duplicate IDs across record kinds", () => {
+    const firstBook = BELLWETHER_FIXTURE.books[0];
+    expect(firstBook).toBeDefined();
+
+    expectValidationCode(
+      () =>
+        defineProjectRecords({
+          ...BELLWETHER_FIXTURE,
+          scenes: BELLWETHER_FIXTURE.scenes.map((scene, index) =>
+            index === 0
+              ? {
+                  ...scene,
+                  id: sceneId(firstBook?.id ?? "missing-book")
+                }
+              : scene
+          )
+        }),
+      "DUPLICATE_ID"
+    );
+  });
+
+  it("rejects manuscript references that do not match book scenes", () => {
+    const [firstBook, ...otherBooks] = BELLWETHER_FIXTURE.books;
+    expect(firstBook).toBeDefined();
+
+    expectValidationCode(
+      () =>
+        defineProjectRecords({
+          ...BELLWETHER_FIXTURE,
+          books: [
+            {
+              ...firstBook!,
+              manuscript: {
+                ...firstBook!.manuscript,
+                unassignedSceneIds: [sceneId("scene-not-in-this-project")]
+              }
+            },
+            ...otherBooks
+          ]
+        }),
+      "UNKNOWN_REFERENCE"
+    );
+  });
+
+  it("rejects edition scene references from another book", () => {
+    const edition = BELLWETHER_FIXTURE.editions[0];
+    const otherBookScene = BELLWETHER_FIXTURE.scenes.find(
+      (scene) => scene.bookId === BELLWETHER_FIXTURE.books[1]?.id
+    );
+    expect(edition).toBeDefined();
+    expect(otherBookScene).toBeDefined();
+
+    expectValidationCode(
+      () =>
+        defineProjectRecords({
+          ...BELLWETHER_FIXTURE,
+          editions: [
+            {
+              ...edition!,
+              sceneRevisions: [
+                {
+                  ...edition!.sceneRevisions[0]!,
+                  sceneId: otherBookScene!.id
+                }
+              ]
+            }
+          ]
+        }),
+      "CROSS_BOOK_REFERENCE"
+    );
+  });
+});
+
+describe("capability parity registry", () => {
+  it("binds the project navigator query to UI and MCP", () => {
+    expect(GHOSTWRITER_CAPABILITIES).toContain(PROJECT_NAVIGATOR_CAPABILITY);
+    expect(PROJECT_NAVIGATOR_CAPABILITY).toMatchObject({
+      access: "read",
+      coreUseCase: "getProjectNavigator",
+      bindings: {
+        ui: "ProjectNavigatorScreen",
+        mcp: "ghostwriter_project_navigator"
+      }
+    });
   });
 });

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lakebase backend, migrations, and branch-based CI/CD</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan · Phase 1.2 (backend)</p>
+      <h1>Lakebase backend, migrations, and branch-based CI/CD</h1>
+      <p class="meta"><strong>Status:</strong> active<br>
+        <strong>Branch:</strong> <code>feat/multi-book-domain-kernel</code> (shared with the kernel slice per founder direction)<br>
+        <strong>Owner:</strong> founder + agent</p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Stand up the durable, server-authoritative persistence and delivery pipeline required by ADR 0002: a Databricks Lakebase Postgres database behind the core <code>ProjectRepository</code> port, version-controlled migrations, a thin Node backend service, and CI/CD that gives every pull request an isolated Lakebase database branch. This turns the in-memory domain kernel into a real backend without changing domain ownership rules.</p>
+      <p>Google OAuth accounts and profile creation, subscription/billing, real-time transport, and browser recovery are explicitly out of scope and follow in their own plans once this backend exists. This plan does not change <code>packages/core</code> ownership rules, add offline/CRDT behavior, or introduce a second canonical store.</p>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ul>
+        <li>ADR 0004 records the Lakebase database, Drizzle migrations, Node/Hono runtime, and branch-per-PR CI/CD decisions.</li>
+        <li><code>packages/storage</code> implements the core <code>ProjectRepository</code> port against Postgres with Drizzle, enforcing the ADR 0003 normalized schema and whole-project validation inside write transactions; no provider or SQL types enter <code>packages/core</code>.</li>
+        <li>Version-controlled Drizzle migrations exist under <code>packages/storage/drizzle/</code>, are applied by <code>pnpm db:migrate</code>, and reproduce the schema from empty.</li>
+        <li>Repository and backend tests run against in-process Postgres (PGlite) so <code>pnpm verify</code> passes with no live database or cloud credentials.</li>
+        <li><code>apps/backend</code> serves health and the project navigator read model from Postgres using the same core services as the UI and MCP, and is container-deployable.</li>
+        <li>CI runs migrations and the storage/backend suites on every PR; a separate workflow provisions a Lakebase branch per PR, migrates it, and deletes it on close.</li>
+        <li>A deploy workflow migrates <code>production</code> and deploys the backend on merge to <code>main</code>.</li>
+        <li>Operations and architecture docs describe the database, migration, branch lifecycle, secrets, and deploy flows.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks</h2>
+      <ol>
+        <li>Record the backend/database/CI decisions in ADR 0004 and this plan.</li>
+        <li>Create <code>packages/storage</code>: Drizzle schema for the multi-book model, client factories (node-postgres + PGlite), migrator, seed, and a Postgres <code>ProjectRepository</code> adapter with parity validation.</li>
+        <li>Generate and commit the initial migration; add repository contract tests against PGlite.</li>
+        <li>Create <code>apps/backend</code>: Hono app and server wiring core services to the Postgres adapter, config from environment, health and navigator routes, and hermetic tests.</li>
+        <li>Add Lakebase branch/credential automation (CLI-driven scripts) and root <code>db:*</code> scripts.</li>
+        <li>Add CI database checks, the PR branch lifecycle workflow, and the backend deploy workflow.</li>
+        <li>Update operations, architecture, README, and the handoff; run full verification.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li><strong>Storage unit/contract:</strong> create project + book, read navigator projection, ordering, cross-record rejection, and transaction rollback against PGlite with real migrations applied.</li>
+        <li><strong>Migration integrity:</strong> migrations applied from empty produce a schema the adapter round-trips; drift is caught in CI.</li>
+        <li><strong>Backend:</strong> in-process requests to <code>/health</code> and the navigator route return the same projection the core produces; unknown project yields 404.</li>
+        <li><strong>Pipeline (manual/CI):</strong> a PR provisions and migrates a Lakebase branch and tears it down; merge migrates production and deploys the backend.</li>
+        <li><strong>Repository:</strong> <code>pnpm verify</code> plus targeted storage/backend suites before handoff.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p>Adds <a href="../../../docs/adr/0004-lakebase-backend-and-cicd.md">ADR 0004</a>. Updates <code>docs/OPERATIONS.md</code> (database, migrations, branch lifecycle, secrets, deploy), <code>docs/ARCHITECTURE.md</code> (storage adapter + backend shell), <code>README.md</code>, and <code>plans/WHERE-I-LEFT-OFF.html</code>.</p>
+      <p><strong>Living design source:</strong> not applicable — this slice is backend/infrastructure with no product-facing UI change. The <a href="../../designs/Ghostwriter%20Mockups%202.0.html">living design</a> continues to govern client work.</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li><strong>Founder-accepted:</strong> Databricks Lakebase (managed portal), Node/Hono runtime, Drizzle migrations, branch-per-PR CI/CD, shared branch with the kernel slice, and available Databricks credentials for CI.</li>
+        <li>Lakebase branch/endpoint APIs are Beta; command shapes may change. They are isolated to scripts and workflows so updates stay contained.</li>
+        <li>Live provisioning requires Databricks and deploy-host secrets that only the founder can set. Code and pipelines are built to run hermetically (PGlite) until those secrets are added, then activate.</li>
+        <li>OAuth token TTL (~1h) requires per-connection refresh for long-lived services; handled in the connection layer, not core.</li>
+        <li>Identity, profiles, subscriptions, real-time transport, and browser recovery remain open and are not decided here.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked disabled> Backend/database decisions accepted and recorded in ADR 0004</li>
+        <li><input type="checkbox" checked disabled> Postgres storage adapter, schema, and migrations complete</li>
+        <li><input type="checkbox" checked disabled> Backend service and hermetic tests complete</li>
+        <li><input type="checkbox" checked disabled> Lakebase branch automation and root db scripts complete</li>
+        <li><input type="checkbox" checked disabled> CI database checks, PR branch lifecycle, and deploy workflows complete</li>
+        <li><input type="checkbox" checked disabled> Operations, architecture, and handoff docs updated</li>
+        <li><input type="checkbox" checked disabled> Full verification complete</li>
+        <li><input type="checkbox" checked disabled> Live secrets wired, Lakebase provisioned, and backend deployed to Fly (health + DB verified)</li>
+        <li><input type="checkbox" disabled> PR database-branch pipeline validated on the first real pull request</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

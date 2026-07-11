@@ -1,0 +1,42 @@
+# Fly.io deployment for the Ghostwriter backend.
+# Deploy from the repo root: `fly deploy --config apps/backend/fly.toml`.
+# The backend authenticates to Lakebase with the service principal (OAuth M2M) and refreshes the
+# database token itself, so only the client secret is a Fly secret:
+#   fly secrets set --app ghostwriter-backend DATABRICKS_CLIENT_SECRET=<secret>
+app = "ghostwriter-backend"
+primary_region = "iad"
+
+# Deploy from the repo root so the Docker build context includes the workspace manifests and the
+# core/storage packages the backend depends on:
+#   fly deploy . --config apps/backend/fly.toml --dockerfile apps/backend/Dockerfile --remote-only
+
+[env]
+  PORT = "8787"
+  DATABRICKS_HOST = "https://dbc-9e9ab246-db45.cloud.databricks.com"
+  DATABRICKS_CLIENT_ID = "a4622cb7-c206-4ace-a085-2b9ecdf98b37"
+  LAKEBASE_PROJECT_ID = "ghostwriter"
+  LAKEBASE_BRANCH = "production"
+  LAKEBASE_ENDPOINT_ID = "primary"
+  LAKEBASE_DB = "databricks_postgres"
+  LAKEBASE_USER = "a4622cb7-c206-4ace-a085-2b9ecdf98b37"
+  # Direct read-write endpoint host. NOTE: use the direct host, not the "-pooler" host — the
+  # connection pooler rejects Lakebase OAuth-token SASL auth (Postgres error 08P01).
+  LAKEBASE_HOST = "ep-dawn-forest-d8ffu38j.database.us-east-2.cloud.databricks.com"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "20s"

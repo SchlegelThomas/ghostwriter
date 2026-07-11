@@ -8,6 +8,7 @@
     "sourceMap": true,
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
-    "noUncheckedIndexedAccess": true
+    "noUncheckedIndexedAccess": true,
+    "allowArbitraryExtensions": true
   }
 }

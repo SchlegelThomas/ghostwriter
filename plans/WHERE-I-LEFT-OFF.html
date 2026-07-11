@@ -11,12 +11,12 @@
     <header>
       <p class="eyebrow">Session handoff</p>
       <h1>Where we left off</h1>
-      <p><strong>Last updated:</strong> 2026-07-11 · <strong>Current branch:</strong> <code>docs/agentic-writing-experience</code></p>
+      <p><strong>Last updated:</strong> 2026-07-11 · <strong>Current branch:</strong> <code>feat/multi-book-domain-kernel</code></p>
     </header>
 
     <section>
       <h2>Current state</h2>
-      <p>Ghostwriter has a merged, runnable TypeScript workspace and an active product/architecture blueprint. The founder has now accepted the novel-and-series beachhead, real-time web product, Story Canvas, Git-inspired content workflow, first-class editor collaboration, and assistant-in-tandem authority model. No production behavior has changed on this branch.</p>
+      <p>Ghostwriter has a merged product/architecture blueprint and its first production domain slice is active. The new kernel models normalized multi-book projects, ordered manuscript structure, scenes, project-wide story knowledge, and edition references. A responsive read-only fixture navigator and MCP tool consume the same core query. The client now uses the living Ghostwriter Mockups 2.0 brand/theme, supplied logo, typography, and shell; no persistence, editor, collaboration, Canvas, or AI behavior is claimed yet.</p>
     </section>
 
     <section>
@@ -24,6 +24,7 @@
       <ul>
         <li><a href="archive/2026-07-11-html-planning-harness/plan.html">HTML planning harness</a> established semantic delivery plans, the autonomous work loop, and ADR 0001.</li>
         <li><a href="archive/2026-07-11-scaffold-foundation/plan.html">Scaffold foundation</a> established pnpm workspaces, strict TypeScript, core, MCP, Expo web, Electron placeholder, verification, and preview deployment through merged PR #2.</li>
+        <li>PR #3 merged the accepted agentic writing blueprint, Story Canvas 2.0 direction, server-authoritative ADR 0002, and living design source into <code>main</code>.</li>
       </ul>
     </section>
 
@@ -38,21 +39,34 @@
         <li>Authors and editors use attributable comments, suggestions, variants, compare/combine, restore, and named editions.</li>
         <li>Agents propose ideas, edits, and multiple prose versions; humans decide what becomes canonical.</li>
         <li>ADR 0002 sets online-only, server-authoritative v1 projects with minimal unacknowledged-work recovery and one direct scene editor at a time; full offline and same-scene multi-cursor editing are deferred.</li>
+        <li>ADR 0003 sets normalized project, book, scene, story-knowledge, and edition boundaries; manuscript and Canvas views reference the same stable scene records.</li>
+        <li>ADR 0004 selects Databricks Lakebase Postgres, Drizzle migrations, a Node/Hono backend, and a database branch per pull request as the server-authoritative store.</li>
         <li>Writer ownership through complete history, export, account exit, platform-neutral core, and MCP parity remains non-negotiable.</li>
       </ul>
     </section>
 
     <section>
-      <h2>Active plan</h2>
-      <p><a href="active/2026-07-11-agentic-writing-experience/plan.html">Design the agentic writing experience</a> now contains:</p>
+      <h2>Active implementation plan</h2>
+      <p><a href="active/2026-07-11-multi-book-domain-kernel/plan.html">Build the multi-book domain kernel</a> is Phase 1.1 from the accepted roadmap.</p>
       <ul>
-        <li><a href="active/2026-07-11-agentic-writing-experience/experience-blueprint.html">Experience blueprint</a> — users, jobs, craft system, truth states, journeys, information architecture, and success measures.</li>
-        <li><a href="active/2026-07-11-agentic-writing-experience/technical-blueprint.html">Technical blueprint</a> — multi-book model, server authority, browser recovery, scene leases, revisions, context, AI boundary, MCP topology, and ADR queue.</li>
-        <li><a href="active/2026-07-11-agentic-writing-experience/agent-contracts.html">Agent contracts</a> — roles, grants, proposals, provenance, safety, parity, and long-form evaluations.</li>
-        <li><a href="active/2026-07-11-agentic-writing-experience/delivery-roadmap.html">Delivery roadmap</a> — outcome-gated candidate plans from the writing kernel through optional industry workflows.</li>
-        <li><a href="active/2026-07-11-agentic-writing-experience/mockups.html">Visual mockups</a> — founder brand direction, Story Canvas 2.0, collaborative prose variants, and responsive desktop/narrow-web concepts.</li>
+        <li><strong>Done:</strong> ADR 0003, immutable domain records and invariants, service ports, transactional memory repository, two-book fixture, MCP structured read parity, supplied logo, living-design theme/fonts, and aligned responsive shell.</li>
+        <li><strong>Verified:</strong> <code>pnpm verify</code>, 13 tests including a real MCP process smoke test, Expo web export with only selected font assets plus the logo, and local HTTP 200.</li>
+        <li><strong>Incomplete:</strong> founder wide/narrow visual review, branch acceptance, and plan archive. The working tree is intentionally uncommitted pending user direction.</li>
+        <li><strong>Next:</strong> inspect the refreshed navigator at <code>http://localhost:8081</code>, make any final product-direction corrections, then accept and archive this slice without selecting a backend.</li>
       </ul>
-      <p><strong>Living design source:</strong> <a href="designs/Ghostwriter%20Mockups%202.0.html">Ghostwriter Mockups 2.0</a> persists outside this plan and should be read before future product, UX, editor, Canvas, imagery, linking, or workflow work.</p>
+      <p><strong>Source blueprint:</strong> <a href="active/2026-07-11-agentic-writing-experience/plan.html">agentic writing experience</a> retains the experience, technical, agent, roadmap, and visual artifacts plus still-open platform decisions. <strong>Living design source:</strong> <a href="designs/Ghostwriter%20Mockups%202.0.html">Ghostwriter Mockups 2.0</a>.</p>
+    </section>
+
+    <section>
+      <h2>Active backend plan</h2>
+      <p><a href="active/2026-07-11-backend-lakebase-cicd/plan.html">Lakebase backend, migrations, and branch-based CI/CD</a> shares this branch per founder direction.</p>
+      <ul>
+        <li><strong>Done:</strong> ADR 0004, <code>packages/storage</code> Drizzle schema + checked-in migration + Postgres <code>ProjectRepository</code> adapter, <code>apps/backend</code> Hono service, PGlite-backed storage/backend tests, <code>scripts/lakebase.sh</code>, and the PR-branch + backend-deploy workflows.</li>
+        <li><strong>Verified:</strong> <code>pnpm verify</code> (20 tests) runs the DB and backend suites hermetically against in-process PGlite — no cloud needed.</li>
+        <li><strong>Done (live):</strong> Lakebase project <code>projects/ghostwriter</code> provisioned and migrated; CI service principal + role + grants created; GitHub secrets/variables set; and the backend is deployed at <code>https://ghostwriter-backend.fly.dev</code> (health ok, DB-backed route verified via service-principal OAuth M2M).</li>
+        <li><strong>Incomplete (founder):</strong> on the first real PR, confirm <code>db-branch.yml</code> can create a Lakebase branch (grant the SP project-manage access if it errors); optionally seed data. Concrete values and gotchas (direct host, not pooler) are in <code>docs/OPERATIONS.md</code>.</li>
+        <li><strong>Next architecture:</strong> Google OAuth accounts/profiles, then subscription management, each as its own plan/ADR on top of this backend.</li>
+      </ul>
     </section>
 
     <section>
@@ -68,16 +82,16 @@
 
     <section>
       <h2>Recommended next step</h2>
-      <p>Run the Phase 0 backend/recovery/lease architecture spike under ADR 0002, then choose concrete services and finish formats, AI posture, and marketplace boundary. Archive this blueprint only after those remaining decisions are recorded, then start the first multi-book domain plan.</p>
+      <p>Finish and review the multi-book kernel branch. Before Phase 1.2 shared web projects, run the Phase 0 backend/recovery/lease architecture spike under ADR 0002 so identity, canonical storage, subscriptions, scene leases, recovery expiry, backup, deletion, and account exit are measured rather than guessed.</p>
     </section>
 
     <section>
       <h2>How to resume</h2>
       <ol>
         <li>Read this document, the active plan, and its record log.</li>
-        <li>Open the linked mockups and decision sections; summarize done, incomplete, and next if the user has not directed the work.</li>
-        <li>Treat ADR 0002 and the recorded product requirements as accepted; keep concrete backend, formats, AI, and marketplace items open.</li>
-        <li>After decisions, update the plan, record log, product/architecture docs, handoff, and archive together.</li>
+        <li>Resume <code>feat/multi-book-domain-kernel</code> only if directed; otherwise summarize done, incomplete, and next.</li>
+        <li>Treat ADRs 0002 and 0003 and the recorded product requirements as accepted; keep concrete backend, formats, AI, and marketplace items open.</li>
+        <li>After verification and acceptance evidence, update the record log and archive the implementation plan; do not archive the living design source.</li>
       </ol>
     </section>
   </main>

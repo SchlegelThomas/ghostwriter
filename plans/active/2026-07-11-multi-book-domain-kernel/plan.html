@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Build the multi-book domain kernel</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan · Phase 1.1</p>
+      <h1>Build the multi-book domain kernel</h1>
+      <p class="meta"><strong>Status:</strong> active<br>
+        <strong>Branch:</strong> <code>feat/multi-book-domain-kernel</code><br>
+        <strong>Owner:</strong> founder + agent</p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Replace the scaffold manuscript example with the first trustworthy Ghostwriter product slice: a platform-neutral model for projects containing one or more ordered books, manuscript structure, scenes, and project-wide story knowledge. Expose the same read model through a responsive fixture navigator and MCP so later persistence, editing, collaboration, and Story Canvas plans build on one domain boundary.</p>
+      <p>The fixture navigator must use <a href="../../designs/Ghostwriter%20Mockups%202.0.html">Ghostwriter Mockups 2.0</a> as its visual and interaction source, including the supplied <code>packages/ui/src/Ghostwriter.png</code> lockup and the living design's typography, color, rail, topbar, and inspector language. This slice uses deterministic in-memory fixtures. Shared persistence, identity, networking, browser recovery, Tiptap scene bodies, revisions, collaboration, Story Canvas editing, import/export, and AI are explicitly out of scope and remain governed by the accepted roadmap and ADR 0002.</p>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ul>
+        <li>The core represents a story project with one or more ordered books, book-owned manuscript structures, ordered chapters, scene metadata, editions, and project-wide story knowledge references without duplicating scene truth.</li>
+        <li>Creation and update functions reject empty identity or title fields, duplicate IDs, cross-project or cross-book references, and manuscript structures that reference unknown scenes.</li>
+        <li>Core transitions are immutable and platform-neutral; no React, DOM, Expo, Node, MCP, persistence-provider, or transport types enter <code>packages/core</code>.</li>
+        <li>Plain command/query services depend on explicit repository, ID, and clock ports, and a memory repository proves the contracts without choosing the shared backend.</li>
+        <li>A capability registry identifies the shipped project-read capability and its core, UI, and MCP bindings.</li>
+        <li>The responsive client shows a clearly labeled fixture project with multiple books and a navigable manuscript/scene hierarchy derived from core queries.</li>
+        <li>The wide-web client chrome follows the living 2.0 design source: supplied logo lockup, Parisienne/Jost/Cormorant brand typography, 52px topbar, 58px project rail including Inbox, contextual navigator, warm writing surface, and 276px scene-context inspector.</li>
+        <li>Fixture-only content remains honest and visually secondary: no metric dashboard, save-state, collaboration, Canvas, editor, or MCP implementation claim appears as shipped product behavior.</li>
+        <li>The MCP server exposes the same fixture project summary and hierarchy through a read-only tool or resource backed by the same core query.</li>
+        <li>Core tests cover invariants, immutability, ordering, memory repository behavior, and UI/MCP parity metadata; <code>pnpm verify</code> passes.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks</h2>
+      <ol>
+        <li>Record the project, book, manuscript, scene, edition, story-knowledge, identity, and aggregate boundaries in an ADR.</li>
+        <li>Split the scaffold core into focused domain, port, use-case, capability, fixture, and public-export modules while preserving strict ESM and platform neutrality.</li>
+        <li>Implement immutable constructors/transitions, validation errors, ordered references, repository contracts, query services, and an in-memory adapter.</li>
+        <li>Add representative original-fiction fixtures for a multi-book project and test all domain and repository invariants.</li>
+        <li>Replace the Expo welcome placeholder with an accessible responsive fixture navigator that consumes only the public core query/read model.</li>
+        <li>Review the living 2.0 design directly, add shared brand/theme tokens and fonts, use the supplied logo, and align the fixture shell without implementing deferred Story Canvas behavior.</li>
+        <li>Replace the MCP scaffold status payload with a read-only project hierarchy capability backed by that same query/read model, and add a process-level smoke test if practical in this slice.</li>
+        <li>Update architecture/API documentation, the active record log, and the handoff; run targeted checks and full repository verification.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li><strong>Core unit:</strong> valid multi-book creation, stable order, immutable updates, duplicate/unknown/cross-book reference rejection, and query projection.</li>
+        <li><strong>Repository contract:</strong> save/get/list behavior and defensive isolation against caller mutation for the memory adapter.</li>
+        <li><strong>Parity:</strong> capability metadata names the core query and both shipped bindings; UI and MCP fixture projections equal the core result.</li>
+        <li><strong>MCP integration:</strong> launch the stdio server, list or invoke the project-read capability, validate structured output, and shut down cleanly.</li>
+        <li><strong>Manual web:</strong> inspect the fixture navigator at approximately 1440 × 960 and 390 × 844 for readable hierarchy, supplied logo visibility, living-design typography/colors, complete rail labels, honest fixture state, and graceful responsive collapse.</li>
+        <li><strong>Repository:</strong> run targeted Vitest suites during implementation and <code>pnpm verify</code> before handoff.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p>Create ADR 0003 for the multi-book aggregate and reference boundaries. Update <code>docs/ARCHITECTURE.md</code> only where implementation makes the accepted blueprint concrete. Keep <code>docs/PRODUCT.md</code> unchanged unless implementation reveals a product conflict. Update this plan, its record log, and <code>plans/WHERE-I-LEFT-OFF.html</code> with delivery evidence.</p>
+      <p>Source direction: <a href="../2026-07-11-agentic-writing-experience/delivery-roadmap.html">delivery roadmap</a>, <a href="../2026-07-11-agentic-writing-experience/technical-blueprint.html">technical blueprint</a>, and <a href="../../designs/Ghostwriter%20Mockups%202.0.html">living design source</a>. The living design governs current product chrome and interaction direction; the plan-scoped mockups are historical context where they conflict.</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li>The domain must establish stable ownership and reference boundaries without pre-deciding a database schema, real-time protocol, editor document schema, or revision graph.</li>
+        <li>Project-wide story knowledge in this slice is a typed reference envelope and authority state, not the full story-bible model scheduled for Phase 2.1.</li>
+        <li>Edition records establish identity and naming only; immutable revision heads and compare/restore behavior remain in the revisions plan.</li>
+        <li>The UI is an honest fixture navigator, not a persistence-backed product claim. It must label sample data and avoid implying save, collaboration, or offline behavior.</li>
+        <li>The supplied PNG is a large-format lockup with a light background. Use it intact in a suitable branded surface and use the living design's text wordmark in compact chrome; do not invent an unofficial transparent icon crop in this slice.</li>
+        <li>Concrete backend, identity, retention, recovery, AI, and import/export choices remain open and are not silently selected here.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked disabled> Plan accepted and branch created from current <code>main</code></li>
+        <li><input type="checkbox" checked disabled> Domain ADR and core contracts complete</li>
+        <li><input type="checkbox" checked disabled> Memory repository and fixtures complete</li>
+        <li><input type="checkbox" checked disabled> Responsive fixture navigator aligned with the living design and supplied brand</li>
+        <li><input type="checkbox" checked disabled> MCP read parity and smoke coverage complete</li>
+        <li><input type="checkbox" checked disabled> Tests and full verification complete after design correction</li>
+        <li><input type="checkbox" checked disabled> Harness, docs, and handoff updated for living-design authority</li>
+        <li><input type="checkbox" disabled> Plan archived after acceptance evidence is recorded</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
