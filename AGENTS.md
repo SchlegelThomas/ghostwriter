@@ -7,9 +7,11 @@ agents via MCP.
 ## Start here, every session
 
 1. Read `plans/WHERE-I-LEFT-OFF.html`, then the active plan and its `record-log.html`.
-2. If the user has not already directed the work, summarize **Done / Incomplete / Next** and
+2. For product, UX, editor, Story Canvas, or workflow work, read the living design source:
+   `plans/designs/Ghostwriter Mockups 2.0.html`.
+3. If the user has not already directed the work, summarize **Done / Incomplete / Next** and
    ask whether to resume or start new work. Do not assume pickup.
-3. For product context read `docs/PRODUCT.md`; for technical context read
+4. For product context read `docs/PRODUCT.md`; for technical context read
    `docs/ARCHITECTURE.md`; for delivery constraints read `docs/OPERATIONS.md`.
 
 ## The planning harness
@@ -24,6 +26,22 @@ All meaningful work is documentation-first. See `plans/README.html` for the full
   memory. Keep todos and acceptance status truthful.
 - Done → move the folder to `plans/archive/` and update `plans/WHERE-I-LEFT-OFF.html`.
 - Trivial fixes (typos, one-liners) don't need a plan.
+
+## Living design sources
+
+`plans/designs/` contains long-running product-design artifacts that evolve across many delivery
+plans. They are durable inputs, not active plans, and are never archived with a feature.
+
+- `plans/designs/Ghostwriter Mockups 2.0.html` is the current visual and interaction source of
+  truth for the Story Canvas, manuscript/Canvas relationship, links, imagery, reader, and related
+  UX. Read it before changing those experiences.
+- Preserve user-authored design files. Do not replace, relocate, flatten, or regenerate them unless
+  the user explicitly asks. The design file may be iterated outside the current implementation plan.
+- When a living design changes, update the active plan's scope/acceptance criteria and record log
+  for any affected delivery work. Do not copy the whole design into a plan.
+- A design mockup expresses product intent; accepted `docs/PRODUCT.md`, architecture invariants,
+  ADRs, security rules, and the active plan still govern implementation. Surface conflicts rather
+  than silently choosing one source.
 
 ## Autonomous delivery loop
 
@@ -92,8 +110,11 @@ These hold for all code written in this repo (details in `docs/ARCHITECTURE.md`)
 3. **MCP is a first-class input.** Any capability a writer can use in the UI should be
    reachable through the MCP server too. Design features as core functions first, then bind
    them to UI and MCP.
-4. **Storage is local-first.** Writers own their words. Don't add cloud dependencies for
-   core writing features without an explicit decision recorded in a plan.
+4. **Storage is writer-owned and server-authoritative in v1.** ADR 0002 explicitly replaces the
+   earlier local-first invariant for the real-time collaborative web product. The shared service
+   owns canonical project state; browsers keep only minimal unacknowledged-work recovery, not a
+   complete offline replica. Preserve complete history, usable export, account exit, and clear save
+   state. Do not add a second canonical store or promise offline editing without a new plan and ADR.
 
 ## Conventions
 

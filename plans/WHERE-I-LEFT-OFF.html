@@ -11,41 +11,73 @@
     <header>
       <p class="eyebrow">Session handoff</p>
       <h1>Where we left off</h1>
-      <p><strong>Last updated:</strong> 2026-07-11 · <strong>Expected branch after merge:</strong> <code>main</code></p>
+      <p><strong>Last updated:</strong> 2026-07-11 · <strong>Current branch:</strong> <code>docs/agentic-writing-experience</code></p>
     </header>
 
     <section>
       <h2>Current state</h2>
-      <p>Ghostwriter is pre-code. Its product, architecture, operations, CI/CD, protected-main, and Cloudflare deployment foundations are in place. The project is now replacing Markdown planning artifacts with rich HTML delivery plans and a documentation-first autonomous agent workflow.</p>
+      <p>Ghostwriter has a merged, runnable TypeScript workspace and an active product/architecture blueprint. The founder has now accepted the novel-and-series beachhead, real-time web product, Story Canvas, Git-inspired content workflow, first-class editor collaboration, and assistant-in-tandem authority model. No production behavior has changed on this branch.</p>
     </section>
 
     <section>
       <h2>Latest completed work</h2>
-      <p><a href="archive/2026-07-11-html-planning-harness/plan.html">HTML planning harness</a> establishes semantic HTML plans, required delivery sections, the autonomous work loop, and ADR 0001.</p>
-      <p>No active plan is expected after this branch merges.</p>
-    </section>
-
-    <section>
-      <h2>Product and architecture decisions</h2>
       <ul>
-        <li>Expo / React Native universal client; Electron wraps the web export.</li>
-        <li>Tiptap (ProseMirror) editor, hosted by Expo DOM components on native.</li>
-        <li>GitHub Actions CI/CD; Cloudflare Pages direct upload; protected <code>main</code>.</li>
-        <li>Platform-neutral core and MCP parity are non-negotiable.</li>
+        <li><a href="archive/2026-07-11-html-planning-harness/plan.html">HTML planning harness</a> established semantic delivery plans, the autonomous work loop, and ADR 0001.</li>
+        <li><a href="archive/2026-07-11-scaffold-foundation/plan.html">Scaffold foundation</a> established pnpm workspaces, strict TypeScript, core, MCP, Expo web, Electron placeholder, verification, and preview deployment through merged PR #2.</li>
       </ul>
     </section>
 
     <section>
-      <h2>Next product feature</h2>
-      <p>After this harness merges, start <code>feat/scaffold-monorepo</code>: pnpm workspaces, strict TypeScript, a tested <code>packages/core</code>, and a stub <code>apps/mcp</code>. Resolve build orchestration in that plan; no source scaffolding has begun.</p>
+      <h2>Committed foundations</h2>
+      <ul>
+        <li>Responsive real-time web is the primary product; Expo remains the universal client and wrappers add conveniences.</li>
+        <li>Tiptap (ProseMirror) editor, hosted by Expo DOM components on native.</li>
+        <li>GitHub Actions CI/CD; Cloudflare Pages direct upload; protected <code>main</code>.</li>
+        <li>Full novels and multi-book projects share story knowledge and cross-book arcs.</li>
+        <li>Story Canvas and Draft are linked views of the same scenes and story objects.</li>
+        <li>Authors and editors use attributable comments, suggestions, variants, compare/combine, restore, and named editions.</li>
+        <li>Agents propose ideas, edits, and multiple prose versions; humans decide what becomes canonical.</li>
+        <li>ADR 0002 sets online-only, server-authoritative v1 projects with minimal unacknowledged-work recovery and one direct scene editor at a time; full offline and same-scene multi-cursor editing are deferred.</li>
+        <li>Writer ownership through complete history, export, account exit, platform-neutral core, and MCP parity remains non-negotiable.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Active plan</h2>
+      <p><a href="active/2026-07-11-agentic-writing-experience/plan.html">Design the agentic writing experience</a> now contains:</p>
+      <ul>
+        <li><a href="active/2026-07-11-agentic-writing-experience/experience-blueprint.html">Experience blueprint</a> — users, jobs, craft system, truth states, journeys, information architecture, and success measures.</li>
+        <li><a href="active/2026-07-11-agentic-writing-experience/technical-blueprint.html">Technical blueprint</a> — multi-book model, server authority, browser recovery, scene leases, revisions, context, AI boundary, MCP topology, and ADR queue.</li>
+        <li><a href="active/2026-07-11-agentic-writing-experience/agent-contracts.html">Agent contracts</a> — roles, grants, proposals, provenance, safety, parity, and long-form evaluations.</li>
+        <li><a href="active/2026-07-11-agentic-writing-experience/delivery-roadmap.html">Delivery roadmap</a> — outcome-gated candidate plans from the writing kernel through optional industry workflows.</li>
+        <li><a href="active/2026-07-11-agentic-writing-experience/mockups.html">Visual mockups</a> — founder brand direction, Story Canvas 2.0, collaborative prose variants, and responsive desktop/narrow-web concepts.</li>
+      </ul>
+      <p><strong>Living design source:</strong> <a href="designs/Ghostwriter%20Mockups%202.0.html">Ghostwriter Mockups 2.0</a> persists outside this plan and should be read before future product, UX, editor, Canvas, imagery, linking, or workflow work.</p>
+    </section>
+
+    <section>
+      <h2>Incomplete and awaiting founder review</h2>
+      <p>The product direction is substantially accepted. These material architecture and scope decisions remain:</p>
+      <ol>
+        <li>Concrete shared backend, identity, database, real-time transport, backup, retention, deletion, and remote MCP implementation.</li>
+        <li>Initial import/export formats; browser access is the accepted primary portability experience.</li>
+        <li>AI provider, credentials, web egress, and local-model posture.</li>
+        <li>Confirmation that marketplace, rights, collaboration, payments, and studio systems remain outside creation v1.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Recommended next step</h2>
+      <p>Run the Phase 0 backend/recovery/lease architecture spike under ADR 0002, then choose concrete services and finish formats, AI posture, and marketplace boundary. Archive this blueprint only after those remaining decisions are recorded, then start the first multi-book domain plan.</p>
     </section>
 
     <section>
       <h2>How to resume</h2>
       <ol>
         <li>Read this document, the active plan, and its record log.</li>
-        <li>Summarize done, incomplete, and next; ask whether to resume if the user has not already directed the work.</li>
-        <li>Refresh the plan’s acceptance criteria, tests, and docs/ADR impact before implementation if scope has changed.</li>
+        <li>Open the linked mockups and decision sections; summarize done, incomplete, and next if the user has not directed the work.</li>
+        <li>Treat ADR 0002 and the recorded product requirements as accepted; keep concrete backend, formats, AI, and marketplace items open.</li>
+        <li>After decisions, update the plan, record log, product/architecture docs, handoff, and archive together.</li>
       </ol>
     </section>
   </main>

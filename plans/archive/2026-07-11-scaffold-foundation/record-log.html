@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scaffold foundation — record log</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header><p class="eyebrow">Ghostwriter record log</p><h1>Scaffold foundation</h1></header>
+    <article>
+      <h2>2026-07-11 08:25 — Core workspace established</h2>
+      <p>Added pnpm workspaces, strict TypeScript, ESLint, Vitest, and a pure core manuscript model with a unit test. <code>pnpm verify</code> passes.</p>
+      <p>Latest TypeScript resolved to 7.0.2, which the installed TypeScript ESLint parser does not yet support. Pinned TypeScript to stable 5.9.3 rather than disabling linting.</p>
+    </article>
+    <article>
+      <h2>2026-07-11 08:27 — Deployment credential correction</h2>
+      <p>The Cloudflare account ID and API-token GitHub secrets were populated in reverse. The user replaced both secrets securely; no secret values are available to or recorded by the repository.</p>
+    </article>
+    <article>
+      <h2>2026-07-11 08:45 — Universal scaffold verified and deployed</h2>
+      <p>Added the Expo universal client, core-backed MCP status tool, Electron placeholder, and workspace documentation. <code>pnpm verify</code> and <code>pnpm --filter client exec expo export --platform web</code> passed. The development deployment succeeded at <a href="https://feat-scaffold-foundation.ghostwriter-di2.pages.dev">the branch preview</a>.</p>
+      <p>The scaffold’s MCP process has no dedicated behavioral smoke test despite that test being named in the proposed verification section. The status tool is compile-checked and was accepted at merge; process-level MCP contracts remain an explicit requirement for the first functional MCP feature.</p>
+    </article>
+    <article>
+      <h2>2026-07-11 08:50 — Merged through protected main</h2>
+      <p><a href="https://github.com/SchlegelThomas/ghostwriter/pull/2">PR #2</a> merged after the required GitHub <code>checks</code> job passed. The plan was reconciled and moved to the archive on the subsequent documentation branch.</p>
+    </article>
+  </main>
+</body>
+</html>

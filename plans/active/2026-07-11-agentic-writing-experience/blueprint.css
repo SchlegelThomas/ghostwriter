@@ -1,0 +1,475 @@
+:root {
+  --ink: #27231f;
+  --muted: #6c645b;
+  --paper: #fbfaf7;
+  --wash: #f2eee7;
+  --panel: #ffffff;
+  --line: #d8d0c5;
+  --accent: #6e3f32;
+  --accent-soft: #efe2db;
+  --green: #35634a;
+  --green-soft: #e2eee6;
+  --blue: #385b73;
+  --blue-soft: #e3edf2;
+  --amber: #7b5a24;
+  --amber-soft: #f4ead4;
+  color-scheme: light;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+main {
+  max-width: 76rem;
+}
+
+a {
+  color: var(--accent);
+}
+
+header {
+  max-width: 64rem;
+}
+
+.lede {
+  color: var(--muted);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.15rem, 2.4vw, 1.55rem);
+  line-height: 1.5;
+  max-width: 56rem;
+}
+
+.meta,
+.callout {
+  background: var(--wash);
+  border: 1px solid var(--line);
+}
+
+.artifact-nav {
+  align-items: center;
+  background: color-mix(in srgb, var(--paper) 94%, transparent);
+  border-bottom: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem .75rem;
+  margin: 0 0 2.5rem;
+  padding: .75rem 0;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.artifact-nav a {
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: .86rem;
+  font-weight: 700;
+  padding: .35rem .7rem;
+  text-decoration: none;
+}
+
+.artifact-nav a:hover,
+.artifact-nav a[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.principle-strip {
+  border-bottom: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: .65rem 1.5rem;
+  margin-top: 1.5rem;
+  padding: 1rem 0;
+}
+
+.principle-strip span {
+  font-size: .9rem;
+  font-weight: 750;
+}
+
+.link-grid,
+.persona-grid,
+.decision-list,
+.metric-grid,
+.role-grid,
+.plan-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+
+.artifact-card,
+.persona,
+.decision-list article,
+.metric,
+.role,
+.candidate-plan {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: .65rem;
+  box-sizing: border-box;
+  color: var(--ink);
+  padding: 1.15rem;
+  text-decoration: none;
+}
+
+.artifact-card {
+  display: grid;
+  gap: .45rem;
+}
+
+.artifact-card:hover {
+  border-color: var(--accent);
+}
+
+.artifact-card span,
+.persona p,
+.decision-list article p:last-child,
+.metric span,
+.role p,
+.candidate-plan p {
+  color: var(--muted);
+  margin-bottom: 0;
+}
+
+.status,
+.tag,
+.phase-label {
+  border-radius: 999px;
+  display: inline-block;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .045em;
+  margin: 0;
+  padding: .22rem .55rem;
+  text-transform: uppercase;
+}
+
+.status.recommended,
+.tag.canon {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.status.decision,
+.tag.planned {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.status.deferred,
+.tag.inferred {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.tag.proposed {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.decision-list h3,
+.persona h3,
+.role h3,
+.candidate-plan h3 {
+  margin: .7rem 0 .25rem;
+}
+
+.thesis {
+  border-left: .3rem solid var(--accent);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.25rem, 2.8vw, 1.8rem);
+  line-height: 1.45;
+  margin: 1.5rem 0;
+  max-width: 60rem;
+  padding: .4rem 0 .4rem 1.25rem;
+}
+
+.journey {
+  counter-reset: journey;
+  display: grid;
+  gap: 0;
+  list-style: none;
+  padding: 0;
+}
+
+.journey li {
+  border-left: 1px solid var(--line);
+  margin-left: 1rem;
+  padding: 0 0 1.5rem 2rem;
+  position: relative;
+}
+
+.journey li::before {
+  align-items: center;
+  background: var(--accent);
+  border-radius: 50%;
+  color: #fff;
+  content: counter(journey);
+  counter-increment: journey;
+  display: flex;
+  font-size: .76rem;
+  font-weight: 800;
+  height: 2rem;
+  justify-content: center;
+  left: -1rem;
+  position: absolute;
+  top: -.25rem;
+  width: 2rem;
+}
+
+.journey li:last-child {
+  border-left-color: transparent;
+}
+
+.journey h3 {
+  margin: 0 0 .35rem;
+}
+
+.journey p {
+  color: var(--muted);
+  margin: 0;
+  max-width: 56rem;
+}
+
+.truth-model {
+  display: grid;
+  gap: .75rem;
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.truth-model article {
+  border-top: .25rem solid var(--line);
+  padding: .85rem .25rem 0;
+}
+
+.truth-model article:nth-child(1) { border-color: var(--accent); }
+.truth-model article:nth-child(2) { border-color: var(--amber); }
+.truth-model article:nth-child(3) { border-color: var(--green); }
+.truth-model article:nth-child(4) { border-color: var(--blue); }
+.truth-model article:nth-child(5) { border-color: #756574; }
+
+.truth-model h3 {
+  font-size: 1rem;
+  margin: 0 0 .35rem;
+}
+
+.truth-model p {
+  color: var(--muted);
+  font-size: .88rem;
+  margin: 0;
+}
+
+.loop-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+}
+
+.loop {
+  border-bottom: 1px solid var(--line);
+  padding: .75rem 0 1.1rem;
+}
+
+.loop h3 {
+  margin: 0 0 .35rem;
+}
+
+.loop p {
+  color: var(--muted);
+  margin: 0;
+}
+
+.flow {
+  align-items: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin: 1rem 0;
+}
+
+.flow > span {
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: .5rem;
+  display: flex;
+  font-size: .87rem;
+  font-weight: 700;
+  min-height: 2.6rem;
+  padding: .3rem .8rem;
+}
+
+.flow > i {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-style: normal;
+}
+
+.ia-map,
+.architecture-map {
+  background: var(--wash);
+  border: 1px solid var(--line);
+  border-radius: .75rem;
+  padding: 1rem;
+}
+
+.ia-map > strong,
+.architecture-map > strong {
+  display: block;
+  margin-bottom: .75rem;
+}
+
+.ia-row,
+.architecture-row {
+  display: grid;
+  gap: .65rem;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+}
+
+.ia-row + .ia-row,
+.architecture-row + .architecture-row {
+  border-top: 1px solid var(--line);
+  margin-top: .75rem;
+  padding-top: .75rem;
+}
+
+.ia-node,
+.architecture-node {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: .45rem;
+  font-size: .85rem;
+  padding: .7rem;
+}
+
+.ia-node strong,
+.architecture-node strong {
+  display: block;
+  margin-bottom: .2rem;
+}
+
+.ia-node span,
+.architecture-node span {
+  color: var(--muted);
+}
+
+.metric strong {
+  color: var(--accent);
+  display: block;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.6rem;
+}
+
+.phase {
+  border-left: .22rem solid var(--line);
+  margin: 1.5rem 0;
+  padding: .2rem 0 .2rem 1.25rem;
+}
+
+.phase.now { border-color: var(--accent); }
+.phase.next { border-color: var(--green); }
+.phase.later { border-color: var(--blue); }
+.phase.horizon { border-color: var(--muted); }
+
+.phase h3 {
+  margin: .35rem 0;
+}
+
+.phase-label {
+  background: var(--wash);
+  color: var(--muted);
+}
+
+.phase ul {
+  margin-bottom: .5rem;
+}
+
+.candidate-plan {
+  display: flex;
+  flex-direction: column;
+}
+
+.candidate-plan .sequence {
+  color: var(--accent);
+  font-size: .75rem;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.candidate-plan footer {
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: .82rem;
+  margin-top: auto;
+  padding-top: .8rem;
+}
+
+.matrix-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.matrix-wrap table {
+  min-width: 50rem;
+}
+
+th {
+  color: var(--muted);
+  font-size: .75rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.note {
+  border-left: .22rem solid var(--amber);
+  color: var(--muted);
+  padding-left: 1rem;
+}
+
+.scenario {
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(10rem, .35fr) 1fr;
+  padding: 1.1rem 0;
+}
+
+.scenario h3,
+.scenario p {
+  margin-top: 0;
+}
+
+.scenario p {
+  color: var(--muted);
+}
+
+.checklist input[disabled] {
+  opacity: 1;
+}
+
+@media (max-width: 760px) {
+  main {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .artifact-nav {
+    position: static;
+  }
+
+  .truth-model {
+    grid-template-columns: 1fr;
+  }
+
+  .scenario {
+    grid-template-columns: 1fr;
+  }
+}

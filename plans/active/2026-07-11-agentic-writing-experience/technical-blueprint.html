@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ghostwriter technical blueprint</title>
+  <link rel="stylesheet" href="../../plan.css">
+  <link rel="stylesheet" href="blueprint.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Architecture direction</p>
+      <h1>Technical blueprint</h1>
+      <p class="lede">A web-first collaborative story platform built around multi-book projects, scene-sized documents, a prose-aware version graph, shared Story Canvas objects, and one accountable proposal path for humans and agents.</p>
+      <p class="meta"><strong>Status:</strong> server-authoritative online-only v1 and editorial collaboration depth accepted in ADR 0002; backend/runtime implementation remains open<br>
+        <strong>Committed constraints preserved:</strong> Tiptap, platform-neutral core, writer ownership, and MCP parity</p>
+    </header>
+
+    <nav class="artifact-nav" aria-label="Plan artifacts">
+      <a href="plan.html">Delivery plan</a>
+      <a href="experience-blueprint.html">Experience blueprint</a>
+      <a aria-current="page" href="technical-blueprint.html">Technical blueprint</a>
+      <a href="agent-contracts.html">Agent contracts</a>
+      <a href="delivery-roadmap.html">Delivery roadmap</a>
+      <a href="mockups.html">Visual mockups</a>
+      <a href="record-log.html">Record log</a>
+    </nav>
+
+    <section>
+      <h2>Architecture stance</h2>
+      <p class="thesis">Build one trustworthy content engine beneath a live web workspace: rich local interaction, shared project state, immutable history, prose-aware variants, and deterministic authority over every human or agent change.</p>
+      <ul>
+        <li><strong>Modular monolith:</strong> packages provide clear boundaries inside one TypeScript codebase; there are no microservices, plugin runtime, accounts, or marketplace abstractions in the writing kernel.</li>
+        <li><strong>Ports and adapters:</strong> core use cases depend on storage, clock, ID, model, export, and policy interfaces. Platform packages select concrete adapters.</li>
+        <li><strong>Shared capabilities:</strong> UI and MCP call the same core commands and queries. A transport never reaches around core into storage.</li>
+        <li><strong>Deterministic authority:</strong> models may analyze and propose. Only validated core transitions can create canonical revisions.</li>
+        <li><strong>Web-first, not web-fragile:</strong> the browser is primary; server-acknowledged edits are durable, unacknowledged input receives minimal crash/reconnect recovery, and complete export protects account exit.</li>
+        <li><strong>Server authority is explicit:</strong> the shared service owns canonical project state; browser storage is limited to recovery for unacknowledged work and is not a complete offline replica.</li>
+        <li><strong>Editorial real-time, not same-scene co-editing:</strong> project updates, presence, comments, tracked suggestions, variants, and review are live, while one collaborator directly edits a scene body at a time.</li>
+        <li><strong>Evolution by evidence:</strong> lexical retrieval precedes embeddings; scene leases and revision checks precede CRDT editing; full offline and multiple cursors require later proof and an ADR.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Decision map</h2>
+      <div class="matrix-wrap">
+        <table>
+          <thead><tr><th>Concern</th><th>Direction</th><th>Status</th><th>Gate</th></tr></thead>
+          <tbody>
+            <tr><td>Primary surface</td><td>Responsive real-time web workspace available wherever a browser is convenient</td><td><span class="status recommended">Accepted</span></td><td>Product direction recorded</td></tr>
+            <tr><td>Universal client</td><td>Expo / React Native shell with web as the lead surface</td><td><span class="status recommended">Committed</span></td><td>Validate that the Story Canvas and Tiptap boundaries do not make web secondary</td></tr>
+            <tr><td>Desktop and mobile</td><td>Convenience shells over the same shared project, not separate products</td><td><span class="status recommended">Accepted</span></td><td>Choose platform conveniences per phase</td></tr>
+            <tr><td>Editor</td><td>Tiptap / ProseMirror; DOM component on native</td><td><span class="status recommended">Committed</span></td><td>Validate bridge, IME, paste, undo, and large projects</td></tr>
+            <tr><td>Domain shape</td><td>Story project containing one or more books, scene-granular bodies, and project-wide story records</td><td><span class="status recommended">Accepted</span></td><td>Record detailed aggregate ADR before implementation</td></tr>
+            <tr><td>Content history</td><td>Autosaved working state plus immutable checkpoint/variant/edition graph; no keystroke event sourcing</td><td><span class="status recommended">Accepted</span></td><td>Define merge, attribution, and retention in ADR</td></tr>
+            <tr><td>Collaboration</td><td>Live project updates, presence, comments, tracked suggestions, review requests, and one direct scene editor</td><td><span class="status recommended">Accepted</span></td><td>ADR 0002; test leases, revocation, stale tabs, and reconnect</td></tr>
+            <tr><td>Data authority</td><td>Server-authoritative, online-only v1 project access</td><td><span class="status recommended">Accepted</span></td><td>ADR 0002; select backend implementation</td></tr>
+            <tr><td>Browser store</td><td>Minimal recovery buffer for unacknowledged text/commands; no complete replica</td><td><span class="status recommended">Accepted</span></td><td>Spike recovery privacy, quota, expiry, and reconnect behavior</td></tr>
+            <tr><td>Portable format</td><td>Versioned logical archive plus human-readable Markdown projection</td><td><span class="status decision">Recommend</span></td><td>Decide initial import/export formats</td></tr>
+            <tr><td>Retrieval</td><td>Explicit links + lexical search + revision-bound summaries first</td><td><span class="status recommended">Recommend</span></td><td>Add local embeddings only if benchmark recall is inadequate</td></tr>
+            <tr><td>AI execution</td><td>Bounded, typed workflows behind a provider-neutral gateway</td><td><span class="status decision">Recommend</span></td><td>Provider/credential ADR before real model calls</td></tr>
+            <tr><td>Agent writes</td><td>Proposal-only by default; first-party writer approval applies</td><td><span class="status decision">Recommend</span></td><td>Security ADR before mutating MCP tools</td></tr>
+            <tr><td>Real-time sync</td><td>Required for the primary web/editor experience; protocol and backend remain open</td><td><span class="status decision">Required / undecided</span></td><td>Architecture spike and ADR in Phase 0</td></tr>
+            <tr><td>Marketplace</td><td>Separate future cloud contexts fed by explicit revision-pinned publication</td><td><span class="status deferred">Horizon</span></td><td>Creation retention, export, rights, and demand gates</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>Runtime and package boundaries</h2>
+      <div class="architecture-map">
+        <strong>Thin applications compose shared packages</strong>
+        <div class="architecture-row">
+          <div class="architecture-node"><strong>apps/client</strong><span>Primary responsive web workspace, Expo Router, lifecycle, adapter selection</span></div>
+          <div class="architecture-node"><strong>apps/desktop</strong><span>Electron main, secure files, credentials, validated IPC</span></div>
+          <div class="architecture-node"><strong>apps/mcp</strong><span>Stdio transport, pairing/grants, protocol mapping</span></div>
+          <div class="architecture-node"><strong>shared backend shell</strong><span>Identity, project access, sync, presence, durable collaboration; runtime not yet chosen</span></div>
+        </div>
+        <div class="architecture-row">
+          <div class="architecture-node"><strong>packages/ui</strong><span>React Native workspace, review, navigation, accessible components</span></div>
+          <div class="architecture-node"><strong>packages/editor</strong><span>Schema, Tiptap extensions, DOM host, diff and codecs</span></div>
+          <div class="architecture-node"><strong>packages/storage</strong><span>Repositories, transactions, migrations, backups, adapter exports</span></div>
+          <div class="architecture-node"><strong>packages/sync</strong><span>Protocol-neutral replication, reconnect, conflict, presence, and outbox contracts if required</span></div>
+          <div class="architecture-node"><strong>packages/ai</strong><span>Provider adapters, streaming normalization, usage, retries</span></div>
+        </div>
+        <div class="architecture-row">
+          <div class="architecture-node"><strong>packages/core</strong><span>Domain types, commands, queries, ports, policy, proposals, capability registry</span></div>
+        </div>
+      </div>
+      <h3>Dependency rules</h3>
+      <ul>
+        <li><code>core</code> imports no React, DOM, Electron, Node, Tiptap, provider, database, or MCP SDK types.</li>
+        <li><code>editor</code>, <code>storage</code>, and <code>ai</code> may depend on core contracts; core never depends on them.</li>
+        <li><code>ui</code> depends on core-facing view models and editor interfaces; platform setup remains in applications.</li>
+        <li>Platform adapters use explicit subpath exports such as <code>@ghostwriter/storage/web</code> and <code>/node</code> so Metro never follows native Node dependencies.</li>
+        <li>Electron renderer has no Node access. Files, SQLite, keychain, and export run through a narrow validated IPC API with context isolation and sandboxing.</li>
+      </ul>
+      <p><strong>Recommended composition:</strong> a plain-function factory such as <code>createGhostwriterServices(dependencies)</code> exposes typed use cases. It is easy to test with memory repositories and avoids a framework-specific dependency-injection container.</p>
+    </section>
+
+    <section>
+      <h2>Domain model</h2>
+      <p><code>Project</code> is the story-universe, ownership, collaboration, archive, and permission boundary—not one giant object loaded into memory. It contains one or more books and project-wide story knowledge. Cross-record rules execute inside core use cases and storage transactions.</p>
+      <div class="matrix-wrap">
+        <table>
+          <thead><tr><th>Record</th><th>Owns</th><th>Important constraints</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Project</strong></td><td>Story universe, identity, settings, collaborators, creative compass, shared Story Canvas</td><td>Globally unique stable ID; permission, archive, and sync boundary</td></tr>
+            <tr><td><strong>Book</strong></td><td>Title, premise, status, book-specific arcs, manuscript structure, editions</td><td>A project contains one or more books; shared story records are referenced, not copied</td></tr>
+            <tr><td><strong>ManuscriptStructure</strong></td><td>Ordered parts, chapters, and scene references for one book</td><td>References scene IDs; no duplicated bodies or Canvas-only scene copies</td></tr>
+            <tr><td><strong>Scene</strong></td><td>Book, title, body, brief, status, POV, Canvas placement metadata</td><td>Primary edit/revision/retrieval unit; one ProseMirror document</td></tr>
+            <tr><td><strong>StoryEntity</strong></td><td>Character, location, faction, object, culture, rule, or custom typed record</td><td>Shared envelope plus typed details; avoid unrestricted EAV data</td></tr>
+            <tr><td><strong>StoryFact</strong></td><td>Assertion, subject, value, qualifiers, authority state, evidence</td><td>Planned, confirmed, inferred, or disputed; inference never self-promotes</td></tr>
+            <tr><td><strong>TimelineEvent</strong></td><td>Narrative order, fictional-time label, participants, places, evidence</td><td>Fictional chronology cannot assume ISO dates</td></tr>
+            <tr><td><strong>NarrativeThread</strong></td><td>Question, promise, setup, payoff, status, linked scenes and books</td><td>May be book-scoped or span a series without imposing one beat framework</td></tr>
+            <tr><td><strong>CanvasObject / Link</strong></td><td>Spatial placement of scenes, notes, imagery, regions, and typed evidence-backed connections</td><td>References canonical records; AI-derived objects remain provisional until confirmed</td></tr>
+            <tr><td><strong>ReviewThread</strong></td><td>Comments, suggestions, participants, anchored revision/block, resolution</td><td>Human and agent origins are explicit; anchors survive normal editing or become visibly stale</td></tr>
+            <tr><td><strong>Proposal</strong></td><td>Base revisions, typed operations, evidence, review state, provenance</td><td>Cannot apply stale or partially valid operations</td></tr>
+            <tr><td><strong>AgentRun</strong></td><td>Assignment, workflow version, context receipt, model details, limits, result</td><td>Separated from proposal and canonical state</td></tr>
+            <tr><td><strong>ReviewFinding</strong></td><td>Claim, evidence, uncertainty, pass type, resolution</td><td>Derived and rebuildable; “intentional” is a valid resolution</td></tr>
+            <tr><td><strong>Asset</strong></td><td>Metadata and content-addressed attachment reference</td><td>Binary content outside normal JSON records; safe import rules</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Search indexes, chunks, embeddings, summaries, and review scans are derived data. Each identifies source revision and workflow version, and the project remains complete if every derived index is deleted.</p>
+    </section>
+
+    <section>
+      <h2>Editor, documents, and revisions</h2>
+      <h3>Canonical scene document</h3>
+      <ul>
+        <li>Store versioned ProseMirror JSON, not HTML, as the canonical scene body.</li>
+        <li>Assign stable IDs to addressable top-level blocks so evidence and durable proposals are not based only on fragile character offsets.</li>
+        <li>Keep the editor schema and migrations in <code>packages/editor</code>; expose DOM-free validation and codec entry points separately from React components.</li>
+        <li>On native, keep transaction-heavy Tiptap state inside the DOM component and bridge coarse commands, selection events, and debounced checkpoints—not every ProseMirror transaction.</li>
+      </ul>
+      <h3>Working state and history</h3>
+      <div class="flow" aria-label="Revision flow">
+        <span>Live working state</span><i>→</i>
+        <span>Immutable checkpoint</span><i>→</i>
+        <span>Variant / review branch</span><i>→</i>
+        <span>Compare and combine</span><i>→</i>
+        <span>Named edition</span>
+      </div>
+      <p>Create immutable revisions at meaningful boundaries: manual checkpoint, sustained idle, review request, import, restore, migration, before and after proposal application, before an AI run, variant creation/merge, and edition/export. Deduplicate identical checkpoints by content hash. Do not event-source every keystroke.</p>
+      <p>Model history as a content-addressed revision graph: a normal revision has one parent; an explicit combine may have multiple parents and a recorded resolution. Human-readable variant names point to graph heads. Every revision records schema version, content hash, actor, origin, timestamp, reason, and related review/proposal/run/import. The rich UI says “variant,” “compare,” “combine,” and “restore,” not branch, commit, rebase, or merge conflict.</p>
+      <p>Live collaboration state and durable content history are separate concerns. V1 uses one visible active-editor lease per scene plus expected-revision checks; comments and tracked suggestions target immutable revisions. A CRDT is deliberately deferred. Agent variants still target an immutable base and never silently rebase.</p>
+    </section>
+
+    <section>
+      <h2>Persistence, synchronization, and portability</h2>
+      <p>ADR 0002 replaces the earlier SQLite-only/local-first recommendation for v1. A responsive live web product with invited editors uses a server-authoritative shared project, explicit identity and authorization, real-time subscriptions, revision-checked writes, and minimal browser recovery.</p>
+      <h3>Accepted v1 behavior</h3>
+      <ul>
+        <li><strong>Canonical store:</strong> the shared service owns project heads, permissions, checkpoints, variants, comments, suggestions, reviews, and editions.</li>
+        <li><strong>Save semantics:</strong> clients may render optimistically, but show <em>Saved</em> only after durable server acknowledgement.</li>
+        <li><strong>Browser recovery:</strong> keep only unacknowledged text/commands long enough to survive refresh, tab crash, or brief disconnect; clear them safely after acknowledgement.</li>
+        <li><strong>No offline promise:</strong> a disconnected user cannot open and edit the complete project in v1. Recovery mode must not be marketed as offline editing.</li>
+        <li><strong>Scene coordination:</strong> one active direct editor per scene, visible presence/lease, expected revision on write, and compare/recovery on conflict.</li>
+      </ul>
+      <p>Keep repository contracts independent of the selected backend. The shared database, identity system, real-time transport, and recovery-buffer technology are selected through a focused spike. Migrations require backups, compatibility checks, reconnect testing, and safe refusal when clients and project schemas are incompatible.</p>
+      <h3>Portable project archive</h3>
+      <pre><code>My Novel.ghostwriter/
+  manifest.json
+  records.ndjson
+  revisions.ndjson
+  assets/&lt;sha256&gt;
+  checksums.json</code></pre>
+      <p>The live database is not the interchange contract. A versioned logical archive preserves project/book IDs, revision graph, Canvas placements, comments, provenance, and unknown forward-compatible fields while excluding credentials, caches, telemetry, and diagnostics. Manuscript exports remain readable projections. Web access is the primary portability experience, but platform exit cannot depend on a subscription or a running sync service.</p>
+    </section>
+
+    <section>
+      <h2>Context engine</h2>
+      <p>Project awareness should begin with deterministic, inspectable assembly—not a vector database.</p>
+      <ol>
+        <li>Resolve the workflow and writer-selected scope.</li>
+        <li>Include the current selection or scene and its immutable revision.</li>
+        <li>Add structural neighbors when the workflow needs them.</li>
+        <li>Add explicitly linked entities, confirmed/planned facts, timeline events, threads, and voice references.</li>
+        <li>Add bounded lexical search candidates from a derived index.</li>
+        <li>Rank, deduplicate, trim to the workflow budget, and create a context receipt.</li>
+      </ol>
+      <p>Each context item records artifact ID, revision, block anchor, content hash, inclusion reason, priority, token estimate, and truncation. The writer can inspect the receipt before content leaves the device.</p>
+      <p><strong>Embedding gate:</strong> add optional local embeddings only when evaluation on representative long projects proves explicit links and lexical search miss important context. Embeddings remain derived, disposable, revision-bound, and local by default; no hosted vector store is needed for the authoring core.</p>
+    </section>
+
+    <section>
+      <h2>AI boundary and orchestration</h2>
+      <p><code>packages/ai</code> adapts providers; <code>packages/core</code> decides allowed context, workflow policy, and whether a typed result can become a proposal.</p>
+      <pre><code>interface ModelGateway {
+  run(
+    request: ModelRequest,
+    signal: AbortSignal
+  ): AsyncIterable&lt;ModelEvent&gt;;
+}</code></pre>
+      <p>The normalized contract supports streaming, validated structured output, usage, finish reason, cancellation, and typed errors. Provider SDK types never leak into core. Capability flags express provider differences instead of pretending every model supports the same behavior.</p>
+      <h3>Start with bounded workflows</h3>
+      <ul>
+        <li>Extract candidate story facts with evidence.</li>
+        <li>Critique one scene against its stated intent.</li>
+        <li>Propose a revision to a selected passage.</li>
+        <li>Suggest several next-beat options.</li>
+        <li>Run a scoped continuity pass.</li>
+        <li>Create a scene or chapter summary as derived context.</li>
+      </ul>
+      <p>Each workflow declares context categories, read-only internal tools, output schema, model capabilities, token/cost/time/step limits, cancellation behavior, and allowed proposal operations. A general autonomous planner and self-extending tool loop are deliberately out of scope.</p>
+      <h3>Credential decision by surface</h3>
+      <ul>
+        <li>Desktop: operating-system keychain.</li>
+        <li>Mobile: secure platform storage.</li>
+        <li>Local MCP: environment or OS-protected profile.</li>
+        <li>Web: no durable browser secret should be described as secure. Choose session-only BYOK, provider-supported ephemeral credentials, local companion, or a hosted proxy in an ADR.</li>
+      </ul>
+      <p>A hosted proxy changes cost, abuse, privacy, compliance, and operational boundaries. It is a product decision, not a hidden implementation convenience.</p>
+    </section>
+
+    <section>
+      <h2>One proposal path</h2>
+      <div class="flow" aria-label="Proposal flow">
+        <span>Capture base revisions</span><i>→</i>
+        <span>Assemble context receipt</span><i>→</i>
+        <span>Run bounded workflow</span><i>→</i>
+        <span>Validate typed result</span><i>→</i>
+        <span>Create proposal</span><i>→</i>
+        <span>Review</span><i>→</i>
+        <span>Atomic apply + revision</span>
+      </div>
+      <p>Proposal operations are domain-specific: replace a scene document, update scene metadata, add a candidate fact, create an entity, reorder scene references, or add a review finding. Avoid arbitrary JSON Patch, generic CRUD, and raw ProseMirror steps as the only durable representation.</p>
+      <p>Apply revalidates permission, schemas, proposal hash, and every base revision in one transaction. It is idempotent, creates before/after checkpoints, links provenance, and leaves the proposal reviewable. Selecting only some operations creates a new child proposal, preserving an unambiguous history.</p>
+    </section>
+
+    <section>
+      <h2>MCP topology and parity</h2>
+      <p>A shared web project changes the earlier desktop-only MCP assumption. MCP may connect either to an explicitly selected local project replica or to the authenticated shared project service, but both paths must execute the same core capabilities and project-scoped policy.</p>
+      <ul>
+        <li>Local stdio remains useful for private desktop workflows and agent tools running on the writer’s machine.</li>
+        <li>Remote access to the shared project requires an explicit OAuth/authorization design, revocable grants, resource scoping, egress disclosure, and audit—not reuse of a browser session token.</li>
+        <li>Capability parity means the same core use case exists and is appropriately bound. It does not grant an external client the first-party writer’s authority.</li>
+        <li>MCP paths are project-scoped resource URIs; protocol inputs never expose or accept arbitrary filesystem paths.</li>
+      </ul>
+      <p>See <a href="agent-contracts.html">Agent contracts</a> for resources, tools, permissions, provenance, and parity tests.</p>
+    </section>
+
+    <section>
+      <h2>Collaboration evolution</h2>
+      <div class="phase now">
+        <p class="phase-label">Accepted v1</p>
+        <h3>Shared project and editorial real-time</h3>
+        <p>Globally unique IDs, author/editor roles, comments, tracked suggestions, review requests, presence, live project updates, one active direct scene editor, immutable checkpoints, minimal unacknowledged-work recovery, version compare, and complete export.</p>
+      </div>
+      <div class="phase next">
+        <p class="phase-label">Explicitly deferred</p>
+        <h3>Same-scene live co-editing</h3>
+        <p>Evaluate Yjs only if real usage justifies simultaneous multi-cursor editing. Any later CRDT working state still checkpoints valid ProseMirror JSON into the immutable revision graph.</p>
+      </div>
+      <div class="phase later">
+        <p class="phase-label">Later depth</p>
+        <h3>Offline replication and larger teams</h3>
+        <p>Add full offline editing, cross-device conflict support, organization roles, approval workflows, and broader CRDT coverage only when the launch topology and real usage justify them.</p>
+      </div>
+      <p>ADR 0002 fixes authority and collaboration depth. The implementation spike must still select identity, authentication, encryption, server runtime, database, real-time transport, deletion, retention, backup, browser-recovery expiry, account exit, and remote MCP authorization.</p>
+    </section>
+
+    <section>
+      <h2>Industry and marketplace boundary</h2>
+      <p>Future publisher, studio, showrunner, rights, catalog, discovery, payment, and streaming systems belong in separate cloud bounded contexts. The private shared project service remains the authoring authority. Publishing creates an explicit, consented, revision-pinned projection or copy.</p>
+      <div class="architecture-map">
+        <strong>Future boundary—not part of the writing kernel</strong>
+        <div class="architecture-row">
+          <div class="architecture-node"><strong>Private shared project</strong><span>Server-authoritative writing source; complete history, permissions, and export</span></div>
+          <div class="architecture-node"><strong>Publication package</strong><span>Chosen edition, rights metadata, provenance, assets, permissions</span></div>
+          <div class="architecture-node"><strong>Industry cloud</strong><span>Organizations, submissions, licensing, catalog, commerce, delivery</span></div>
+          <div class="architecture-node"><strong>Audience surfaces</strong><span>Discovery, reading/listening, adaptation interest, analytics with consent</span></div>
+        </div>
+      </div>
+      <p>The test is separation: removing marketplace or industry services must not prevent private project writing, reading, history, or export through the core shared project service.</p>
+    </section>
+
+    <section>
+      <h2>Privacy, diagnostics, and security posture</h2>
+      <ul>
+        <li>A network connection and authenticated shared service are required for normal v1 project access. Recovery copy must never imply otherwise.</li>
+        <li>Server access to project content is limited by documented author/editor roles, audited service operations, encryption, retention, deletion, backup, and account-exit policy.</li>
+        <li>Every AI call has a visible provider and context receipt; project access does not automatically grant separate model-provider egress.</li>
+        <li>Structured diagnostics record IDs, adapter/workflow, duration, usage, and error category—never manuscript text, raw prompts, provider output, or secrets by default.</li>
+        <li>Remote telemetry and crash reporting are opt-in, content-free, documented, and locally previewable before diagnostic export.</li>
+        <li>Imported text and model output are untrusted data. Strip active HTML, never auto-fetch embedded URLs, validate archive paths and sizes, and render safely.</li>
+        <li>Provider calls are mocked in required CI. Test fixtures use original synthetic fiction, not private user work or copyrighted novels.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Verification architecture</h2>
+      <div class="matrix-wrap">
+        <table>
+          <thead><tr><th>Layer</th><th>Required coverage</th></tr></thead>
+          <tbody>
+            <tr><td>Core unit</td><td>Domain invariants, immutable transforms, revisions, policy, context selection, proposal transitions, apply/undo, conflict, import normalization</td></tr>
+            <tr><td>Contract</td><td>One repository suite against memory and the selected server store; browser-recovery and subscription contracts; one capability suite against UI, shared service, and MCP bindings</td></tr>
+            <tr><td>Integration</td><td>Migrations and rollback, editor schema round trips, archive corruption, deterministic fake-model streams, MCP stdio, Electron IPC</td></tr>
+            <tr><td>End to end</td><td>Create multi-book project; author/editor invite and revoke; reconnect and recover; variant/compare/combine; proposal/review/apply/undo; shared project through UI and MCP; export/delete/import/restore</td></tr>
+            <tr><td>Platform smoke</td><td>Web Tiptap collaboration, keyboard, paste, selection, history, browser persistence/quota/reconnect; native bridge and offline lifecycle only for advertised wrapper capabilities</td></tr>
+            <tr><td>Performance</td><td>Representative 120k-word project, thousands of facts and findings, no whole-project work per keystroke, bounded context latency</td></tr>
+            <tr><td>Agent eval</td><td>Evidence resolution, long-distance continuity, voice and structure fixtures, prompt-injection invariants; see agent plan</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>ADR queue and decision timing</h2>
+      <ol>
+        <li><strong>Multi-book project, Story Canvas, and truth states:</strong> before the scaffold model expands.</li>
+        <li><strong>Editor document, stable block IDs, revision graph, variants, and provenance:</strong> before production Tiptap persistence or import.</li>
+        <li><strong>Server authority, minimal browser recovery, and editorial collaboration:</strong> accepted in <a href="../../../docs/adr/0002-server-authoritative-web-collaboration.md">ADR 0002</a>; the implementation spike must select concrete services and protocols.</li>
+        <li><strong>Identity, author/editor roles, invitations, and remote project access:</strong> before shared projects are exposed.</li>
+        <li><strong>Agent authority and MCP mutation policy:</strong> before a real model or external client can create actionable proposals.</li>
+        <li><strong>AI provider, credentials, egress, and web boundary:</strong> before shipping provider calls on any surface.</li>
+        <li><strong>Full offline replication and same-scene co-editing:</strong> only when validated demand justifies replacing the v1 lease/revision model.</li>
+        <li><strong>Remote MCP, organizations, publication, rights, or marketplace:</strong> one or more later ADRs; none should be pre-decided inside core authoring packages.</li>
+      </ol>
+    </section>
+  </main>
+</body>
+</html>
