@@ -7,7 +7,7 @@
 Add manual CI dispatch for an immediate smoke test, configure branch protection only after the check name is verified, and add Cloudflare credentials after the user supplies a scoped API token.
 
 ## Checklist
-- [ ] Add CI manual dispatch and test workflow execution
-- [ ] Configure and verify main branch protection
+- [x] Add CI manual dispatch and test workflow execution
+- [x] Configure and verify main branch protection
 - [ ] Add Cloudflare deployment credentials and verify Pages project access
 - [ ] Update breadcrumbs and archive plan
