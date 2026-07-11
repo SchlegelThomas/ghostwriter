@@ -106,6 +106,10 @@ importers:
       zod:
         specifier: latest
         version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
 
   packages/core: {}
 
