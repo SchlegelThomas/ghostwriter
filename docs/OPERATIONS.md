@@ -42,31 +42,28 @@ export, and deploys it to the Pages production environment. No manual production
 green CI. Both workflows are guarded to no-op until the monorepo is scaffolded
 (they check for `package.json`), so they won't fail on docs-only work in the meantime.
 
-## One-time setup (not yet done)
+## Setup status
 
-1. Cloudflare account (free): https://dash.cloudflare.com/sign-up
-2. Locally: `npm i -g wrangler && wrangler login`
-3. Create the Pages project: `wrangler pages project create ghostwriter --production-branch main`
-4. Create an API token (Cloudflare dashboard → "Edit Cloudflare Workers" template works for Pages)
-   and add secrets for CI:
+Completed 2026-07-11:
+
+- Cloudflare Pages project created and Git-integrated Cloudflare builds disconnected. GitHub
+  Actions is the sole deployment path.
+- `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` configured as GitHub repository secrets.
+- `main` protected for all users: current `checks` CI status is required; force-pushes and
+  branch deletion are disabled.
+
+For another development machine:
+
+```bash
+npm i -g wrangler
+wrangler login
+```
+
+To rotate a Cloudflare credential:
 
 ```bash
 gh secret set CLOUDFLARE_API_TOKEN
 gh secret set CLOUDFLARE_ACCOUNT_ID
-```
-
-5. Protect `main` (require PR + green CI before merge):
-
-```bash
-gh api -X PUT repos/SchlegelThomas/ghostwriter/branches/main/protection \
-  --input - <<'EOF'
-{
-  "required_status_checks": { "strict": true, "contexts": ["checks"] },
-  "enforce_admins": false,
-  "required_pull_request_reviews": null,
-  "restrictions": null
-}
-EOF
 ```
 
 ## Command cheat sheet

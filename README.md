@@ -15,10 +15,11 @@ writer's project directly.
 | `docs/PRODUCT.md` | What Ghostwriter is and who it's for |
 | `docs/ARCHITECTURE.md` | One-codebase strategy, stack, open decisions |
 | `docs/OPERATIONS.md` | CI/CD, hosting, dev/prod deploy flows |
-| `plans/WHERE-I-LEFT-OFF.md` | Current state and next step |
-| `plans/README.md` | How the planning system works |
+| `plans/WHERE-I-LEFT-OFF.html` | Current state and next step |
+| `plans/README.html` | Rich planning system and delivery loop |
+| `docs/adr/README.md` | How durable architecture decisions are recorded |
 
 ## Working on this repo
 
-All meaningful work goes through a lightweight plan in `plans/active/`. Start every session
-by reading `plans/WHERE-I-LEFT-OFF.md`.
+All meaningful work begins with a rich HTML delivery plan in `plans/active/`. Start every
+session by reading `plans/WHERE-I-LEFT-OFF.html`.

@@ -1,0 +1,25 @@
+{
+  "name": "client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "expo/AppEntry",
+  "scripts": {
+    "dev": "expo start",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ghostwriter/core": "workspace:*",
+    "@expo/metro-runtime": "latest",
+    "expo": "latest",
+    "expo-router": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "react-native": "latest",
+    "react-native-web": "latest"
+  },
+  "devDependencies": {
+    "@types/react": "latest"
+  }
+}

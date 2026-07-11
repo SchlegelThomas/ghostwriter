@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ghostwriter planning system</title>
+  <link rel="stylesheet" href="plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Project operating system</p>
+      <h1>Planning system</h1>
+      <p>Plans are the shared, durable contract between the product owner and agents. They turn intent into an observable delivery agreement before implementation begins.</p>
+    </header>
+
+    <section>
+      <h2>Layout</h2>
+      <table>
+        <thead><tr><th>Path</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>WHERE-I-LEFT-OFF.html</code></td><td>Current handoff; every session starts here.</td></tr>
+          <tr><td><code>template.html</code></td><td>Required structure for every new plan.</td></tr>
+          <tr><td><code>active/YYYY-MM-DD-short-slug/plan.html</code></td><td>Rich delivery plan for one focused branch of work.</td></tr>
+          <tr><td><code>active/.../record-log.html</code></td><td>Time-stamped decisions, progress, and scope changes.</td></tr>
+          <tr><td><code>archive/</code></td><td>Completed plan folders, preserved verbatim as project memory.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Required plan sections</h2>
+      <p>Every <code>plan.html</code> must include: <strong>Intent</strong>, <strong>Acceptance criteria</strong>, <strong>Tasks</strong>, <strong>Tests and verification</strong>, <strong>Documentation and ADR impact</strong>, <strong>Risks and decisions</strong>, and checkable <strong>Todos</strong>. Copy <a href="template.html">the template</a>; do not create an abbreviated substitute.</p>
+    </section>
+
+    <section>
+      <h2>Session and delivery loop</h2>
+      <ol>
+        <li><strong>Orient:</strong> read <a href="WHERE-I-LEFT-OFF.html">the handoff</a>, the active plan, its record log, and relevant product/architecture docs.</li>
+        <li><strong>Plan:</strong> for new meaningful work, create or refresh the HTML plan before touching implementation. Confirm ambiguous, consequential choices with the user.</li>
+        <li><strong>Build:</strong> work through tasks in a loop: implement a small coherent slice, run the relevant checks, inspect results, update tests and docs, then continue.</li>
+        <li><strong>Record:</strong> append real decisions, discoveries, failures, and scope changes to <code>record-log.html</code>. Keep plan todos truthful.</li>
+        <li><strong>Handoff:</strong> verify acceptance criteria, update the handoff, archive the completed plan, and report remaining risks.</li>
+      </ol>
+      <p class="callout">Agents may work autonomously for extended periods inside an accepted plan. They must stop for user input when a material product, architecture, cost, security, data-loss, or external side-effect decision is not already covered by the plan.</p>
+    </section>
+
+    <section>
+      <h2>ADRs and documentation</h2>
+      <p>Plans must name every documentation impact. Create or update an ADR for durable architectural, product-platform, persistence, sync, provider, security, or operational decisions. See <a href="../docs/adr/README.md">the ADR guide</a>.</p>
+    </section>
+
+    <section>
+      <h2>Historical Markdown plans</h2>
+      <p>Plans archived before this system was introduced remain in Markdown as historical records. New active plans use HTML.</p>
+    </section>
+  </main>
+</body>
+</html>

@@ -6,20 +6,48 @@ agents via MCP.
 
 ## Start here, every session
 
-1. Read `plans/WHERE-I-LEFT-OFF.md`.
-2. If a plan exists in `plans/active/`, summarize **Done / Incomplete / Next** to the user
-   and ask whether to resume or start new work. Do not assume pickup.
-3. For product context read `docs/PRODUCT.md`; for technical context read `docs/ARCHITECTURE.md`.
+1. Read `plans/WHERE-I-LEFT-OFF.html`, then the active plan and its `record-log.html`.
+2. If the user has not already directed the work, summarize **Done / Incomplete / Next** and
+   ask whether to resume or start new work. Do not assume pickup.
+3. For product context read `docs/PRODUCT.md`; for technical context read
+   `docs/ARCHITECTURE.md`; for delivery constraints read `docs/OPERATIONS.md`.
 
 ## The planning harness
 
-All meaningful work goes through a lightweight plan. See `plans/README.md` for the full system.
-Short version:
+All meaningful work is documentation-first. See `plans/README.html` for the full system.
 
-- New effort → create `plans/active/YYYY-MM-DD-short-slug/` containing `plan.md` and `record-log.md`.
-- Log decisions and meaningful progress in `record-log.md` as you go — this is the project's memory.
-- Done → move the folder to `plans/archive/` and update `plans/WHERE-I-LEFT-OFF.md`.
+- New effort → create `plans/active/YYYY-MM-DD-short-slug/` with `plan.html` and
+  `record-log.html`, following `plans/template.html`.
+- A plan is not ready to build until it contains **Intent, Acceptance criteria, Tasks, Tests
+  and verification, Documentation and ADR impact, Risks and decisions, and Todos**.
+- Log decisions and meaningful progress in `record-log.html` as you go — this is the project's
+  memory. Keep todos and acceptance status truthful.
+- Done → move the folder to `plans/archive/` and update `plans/WHERE-I-LEFT-OFF.html`.
 - Trivial fixes (typos, one-liners) don't need a plan.
+
+## Autonomous delivery loop
+
+Once the user has accepted a plan, work independently in repeated, bounded loops:
+
+1. Take the next coherent task from the plan.
+2. Read the local code and documentation it affects.
+3. Implement the smallest complete slice, including tests.
+4. Run targeted checks; fix failures before continuing.
+5. Update the plan, record log, affected docs, and ADRs immediately — not at the end.
+6. Reassess acceptance criteria and move to the next task.
+
+Continue until the plan is complete or a real decision requires the user. Stop and ask before
+making a material product, architecture, cost, security, data-loss, or external-side-effect
+choice not already accepted in the plan. Do not confuse a passing test suite with meeting the
+acceptance criteria.
+
+## Documentation and ADRs
+
+- Plan documentation updates as tasks, alongside implementation and tests.
+- Create or update an ADR under `docs/adr/` for durable decisions about architecture,
+  persistence, sync, AI providers, security, deployment, or product-platform tradeoffs.
+- Link each ADR from the plan's **Documentation and ADR impact** section and record its
+  decision in the log.
 
 ## Ground rules
 
@@ -79,4 +107,4 @@ These hold for all code written in this repo (details in `docs/ARCHITECTURE.md`)
 
 `docs/ARCHITECTURE.md` has an **Open decisions** section. If your work depends on an
 undecided item, raise it with the user rather than choosing unilaterally, then record the
-outcome in the current plan's `record-log.md` and update the doc.
+outcome in the current plan's `record-log.html` and update the doc.
