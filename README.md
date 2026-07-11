@@ -4,8 +4,11 @@ An AI tool for creative writers. One TypeScript/Node.js codebase targeting web, 
 (Electron), and mobile — plus an MCP server so external AI agents can collaborate on a
 writer's project directly.
 
-> Status: foundation scaffold is runnable. The active plan defines the multi-book,
-> real-time collaborative writing experience and Story Canvas before product implementation.
+> Status: the foundation and product blueprint are merged. Current branch implements a
+> platform-neutral multi-book domain kernel, a responsive read-only fixture navigator, a matching
+> MCP project query, and (ADR 0004) a Databricks Lakebase Postgres backend with Drizzle migrations,
+> a Node/Hono service, and a database branch per pull request. Auth, profiles, subscriptions,
+> rich editing, and collaboration remain later slices.
 
 ## Orientation
 

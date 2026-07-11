@@ -7,7 +7,10 @@
     "verify": "pnpm typecheck && pnpm lint && pnpm test",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:generate": "pnpm --filter @ghostwriter/storage db:generate",
+    "db:migrate": "pnpm --filter @ghostwriter/storage db:migrate",
+    "lakebase": "./scripts/lakebase.sh"
   },
   "devDependencies": {
     "@eslint/js": "latest",

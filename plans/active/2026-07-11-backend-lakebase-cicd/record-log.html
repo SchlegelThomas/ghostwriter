@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lakebase backend and CI/CD — record log</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter record log</p>
+      <h1>Lakebase backend and CI/CD</h1>
+      <p class="meta"><a href="plan.html">Return to delivery plan</a> · <strong>Branch:</strong> <code>feat/multi-book-domain-kernel</code></p>
+    </header>
+
+    <article>
+      <h2>2026-07-11 13:40 — Backend effort opened and decisions locked</h2>
+      <p>The founder directed adding the durable backend now: a Databricks Lakebase Postgres database, version-controlled migrations, a Node service, and CI/CD that branches the database per feature branch/PR. Decisions confirmed: Lakebase via the managed portal, a Node/Hono service on a managed host (Fly-style), Drizzle migrations, continuing on the current branch, and available Databricks credentials for CI. Auth/profiles and subscriptions are deferred to later plans.</p>
+      <p>Confirmed the real Lakebase surface before building automation: branches via <code>databricks postgres create-branch/delete-branch</code> (REST <code>/api/2.0/postgres/projects/{id}/branches</code>) with a <code>spec</code> expiration policy, and connections via <code>generate-database-credential</code> (≈1h OAuth token used as the Postgres password) plus <code>get-endpoint</code> for the host. CI will authenticate with a service principal.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 13:42 — Architecture recorded (ADR 0004)</h2>
+      <p>Accepted <a href="../../../docs/adr/0004-lakebase-backend-and-cicd.md">ADR 0004</a>: Lakebase behind the core <code>ProjectRepository</code> port via a Drizzle-based <code>packages/storage</code> adapter, checked-in Drizzle migrations, a thin <code>apps/backend</code> Hono service, and branch-per-PR CI/CD. The store depends only on standard Postgres so tests and local dev use in-process PGlite and <code>pnpm verify</code> needs no cloud access. Core stays platform-neutral; Lakebase specifics live in operations, scripts, and workflows.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 13:55 — Backend, storage, and pipeline built and verified</h2>
+      <p>Implemented <code>packages/storage</code> (Drizzle schema for the ADR 0003 model, a checked-in initial migration, and a Postgres <code>ProjectRepository</code> adapter that buffers writes, inserts in dependency order, and runs whole-project domain validation inside the transaction), and <code>apps/backend</code> (a Hono service exposing health and the project navigator over the same core services as the UI and MCP). Tests run against in-process PGlite via a <code>@ghostwriter/storage/pglite</code> subpath, keeping the WASM engine out of the backend bundle.</p>
+      <p>Added <code>scripts/lakebase.sh</code> wrapping the Databricks CLI for branch create/delete/migrate and connection assembly, root <code>db:generate</code>/<code>db:migrate</code>/<code>lakebase</code> scripts, a Fly Dockerfile/config, and two workflows: <code>db-branch.yml</code> (per-PR Lakebase branch lifecycle) and <code>deploy-backend.yml</code> (migrate production + deploy). Both no-op until Databricks/Fly secrets and <code>LAKEBASE_*</code> variables are set, so <code>pnpm verify</code> and forks stay green.</p>
+      <p>Confirmed the Databricks CLI (v1.7.0) and <code>ghostwriter</code> profile resolve; <code>list-projects</code> shows no Lakebase project yet. Creating the project/<code>production</code> branch and wiring secrets is a billable founder step, intentionally not performed automatically. <code>pnpm verify</code> passes with 20 tests across core, storage, backend, and MCP.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 14:03 — Lakebase project provisioned and pipeline validated live</h2>
+      <p>On founder go-ahead, created <code>projects/ghostwriter</code> (default branch <code>production</code>, endpoint <code>primary</code>, AWS <code>us-east-2</code>, Postgres 17, owner role <code>tas9117@gmail.com</code>). Confirmed the endpoint host JSON path (<code>.status.hosts.host</code>) matches <code>scripts/lakebase.sh</code>.</p>
+      <p>Validated the full pipeline against real Lakebase: created a throwaway branch from <code>production</code>, applied the Drizzle migration through <code>scripts/lakebase.sh migrate</code> (real Postgres 17), and deleted the branch; <code>list-branches</code> confirms only <code>production</code> remains. Concrete resource values are recorded in <code>docs/OPERATIONS.md</code>.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 14:21 — CI credentials provisioned; Databricks path resolved</h2>
+      <p>Created service principal <code>ghostwriter-ci</code> (client id <code>a4622cb7-c206-4ace-a085-2b9ecdf98b37</code>), created its SERVICE_PRINCIPAL Postgres role on <code>production</code>, and granted it <code>CREATE</code> on the database/schema plus table privileges so migrations can run under the SP. Set GitHub secrets <code>DATABRICKS_HOST</code> and <code>DATABRICKS_CLIENT_ID</code> and variables <code>LAKEBASE_PROJECT_ID</code>, <code>LAKEBASE_USER</code>, <code>LAKEBASE_ENDPOINT_ID</code>.</p>
+      <p>Workspace Personal Access Tokens are disabled (the token-permissions object returns <code>RESOURCE_DOES_NOT_EXIST</code>), so the on-behalf-of token path is unavailable and CI/backend use OAuth M2M. The founder minted the SP OAuth secret in the console and set <code>DATABRICKS_CLIENT_SECRET</code>. A first-PR check that the SP can manage Lakebase branches remains, documented in <code>docs/OPERATIONS.md</code>. No workflow changes were needed — they already use <code>DATABRICKS_CLIENT_ID</code>/<code>DATABRICKS_CLIENT_SECRET</code>.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 14:35 — Backend self-refreshing Lakebase connection implemented</h2>
+      <p>Because workspace PATs are disabled, implemented service-principal OAuth M2M for the long-running backend: <code>packages/storage/src/lakebase.ts</code> mints a Databricks access token (<code>/oidc/v1/token</code>) and a Lakebase database credential (<code>POST /api/2.0/postgres/credentials</code> with <code>{endpoint}</code>), caches it until just before <code>expire_time</code>, and supplies it as the pg pool password. Confirmed the endpoints and response shape (<code>token</code>, <code>expire_time</code>) against the live workspace.</p>
+      <p>The backend config selects Lakebase mode from <code>DATABRICKS_CLIENT_SECRET</code> + <code>LAKEBASE_HOST</code>, else falls back to <code>DATABASE_URL</code> for local/CI. <code>apps/backend/fly.toml</code> carries all non-secret connection settings; only <code>DATABRICKS_CLIENT_SECRET</code> is a Fly secret. Installed <code>flyctl</code>. <code>pnpm verify</code> passes (20 tests).</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 15:02 — Backend deployed to Fly and verified live</h2>
+      <p>Created the Fly app <code>ghostwriter-backend</code>, stored a scoped deploy token as the <code>FLY_API_TOKEN</code> GitHub secret, and deployed. Fixed three deploy issues: the Docker build context/dockerfile path (deploy from repo root with <code>--dockerfile</code> and a root <code>.dockerignore</code>); the machine was memory-starved at 256&nbsp;MB (tsx boot produced no output, exit 124) so bumped to 512&nbsp;MB and widened the health grace; and the connection pooler host rejects Lakebase OAuth-token SASL (Postgres <code>08P01</code>), so the backend must use the <em>direct</em> endpoint host, not <code>-pooler</code>.</p>
+      <p>Migrated the <code>production</code> branch and verified the running service: <code>https://ghostwriter-backend.fly.dev/health</code> returns 200, and the DB-backed navigator returns a correct 404 for an unknown project — proving Fly → service-principal OAuth M2M (self-refreshing token) → Lakebase → Drizzle → core end to end. First-PR check that the SP can manage branches still applies to <code>db-branch.yml</code>.</p>
+    </article>
+  </main>
+</body>
+</html>

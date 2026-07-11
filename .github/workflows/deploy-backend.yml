@@ -1,0 +1,61 @@
+name: Deploy backend (production)
+
+# On merge to main: run forward-only migrations against the Lakebase production branch and deploy
+# the backend to Fly.io. No-ops until Databricks and Fly secrets/variables are configured.
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-backend-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      HAS_SECRETS: ${{ secrets.DATABRICKS_HOST != '' && secrets.FLY_API_TOKEN != '' && vars.LAKEBASE_PROJECT_ID != '' }}
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      LAKEBASE_PROJECT_ID: ${{ vars.LAKEBASE_PROJECT_ID }}
+      LAKEBASE_USER: ${{ vars.LAKEBASE_USER }}
+      LAKEBASE_ENDPOINT_ID: ${{ vars.LAKEBASE_ENDPOINT_ID }}
+      LAKEBASE_SOURCE_BRANCH: production
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip when unconfigured
+        if: env.HAS_SECRETS != 'true'
+        run: echo "Backend deploy secrets not configured — skipping."
+
+      - uses: pnpm/action-setup@v4
+        if: env.HAS_SECRETS == 'true'
+
+      - uses: actions/setup-node@v4
+        if: env.HAS_SECRETS == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install storage dependencies
+        if: env.HAS_SECRETS == 'true'
+        run: pnpm install --frozen-lockfile --filter "@ghostwriter/storage..."
+
+      - name: Install Databricks CLI
+        if: env.HAS_SECRETS == 'true'
+        run: curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sudo sh
+
+      - name: Migrate production
+        if: env.HAS_SECRETS == 'true'
+        run: ./scripts/lakebase.sh migrate production
+
+      - name: Set up flyctl
+        if: env.HAS_SECRETS == 'true'
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy to Fly.io
+        if: env.HAS_SECRETS == 'true'
+        run: flyctl deploy --config apps/backend/fly.toml --remote-only

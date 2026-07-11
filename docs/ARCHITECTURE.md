@@ -51,6 +51,50 @@ Every feature is built inside-out:
 
 This ordering keeps MCP at parity by construction instead of as an afterthought.
 
+## Implemented writing kernel (2026-07-11)
+
+Phase 1.1 replaces the scaffold manuscript object with the first shared product capability:
+
+- ADR 0003 defines normalized project, book, scene, story-knowledge, and edition records. A project
+  owns ordered book references; each book owns its manuscript structure; parts and chapters order
+  stable scene references rather than copied scene bodies.
+- `packages/core` provides branded IDs, immutable record constructors, cross-record validation,
+  plain repository/transaction/ID/clock ports, project commands and queries, and a transactional
+  memory adapter. The memory adapter is a deterministic test and fixture implementation, not a
+  browser store or candidate canonical backend.
+- One `ProjectNavigator` query projection drives the responsive fixture navigator in
+  `packages/ui` and the read-only `ghostwriter_project_navigator` MCP tool. A capability registry
+  records those bindings explicitly.
+- `packages/ui/src/theme.ts` holds the product chrome tokens and font roles derived from the living
+  `plans/designs/Ghostwriter Mockups 2.0.html` source. The client loads Parisienne, Jost, and
+  Cormorant Garamond, while the shared UI owns the supplied Ghostwriter lockup and responsive shell.
+- The client labels the Bellwether data as a read-only sample. It does not imply persistence,
+  server acknowledgement, collaboration, or offline access.
+- The MCP process smoke test launches a real stdio server, discovers the tool, invokes it, validates
+  structured output against the core fixture, and closes it cleanly.
+
+See [ADR 0003](adr/0003-multi-book-domain-boundaries.md). Tiptap scene bodies, the revision graph,
+identity, real-time sync, recovery, and Story Canvas mutation remain later plans.
+
+## Implemented backend and persistence (2026-07-11)
+
+ADR 0004 makes the server-authoritative store concrete:
+
+- `packages/storage` implements the core `ProjectRepository` port against Postgres with **Drizzle
+  ORM**. The relational schema is the normalized ADR 0003 model; write transactions run the domain's
+  whole-project validation for parity with the in-memory adapter. Provider/SQL types never enter
+  `packages/core`. The store depends only on standard Postgres, so tests and local dev use in-process
+  **PGlite** (kept out of the `@ghostwriter/storage` entry point via a `./pglite` subpath).
+- Migrations are TypeScript-defined and emitted as checked-in SQL under `packages/storage/drizzle/`.
+- `apps/backend` is a thin **Hono** service composing the same core services the UI and MCP call,
+  over the Postgres adapter. It exposes health and the project-navigator read model and is
+  container-deployable (Fly.io).
+- The database is **Databricks Lakebase** (serverless Postgres). CI branches the database per pull
+  request (copy-on-write) via `scripts/lakebase.sh`; production deploys migrate and ship the backend.
+
+See [ADR 0004](adr/0004-lakebase-backend-and-cicd.md). Identity/auth, profiles, subscriptions,
+real-time transport, and browser recovery remain later plans on top of this backend.
+
 ## Accepted product requirements (2026-07-11)
 
 - Responsive real-time web is the primary product; desktop and mobile are convenience surfaces
@@ -108,7 +152,7 @@ plan's record-log plus update this section.
 
 | Decision | Options on the table | Notes |
 |---|---|---|
-| Real-time backend | shared database + subscriptions, actor/room model, CRDT coordination service | Select identity, authorization, hosting, deletion, retention, and reconnect semantics together |
+| Real-time transport | subscriptions over the shared DB, actor/room model, CRDT coordination service | Database chosen (Lakebase, ADR 0004); live-update transport, presence, and reconnect semantics still open |
 | Content history | content-addressed checkpoint/variant graph, event sourcing, literal Git repository | Recommend immutable prose-aware version graph; do not expose Git mechanics or event-source keystrokes |
 | Browser recovery | IndexedDB, OPFS, simpler encrypted draft buffer | Store only unacknowledged recovery data; clear safely after server acknowledgement |
 | Build tooling | pnpm native workspace orchestration; revisit Turborepo only when measured need appears | Resolved for scaffold |

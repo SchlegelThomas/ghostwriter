@@ -1,0 +1,10 @@
+# Keep the backend Docker build context small. The Dockerfile installs dependencies in-image and
+# only needs workspace manifests + core/storage/backend source.
+**/node_modules
+.git
+**/dist
+**/.expo
+plans
+docs
+apps/client
+packages/ui

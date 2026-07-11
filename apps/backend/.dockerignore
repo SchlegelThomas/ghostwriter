@@ -1,0 +1,8 @@
+**/node_modules
+**/dist
+**/.expo
+**/.turbo
+apps/client
+packages/ui
+plans
+docs

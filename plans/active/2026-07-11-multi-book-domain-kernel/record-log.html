@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Multi-book domain kernel — record log</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter record log</p>
+      <h1>Multi-book domain kernel</h1>
+      <p class="meta"><a href="plan.html">Return to delivery plan</a> · <strong>Branch:</strong> <code>feat/multi-book-domain-kernel</code></p>
+    </header>
+
+    <article>
+      <h2>2026-07-11 13:05 — Phase 1.1 opened</h2>
+      <p>The founder directed implementation to begin from the latest accepted plans. Remote <code>main</code> already contained merged PR #3, so local <code>main</code> was fast-forwarded to <code>e3d438a</code> and <code>feat/multi-book-domain-kernel</code> was created from it with a clean working tree.</p>
+      <p>Selected roadmap slice 1.1 because it is the earliest production slice that can proceed without silently choosing the still-open backend, identity, recovery, AI-provider, credential, or import/export architecture. The observable outcome is a shared multi-book core read model shown through a responsive fixture navigator and the MCP server.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 13:08 — Scope boundaries recorded</h2>
+      <p>The kernel will define stable aggregate ownership, IDs, ordered manuscript references, scene metadata, edition identity, minimal project-wide story-knowledge references, command/query ports, a memory repository, and capability parity metadata.</p>
+      <p>It will not implement a database schema, network transport, browser recovery, editor document, revision graph, live collaboration, complete story bible, Story Canvas mutation, import/export, or model call. The client will identify all displayed content as fixture data and will not claim that content is saved or collaborative.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 13:10 — Domain kernel and memory adapter verified</h2>
+      <p>Accepted <a href="../../../docs/adr/0003-multi-book-domain-boundaries.md">ADR 0003</a>: projects own ordered book references; books own manuscript structure; scenes, story knowledge, and editions remain normalized records with stable references. Canvas and manuscript projections cannot duplicate scene truth, and concrete storage or transport types remain outside core.</p>
+      <p>Implemented branded IDs, immutable record constructors, cross-record validation, project query projections, plain service ports, transactional in-memory storage, a capability registry, and a two-book Bellwether fixture. Focused core typecheck and 12 Vitest cases pass, including ordering, duplicate and cross-book rejection, transaction rollback, defensive copies, and UI/MCP parity metadata.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 13:14 — Responsive fixture navigator running</h2>
+      <p>Established <code>@ghostwriter/ui</code> and replaced the scaffold welcome page with a warm, responsive project navigator derived from the shared core projection. Wide web uses the accepted rail, manuscript navigator, central writing surface, and story-knowledge inspector; narrow web uses book tabs and a focused single-column hierarchy.</p>
+      <p>The UI labels the project as a read-only sample and makes no persistence, collaboration, or offline claim. Package and client typechecks pass, Expo web export succeeds, and the local web runtime returns HTTP 200. The initial export exposed Metro’s handling of NodeNext <code>.js</code> specifiers in workspace TypeScript; a client-scoped resolver now strips those specifiers only for relative imports originating in shared packages.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 13:16 — MCP read parity verified over stdio</h2>
+      <p>Replaced the scaffold status tool with <code>ghostwriter_project_navigator</code>. It returns the same Bellwether core projection as structured, schema-validated output, declares read-only and idempotent annotations, accepts an optional project scope, and rejects unavailable fixture projects without broadening access.</p>
+      <p>A real MCP client now launches the server as a child process, negotiates stdio, lists the tool, invokes it, compares the structured result with the core fixture, checks the unavailable-project error, and closes cleanly. MCP typecheck and the process smoke test pass, closing the known test gap preserved from the foundation plan.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 13:18 — Full verification passed</h2>
+      <p>The first full verification run found only repository-lint issues in the new Metro configuration and one intentionally unused test parameter. Converted the Metro configuration to lint-clean ESM, corrected Expo’s exported config path and project-root normalization, removed the unused parameter, and rebuilt the web export successfully.</p>
+      <p><code>pnpm verify</code> now passes across all workspaces: core, UI, client, and MCP typechecks; repository ESLint; and 13 Vitest cases across three files. <code>git diff --check</code> and IDE diagnostics are clean. Expo static web export also passes after the full suite.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 13:21 — Living-design mismatch reopened the UI slice</h2>
+      <p>The founder identified that the fixture navigator followed the older plan-scoped mockup palette and shell rather than the updated living source at <a href="../../designs/Ghostwriter%20Mockups%202.0.html">Ghostwriter Mockups 2.0</a>. Audit confirmed the current UI omitted the supplied logo, Parisienne/Jost/Cormorant typography, Inbox rail item, 2.0 shell dimensions, and contextual inspector language, while introducing a metric dashboard not present in the design.</p>
+      <p>Reopened the responsive UI, verification, and documentation todos. The correction will use <code>packages/ui/src/Ghostwriter.png</code>, promote living-design theme tokens and typography, align the wide-web chrome, remove implementation-centric dashboard messaging, and strengthen the planning template so product-facing plans must record living-design review. Story Canvas, derivation, imagery, and split-view behavior remain deferred rather than being faked in this domain slice.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 13:30 — Brand, theme, shell, and harness corrected</h2>
+      <p>Added a shared living-design theme with the 2.0 ink, canvas, kicker, brand-dark, wash, rail, and status tokens; loaded Parisienne, Jost, and Cormorant Garamond through the client; and placed the supplied large-format Ghostwriter lockup intact in the manuscript navigator and narrow layout. The topbar now uses the 2.0 text wordmark, the rail includes Inbox and matches the 58px dimension, the navigator and contextual scene inspector match the 252px/276px shell, and the metric dashboard and MCP-centric boundary callout were removed.</p>
+      <p>The planning template now requires product-facing plans to link and record living-design review, the planning guide makes that acceptance step explicit, and the older plan-scoped mockups identify themselves as historical where the living source differs. Direct font-module imports limit the web export to the six selected font files plus the supplied logo. <code>pnpm verify</code> passes with 13 tests; Expo web export passes; the refreshed preview returns HTTP 200; <code>git diff --check</code> and IDE diagnostics are clean.</p>
+    </article>
+  </main>
+</body>
+</html>
