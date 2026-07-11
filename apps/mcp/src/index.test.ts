@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import { PROJECT_NAVIGATOR_TOOL_NAME } from "./server.js";
 
 const appDirectory = fileURLToPath(new URL("..", import.meta.url));
+const serverEntry = fileURLToPath(new URL("./index.ts", import.meta.url));
 
 describe("Ghostwriter MCP stdio server", () => {
   it(
@@ -18,9 +19,11 @@ describe("Ghostwriter MCP stdio server", () => {
         name: "ghostwriter-mcp-smoke-test",
         version: "0.0.0"
       });
+      // Spawn the server directly with `node --import tsx` rather than through pnpm, so nothing
+      // pollutes the stdio JSON-RPC stream (pnpm output varies by environment).
       const transport = new StdioClientTransport({
-        command: "pnpm",
-        args: ["exec", "tsx", "src/index.ts"],
+        command: process.execPath,
+        args: ["--import", "tsx", serverEntry],
         cwd: appDirectory,
         stderr: "pipe"
       });
