@@ -34,9 +34,14 @@ const ids = () =>
     part: ["part-one", "part-two"],
     chapter: ["chapter-one", "chapter-two"],
     scene: ["scene-one"],
+    sceneDocumentBlock: [],
     storyKnowledge: ["knowledge-one"],
     edition: [],
-    revision: []
+    revision: [],
+    sceneVariant: [],
+    canvasObject: [],
+    canvasLink: [],
+    canvasRevision: []
   });
 
 async function setup() {
@@ -274,5 +279,59 @@ describe("project commands", () => {
     });
     expect(afterFailures.version).toBe(3);
     expect(afterFailures.title).toBe("Still consistent");
+  });
+
+  it("refuses new story links to archived scenes without trapping existing links", async () => {
+    const { execute } = await setup();
+    let navigator = await execute(1, {
+      type: "scene.create",
+      bookId: bookId("book-one"),
+      title: "Archived scene"
+    });
+    navigator = await execute(navigator.version, {
+      type: "storyKnowledge.create",
+      label: "Known place",
+      kind: "location",
+      authority: "confirmed"
+    });
+    navigator = await execute(navigator.version, {
+      type: "scene.setArchived",
+      sceneId: sceneId("scene-one"),
+      archived: true
+    });
+
+    await expect(
+      execute(navigator.version, {
+        type: "storyKnowledge.setSceneLink",
+        storyKnowledgeId: storyKnowledgeId("knowledge-one"),
+        sceneId: sceneId("scene-one"),
+        linked: true
+      })
+    ).rejects.toMatchObject({ code: "INVALID_PLACEMENT" });
+
+    navigator = await execute(navigator.version, {
+      type: "scene.setArchived",
+      sceneId: sceneId("scene-one"),
+      archived: false
+    });
+    navigator = await execute(navigator.version, {
+      type: "storyKnowledge.setSceneLink",
+      storyKnowledgeId: storyKnowledgeId("knowledge-one"),
+      sceneId: sceneId("scene-one"),
+      linked: true
+    });
+    navigator = await execute(navigator.version, {
+      type: "scene.setArchived",
+      sceneId: sceneId("scene-one"),
+      archived: true
+    });
+    navigator = await execute(navigator.version, {
+      type: "storyKnowledge.setSceneLink",
+      storyKnowledgeId: storyKnowledgeId("knowledge-one"),
+      sceneId: sceneId("scene-one"),
+      linked: false
+    });
+
+    expect(navigator.storyKnowledge[0]?.linkedSceneCount).toBe(0);
   });
 });

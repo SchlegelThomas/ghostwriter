@@ -24,6 +24,10 @@ import {
   type ProjectRecordWriter,
   type ProjectRepository
 } from "./project-repository.js";
+import {
+  MEMORY_TRANSACTION_STATE,
+  type MemoryTransactionalRepository
+} from "./memory-transaction.js";
 
 type MemoryState = {
   projects: Map<string, Project>;
@@ -286,7 +290,7 @@ export function createMemoryProjectRepository(
   }
   validateState(state);
 
-  return Object.freeze({
+  const repository: ProjectRepository & MemoryTransactionalRepository = {
     async getProject(id: ProjectId): Promise<Project | undefined> {
       const project = state.projects.get(id);
       return project === undefined ? undefined : createProject(project);
@@ -359,5 +363,12 @@ export function createMemoryProjectRepository(
         releaseTransaction();
       }
     }
+  };
+  repository[MEMORY_TRANSACTION_STATE] = Object.freeze({
+    snapshot: () => cloneState(state),
+    restore(snapshot: unknown): void {
+      state = cloneState(snapshot as MemoryState);
+    }
   });
+  return Object.freeze(repository);
 }

@@ -19,6 +19,7 @@ export type ProjectLibraryScreenProps = Readonly<{
   projects: readonly StoryProjectSummary[];
   includeArchived: boolean;
   busy?: boolean;
+  profileSaveState?: "idle" | "saving" | "saved" | "error";
   error?: string;
   onCreate(input: Readonly<{ title: string; firstBookTitle: string }>): void;
   onOpen(projectId: string): void;
@@ -68,6 +69,7 @@ export function ProjectLibraryScreen({
   projects,
   includeArchived,
   busy = false,
+  profileSaveState = "idle",
   error,
   onCreate,
   onOpen,
@@ -140,6 +142,7 @@ export function ProjectLibraryScreen({
                 {projects.map((project) => (
                   <Pressable
                     accessibilityHint="Open this project"
+                    accessibilityLabel={`Project ${project.title}`}
                     accessibilityRole="button"
                     key={project.id}
                     onPress={() => onOpen(project.id)}
@@ -229,6 +232,21 @@ export function ProjectLibraryScreen({
                   })
                 }
               />
+              <Text
+                accessibilityLiveRegion="polite"
+                style={[
+                  styles.profileStatus,
+                  profileSaveState === "error" && styles.profileStatusError
+                ]}
+              >
+                {profileSaveState === "saving"
+                  ? "Saving profile…"
+                  : profileSaveState === "saved"
+                    ? "Profile saved"
+                    : profileSaveState === "error"
+                      ? "Profile not saved"
+                      : "Profile changes save to your account"}
+              </Text>
             </View>
           </View>
         </View>
@@ -463,5 +481,14 @@ const styles = StyleSheet.create({
     minHeight: 42,
     paddingHorizontal: 11,
     paddingVertical: 9
+  },
+  profileStatus: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 8,
+    marginTop: 8
+  },
+  profileStatusError: {
+    color: colors.red
   }
 });

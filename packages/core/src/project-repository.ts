@@ -56,9 +56,14 @@ export type DomainIdKind =
   | "part"
   | "chapter"
   | "scene"
+  | "sceneDocumentBlock"
   | "storyKnowledge"
   | "edition"
-  | "revision";
+  | "revision"
+  | "sceneVariant"
+  | "canvasObject"
+  | "canvasLink"
+  | "canvasRevision";
 
 export interface IdGenerator {
   create(kind: DomainIdKind): string;

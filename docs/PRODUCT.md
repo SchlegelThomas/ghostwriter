@@ -69,6 +69,25 @@ canonical local or offline project. See ADR 0005.
   multiple prose variants, but their output stays provisional until an author or authorized
   editor chooses what to apply.
 
+## Current writing milestone — implemented locally 2026-07-12
+
+The active branch now proves the first owner-only version of the core promise:
+
+- authenticated writers create projects and manage the complete current manuscript/story-knowledge
+  kernel through safe server-acknowledged commands;
+- each scene has durable Tiptap prose, one direct-edit lease, clear save/conflict states, immutable
+  checkpoints, named variants, block-aware comparison, restore-as-new, and explicit crash recovery;
+- Draft and Story Canvas share canonical scene/story IDs, selected scene context, and Split view;
+- Story Canvas persists spatial objects, notes, regions, story-knowledge/image metadata, typed
+  confirmed or provisional links, personal viewport state, snapshot restore/undo, and a
+  manuscript-derived spine that exposes drift without reordering prose;
+- wide web supports spatial writing; narrow web uses an ordered keyboard/screen-reader Canvas
+  posture instead of pretending freeform drag fits a phone.
+
+This milestone does not yet deliver collaborators, comments/suggestions, real-time subscriptions or
+presence, AI/image generation, import/export, account exit, permanent purge, or native freeform
+Canvas editing. Product copy must not imply those later outcomes already ship.
+
 ## Product principles
 
 1. **The writer owns the work.** Complete history, usable export, clear permissions, and no

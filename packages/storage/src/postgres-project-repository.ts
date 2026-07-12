@@ -32,7 +32,7 @@ import {
   type StoryKnowledgeAuthority,
   type StoryKnowledgeKind
 } from "@ghostwriter/core";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import {
   ProjectVersionConflictError,
   type ProjectRecordWriter,
@@ -308,6 +308,418 @@ async function persistBuffer(
   }
 }
 
+type ReplacementRows = Readonly<{
+  bookRows: Array<typeof books.$inferInsert>;
+  sceneRows: Array<typeof scenes.$inferInsert>;
+  partRows: Array<typeof manuscriptParts.$inferInsert>;
+  chapterRows: Array<typeof manuscriptChapters.$inferInsert>;
+  chapterSceneRows: Array<typeof manuscriptChapterScenes.$inferInsert>;
+  unassignedRows: Array<typeof bookUnassignedScenes.$inferInsert>;
+  knowledgeRows: Array<typeof storyKnowledge.$inferInsert>;
+  knowledgeSceneRows: Array<typeof storyKnowledgeScenes.$inferInsert>;
+  editionRows: Array<typeof editions.$inferInsert>;
+  editionRefRows: Array<typeof editionSceneRevisions.$inferInsert>;
+}>;
+
+type ExistingProjectRowIds = Readonly<{
+  bookIds: string[];
+  sceneIds: string[];
+  partIds: string[];
+  chapterIds: string[];
+  knowledgeIds: string[];
+  editionIds: string[];
+}>;
+
+function replacementRows(records: ProjectRecords): ReplacementRows {
+  const bookRows: ReplacementRows["bookRows"] = [];
+  const sceneRows: ReplacementRows["sceneRows"] = [];
+  const partRows: ReplacementRows["partRows"] = [];
+  const chapterRows: ReplacementRows["chapterRows"] = [];
+  const chapterSceneRows: ReplacementRows["chapterSceneRows"] = [];
+  const unassignedRows: ReplacementRows["unassignedRows"] = [];
+  const knowledgeRows: ReplacementRows["knowledgeRows"] = [];
+  const knowledgeSceneRows: ReplacementRows["knowledgeSceneRows"] = [];
+  const editionRows: ReplacementRows["editionRows"] = [];
+  const editionRefRows: ReplacementRows["editionRefRows"] = [];
+
+  for (const book of records.books) {
+    bookRows.push({
+      id: book.id,
+      projectId: book.projectId,
+      position: records.project.bookIds.indexOf(book.id),
+      title: book.title,
+      status: book.status,
+      createdAt: book.createdAt,
+      archivedAt: book.archivedAt ?? null
+    });
+
+    book.manuscript.parts.forEach((part, partIndex) => {
+      partRows.push({ id: part.id, bookId: book.id, position: partIndex, title: part.title });
+
+      part.chapters.forEach((chapter, chapterIndex) => {
+        chapterRows.push({
+          id: chapter.id,
+          partId: part.id,
+          position: chapterIndex,
+          title: chapter.title
+        });
+
+        chapter.sceneIds.forEach((sceneReference, sceneIndex) => {
+          chapterSceneRows.push({
+            chapterId: chapter.id,
+            sceneId: sceneReference,
+            position: sceneIndex
+          });
+        });
+      });
+    });
+
+    book.manuscript.unassignedSceneIds.forEach((sceneReference, sceneIndex) => {
+      unassignedRows.push({
+        bookId: book.id,
+        sceneId: sceneReference,
+        position: sceneIndex
+      });
+    });
+  }
+
+  for (const scene of records.scenes) {
+    sceneRows.push({
+      id: scene.id,
+      projectId: scene.projectId,
+      bookId: scene.bookId,
+      title: scene.title,
+      status: scene.status,
+      summary: scene.summary ?? null,
+      povStoryKnowledgeId: scene.povStoryKnowledgeId ?? null,
+      archivedAt: scene.archivedAt ?? null
+    });
+  }
+
+  for (const knowledge of records.storyKnowledge) {
+    knowledgeRows.push({
+      id: knowledge.id,
+      projectId: knowledge.projectId,
+      label: knowledge.label,
+      kind: knowledge.kind,
+      authority: knowledge.authority,
+      archivedAt: knowledge.archivedAt ?? null
+    });
+
+    knowledge.linkedSceneIds.forEach((sceneReference, sceneIndex) => {
+      knowledgeSceneRows.push({
+        storyKnowledgeId: knowledge.id,
+        sceneId: sceneReference,
+        position: sceneIndex
+      });
+    });
+  }
+
+  for (const edition of records.editions) {
+    editionRows.push({
+      id: edition.id,
+      projectId: edition.projectId,
+      bookId: edition.bookId,
+      name: edition.name,
+      projectRevisionId: edition.projectRevisionId,
+      createdAt: edition.createdAt
+    });
+
+    edition.sceneRevisions.forEach((reference, referenceIndex) => {
+      editionRefRows.push({
+        editionId: edition.id,
+        sceneId: reference.sceneId,
+        revisionId: reference.revisionId,
+        position: referenceIndex
+      });
+    });
+  }
+
+  return {
+    bookRows,
+    sceneRows,
+    partRows,
+    chapterRows,
+    chapterSceneRows,
+    unassignedRows,
+    knowledgeRows,
+    knowledgeSceneRows,
+    editionRows,
+    editionRefRows
+  };
+}
+
+async function existingProjectRowIds(
+  exec: RepositoryDatabase,
+  id: ProjectId
+): Promise<ExistingProjectRowIds> {
+  const bookRows = await exec
+    .select({ id: books.id })
+    .from(books)
+    .where(eq(books.projectId, id));
+  const bookIds = bookRows.map((row) => row.id);
+  const sceneRows = await exec
+    .select({ id: scenes.id })
+    .from(scenes)
+    .where(eq(scenes.projectId, id));
+  const knowledgeRows = await exec
+    .select({ id: storyKnowledge.id })
+    .from(storyKnowledge)
+    .where(eq(storyKnowledge.projectId, id));
+  const editionRows = await exec
+    .select({ id: editions.id })
+    .from(editions)
+    .where(eq(editions.projectId, id));
+  const partRows =
+    bookIds.length === 0
+      ? []
+      : await exec
+          .select({ id: manuscriptParts.id })
+          .from(manuscriptParts)
+          .where(inArray(manuscriptParts.bookId, bookIds));
+  const partIds = partRows.map((row) => row.id);
+  const chapterRows =
+    partIds.length === 0
+      ? []
+      : await exec
+          .select({ id: manuscriptChapters.id })
+          .from(manuscriptChapters)
+          .where(inArray(manuscriptChapters.partId, partIds));
+
+  return {
+    bookIds,
+    sceneIds: sceneRows.map((row) => row.id),
+    partIds,
+    chapterIds: chapterRows.map((row) => row.id),
+    knowledgeIds: knowledgeRows.map((row) => row.id),
+    editionIds: editionRows.map((row) => row.id)
+  };
+}
+
+async function clearReplacementLinks(
+  exec: RepositoryDatabase,
+  existing: ExistingProjectRowIds
+): Promise<void> {
+  if (existing.chapterIds.length > 0) {
+    await exec
+      .delete(manuscriptChapterScenes)
+      .where(inArray(manuscriptChapterScenes.chapterId, existing.chapterIds));
+  }
+  if (existing.bookIds.length > 0) {
+    await exec
+      .delete(bookUnassignedScenes)
+      .where(inArray(bookUnassignedScenes.bookId, existing.bookIds));
+  }
+  if (existing.knowledgeIds.length > 0) {
+    await exec
+      .delete(storyKnowledgeScenes)
+      .where(inArray(storyKnowledgeScenes.storyKnowledgeId, existing.knowledgeIds));
+  }
+  if (existing.editionIds.length > 0) {
+    await exec
+      .delete(editionSceneRevisions)
+      .where(inArray(editionSceneRevisions.editionId, existing.editionIds));
+  }
+}
+
+async function persistStableReplacementRows(
+  exec: RepositoryDatabase,
+  rows: ReplacementRows,
+  existing: ExistingProjectRowIds
+): Promise<void> {
+  const existingBookIds = new Set(existing.bookIds);
+  for (const row of rows.bookRows) {
+    if (existingBookIds.has(row.id)) {
+      await exec
+        .update(books)
+        .set({
+          projectId: row.projectId,
+          position: row.position,
+          title: row.title,
+          status: row.status,
+          createdAt: row.createdAt,
+          archivedAt: row.archivedAt
+        })
+        .where(eq(books.id, row.id));
+    } else {
+      await exec.insert(books).values(row);
+    }
+  }
+
+  const existingKnowledgeIds = new Set(existing.knowledgeIds);
+  for (const row of rows.knowledgeRows) {
+    if (existingKnowledgeIds.has(row.id)) {
+      await exec
+        .update(storyKnowledge)
+        .set({
+          projectId: row.projectId,
+          label: row.label,
+          kind: row.kind,
+          authority: row.authority,
+          archivedAt: row.archivedAt
+        })
+        .where(eq(storyKnowledge.id, row.id));
+    } else {
+      await exec.insert(storyKnowledge).values(row);
+    }
+  }
+
+  const existingSceneIds = new Set(existing.sceneIds);
+  for (const row of rows.sceneRows) {
+    if (existingSceneIds.has(row.id)) {
+      await exec
+        .update(scenes)
+        .set({
+          projectId: row.projectId,
+          bookId: row.bookId,
+          title: row.title,
+          status: row.status,
+          summary: row.summary,
+          povStoryKnowledgeId: row.povStoryKnowledgeId,
+          archivedAt: row.archivedAt
+        })
+        .where(eq(scenes.id, row.id));
+    } else {
+      await exec.insert(scenes).values(row);
+    }
+  }
+
+  const existingPartIds = new Set(existing.partIds);
+  for (const row of rows.partRows) {
+    if (existingPartIds.has(row.id)) {
+      await exec
+        .update(manuscriptParts)
+        .set({
+          bookId: row.bookId,
+          position: row.position,
+          title: row.title
+        })
+        .where(eq(manuscriptParts.id, row.id));
+    } else {
+      await exec.insert(manuscriptParts).values(row);
+    }
+  }
+
+  const existingChapterIds = new Set(existing.chapterIds);
+  for (const row of rows.chapterRows) {
+    if (existingChapterIds.has(row.id)) {
+      await exec
+        .update(manuscriptChapters)
+        .set({
+          partId: row.partId,
+          position: row.position,
+          title: row.title
+        })
+        .where(eq(manuscriptChapters.id, row.id));
+    } else {
+      await exec.insert(manuscriptChapters).values(row);
+    }
+  }
+
+  const existingEditionIds = new Set(existing.editionIds);
+  for (const row of rows.editionRows) {
+    if (existingEditionIds.has(row.id)) {
+      await exec
+        .update(editions)
+        .set({
+          projectId: row.projectId,
+          bookId: row.bookId,
+          name: row.name,
+          projectRevisionId: row.projectRevisionId,
+          createdAt: row.createdAt
+        })
+        .where(eq(editions.id, row.id));
+    } else {
+      await exec.insert(editions).values(row);
+    }
+  }
+}
+
+function removedIds(
+  existingIds: readonly string[],
+  desiredRows: readonly Readonly<{ id: string }>[]
+): string[] {
+  const desiredIds = new Set(desiredRows.map((row) => row.id));
+  return existingIds.filter((id) => !desiredIds.has(id));
+}
+
+async function removeMissingReplacementRows(
+  exec: RepositoryDatabase,
+  project: Project,
+  rows: ReplacementRows,
+  existing: ExistingProjectRowIds
+): Promise<void> {
+  const removedEditionIds = removedIds(existing.editionIds, rows.editionRows);
+  const removedChapterIds = removedIds(existing.chapterIds, rows.chapterRows);
+  const removedPartIds = removedIds(existing.partIds, rows.partRows);
+  const removedSceneIds = removedIds(existing.sceneIds, rows.sceneRows);
+  const removedKnowledgeIds = removedIds(existing.knowledgeIds, rows.knowledgeRows);
+  const removedBookIds = removedIds(existing.bookIds, rows.bookRows);
+
+  if (removedEditionIds.length > 0) {
+    await exec
+      .delete(editions)
+      .where(
+        and(
+          eq(editions.projectId, project.id),
+          inArray(editions.id, removedEditionIds)
+        )
+      );
+  }
+  if (removedChapterIds.length > 0) {
+    await exec
+      .delete(manuscriptChapters)
+      .where(inArray(manuscriptChapters.id, removedChapterIds));
+  }
+  if (removedPartIds.length > 0) {
+    await exec
+      .delete(manuscriptParts)
+      .where(inArray(manuscriptParts.id, removedPartIds));
+  }
+  if (removedSceneIds.length > 0) {
+    await exec
+      .delete(scenes)
+      .where(
+        and(eq(scenes.projectId, project.id), inArray(scenes.id, removedSceneIds))
+      );
+  }
+  if (removedKnowledgeIds.length > 0) {
+    await exec
+      .delete(storyKnowledge)
+      .where(
+        and(
+          eq(storyKnowledge.projectId, project.id),
+          inArray(storyKnowledge.id, removedKnowledgeIds)
+        )
+      );
+  }
+  if (removedBookIds.length > 0) {
+    await exec
+      .delete(books)
+      .where(
+        and(eq(books.projectId, project.id), inArray(books.id, removedBookIds))
+      );
+  }
+}
+
+async function insertReplacementLinks(
+  exec: RepositoryDatabase,
+  rows: ReplacementRows
+): Promise<void> {
+  if (rows.chapterSceneRows.length > 0) {
+    await exec.insert(manuscriptChapterScenes).values(rows.chapterSceneRows);
+  }
+  if (rows.unassignedRows.length > 0) {
+    await exec.insert(bookUnassignedScenes).values(rows.unassignedRows);
+  }
+  if (rows.knowledgeSceneRows.length > 0) {
+    await exec.insert(storyKnowledgeScenes).values(rows.knowledgeSceneRows);
+  }
+  if (rows.editionRefRows.length > 0) {
+    await exec.insert(editionSceneRevisions).values(rows.editionRefRows);
+  }
+}
+
 async function persistReplacements(
   exec: RepositoryDatabase,
   replacements: WriteBuffer["replacements"]
@@ -334,22 +746,12 @@ async function persistReplacements(
       throw new ProjectVersionConflictError(records.project.id, expectedVersion);
     }
 
-    await exec.delete(editions).where(eq(editions.projectId, records.project.id));
-    await exec
-      .delete(storyKnowledge)
-      .where(eq(storyKnowledge.projectId, records.project.id));
-    await exec.delete(books).where(eq(books.projectId, records.project.id));
-
-    const replacementBuffer = emptyBuffer();
-    replacementBuffer.projects.push(records.project);
-    replacementBuffer.books.push(...records.books);
-    replacementBuffer.scenes.push(...records.scenes);
-    replacementBuffer.storyKnowledge.push(...records.storyKnowledge);
-    replacementBuffer.editions.push(...records.editions);
-    await persistBuffer(exec, replacementBuffer, {
-      insertProjects: false,
-      insertMemberships: false
-    });
+    const rows = replacementRows(records);
+    const existing = await existingProjectRowIds(exec, records.project.id);
+    await clearReplacementLinks(exec, existing);
+    await persistStableReplacementRows(exec, rows, existing);
+    await removeMissingReplacementRows(exec, records.project, rows, existing);
+    await insertReplacementLinks(exec, rows);
   }
 }
 

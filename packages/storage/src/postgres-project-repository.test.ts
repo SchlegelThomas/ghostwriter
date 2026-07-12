@@ -5,11 +5,13 @@ import {
   BELLWETHER_FIXTURE_PROJECT_ID,
   accountId,
   bookId,
+  chapterId,
   createGhostwriterServices,
   createProject,
   createProjectMembership,
   createScene,
   DomainValidationError,
+  partId,
   projectId,
   sceneId,
   type IdGenerator,
@@ -31,8 +33,8 @@ afterEach(async () => {
   }
 });
 
-async function freshRepository(): Promise<ProjectRepository> {
-  const { db, close } = createPgliteDatabase();
+async function freshRepositoryDatabase() {
+  const { db, client, close } = createPgliteDatabase();
   closers.push(close);
   await migratePgliteRepositoryDatabase(db);
   await db.insert(user).values({
@@ -41,7 +43,14 @@ async function freshRepository(): Promise<ProjectRepository> {
     email: "owner@example.test",
     emailVerified: true
   });
-  return createPostgresProjectRepository(toRepositoryDatabase(db));
+  return {
+    repository: createPostgresProjectRepository(toRepositoryDatabase(db)),
+    client
+  };
+}
+
+async function freshRepository(): Promise<ProjectRepository> {
+  return (await freshRepositoryDatabase()).repository;
 }
 
 function sequenceIds(values: readonly string[]): IdGenerator {
@@ -81,6 +90,21 @@ describe("postgres project repository", () => {
     await expect(
       services.getProjectNavigator(OWNER_ACCOUNT_ID, BELLWETHER_FIXTURE_PROJECT_ID)
     ).resolves.toEqual(BELLWETHER_FIXTURE_NAVIGATOR);
+
+    const renamed = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+      expectedVersion: 1,
+      command: { type: "project.rename", title: "The Renamed Bellwether Cycle" }
+    });
+    expect(renamed).toEqual({
+      ...BELLWETHER_FIXTURE_NAVIGATOR,
+      title: "The Renamed Bellwether Cycle",
+      version: 2
+    });
+    await expect(
+      services.getProjectNavigator(OWNER_ACCOUNT_ID, BELLWETHER_FIXTURE_PROJECT_ID)
+    ).resolves.toEqual(renamed);
   });
 
   it("creates a project and first book through the service", async () => {
@@ -175,6 +199,146 @@ describe("postgres project repository", () => {
     await expect(
       services.getProjectNavigator(OWNER_ACCOUNT_ID, id)
     ).resolves.toMatchObject({ version: 4 });
+  });
+
+  it("preserves a scene row referenced by a restrictive foreign key", async () => {
+    const { repository, client } = await freshRepositoryDatabase();
+    const services = createGhostwriterServices({
+      projects: repository,
+      ids: sequenceIds([
+        "project-stable-scene",
+        "book-origin",
+        "book-destination",
+        "part-origin",
+        "chapter-origin",
+        "scene-stable"
+      ]),
+      clock: { now: () => "2026-07-11T19:00:00.000Z" }
+    });
+    const id = await services.createStoryProject({
+      ownerAccountId: OWNER_ACCOUNT_ID,
+      title: "Before",
+      firstBookTitle: "Origin"
+    });
+    let navigator = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: id,
+      expectedVersion: 1,
+      command: { type: "book.create", title: "Destination" }
+    });
+    navigator = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: id,
+      expectedVersion: navigator.version,
+      command: {
+        type: "part.create",
+        bookId: bookId("book-origin"),
+        title: "Part One"
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: id,
+      expectedVersion: navigator.version,
+      command: {
+        type: "chapter.create",
+        bookId: bookId("book-origin"),
+        partId: partId("part-origin"),
+        title: "Chapter One"
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: id,
+      expectedVersion: navigator.version,
+      command: {
+        type: "scene.create",
+        bookId: bookId("book-origin"),
+        chapterId: chapterId("chapter-origin"),
+        title: "Opening"
+      }
+    });
+
+    await client.exec(`
+      CREATE TABLE scene_fk_sentinel (
+        id text PRIMARY KEY,
+        scene_id text NOT NULL REFERENCES scenes(id) ON DELETE RESTRICT
+      );
+      INSERT INTO scene_fk_sentinel (id, scene_id)
+      VALUES ('dependent-draft', 'scene-stable');
+    `);
+
+    navigator = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: id,
+      expectedVersion: navigator.version,
+      command: { type: "project.rename", title: "After" }
+    });
+    navigator = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: id,
+      expectedVersion: navigator.version,
+      command: {
+        type: "scene.update",
+        sceneId: sceneId("scene-stable"),
+        title: "A Different Opening",
+        status: "drafting",
+        summary: "The metadata changed without replacing the scene."
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: id,
+      expectedVersion: navigator.version,
+      command: {
+        type: "scene.move",
+        sceneId: sceneId("scene-stable"),
+        bookId: bookId("book-destination"),
+        position: 0
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: id,
+      expectedVersion: navigator.version,
+      command: {
+        type: "chapter.removeEmpty",
+        bookId: bookId("book-origin"),
+        partId: partId("part-origin"),
+        chapterId: chapterId("chapter-origin")
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: id,
+      expectedVersion: navigator.version,
+      command: {
+        type: "part.removeEmpty",
+        bookId: bookId("book-origin"),
+        partId: partId("part-origin")
+      }
+    });
+
+    const dependentRows = await client.query<{
+      id: string;
+      scene_id: string;
+    }>("SELECT id, scene_id FROM scene_fk_sentinel");
+    expect(dependentRows.rows).toEqual([
+      { id: "dependent-draft", scene_id: "scene-stable" }
+    ]);
+    await expect(repository.listScenes(id)).resolves.toContainEqual(
+      expect.objectContaining({
+        id: sceneId("scene-stable"),
+        bookId: bookId("book-destination"),
+        title: "A Different Opening",
+        status: "drafting",
+        summary: "The metadata changed without replacing the scene."
+      })
+    );
+    expect(
+      navigator.books.find((book) => book.id === bookId("book-origin"))?.parts
+    ).toEqual([]);
+    expect(navigator).toMatchObject({ title: "After", version: 10 });
   });
 
   it("rejects a duplicate seed and leaves the store unchanged", async () => {

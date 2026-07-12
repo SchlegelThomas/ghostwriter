@@ -8,6 +8,10 @@ export type SceneId = BrandedId<"SceneId">;
 export type StoryKnowledgeId = BrandedId<"StoryKnowledgeId">;
 export type EditionId = BrandedId<"EditionId">;
 export type RevisionId = BrandedId<"RevisionId">;
+export type SceneVariantId = BrandedId<"SceneVariantId">;
+export type CanvasObjectId = BrandedId<"CanvasObjectId">;
+export type CanvasLinkId = BrandedId<"CanvasLinkId">;
+export type CanvasRevisionId = BrandedId<"CanvasRevisionId">;
 
 export type DomainValidationCode =
   | "EMPTY_VALUE"
@@ -73,6 +77,22 @@ export function editionId(value: string): EditionId {
 
 export function revisionId(value: string): RevisionId {
   return createId(value, "RevisionId");
+}
+
+export function sceneVariantId(value: string): SceneVariantId {
+  return createId(value, "SceneVariantId");
+}
+
+export function canvasObjectId(value: string): CanvasObjectId {
+  return createId(value, "CanvasObjectId");
+}
+
+export function canvasLinkId(value: string): CanvasLinkId {
+  return createId(value, "CanvasLinkId");
+}
+
+export function canvasRevisionId(value: string): CanvasRevisionId {
+  return createId(value, "CanvasRevisionId");
 }
 
 function freezeList<Value>(values: readonly Value[]): readonly Value[] {

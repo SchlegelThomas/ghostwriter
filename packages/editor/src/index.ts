@@ -1,0 +1,51 @@
+export {
+  EMPTY_SCENE_DOCUMENT,
+  assignStableBlockIds,
+  assignTopLevelBlockIds,
+  blockId,
+  createEmptySceneDocument,
+  generateBlockId,
+  isSceneDocumentV1,
+  isValidBlockId,
+  migrateSceneDocument,
+  normalizeSceneDocument,
+  validateProseMirrorDocumentV1,
+  validateSceneDocumentV1,
+} from "./document.js";
+export {
+  hashSceneDocument,
+  serializeCanonicalSceneDocument,
+} from "./canonical.js";
+export { compareSceneDocuments } from "./compare.js";
+export {
+  SCENE_BLOCK_NODE_TYPES,
+  SCENE_DOCUMENT_SCHEMA_VERSION,
+  SCENE_MARK_TYPES,
+  SceneDocumentValidationError,
+} from "./types.js";
+export type {
+  BlockId,
+  BlockIdGenerator,
+  ProseMirrorDocumentV1,
+  SceneBlockAttributesV1,
+  SceneBlockChangeKind,
+  SceneBlockComparison,
+  SceneBlockNodeType,
+  SceneBlockV1,
+  SceneBlockquoteNodeV1,
+  SceneDocument,
+  SceneDocumentComparison,
+  SceneDocumentNormalizationOptions,
+  SceneDocumentSchemaVersion,
+  SceneDocumentV1,
+  SceneDocumentValidationCode,
+  SceneHardBreakNodeV1,
+  SceneHeadingLevel,
+  SceneHeadingNodeV1,
+  SceneHorizontalRuleNodeV1,
+  SceneInlineNodeV1,
+  SceneMarkType,
+  SceneMarkV1,
+  SceneParagraphNodeV1,
+  SceneTextNodeV1,
+} from "./types.js";

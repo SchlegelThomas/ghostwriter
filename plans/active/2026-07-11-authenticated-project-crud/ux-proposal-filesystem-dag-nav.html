@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ghostwriter UX proposal — Story tree + relationship graph</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Founder review · UX proposal</p>
+      <h1>Story tree + relationship graph navigation</h1>
+      <p class="meta"><strong>Status:</strong> accepted 2026-07-12 — implementation active<br>
+        <strong>Branch:</strong> <code>feat/authenticated-project-crud</code><br>
+        <strong>Parent plan:</strong> <a href="plan.html">Authenticated writing workspace, revisions, and Story Canvas</a></p>
+      <p>This plan supplement responds to the 2026-07-12 milestone review. It does not open a second branch or replace the active epic. The interactive visual proposal is appended to <a href="../../designs/Ghostwriter%20Mockups%202.0.html#ux-proposal-fs-dag">Ghostwriter Mockups 2.0</a>.</p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Replace the form-and-card “Project setup” experience with a writer-facing structure navigator that combines a filesystem-like manuscript tree with a relationship DAG. The tree remains the canonical hierarchy and reading order; the graph reveals meaning, threads, dependencies, continuity, and provisional ideas without becoming another source of manuscript order.</p>
+      <p>Make Canvas a workflow surface rather than an object-management screen. Writers should be able to shape an outline, inspect relationships, move from plan to prose, review continuity, and restore prior Canvas states through one layered environment. Clicking a chapter or scene dives into that scope with an animated camera transition and an explicit way back up.</p>
+      <p>Every acknowledged action receives clear, contextual save confirmation. Persistent status stays quiet; per-action toasts explain what saved and expose Undo/Restore where the domain supports it.</p>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ul>
+        <li>Wide Draft, Canvas, and Split modes share a persistent Project rail, manuscript tree, center work surface, and selection inspector. The current horizontal scene chips and primary card/form setup flow are absent.</li>
+        <li>The manuscript tree exposes Project → Book → Part → Chapter → Scene plus explicit Unassigned scenes. Expand/collapse, inline rename, add, reorder, move, archive, and restore actions have pointer and keyboard paths.</li>
+        <li>The tree is authoritative for manuscript order. Relationship edges, Canvas coordinates, regions, and story-order hints never reorder Draft without a separate explicit confirmation.</li>
+        <li>Canvas offers workflow lenses for <strong>Outline</strong>, <strong>Relationships</strong>, <strong>Continuity</strong>, <strong>Plan → Draft</strong>, and <strong>Review</strong>. Each lens has a clear entry, primary action, empty state, and return to neutral Canvas.</li>
+        <li>Clicking or pressing Enter on a chapter region/node animates a 400–500 ms zoom into a chapter lens. Breadcrumbs, Back, Escape, and reduced-motion behavior all return to a parent scope without losing selection or viewport.</li>
+        <li>At chapter depth, sibling context dims but remains legible; scenes, inbound/outbound links, provisional findings, and chapter-level actions become primary. Scene depth can open a Draft preview or Split view using the same canonical scene ID.</li>
+        <li>Persistent topbar status distinguishes Saving, Saved to project, retryable failure, conflict, and recovery. Action toasts appear only after durable acknowledgement and identify the action that completed.</li>
+        <li>Structure and Canvas acknowledgement toasts expose Undo where an inverse or Canvas snapshot exists. Archive acknowledgement exposes Restore. Draft saves avoid toast spam and rely on quiet status plus one post-idle acknowledgement.</li>
+        <li>Conflict and recovery toasts remain until resolved, do not steal editor focus, and expose explicit Reload/Use server/Keep local/Recover/Discard actions as appropriate.</li>
+        <li>Narrow web uses book tabs, an ordered structure/DAG view, one focused Draft scene, and decision-first review actions. It does not claim freeform spatial drag.</li>
+        <li>Every spatial workflow has an ordered keyboard/screen-reader equivalent; authority, stale state, relationship direction, and hierarchy depth are expressed in text rather than color or line style alone.</li>
+        <li>The proposal preserves ADRs 0002, 0003, 0006, and 0007: auth-first server authority, one canonical scene model, revision-safe prose, dedicated Canvas versioning, and explicit manuscript-order authority.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Interaction model</h2>
+      <h3>Tree = structure</h3>
+      <ul>
+        <li><strong>Single click:</strong> select a row and populate the inspector.</li>
+        <li><strong>Chevron / ArrowRight:</strong> expand a folder. <strong>ArrowLeft:</strong> collapse or move to its parent.</li>
+        <li><strong>Enter:</strong> open a scene in Draft or dive into a chapter lens from Canvas.</li>
+        <li><strong>F2 / inline title:</strong> rename and commit on Enter or blur.</li>
+        <li><strong>Drag or Alt+Arrow:</strong> reorder within a parent. Move-to commands use a searchable destination menu.</li>
+        <li><strong>Context menu:</strong> add child, duplicate metadata, move, archive/restore, or inspect history. Destructive actions keep the existing confirmation contract.</li>
+      </ul>
+
+      <h3>Graph = relationships</h3>
+      <ul>
+        <li>Scene, story-knowledge, note, image-reference, and region nodes always reference canonical IDs or Canvas-owned records.</li>
+        <li>Directed link arrows expose inbound/outbound meaning and link kind. Confirmed and provisional links retain explicit labels.</li>
+        <li>Workflow lenses filter/emphasize the same board rather than navigating to separate data stores.</li>
+        <li>The reading-order spine stays visible in Outline and Plan → Draft, with drift explained as a review state rather than an automatic reorder.</li>
+      </ul>
+
+      <h3>Drill stack</h3>
+      <ol>
+        <li><strong>Project lens:</strong> books, parts/chapters, cross-book threads, and global story knowledge.</li>
+        <li><strong>Chapter lens:</strong> chapter scenes, local relationships, setup/payoff flow, continuity findings, and “Open in Draft.”</li>
+        <li><strong>Scene lens:</strong> selected scene, linked knowledge/evidence, brief, history, and Draft preview.</li>
+      </ol>
+      <p>The drill stack is UI state, not a new route or persistence authority. Canvas viewport preference records the last scope/viewport only after the writer settles on it.</p>
+    </section>
+
+    <section>
+      <h2>Canvas workflow contracts</h2>
+      <ul>
+        <li><strong>Outline · Shape the book:</strong> add or move structure from the tree, storyboard a scene with explicit placement, inspect spine drift, and choose whether to apply a proposed order through a separate manuscript command.</li>
+        <li><strong>Relationships · See threads:</strong> select a relationship/thread, highlight its directed chain, inspect inbound/outbound links, and confirm/dismiss provisional edges.</li>
+        <li><strong>Continuity · Check the world:</strong> scope deterministic fixture findings to the current chapter, pin evidence to scenes, and send unresolved items to Review. Real model calls remain out of scope.</li>
+        <li><strong>Plan → Draft · Write this beat:</strong> select a planned scene, edit its brief/POV/status in the inspector, open Split, and carry the same selection into Tiptap.</li>
+        <li><strong>Review · Decide what changed:</strong> browse Canvas snapshots, compare authority/stale states, Undo the latest command, or restore a prior snapshot without changing Draft prose.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Save acknowledgement contract</h2>
+      <ul>
+        <li><strong>Quiet persistent status:</strong> Saving… → Saved to project; Canvas and Draft surface their own domain state while an aggregate “All changes saved” appears only when all domains are idle.</li>
+        <li><strong>Metadata toast:</strong> “Chapter renamed” / “Scene moved to Game Day” with Undo when an inverse command is safe.</li>
+        <li><strong>Canvas toast:</strong> “Relationship linked” / “Chapter lens updated” with Undo using the Canvas snapshot history.</li>
+        <li><strong>Archive toast:</strong> “Scene archived” with Restore after the confirmed request succeeds.</li>
+        <li><strong>Draft acknowledgement:</strong> show the first “Draft saved” after an idle writing burst, then suppress repeated toasts for 30 seconds; History remains the undo model.</li>
+        <li><strong>Sticky problem toast:</strong> conflict, retryable save failure, expired lease, or recoverable draft remains visible until the writer chooses an explicit action.</li>
+      </ul>
+      <p>Toasts use <code>role="status"</code>/<code>aria-live="polite"</code>; conflicts use <code>role="alert"</code>. They never steal focus from Tiptap or a tree rename.</p>
+    </section>
+
+    <section>
+      <h2>Implementation tasks after founder acceptance</h2>
+      <ol>
+        <li>Extract the existing manuscript-tree prototype into an authenticated structure navigator and replace the horizontal scene chip strip.</li>
+        <li>Move book/part/chapter/scene and story-knowledge detail forms into one selection inspector with inline commit behavior.</li>
+        <li>Add tree expansion, inline rename, keyboard reorder/move, destination search, context actions, archive confirmation, and active/archived filters.</li>
+        <li>Add a shared acknowledgement/toast coordinator over project, scene, and Canvas save domains, including Undo/Restore action callbacks and conflict persistence.</li>
+        <li>Add Canvas workflow-lens state and filtered graph projections without changing canonical storage.</li>
+        <li>Add drill-stack and camera-bound calculations, chapter/scene aggregated nodes, breadcrumb/Escape behavior, focus management, and <code>prefers-reduced-motion</code> fallback.</li>
+        <li>Refine wide spatial composition and narrow ordered Project/Draft views from the accepted proposal.</li>
+        <li>Replace implementation browser journeys that assert card/form controls with tree, inspector, drill, workflow, and toast journeys while retaining domain and persistence coverage.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li><strong>Tree:</strong> expand/collapse, inline rename, add/move/reorder, archived filters, destination refusal, one canonical scene order, and keyboard parity.</li>
+        <li><strong>Drill:</strong> project → chapter → scene → parent, viewport preservation, Escape, breadcrumb focus, reduced motion, and stale selected-node recovery.</li>
+        <li><strong>Workflows:</strong> each lens changes only projection/filter state unless an explicit canonical command is acknowledged.</li>
+        <li><strong>Toasts:</strong> no pre-ack success, action copy, stacking limit, timeout/hover pause, Undo/Restore, conflict persistence, screen-reader announcements, and no editor focus theft.</li>
+        <li><strong>Responsive:</strong> four-region wide shell, collapsible medium navigator, ordered narrow view, no horizontal overflow, and no narrow freeform-drag claim.</li>
+        <li><strong>Regression:</strong> Draft/history/recovery, Canvas snapshots, atomic storyboard handoff, owner authorization, and all current repository/API suites remain green.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p>This is a UX binding change over accepted domain and persistence boundaries. No new ADR is required unless implementation adds persisted metadata undo or makes drill scope canonical. Update the active plan, record log, living design, product experience notes, and browser acceptance. Do not rewrite ADRs 0003/0006/0007.</p>
+      <p>The founder explicitly authorized adding this direction to the living design and accepted it on 2026-07-12. Existing founder-authored screens remain unchanged; the additive section now governs implementation alongside ADRs 0002/0003/0006/0007.</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li><strong>Accepted constraint:</strong> the filesystem metaphor must not expose raw files or create a second local canonical store.</li>
+        <li><strong>Accepted constraint:</strong> DAG position/order is interpretive; manuscript order changes only through explicit structure commands.</li>
+        <li><strong>Open review:</strong> whether single-click or double-click is the primary chapter dive gesture. Keyboard Enter is always supported.</li>
+        <li><strong>Open review:</strong> whether metadata fields commit on blur immediately or use a short dirty-state Apply affordance for multi-field scene edits.</li>
+        <li><strong>Open review:</strong> how much relationship detail appears on the spatial board versus the inspector to avoid visual overload.</li>
+        <li><strong>Scope:</strong> deterministic continuity/derive fixtures may illustrate workflows; AI inference, collaboration presence, and timeline implementation remain later.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked disabled> Founder milestone feedback and screenshots reviewed</li>
+        <li><input type="checkbox" checked disabled> Existing design source, authenticated shell, tree prototype, Canvas, and ADR constraints reviewed</li>
+        <li><input type="checkbox" checked disabled> Additive interactive proposal appended to Ghostwriter Mockups 2.0</li>
+        <li><input type="checkbox" checked disabled> Active epic and record log linked to this supplement</li>
+        <li><input type="checkbox" checked disabled> Founder accepts the filesystem + DAG mental model</li>
+        <li><input type="checkbox" checked disabled> Founder accepts drill animation, breadcrumbs, and reduced-motion behavior</li>
+        <li><input type="checkbox" checked disabled> Founder accepts Canvas workflow lenses and toast contract</li>
+        <li><input type="checkbox" checked disabled> Implementation tasks promoted into the active epic after visual acceptance</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

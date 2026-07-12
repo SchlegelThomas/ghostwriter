@@ -1,0 +1,332 @@
+import type {
+  BookId,
+  CanvasBoard,
+  CanvasObject,
+  CanvasObjectId,
+  CanvasReadingOrderSpine,
+  CanvasRevisionMetadata,
+  CanvasSpineDrift,
+  ChapterId,
+  ProjectNavigator,
+  ProjectNavigatorKnowledge,
+  SceneId
+} from "@ghostwriter/core";
+
+export type CanvasViewport = Readonly<{
+  x: number;
+  y: number;
+  zoom: number;
+}>;
+
+export type CanvasViewportSize = Readonly<{
+  width: number;
+  height: number;
+}>;
+
+export type CanvasScreenFrame = Readonly<{
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}>;
+
+export type CanvasOutlineItem = Readonly<{
+  object: CanvasObject;
+  authorityLabel: "Confirmed" | "Provisional fixture";
+  stateLabel: "Active" | "Archived" | "Dismissed";
+  positionLabel: string;
+  orderLabel?: string;
+}>;
+
+export type CanvasFailureDisposition =
+  | "reload-board"
+  | "reload-project-and-board"
+  | "preserve-board";
+
+export type CanvasCanonicalReferenceState = Readonly<{
+  stale: boolean;
+  label?: string;
+}>;
+
+export type CanvasHandoffPlacement =
+  | Readonly<{
+      kind: "chapter";
+      bookId: BookId;
+      chapterId: ChapterId;
+      position?: number;
+    }>
+  | Readonly<{
+      kind: "unassigned";
+      bookId: BookId;
+      position?: number;
+    }>;
+
+export function clampCanvasZoom(zoom: number): number {
+  return Math.min(2.5, Math.max(0.35, zoom));
+}
+
+export function canvasScreenFrame(
+  object: Pick<CanvasObject, "x" | "y" | "width" | "height">,
+  viewport: CanvasViewport
+): CanvasScreenFrame {
+  return {
+    left: (object.x - viewport.x) * viewport.zoom,
+    top: (object.y - viewport.y) * viewport.zoom,
+    width: object.width * viewport.zoom,
+    height: object.height * viewport.zoom
+  };
+}
+
+export function canvasPositionAfterDrag(
+  start: Readonly<{ x: number; y: number }>,
+  screenDelta: Readonly<{ x: number; y: number }>,
+  zoom: number
+): Readonly<{ x: number; y: number }> {
+  const safeZoom = clampCanvasZoom(zoom);
+  return {
+    x: Math.round(start.x + screenDelta.x / safeZoom),
+    y: Math.round(start.y + screenDelta.y / safeZoom)
+  };
+}
+
+export function visibleCanvasObjects(
+  objects: readonly CanvasObject[],
+  viewport: CanvasViewport,
+  size: CanvasViewportSize,
+  padding = 120
+): readonly CanvasObject[] {
+  const worldLeft = viewport.x - padding / viewport.zoom;
+  const worldTop = viewport.y - padding / viewport.zoom;
+  const worldRight = viewport.x + (size.width + padding) / viewport.zoom;
+  const worldBottom = viewport.y + (size.height + padding) / viewport.zoom;
+
+  return objects.filter(
+    (object) =>
+      object.x + object.width >= worldLeft &&
+      object.y + object.height >= worldTop &&
+      object.x <= worldRight &&
+      object.y <= worldBottom
+  );
+}
+
+export function canvasDriftLabel(drift: CanvasSpineDrift): string {
+  switch (drift) {
+    case "aligned":
+      return "Aligned with Draft";
+    case "no-hint":
+      return "No Canvas order hint";
+    case "earlier-on-canvas":
+      return "Earlier on Canvas";
+    case "later-on-canvas":
+      return "Later on Canvas";
+    case "not-placed":
+      return "Not placed";
+  }
+}
+
+export function canvasCanonicalReferenceState(
+  object: CanvasObject,
+  project: ProjectNavigator
+): CanvasCanonicalReferenceState {
+  if (object.kind === "scene-card") {
+    const scene = project.books
+      .flatMap((book) => [
+        ...book.parts.flatMap((part) =>
+          part.chapters.flatMap((chapter) => chapter.scenes)
+        ),
+        ...book.unassignedScenes
+      ])
+      .find((candidate) => candidate.id === object.sceneId);
+    if (scene === undefined) {
+      return { stale: true, label: "Scene unavailable · stale reference" };
+    }
+    if (scene.archivedAt !== undefined) {
+      return { stale: true, label: "Archived scene · stale reference" };
+    }
+  }
+  if (object.kind === "story-knowledge-card") {
+    const knowledge = project.storyKnowledge.find(
+      (candidate) => candidate.id === object.storyKnowledgeId
+    );
+    if (knowledge === undefined) {
+      return {
+        stale: true,
+        label: "Story record unavailable · stale reference"
+      };
+    }
+    if (knowledge.archivedAt !== undefined) {
+      return { stale: true, label: "Archived story record · stale reference" };
+    }
+  }
+  return { stale: false };
+}
+
+export function availableCanvasStoryKnowledge(
+  project: ProjectNavigator,
+  board: CanvasBoard
+): readonly ProjectNavigatorKnowledge[] {
+  const placedKnowledgeIds = new Set(
+    board.objects.flatMap((object) =>
+      object.kind === "story-knowledge-card" &&
+      object.storyKnowledgeId !== undefined
+        ? [object.storyKnowledgeId]
+        : []
+    )
+  );
+  return project.storyKnowledge.filter(
+    (knowledge) =>
+      knowledge.archivedAt === undefined && !placedKnowledgeIds.has(knowledge.id)
+  );
+}
+
+export function canonicalIndexForCanvasHandoff(
+  project: ProjectNavigator,
+  placement: CanvasHandoffPlacement
+): number | undefined {
+  let canonicalIndex = 0;
+  for (const book of project.books) {
+    for (const part of book.parts) {
+      for (const chapter of part.chapters) {
+        if (
+          placement.kind === "chapter" &&
+          placement.bookId === book.id &&
+          placement.chapterId === chapter.id
+        ) {
+          const position = placement.position ?? chapter.scenes.length;
+          return Number.isSafeInteger(position) &&
+            position >= 0 &&
+            position <= chapter.scenes.length
+            ? canonicalIndex + position
+            : undefined;
+        }
+        canonicalIndex += chapter.scenes.length;
+      }
+    }
+    if (placement.kind === "unassigned" && placement.bookId === book.id) {
+      const position = placement.position ?? book.unassignedScenes.length;
+      return Number.isSafeInteger(position) &&
+        position >= 0 &&
+        position <= book.unassignedScenes.length
+        ? canonicalIndex + position
+        : undefined;
+    }
+    canonicalIndex += book.unassignedScenes.length;
+  }
+  return undefined;
+}
+
+export function preferredCanvasSceneId(
+  board: CanvasBoard,
+  selectedObjectId: CanvasObjectId | undefined
+): SceneId | undefined {
+  if (selectedObjectId === undefined) return undefined;
+  const object = board.objects.find((candidate) => candidate.id === selectedObjectId);
+  return object?.kind === "scene-card" ? object.sceneId : undefined;
+}
+
+export function canvasHistoryLabel(revision: CanvasRevisionMetadata): string {
+  if (revision.reason === "genesis") return "Canvas created";
+  if (revision.reason === "restore") return "Earlier snapshot restored";
+  if (revision.reason === "undo") return "Latest Canvas change undone";
+  switch (revision.commandType) {
+    case "canvas.object.create":
+      return "Object created";
+    case "canvas.object.place":
+      return "Canonical card placed";
+    case "canvas.object.update":
+      return "Object details updated";
+    case "canvas.object.move":
+      return "Object moved";
+    case "canvas.object.resize":
+      return "Object resized";
+    case "canvas.object.archive":
+      return "Object archived";
+    case "canvas.object.restore":
+      return "Object restored";
+    case "canvas.object.confirm":
+      return "Provisional object confirmed";
+    case "canvas.object.dismiss":
+      return "Provisional object dismissed";
+    case "canvas.link.create":
+      return "Link created";
+    case "canvas.link.update":
+      return "Link details updated";
+    case "canvas.link.archive":
+      return "Link archived";
+    case "canvas.link.restore":
+      return "Link restored";
+    case "canvas.link.confirm":
+      return "Provisional link confirmed";
+    case "canvas.link.dismiss":
+      return "Provisional link dismissed";
+    case undefined:
+      return "Canvas updated";
+  }
+}
+
+export function projectCanvasOutline(
+  board: CanvasBoard,
+  spine: CanvasReadingOrderSpine
+): readonly CanvasOutlineItem[] {
+  const spineByObjectId = new Map(
+    spine.entries.flatMap((entry) =>
+      entry.canvasObjectId === undefined
+        ? []
+        : [[entry.canvasObjectId, entry] as const]
+    )
+  );
+
+  return [...board.objects]
+    .sort((left, right) => {
+      const leftSpine = spineByObjectId.get(left.id);
+      const rightSpine = spineByObjectId.get(right.id);
+      if (leftSpine !== undefined && rightSpine !== undefined) {
+        return leftSpine.canonicalIndex - rightSpine.canonicalIndex;
+      }
+      if (leftSpine !== undefined) return -1;
+      if (rightSpine !== undefined) return 1;
+      if ((left.archivedAt === undefined) !== (right.archivedAt === undefined)) {
+        return left.archivedAt === undefined ? -1 : 1;
+      }
+      return (
+        left.z - right.z ||
+        left.y - right.y ||
+        left.x - right.x ||
+        left.label.localeCompare(right.label)
+      );
+    })
+    .map((object) => {
+      const spineEntry = spineByObjectId.get(object.id);
+      return {
+        object,
+        authorityLabel:
+          object.authority === "confirmed"
+            ? ("Confirmed" as const)
+            : ("Provisional fixture" as const),
+        stateLabel:
+          object.dismissedAt !== undefined
+            ? ("Dismissed" as const)
+            : object.archivedAt !== undefined
+              ? ("Archived" as const)
+              : ("Active" as const),
+        positionLabel: `x ${Math.round(object.x)}, y ${Math.round(object.y)} · ${Math.round(
+          object.width
+        )} × ${Math.round(object.height)}`,
+        ...(spineEntry === undefined
+          ? {}
+          : {
+              orderLabel: `Draft ${spineEntry.canonicalIndex + 1} · ${canvasDriftLabel(
+                spineEntry.drift
+              )}`
+            })
+      };
+    });
+}
+
+export function canvasFailureDisposition(
+  code: string | undefined
+): CanvasFailureDisposition {
+  if (code === "CANVAS_VERSION_CONFLICT") return "reload-board";
+  if (code === "VERSION_CONFLICT") return "reload-project-and-board";
+  return "preserve-board";
+}

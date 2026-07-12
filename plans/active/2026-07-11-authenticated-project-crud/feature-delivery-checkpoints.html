@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ghostwriter autonomous feature checkpoints</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Autonomous delivery harness</p>
+      <h1>Tree, workflows, reader, split, and handoffs</h1>
+      <p class="meta"><strong>Status:</strong> accepted implementation sequence<br>
+        <strong>Branch:</strong> <code>feat/authenticated-project-crud</code><br>
+        <strong>Skill:</strong> <code>.cursor/skills/ghostwriter-autonomous-delivery/SKILL.md</code></p>
+      <p>This supplement applies the project delivery skill to the founder-accepted tree + DAG direction, Book Reader, Split, and scene handoffs. Each checkpoint is independently observable, documented, reviewed for cumulative coherence, verified, and committed before the next begins.</p>
+    </header>
+
+    <section>
+      <h2>Accepted product and architecture boundaries</h2>
+      <ul>
+        <li><strong>Structure authority:</strong> Project → Book → Part → Chapter → Scene and Unassigned scenes define canonical manuscript order.</li>
+        <li><strong>Relationship authority:</strong> Canvas objects/links and story-knowledge links form an interpretive DAG over canonical IDs. They never silently reorder Draft.</li>
+        <li><strong>Prose authority:</strong> acknowledged scene working heads are canonical for the live manuscript; immutable checkpoints/variants preserve history.</li>
+        <li><strong>Reader authority:</strong> Reader is a read-only projection over manuscript order and acknowledged scene documents. It takes no edit lease and creates no copy.</li>
+        <li><strong>Concurrency:</strong> project metadata, scene working revision, and Canvas board retain separate optimistic preconditions.</li>
+        <li><strong>Save truth:</strong> success toasts appear only after durable acknowledgement. Conflicts apply nothing and remain actionable.</li>
+        <li><strong>Drill and workflows:</strong> drill depth, workflow lens, tree expansion, focus, and split ratio are view preferences—not canonical story state.</li>
+        <li><strong>Current non-goals:</strong> collaborators/presence, comments/suggestions, real AI inference/image generation, full offline projects, import/export, purge, marketplace, and native freeform Canvas.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Checkpoint A — Manuscript tree, inspector, and acknowledgement toasts</h2>
+      <p><strong>Writer-visible outcome:</strong> open a project, navigate the persistent manuscript tree, rename/reorder/move a chapter or scene in context, and receive an action-specific acknowledged toast with safe Undo/Restore where available.</p>
+      <h3>Domain and binding map</h3>
+      <ul>
+        <li>Reuse existing <code>ProjectCommand</code> types, owner policy, project version, archive/restore rules, and aggregate navigator. No new canonical records or migration.</li>
+        <li>Extract the existing manuscript-tree prototype into an authenticated tree with controlled selection, expansion, active/archived visibility, inline add/rename, keyboard reorder, and destination move.</li>
+        <li>Replace primary setup cards and horizontal scene chips with one tree plus a selection inspector. Keep complex destructive confirmation and refusal copy.</li>
+        <li>Add a central acknowledgement coordinator in the client. Project and Canvas success dispatch only after acknowledged responses; Draft keeps quiet save state plus one post-idle acknowledgement.</li>
+        <li>Bound metadata Undo to one client-held inverse command with a short expiry. Do not support Undo for create, empty-container removal, or multi-domain scene handoff. Canvas uses server snapshot Undo; archive uses Restore; Draft uses History.</li>
+      </ul>
+      <h3>Tests</h3>
+      <ul>
+        <li>Tree roles, levels, expand/collapse, inline rename, add, reorder, move, archive/restore, refusals, and keyboard parity.</li>
+        <li>No success toast before acknowledgement; safe Undo uses the latest project version; conflict invalidates Undo and stays visible.</li>
+        <li>Tree selection drives the same scene in Draft, Canvas, Split, and later Reader.</li>
+        <li>Existing core/storage/backend suites remain unchanged and green.</li>
+      </ul>
+      <p><strong>Commit:</strong> <code>feat: replace project setup with manuscript tree</code></p>
+    </section>
+
+    <section>
+      <h2>Checkpoint B — Layer drill and Canvas workflows</h2>
+      <p><strong>Writer-visible outcome:</strong> enter a chapter from the tree or Canvas, see its scenes and relationships become primary, move into a scene, return through breadcrumbs/Escape, and switch workflow lenses without mutating the manuscript.</p>
+      <h3>Domain and design map</h3>
+      <ul>
+        <li>Drill scopes are <code>project</code>, <code>chapter</code>, and <code>scene</code>, referencing existing IDs only. The stack is client state.</li>
+        <li>Workflow lenses are Outline, Relationships, Continuity fixture, Plan → Draft, and Review. They filter/emphasize existing board/navigator projections.</li>
+        <li>Chapter bounds are derived from scene cards/regions. Camera transitions are 400–500 ms with instant reduced-motion fallback.</li>
+        <li>Relationships exposes inbound/outbound typed links and authority. Continuity uses deterministic fixture findings only. Plan → Draft opens Split at the same scene. Review exposes Canvas snapshots/Undo and provisional decisions.</li>
+      </ul>
+      <h3>Tests</h3>
+      <ul>
+        <li>Project → chapter → scene → parent; breadcrumb/Back/Escape; focus transfer; stale selected node; viewport retention.</li>
+        <li>Lens changes do not bump project or Canvas version until an explicit command executes.</li>
+        <li>Relationship direction, stale target, confirmed/provisional text, and chapter-scoped filtering.</li>
+        <li>Reduced motion and narrow ordered equivalent.</li>
+      </ul>
+      <p><strong>Commit:</strong> <code>feat: add layered Canvas workflows</code></p>
+    </section>
+
+    <section>
+      <h2>Checkpoint C — Book Reader</h2>
+      <p><strong>Writer-visible outcome:</strong> open Reader from the selected tree/Draft/Canvas scene, read the selected book in bound spreads on wide web or continuous chapters on narrow web, navigate by chapter and page, inspect scene-linked story context, then return to the exact prior scene and mode.</p>
+      <h3>Domain map</h3>
+      <ul>
+        <li>Add a book-reader query projection over one <code>BookId</code>, canonical manuscript scene order, non-archived scenes, and acknowledged <code>SceneDocumentHead</code> values.</li>
+        <li>Reader is read-only, takes no scene lease, and stores no prose. Working draft is the initial pin. Immutable edition/checkpoint pinning remains a follow-on until complete project-level edition semantics exist.</li>
+        <li>Add batch scene-head reads in memory/Postgres and one bounded authenticated book-reader endpoint to avoid N scene requests.</li>
+        <li>Register <code>book.reader.read</code> with web/backend binding and an explicit authenticated-prose MCP exception.</li>
+      </ul>
+      <h3>Design map</h3>
+      <ul>
+        <li>Wide: two-page bound spread, chapter tabs, previous/next, page progress, running headers, typeset chapter opener, Links toggle, reduced-motion page turn.</li>
+        <li>Narrow: continuous scroll with chapter landmarks and next/previous scene controls.</li>
+        <li>Scene-level context rail initially surfaces Canvas/story links. Inline passage pins require a dedicated stable-block pin model and ADR before they appear; do not fake anchors by matching text.</li>
+        <li>Reader entry captures prior workspace mode, scene, tree expansion, drill scope, and Canvas selection; Exit restores them.</li>
+      </ul>
+      <h3>Tests</h3>
+      <ul>
+        <li>Multi-part/chapter/unassigned order, archived exclusion, empty document, authorization/non-disclosure, batch parity, payload bounds.</li>
+        <li>Wide spread/chapter navigation, keyboard arrows, progress, Links toggle, reduced motion, and Draft/Canvas round-trip.</li>
+        <li>Narrow scroll landmarks and exact scene return.</li>
+        <li>50-scene reader projection/pagination smoke.</li>
+      </ul>
+      <p><strong>Commit:</strong> <code>feat: add manuscript book reader</code></p>
+    </section>
+
+    <section>
+      <h2>Checkpoint D — Split composition and complete scene handoffs</h2>
+      <p><strong>Writer-visible outcome:</strong> move from tree, Canvas, Reader, or chapter/scene lens into a focus-preserving Split; resize panes; write or inspect; and return without losing acknowledged prose, selection, viewport, or history context.</p>
+      <h3>Handoff map</h3>
+      <ul>
+        <li><strong>Storyboard-first:</strong> existing atomic project scene + genesis document + Canvas card transaction, now entered from the chapter lens/tree.</li>
+        <li><strong>Write-first:</strong> place the selected Draft scene on Canvas and offer Open Split after acknowledgement.</li>
+        <li><strong>Tree move:</strong> explicit manuscript move/reorder command; Canvas references stay stable and spine drift becomes a review prompt, never an automatic hint rewrite.</li>
+        <li><strong>Reader:</strong> open at the same scene without a lease; return restores previous mode, selection, drill stack, and focus target.</li>
+        <li><strong>Split:</strong> adjustable ratio persisted as an account/project preference; Draft remains mounted while visible so lease/caret survive Canvas selection changes that do not choose another scene.</li>
+      </ul>
+      <h3>Tests</h3>
+      <ul>
+        <li>Resize/reload ratio, medium collapse behavior, scene switch with dirty Draft, lease conflict, revision conflict, recovery, and focus/caret policy.</li>
+        <li>Atomic storyboard rollback; write-first placement; tree move plus stable Canvas card; reader round-trip.</li>
+        <li>No pre-ack toast and domain-specific conflict copy.</li>
+      </ul>
+      <p><strong>Commit:</strong> <code>feat: complete cross-surface scene handoffs</code></p>
+    </section>
+
+    <section>
+      <h2>Checkpoint E — Cumulative coherence and release readiness</h2>
+      <ul>
+        <li>Review every canonical object and relationship across tree, Draft, history, Reader, Canvas, Split, and MCP/capability records.</li>
+        <li>Run migration-from-empty, memory/Postgres parity, authorization/non-disclosure, scale fixtures, <code>pnpm verify</code>, and the complete wide/narrow Playwright suite.</li>
+        <li>Update plan/checklists, record log, handoff, Product, Architecture, API, Operations, ADR references, living design, and this skill with reusable learnings.</li>
+        <li>Create the final checkpoint commit only after all previous features remain coherent. Push/PR/deploy remain separate approval gates.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Harness iteration log</h2>
+      <ul>
+        <li><strong>Initial skill:</strong> domain/design map, vertical feature loop, cumulative coherence gate, docs, verification, commits.</li>
+        <li><strong>Expected refinement:</strong> add a cross-surface handoff checklist after Checkpoint A/B if selection, focus, lease, or acknowledgement defects repeat.</li>
+        <li><strong>Expected refinement:</strong> add reader projection guidance after Checkpoint C if projection/pagination boundaries recur elsewhere.</li>
+        <li><strong>Rule:</strong> only reusable lessons enter the skill; feature-specific details stay in this supplement and record log.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,20 +1,53 @@
 import {
   accountId,
+  CanvasCommandError,
+  CanvasNotFoundError,
+  CanvasRevisionNotFoundError,
+  CanvasVersionConflictError,
   DomainValidationError,
+  InvalidSceneDocumentError,
+  InvalidSceneVariantNameError,
   ProfileConflictError,
   ProjectAccessDeniedError,
   ProjectCommandError,
   ProjectVersionConflictError,
   projectId,
+  SceneLeaseConflictError,
+  SceneLeaseExpiredError,
+  SceneNotFoundError,
+  SceneRevisionNotFoundError,
+  sceneId,
+  SceneVariantNameConflictError,
+  SceneWorkingVersionConflictError,
+  type CanvasRevisionMetadata,
+  type CanvasServices,
+  type CanvasWorkspace,
   type GhostwriterServices,
-  type IdentityServices
+  type IdentityServices,
+  type SceneDocumentHead,
+  type SceneRevisionMetadata,
+  type SceneVariant,
+  type SceneWritingServices,
+  type SceneWorkspace
 } from "@ghostwriter/core";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import {
+  compareSceneRevisionsRequestSchema,
+  createSceneFromCanvasRequestSchema,
   createProjectRequestSchema,
+  createSceneCheckpointRequestSchema,
+  createSceneVariantRequestSchema,
   executeProjectCommandRequestSchema,
+  executeCanvasCommandRequestSchema,
+  restoreSceneRevisionRequestSchema,
+  restoreCanvasRequestSchema,
+  saveCanvasPreferenceRequestSchema,
   parseJsonRequest,
+  saveSceneDocumentRequestSchema,
+  SCENE_DOCUMENT_REQUEST_MAX_BYTES,
+  toCanvasCommand,
+  toCreateSceneFromCanvasInput,
   toProjectCommand,
   updateProfileRequestSchema
 } from "./api-contract.js";
@@ -22,6 +55,8 @@ import type { AuthGateway, AuthenticatedSession } from "./auth.js";
 
 export type BackendDependencies = Readonly<{
   services: GhostwriterServices;
+  writing: SceneWritingServices;
+  canvas: CanvasServices;
   identity: IdentityServices;
   auth: AuthGateway;
   allowedOrigins?: readonly string[];
@@ -32,6 +67,106 @@ type BackendEnvironment = {
     authSession: AuthenticatedSession;
   };
 };
+
+function sceneHeadResponse(head: SceneDocumentHead) {
+  return {
+    sceneId: head.sceneId,
+    projectId: head.projectId,
+    workingVersion: head.workingVersion,
+    document: head.document,
+    contentHash: head.contentHash,
+    checkpointRevisionId: head.checkpointRevisionId,
+    updatedByAccountId: head.updatedByAccountId,
+    createdAt: head.createdAt,
+    updatedAt: head.updatedAt
+  };
+}
+
+function sceneHeadMetadataResponse(head: SceneDocumentHead) {
+  return {
+    sceneId: head.sceneId,
+    projectId: head.projectId,
+    workingVersion: head.workingVersion,
+    contentHash: head.contentHash,
+    checkpointRevisionId: head.checkpointRevisionId,
+    updatedByAccountId: head.updatedByAccountId,
+    createdAt: head.createdAt,
+    updatedAt: head.updatedAt
+  };
+}
+
+function sceneRevisionResponse(revision: SceneRevisionMetadata) {
+  return {
+    id: revision.id,
+    sceneId: revision.sceneId,
+    projectId: revision.projectId,
+    ...(revision.parentRevisionId === undefined
+      ? {}
+      : { parentRevisionId: revision.parentRevisionId }),
+    schemaVersion: revision.schemaVersion,
+    contentHash: revision.contentHash,
+    actorAccountId: revision.actorAccountId,
+    origin: revision.origin,
+    reason: revision.reason,
+    createdAt: revision.createdAt
+  };
+}
+
+function sceneVariantResponse(variant: SceneVariant) {
+  return {
+    id: variant.id,
+    sceneId: variant.sceneId,
+    projectId: variant.projectId,
+    revisionId: variant.revisionId,
+    creatorAccountId: variant.creatorAccountId,
+    name: variant.name,
+    createdAt: variant.createdAt,
+    updatedAt: variant.updatedAt
+  };
+}
+
+function sceneWorkspaceResponse(
+  workspace: SceneWorkspace,
+  currentSessionId: string
+) {
+  return {
+    head: sceneHeadResponse(workspace.head),
+    lease:
+      workspace.lease === undefined
+        ? null
+        : {
+            heldByCurrentSession:
+              workspace.lease.holderId === currentSessionId,
+            renewedAt: workspace.lease.renewedAt,
+            expiresAt: workspace.lease.expiresAt
+          }
+  };
+}
+
+function canvasWorkspaceResponse(workspace: CanvasWorkspace) {
+  return {
+    board: workspace.board,
+    spine: workspace.spine
+  };
+}
+
+function canvasRevisionResponse(revision: CanvasRevisionMetadata) {
+  return {
+    id: revision.id,
+    projectId: revision.projectId,
+    boardVersion: revision.boardVersion,
+    contentHash: revision.contentHash,
+    actorAccountId: revision.actorAccountId,
+    reason: revision.reason,
+    ...(revision.commandType === undefined
+      ? {}
+      : { commandType: revision.commandType }),
+    ...(revision.parentRevisionId === undefined
+      ? {}
+      : { parentRevisionId: revision.parentRevisionId }),
+    createdAt: revision.createdAt
+  };
+}
 
 export function createApp(dependencies: BackendDependencies): Hono<BackendEnvironment> {
   const app = new Hono<BackendEnvironment>();
@@ -44,7 +179,7 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
         return allowedOrigins.has(origin) ? origin : "";
       },
       allowHeaders: ["Content-Type", "Idempotency-Key"],
-      allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       credentials: true,
       maxAge: 600
     })
@@ -65,7 +200,7 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
 
     context.set("authSession", session);
 
-    if (["POST", "PATCH", "DELETE"].includes(context.req.method)) {
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(context.req.method)) {
       const origin = context.req.header("origin");
       if (origin === undefined || !allowedOrigins.has(origin)) {
         return context.json(
@@ -209,7 +344,483 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
     return context.json(navigator);
   });
 
+  app.get("/api/projects/:projectId/canvas", async (context) => {
+    const authSession = context.get("authSession");
+    const result = await dependencies.canvas.getCanvasWorkspace({
+      accountId: accountId(authSession.account.id),
+      projectId: projectId(context.req.param("projectId"))
+    });
+    return context.json(canvasWorkspaceResponse(result));
+  });
+
+  app.post("/api/projects/:projectId/canvas/commands", async (context) => {
+    const parsed = await parseJsonRequest(
+      context.req.raw,
+      executeCanvasCommandRequestSchema
+    );
+    if (!parsed.success) {
+      return context.json(
+        {
+          error: "Invalid Canvas command request.",
+          code: parsed.code,
+          ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
+        },
+        parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
+      );
+    }
+    const authSession = context.get("authSession");
+    const result = await dependencies.canvas.executeCanvasCommand({
+      accountId: accountId(authSession.account.id),
+      projectId: projectId(context.req.param("projectId")),
+      expectedCanvasVersion: parsed.data.expectedCanvasVersion,
+      command: toCanvasCommand(parsed.data.command)
+    });
+    return context.json(canvasWorkspaceResponse(result));
+  });
+
+  app.get("/api/projects/:projectId/canvas/history", async (context) => {
+    const authSession = context.get("authSession");
+    const revisions = await dependencies.canvas.listCanvasHistory({
+      accountId: accountId(authSession.account.id),
+      projectId: projectId(context.req.param("projectId"))
+    });
+    return context.json({
+      revisions: revisions.map(canvasRevisionResponse)
+    });
+  });
+
+  app.post(
+    "/api/projects/:projectId/canvas/history/restore",
+    async (context) => {
+      const parsed = await parseJsonRequest(
+        context.req.raw,
+        restoreCanvasRequestSchema
+      );
+      if (!parsed.success) {
+        return context.json(
+          {
+            error: "Invalid Canvas restore request.",
+            code: parsed.code,
+            ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
+          },
+          parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
+        );
+      }
+      const authSession = context.get("authSession");
+      const scope = {
+        accountId: accountId(authSession.account.id),
+        projectId: projectId(context.req.param("projectId")),
+        expectedCanvasVersion: parsed.data.expectedCanvasVersion
+      };
+      const result =
+        parsed.data.revisionId === undefined
+          ? await dependencies.canvas.undoCanvas(scope)
+          : await dependencies.canvas.restoreCanvasRevision({
+              ...scope,
+              revisionId: parsed.data.revisionId
+            });
+      return context.json(canvasWorkspaceResponse(result), 201);
+    }
+  );
+
+  app.get("/api/projects/:projectId/canvas/preference", async (context) => {
+    const authSession = context.get("authSession");
+    const preference =
+      await dependencies.canvas.getCanvasViewportPreference({
+        accountId: accountId(authSession.account.id),
+        projectId: projectId(context.req.param("projectId"))
+      });
+    return context.json({ preference: preference ?? null });
+  });
+
+  app.put("/api/projects/:projectId/canvas/preference", async (context) => {
+    const parsed = await parseJsonRequest(
+      context.req.raw,
+      saveCanvasPreferenceRequestSchema
+    );
+    if (!parsed.success) {
+      return context.json(
+        {
+          error: "Invalid Canvas preference request.",
+          code: parsed.code,
+          ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
+        },
+        parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
+      );
+    }
+    const authSession = context.get("authSession");
+    const { selectedObjectId, ...viewport } = parsed.data;
+    const preference =
+      await dependencies.canvas.saveCanvasViewportPreference({
+        accountId: accountId(authSession.account.id),
+        projectId: projectId(context.req.param("projectId")),
+        ...viewport,
+        ...(selectedObjectId === undefined || selectedObjectId === null
+          ? {}
+          : { selectedObjectId })
+      });
+    return context.json({ preference });
+  });
+
+  app.post("/api/projects/:projectId/canvas/scenes", async (context) => {
+    const parsed = await parseJsonRequest(
+      context.req.raw,
+      createSceneFromCanvasRequestSchema
+    );
+    if (!parsed.success) {
+      return context.json(
+        {
+          error: "Invalid Canvas scene request.",
+          code: parsed.code,
+          ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
+        },
+        parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
+      );
+    }
+    const authSession = context.get("authSession");
+    const result = await dependencies.canvas.createSceneFromCanvas(
+      toCreateSceneFromCanvasInput(
+        parsed.data,
+        accountId(authSession.account.id),
+        projectId(context.req.param("projectId"))
+      )
+    );
+    return context.json(
+      {
+        scene: result.scene,
+        sceneDocumentHead: sceneHeadResponse(result.sceneDocumentHead),
+        navigator: result.navigator,
+        canvas: canvasWorkspaceResponse(result.canvas)
+      },
+      201
+    );
+  });
+
+  app.get(
+    "/api/projects/:projectId/scenes/:sceneId/workspace",
+    async (context) => {
+      const authSession = context.get("authSession");
+      const workspace = await dependencies.writing.getSceneWorkspace({
+        accountId: accountId(authSession.account.id),
+        projectId: projectId(context.req.param("projectId")),
+        sceneId: sceneId(context.req.param("sceneId"))
+      });
+      return context.json(
+        sceneWorkspaceResponse(workspace, authSession.session.id)
+      );
+    }
+  );
+
+  app.get(
+    "/api/projects/:projectId/scenes/:sceneId/history",
+    async (context) => {
+      const authSession = context.get("authSession");
+      const scope = {
+        accountId: accountId(authSession.account.id),
+        projectId: projectId(context.req.param("projectId")),
+        sceneId: sceneId(context.req.param("sceneId"))
+      };
+      const [revisions, variants] = await Promise.all([
+        dependencies.writing.listSceneRevisions(scope),
+        dependencies.writing.listNamedSceneVariants(scope)
+      ]);
+      return context.json({
+        revisions: revisions.map(sceneRevisionResponse),
+        variants: variants.map(sceneVariantResponse)
+      });
+    }
+  );
+
+  app.post(
+    "/api/projects/:projectId/scenes/:sceneId/checkpoints",
+    async (context) => {
+      const parsed = await parseJsonRequest(
+        context.req.raw,
+        createSceneCheckpointRequestSchema
+      );
+      if (!parsed.success) {
+        return context.json(
+          {
+            error: "Invalid scene checkpoint request.",
+            code: parsed.code,
+            ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
+          },
+          parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
+        );
+      }
+      const authSession = context.get("authSession");
+      const result = await dependencies.writing.createManualCheckpoint({
+        accountId: accountId(authSession.account.id),
+        projectId: projectId(context.req.param("projectId")),
+        sceneId: sceneId(context.req.param("sceneId")),
+        sessionId: authSession.session.id,
+        expectedWorkingVersion: parsed.data.expectedWorkingVersion
+      });
+      return context.json(
+        {
+          head: sceneHeadMetadataResponse(result.head),
+          revision: sceneRevisionResponse(result.revision),
+          created: result.created
+        },
+        result.created ? 201 : 200
+      );
+    }
+  );
+
+  app.post(
+    "/api/projects/:projectId/scenes/:sceneId/variants",
+    async (context) => {
+      const parsed = await parseJsonRequest(
+        context.req.raw,
+        createSceneVariantRequestSchema
+      );
+      if (!parsed.success) {
+        return context.json(
+          {
+            error: "Invalid scene variant request.",
+            code: parsed.code,
+            ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
+          },
+          parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
+        );
+      }
+      const authSession = context.get("authSession");
+      const result = await dependencies.writing.createNamedSceneVariant({
+        accountId: accountId(authSession.account.id),
+        projectId: projectId(context.req.param("projectId")),
+        sceneId: sceneId(context.req.param("sceneId")),
+        sessionId: authSession.session.id,
+        expectedWorkingVersion: parsed.data.expectedWorkingVersion,
+        name: parsed.data.name
+      });
+      return context.json(
+        {
+          head: sceneHeadMetadataResponse(result.head),
+          revision: sceneRevisionResponse(result.revision),
+          variant: sceneVariantResponse(result.variant),
+          checkpointCreated: result.checkpointCreated
+        },
+        201
+      );
+    }
+  );
+
+  app.post(
+    "/api/projects/:projectId/scenes/:sceneId/compare",
+    async (context) => {
+      const parsed = await parseJsonRequest(
+        context.req.raw,
+        compareSceneRevisionsRequestSchema
+      );
+      if (!parsed.success) {
+        return context.json(
+          {
+            error: "Invalid scene comparison request.",
+            code: parsed.code,
+            ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
+          },
+          parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
+        );
+      }
+      const authSession = context.get("authSession");
+      const result = await dependencies.writing.compareSceneRevisions({
+        accountId: accountId(authSession.account.id),
+        projectId: projectId(context.req.param("projectId")),
+        sceneId: sceneId(context.req.param("sceneId")),
+        beforeRevisionId: parsed.data.beforeRevisionId,
+        afterRevisionId: parsed.data.afterRevisionId
+      });
+      return context.json({
+        beforeRevision: sceneRevisionResponse(result.beforeRevision),
+        afterRevision: sceneRevisionResponse(result.afterRevision),
+        comparison: result.comparison
+      });
+    }
+  );
+
+  app.post(
+    "/api/projects/:projectId/scenes/:sceneId/restore",
+    async (context) => {
+      const parsed = await parseJsonRequest(
+        context.req.raw,
+        restoreSceneRevisionRequestSchema
+      );
+      if (!parsed.success) {
+        return context.json(
+          {
+            error: "Invalid scene restore request.",
+            code: parsed.code,
+            ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
+          },
+          parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
+        );
+      }
+      const authSession = context.get("authSession");
+      const result = await dependencies.writing.restoreSceneRevision({
+        accountId: accountId(authSession.account.id),
+        projectId: projectId(context.req.param("projectId")),
+        sceneId: sceneId(context.req.param("sceneId")),
+        sessionId: authSession.session.id,
+        expectedWorkingVersion: parsed.data.expectedWorkingVersion,
+        revisionId: parsed.data.revisionId
+      });
+      return context.json(
+        {
+          head: sceneHeadResponse(result.head),
+          revision: sceneRevisionResponse(result.revision)
+        },
+        201
+      );
+    }
+  );
+
+  app.post(
+    "/api/projects/:projectId/scenes/:sceneId/lease",
+    async (context) => {
+      const authSession = context.get("authSession");
+      const lease = await dependencies.writing.acquireOrRenewSceneLease({
+        accountId: accountId(authSession.account.id),
+        projectId: projectId(context.req.param("projectId")),
+        sceneId: sceneId(context.req.param("sceneId")),
+        sessionId: authSession.session.id
+      });
+      return context.json({
+        lease: {
+          heldByCurrentSession: true,
+          renewedAt: lease.renewedAt,
+          expiresAt: lease.expiresAt
+        }
+      });
+    }
+  );
+
+  app.delete(
+    "/api/projects/:projectId/scenes/:sceneId/lease",
+    async (context) => {
+      const authSession = context.get("authSession");
+      await dependencies.writing.releaseSceneLease({
+        accountId: accountId(authSession.account.id),
+        projectId: projectId(context.req.param("projectId")),
+        sceneId: sceneId(context.req.param("sceneId")),
+        sessionId: authSession.session.id
+      });
+      return context.body(null, 204);
+    }
+  );
+
+  app.patch(
+    "/api/projects/:projectId/scenes/:sceneId/body",
+    async (context) => {
+      const parsed = await parseJsonRequest(
+        context.req.raw,
+        saveSceneDocumentRequestSchema,
+        SCENE_DOCUMENT_REQUEST_MAX_BYTES
+      );
+      if (!parsed.success) {
+        return context.json(
+          {
+            error: "Invalid scene document request.",
+            code: parsed.code,
+            ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
+          },
+          parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
+        );
+      }
+      const authSession = context.get("authSession");
+      const head = await dependencies.writing.saveWorkingSceneDocument({
+        accountId: accountId(authSession.account.id),
+        projectId: projectId(context.req.param("projectId")),
+        sceneId: sceneId(context.req.param("sceneId")),
+        sessionId: authSession.session.id,
+        expectedWorkingVersion: parsed.data.expectedWorkingVersion,
+        document: parsed.data.document
+      });
+      return context.json({ head: sceneHeadResponse(head) });
+    }
+  );
+
   app.onError((error, context) => {
+    if (error instanceof CanvasNotFoundError) {
+      return context.json(
+        { error: "Canvas not found.", code: "CANVAS_NOT_FOUND" },
+        404
+      );
+    }
+    if (error instanceof CanvasRevisionNotFoundError) {
+      return context.json(
+        { error: "Canvas revision not found.", code: "CANVAS_REVISION_NOT_FOUND" },
+        404
+      );
+    }
+    if (error instanceof CanvasVersionConflictError) {
+      return context.json(
+        {
+          error: "The Canvas changed since it was loaded.",
+          code: "CANVAS_VERSION_CONFLICT"
+        },
+        409
+      );
+    }
+    if (error instanceof CanvasCommandError) {
+      if (error.code === "RECORD_NOT_FOUND") {
+        return context.json({ error: error.message, code: error.code }, 404);
+      }
+      if (error.code === "UNSAFE_ARCHIVE") {
+        return context.json({ error: error.message, code: error.code }, 409);
+      }
+      return context.json({ error: error.message, code: error.code }, 422);
+    }
+    if (error instanceof SceneNotFoundError) {
+      return context.json(
+        { error: "Scene not found.", code: "SCENE_NOT_FOUND" },
+        404
+      );
+    }
+    if (error instanceof SceneWorkingVersionConflictError) {
+      return context.json(
+        { error: "The scene changed since it was loaded.", code: "REVISION_CONFLICT" },
+        409
+      );
+    }
+    if (error instanceof SceneLeaseExpiredError) {
+      return context.json(
+        { error: "The scene editing lease expired.", code: "LEASE_EXPIRED" },
+        409
+      );
+    }
+    if (error instanceof SceneLeaseConflictError) {
+      return context.json(
+        { error: "The scene is being edited elsewhere.", code: "LEASE_CONFLICT" },
+        409
+      );
+    }
+    if (error instanceof InvalidSceneDocumentError) {
+      return context.json(
+        { error: "Invalid scene document.", code: "INVALID_SCENE_DOCUMENT" },
+        422
+      );
+    }
+    if (error instanceof SceneRevisionNotFoundError) {
+      return context.json(
+        { error: "Scene revision not found.", code: "REVISION_NOT_FOUND" },
+        404
+      );
+    }
+    if (error instanceof SceneVariantNameConflictError) {
+      return context.json(
+        {
+          error: "A variant with this name already exists.",
+          code: "VARIANT_NAME_CONFLICT"
+        },
+        409
+      );
+    }
+    if (error instanceof InvalidSceneVariantNameError) {
+      return context.json(
+        { error: error.message, code: "INVALID_VARIANT_NAME" },
+        422
+      );
+    }
     if (error instanceof ProjectAccessDeniedError) {
       return context.json(
         { error: "Project not found.", code: "PROJECT_NOT_FOUND" },

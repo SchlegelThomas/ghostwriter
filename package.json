@@ -7,7 +7,7 @@
     "verify": "pnpm typecheck && pnpm lint && pnpm test",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
-    "test": "vitest run --exclude 'e2e/**'",
+    "test": "vitest run --exclude 'e2e/**' --maxWorkers=4",
     "test:e2e": "playwright test",
     "db:generate": "pnpm --filter @ghostwriter/storage db:generate",
     "db:migrate": "pnpm --filter @ghostwriter/storage db:migrate",

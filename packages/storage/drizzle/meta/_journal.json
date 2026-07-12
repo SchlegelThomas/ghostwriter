@@ -29,6 +29,27 @@
       "when": 1783811421553,
       "tag": "0003_sad_speedball",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783882753632,
+      "tag": "0004_productive_rogue",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1783884362519,
+      "tag": "0005_tense_lady_deathstrike",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783886344138,
+      "tag": "0006_bumpy_black_cat",
+      "breakpoints": true
     }
   ]
 }

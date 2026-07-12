@@ -6,6 +6,7 @@ export type GhostwriterCapability = Readonly<{
   coreUseCase: string;
   bindings: Readonly<{
     ui?: string;
+    web?: string;
     mcp?: string;
     mcpException?: string;
   }>;
@@ -131,7 +132,201 @@ export const PROJECT_COMMAND_CAPABILITIES: readonly GhostwriterCapability[] =
     )
   ]);
 
+export const SCENE_WORKSPACE_CAPABILITY = Object.freeze({
+  id: "scene.workspace.read",
+  title: "Read an owned scene writing workspace",
+  access: "read",
+  scope: "scene",
+  coreUseCase: "getSceneWorkspace",
+  bindings: Object.freeze({
+    web: "GET /api/projects/{projectId}/scenes/{sceneId}/workspace",
+    mcpException:
+      "Scene-body reads require authenticated project authority that the current MCP binding does not have."
+  })
+}) satisfies GhostwriterCapability;
+
+export const SCENE_HISTORY_CAPABILITIES: readonly GhostwriterCapability[] =
+  Object.freeze([
+    Object.freeze({
+      id: "scene.history.read",
+      title: "List a scene's immutable revisions and named variants",
+      access: "read",
+      scope: "scene",
+      coreUseCase: "listSceneRevisions + listNamedSceneVariants",
+      bindings: Object.freeze({
+        web: "GET /api/projects/{projectId}/scenes/{sceneId}/history",
+        mcpException:
+          "Scene history reads require authenticated project authority that the current MCP binding does not have."
+      })
+    }),
+    Object.freeze({
+      id: "scene.revisions.compare",
+      title: "Compare two immutable scene revisions",
+      access: "read",
+      scope: "scene",
+      coreUseCase: "compareSceneRevisions",
+      bindings: Object.freeze({
+        web: "POST /api/projects/{projectId}/scenes/{sceneId}/compare",
+        mcpException:
+          "Scene comparison reveals requested prose and requires authenticated project authority that the current MCP binding does not have."
+      })
+    })
+  ]);
+
+function sceneWritingMutation(
+  id: string,
+  title: string,
+  coreUseCase: string,
+  web: string
+): GhostwriterCapability {
+  return Object.freeze({
+    id,
+    title,
+    access: "apply",
+    scope: "scene",
+    coreUseCase,
+    bindings: Object.freeze({
+      web,
+      mcpException: MCP_CANONICAL_MUTATION_EXCEPTION
+    })
+  });
+}
+
+export const SCENE_WRITING_MUTATION_CAPABILITIES: readonly GhostwriterCapability[] =
+  Object.freeze([
+    sceneWritingMutation(
+      "scene.lease.acquire",
+      "Acquire or renew a scene editing lease",
+      "acquireOrRenewSceneLease",
+      "POST /api/projects/{projectId}/scenes/{sceneId}/lease"
+    ),
+    sceneWritingMutation(
+      "scene.lease.release",
+      "Release a scene editing lease",
+      "releaseSceneLease",
+      "DELETE /api/projects/{projectId}/scenes/{sceneId}/lease"
+    ),
+    sceneWritingMutation(
+      "scene.document.save",
+      "Save an acknowledged scene document",
+      "saveWorkingSceneDocument",
+      "PATCH /api/projects/{projectId}/scenes/{sceneId}/body"
+    ),
+    sceneWritingMutation(
+      "scene.checkpoint.create",
+      "Create an immutable scene checkpoint",
+      "createManualCheckpoint",
+      "POST /api/projects/{projectId}/scenes/{sceneId}/checkpoints"
+    ),
+    sceneWritingMutation(
+      "scene.variant.create",
+      "Name the current scene revision as a variant",
+      "createNamedSceneVariant",
+      "POST /api/projects/{projectId}/scenes/{sceneId}/variants"
+    ),
+    sceneWritingMutation(
+      "scene.revision.restore",
+      "Restore a scene revision as new history",
+      "restoreSceneRevision",
+      "POST /api/projects/{projectId}/scenes/{sceneId}/restore"
+    )
+  ]);
+
+export const CANVAS_READ_CAPABILITIES: readonly GhostwriterCapability[] =
+  Object.freeze([
+    Object.freeze({
+      id: "canvas.board.read",
+      title: "Read a project's canonical Story Canvas and manuscript spine",
+      access: "read",
+      scope: "project",
+      coreUseCase: "getCanvasWorkspace",
+      bindings: Object.freeze({
+        web: "GET /api/projects/{projectId}/canvas",
+        mcpException:
+          "Canvas reads require authenticated project authority that the current MCP binding does not have."
+      })
+    }),
+    Object.freeze({
+      id: "canvas.history.read",
+      title: "List immutable Story Canvas snapshot history",
+      access: "read",
+      scope: "project",
+      coreUseCase: "listCanvasHistory",
+      bindings: Object.freeze({
+        web: "GET /api/projects/{projectId}/canvas/history",
+        mcpException:
+          "Canvas history reads require authenticated project authority that the current MCP binding does not have."
+      })
+    }),
+    Object.freeze({
+      id: "canvas.preference.read",
+      title: "Read a writer's Story Canvas viewport preference",
+      access: "read",
+      scope: "project",
+      coreUseCase: "getCanvasViewportPreference",
+      bindings: Object.freeze({
+        web: "GET /api/projects/{projectId}/canvas/preference",
+        mcpException:
+          "Personal viewport state is account-scoped and unavailable to the current MCP binding."
+      })
+    })
+  ]);
+
+export const CANVAS_MUTATION_CAPABILITIES: readonly GhostwriterCapability[] =
+  Object.freeze([
+    Object.freeze({
+      id: "canvas.command.apply",
+      title: "Apply one guarded Story Canvas command",
+      access: "apply",
+      scope: "project",
+      coreUseCase: "executeCanvasCommand",
+      bindings: Object.freeze({
+        web: "POST /api/projects/{projectId}/canvas/commands",
+        mcpException: MCP_CANONICAL_MUTATION_EXCEPTION
+      })
+    }),
+    Object.freeze({
+      id: "canvas.history.restore",
+      title: "Restore or undo to a Story Canvas snapshot",
+      access: "apply",
+      scope: "project",
+      coreUseCase: "restoreCanvasRevision + undoCanvas",
+      bindings: Object.freeze({
+        web: "POST /api/projects/{projectId}/canvas/history/restore",
+        mcpException: MCP_CANONICAL_MUTATION_EXCEPTION
+      })
+    }),
+    Object.freeze({
+      id: "canvas.preference.save",
+      title: "Save a writer's Story Canvas viewport preference",
+      access: "apply",
+      scope: "project",
+      coreUseCase: "saveCanvasViewportPreference",
+      bindings: Object.freeze({
+        web: "PUT /api/projects/{projectId}/canvas/preference",
+        mcpException:
+          "Personal viewport preferences are account-scoped and unavailable to the current MCP binding."
+      })
+    }),
+    Object.freeze({
+      id: "canvas.scene.create",
+      title: "Create a canonical scene and place its Story Canvas card atomically",
+      access: "apply",
+      scope: "project",
+      coreUseCase: "createSceneFromCanvas",
+      bindings: Object.freeze({
+        web: "POST /api/projects/{projectId}/canvas/scenes",
+        mcpException: MCP_CANONICAL_MUTATION_EXCEPTION
+      })
+    })
+  ]);
+
 export const GHOSTWRITER_CAPABILITIES: readonly GhostwriterCapability[] = Object.freeze([
   PROJECT_NAVIGATOR_CAPABILITY,
-  ...PROJECT_COMMAND_CAPABILITIES
+  ...PROJECT_COMMAND_CAPABILITIES,
+  SCENE_WORKSPACE_CAPABILITY,
+  ...SCENE_HISTORY_CAPABILITIES,
+  ...SCENE_WRITING_MUTATION_CAPABILITIES,
+  ...CANVAS_READ_CAPABILITIES,
+  ...CANVAS_MUTATION_CAPABILITIES
 ]);

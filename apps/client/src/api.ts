@@ -1,9 +1,23 @@
 import type {
+  BookId,
+  CanvasBoard,
+  CanvasCommand,
+  CanvasObjectId,
+  CanvasReadingOrderSpine,
+  CanvasRevisionId,
+  CanvasRevisionMetadata,
+  CanvasViewportPreference,
+  ChapterId,
   ProjectCommand,
   ProjectNavigator,
+  Scene,
   StoryProjectSummary,
   WriterProfile
 } from "@ghostwriter/core";
+import type {
+  SceneDocumentComparison,
+  SceneDocumentV1
+} from "@ghostwriter/editor";
 
 export type SessionAccount = Readonly<{
   id: string;
@@ -16,6 +30,147 @@ export type CurrentWriter = Readonly<{
   account: SessionAccount;
   profile: WriterProfile;
   session: Readonly<{ id: string; expiresAt: string }>;
+}>;
+
+export type SceneHeadResponse = Readonly<{
+  sceneId: string;
+  projectId: string;
+  workingVersion: number;
+  document: SceneDocumentV1;
+  contentHash: string;
+  checkpointRevisionId: string;
+  updatedByAccountId: string;
+  createdAt: string;
+  updatedAt: string;
+}>;
+
+export type SceneLeaseResponse = Readonly<{
+  heldByCurrentSession: boolean;
+  renewedAt: string;
+  expiresAt: string;
+}>;
+
+export type SceneWorkspaceResponse = Readonly<{
+  head: SceneHeadResponse;
+  lease: SceneLeaseResponse | null;
+}>;
+
+export type SceneHeadMetadataResponse = Readonly<
+  Omit<SceneHeadResponse, "document">
+>;
+
+export type SceneRevisionReason =
+  | "genesis"
+  | "checkpoint"
+  | "idle-checkpoint"
+  | "restore"
+  | "schema-migration";
+
+export type SceneRevisionMetadataResponse = Readonly<{
+  id: string;
+  sceneId: string;
+  projectId: string;
+  parentRevisionId?: string;
+  schemaVersion: number;
+  contentHash: string;
+  actorAccountId: string;
+  origin: "human" | "agent" | "system";
+  reason: SceneRevisionReason;
+  createdAt: string;
+}>;
+
+export type SceneVariantResponse = Readonly<{
+  id: string;
+  sceneId: string;
+  projectId: string;
+  revisionId: string;
+  creatorAccountId: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}>;
+
+export type SceneHistoryResponse = Readonly<{
+  revisions: readonly SceneRevisionMetadataResponse[];
+  variants: readonly SceneVariantResponse[];
+}>;
+
+export type SceneCheckpointResponse = Readonly<{
+  head: SceneHeadMetadataResponse;
+  revision: SceneRevisionMetadataResponse;
+  created: boolean;
+}>;
+
+export type SceneVariantCreationResponse = Readonly<{
+  head: SceneHeadMetadataResponse;
+  revision: SceneRevisionMetadataResponse;
+  variant: SceneVariantResponse;
+  checkpointCreated: boolean;
+}>;
+
+export type SceneRevisionComparisonResponse = Readonly<{
+  beforeRevision: SceneRevisionMetadataResponse;
+  afterRevision: SceneRevisionMetadataResponse;
+  comparison: SceneDocumentComparison;
+}>;
+
+export type SceneRevisionRestoreResponse = Readonly<{
+  head: SceneHeadResponse;
+  revision: SceneRevisionMetadataResponse;
+}>;
+
+export type SceneRequestScope = Readonly<{
+  projectId: string;
+  sceneId: string;
+}>;
+
+export type CanvasBoardResponse = CanvasBoard;
+export type CanvasObjectResponse = CanvasBoard["objects"][number];
+export type CanvasLinkResponse = CanvasBoard["links"][number];
+export type CanvasSpineResponse = CanvasReadingOrderSpine;
+export type CanvasRevisionResponse = CanvasRevisionMetadata;
+export type CanvasPreferenceResponse = CanvasViewportPreference;
+
+export type CanvasWorkspaceResponse = Readonly<{
+  board: CanvasBoardResponse;
+  spine: CanvasSpineResponse;
+}>;
+
+export type CanvasHistoryResponse = Readonly<{
+  revisions: readonly CanvasRevisionResponse[];
+}>;
+
+export type CanvasScenePlacementInput =
+  | Readonly<{
+      kind: "chapter";
+      bookId: BookId;
+      chapterId: ChapterId;
+      position?: number;
+    }>
+  | Readonly<{
+      kind: "unassigned";
+      bookId: BookId;
+      position?: number;
+    }>;
+
+export type CanvasSceneGeometryInput = Readonly<{
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  z: number;
+  parentRegionId?: CanvasObjectId;
+  storyOrderHint?: number;
+  label?: string;
+  sourceKey?: string;
+  provenance?: string;
+}>;
+
+export type CanvasSceneHandoffResponse = Readonly<{
+  scene: Scene;
+  sceneDocumentHead: SceneHeadResponse;
+  navigator: ProjectNavigator;
+  canvas: CanvasWorkspaceResponse;
 }>;
 
 export class GhostwriterApiError extends Error {
@@ -48,6 +203,9 @@ async function requestJson<Output>(
       ...init.headers
     }
   });
+  if (response.ok && response.status === 204) {
+    return undefined as Output;
+  }
   const body = (await response.json().catch(() => ({}))) as {
     code?: string;
     error?: string;
@@ -62,7 +220,10 @@ async function requestJson<Output>(
   return body as Output;
 }
 
-function jsonRequest(method: "POST" | "PATCH", body?: unknown): RequestInit {
+function jsonRequest(
+  method: "POST" | "PUT" | "PATCH",
+  body?: unknown
+): RequestInit {
   return {
     method,
     headers: { "content-type": "application/json" },
@@ -128,6 +289,242 @@ export function executeProjectCommand(input: {
     jsonRequest("POST", {
       expectedVersion: input.expectedVersion,
       command: input.command
+    })
+  );
+}
+
+function canvasPath(projectId: string, resource = ""): string {
+  const suffix = resource.length === 0 ? "" : `/${resource}`;
+  return `/api/projects/${encodeURIComponent(projectId)}/canvas${suffix}`;
+}
+
+export function getCanvasBoard(
+  projectId: string
+): Promise<CanvasWorkspaceResponse> {
+  return requestJson(canvasPath(projectId));
+}
+
+export function executeCanvasCommand(input: {
+  projectId: string;
+  expectedCanvasVersion: number;
+  command: CanvasCommand;
+}): Promise<CanvasWorkspaceResponse> {
+  return requestJson(
+    canvasPath(input.projectId, "commands"),
+    jsonRequest("POST", {
+      expectedCanvasVersion: input.expectedCanvasVersion,
+      command: input.command
+    })
+  );
+}
+
+export function getCanvasHistory(
+  projectId: string
+): Promise<CanvasHistoryResponse> {
+  return requestJson(canvasPath(projectId, "history"));
+}
+
+export function undoCanvas(input: {
+  projectId: string;
+  expectedCanvasVersion: number;
+}): Promise<CanvasWorkspaceResponse> {
+  return requestJson(
+    canvasPath(input.projectId, "history/restore"),
+    jsonRequest("POST", {
+      expectedCanvasVersion: input.expectedCanvasVersion
+    })
+  );
+}
+
+export function restoreCanvasRevision(input: {
+  projectId: string;
+  expectedCanvasVersion: number;
+  revisionId: CanvasRevisionId;
+}): Promise<CanvasWorkspaceResponse> {
+  return requestJson(
+    canvasPath(input.projectId, "history/restore"),
+    jsonRequest("POST", {
+      expectedCanvasVersion: input.expectedCanvasVersion,
+      revisionId: input.revisionId
+    })
+  );
+}
+
+export async function getCanvasPreference(
+  projectId: string
+): Promise<CanvasPreferenceResponse | null> {
+  const response = await requestJson<
+    Readonly<{ preference: CanvasPreferenceResponse | null }>
+  >(canvasPath(projectId, "preference"));
+  return response.preference;
+}
+
+export async function saveCanvasPreference(input: {
+  projectId: string;
+  x: number;
+  y: number;
+  zoom: number;
+  selectedObjectId?: CanvasObjectId | null;
+}): Promise<CanvasPreferenceResponse> {
+  const response = await requestJson<
+    Readonly<{ preference: CanvasPreferenceResponse }>
+  >(
+    canvasPath(input.projectId, "preference"),
+    jsonRequest("PUT", {
+      x: input.x,
+      y: input.y,
+      zoom: input.zoom,
+      ...(input.selectedObjectId === undefined
+        ? {}
+        : { selectedObjectId: input.selectedObjectId })
+    })
+  );
+  return response.preference;
+}
+
+export function createSceneFromCanvas(input: {
+  projectId: string;
+  expectedProjectVersion: number;
+  expectedCanvasVersion: number;
+  title: string;
+  manuscriptPlacement: CanvasScenePlacementInput;
+  canvas: CanvasSceneGeometryInput;
+}): Promise<CanvasSceneHandoffResponse> {
+  return requestJson(
+    canvasPath(input.projectId, "scenes"),
+    jsonRequest("POST", {
+      expectedProjectVersion: input.expectedProjectVersion,
+      expectedCanvasVersion: input.expectedCanvasVersion,
+      title: input.title,
+      manuscriptPlacement: input.manuscriptPlacement,
+      canvas: input.canvas
+    })
+  );
+}
+
+function scenePath(
+  input: SceneRequestScope,
+  resource:
+    | "workspace"
+    | "lease"
+    | "body"
+    | "history"
+    | "checkpoints"
+    | "variants"
+    | "compare"
+    | "restore"
+): string {
+  return (
+    `/api/projects/${encodeURIComponent(input.projectId)}` +
+    `/scenes/${encodeURIComponent(input.sceneId)}/${resource}`
+  );
+}
+
+export function getSceneWorkspace(
+  input: SceneRequestScope
+): Promise<SceneWorkspaceResponse> {
+  return requestJson(scenePath(input, "workspace"));
+}
+
+async function requestSceneLease(
+  input: SceneRequestScope
+): Promise<SceneLeaseResponse> {
+  const result = await requestJson<Readonly<{ lease: SceneLeaseResponse }>>(
+    scenePath(input, "lease"),
+    { method: "POST" }
+  );
+  return result.lease;
+}
+
+export function acquireSceneLease(
+  input: SceneRequestScope
+): Promise<SceneLeaseResponse> {
+  return requestSceneLease(input);
+}
+
+export function renewSceneLease(
+  input: SceneRequestScope
+): Promise<SceneLeaseResponse> {
+  return requestSceneLease(input);
+}
+
+export function releaseSceneLease(input: SceneRequestScope): Promise<void> {
+  return requestJson(scenePath(input, "lease"), {
+    method: "DELETE",
+    keepalive: true
+  });
+}
+
+export async function saveSceneDocument(
+  input: SceneRequestScope &
+    Readonly<{
+      expectedWorkingVersion: number;
+      document: SceneDocumentV1;
+    }>
+): Promise<SceneHeadResponse> {
+  const result = await requestJson<Readonly<{ head: SceneHeadResponse }>>(
+    scenePath(input, "body"),
+    jsonRequest("PATCH", {
+      expectedWorkingVersion: input.expectedWorkingVersion,
+      document: input.document
+    })
+  );
+  return result.head;
+}
+
+export function getSceneHistory(
+  input: SceneRequestScope
+): Promise<SceneHistoryResponse> {
+  return requestJson(scenePath(input, "history"));
+}
+
+export function createSceneCheckpoint(
+  input: SceneRequestScope &
+    Readonly<{ expectedWorkingVersion: number }>
+): Promise<SceneCheckpointResponse> {
+  return requestJson(
+    scenePath(input, "checkpoints"),
+    jsonRequest("POST", {
+      expectedWorkingVersion: input.expectedWorkingVersion
+    })
+  );
+}
+
+export function createSceneVariant(
+  input: SceneRequestScope &
+    Readonly<{ expectedWorkingVersion: number; name: string }>
+): Promise<SceneVariantCreationResponse> {
+  return requestJson(
+    scenePath(input, "variants"),
+    jsonRequest("POST", {
+      expectedWorkingVersion: input.expectedWorkingVersion,
+      name: input.name
+    })
+  );
+}
+
+export function compareSceneRevisions(
+  input: SceneRequestScope &
+    Readonly<{ beforeRevisionId: string; afterRevisionId: string }>
+): Promise<SceneRevisionComparisonResponse> {
+  return requestJson(
+    scenePath(input, "compare"),
+    jsonRequest("POST", {
+      beforeRevisionId: input.beforeRevisionId,
+      afterRevisionId: input.afterRevisionId
+    })
+  );
+}
+
+export function restoreSceneRevision(
+  input: SceneRequestScope &
+    Readonly<{ expectedWorkingVersion: number; revisionId: string }>
+): Promise<SceneRevisionRestoreResponse> {
+  return requestJson(
+    scenePath(input, "restore"),
+    jsonRequest("POST", {
+      expectedWorkingVersion: input.expectedWorkingVersion,
+      revisionId: input.revisionId
     })
   );
 }

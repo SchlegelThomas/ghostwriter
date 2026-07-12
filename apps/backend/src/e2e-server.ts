@@ -1,12 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { serve } from "@hono/node-server";
 import {
+  createCanvasServices,
   createGhostwriterServices,
   createIdentityServices,
+  createSceneWritingServices,
   type DomainIdKind
 } from "@ghostwriter/core";
 import {
+  createPostgresCanvasRepository,
+  createPostgresCanvasSceneCreationUnitOfWork,
   createPostgresProjectRepository,
+  createPostgresSceneDocumentRepository,
   createPostgresWriterProfileRepository,
   toRepositoryDatabase,
   user
@@ -88,16 +93,36 @@ await migratePgliteRepositoryDatabase(db);
 await db.insert(user).values(account);
 const repositoryDatabase = toRepositoryDatabase(db);
 const projects = createPostgresProjectRepository(repositoryDatabase);
+const sceneDocuments = createPostgresSceneDocumentRepository(repositoryDatabase);
+const canvases = createPostgresCanvasRepository(repositoryDatabase);
 const profiles = createPostgresWriterProfileRepository(repositoryDatabase);
 const clock = { now: () => new Date().toISOString() };
+const ids = { create: (kind: DomainIdKind) => `${kind}_${randomUUID()}` };
 const services = createGhostwriterServices({
   projects,
-  ids: { create: (kind: DomainIdKind) => `${kind}_${randomUUID()}` },
+  ids,
+  clock
+});
+const writing = createSceneWritingServices({
+  projects,
+  sceneDocuments,
+  ids,
+  clock
+});
+const canvas = createCanvasServices({
+  projects,
+  canvases,
+  sceneDocuments,
+  sceneCreation:
+    createPostgresCanvasSceneCreationUnitOfWork(repositoryDatabase),
+  ids,
   clock
 });
 const identity = createIdentityServices({ profiles, clock });
 const app = createApp({
   services,
+  writing,
+  canvas,
   identity,
   auth: e2eAuthGateway(),
   allowedOrigins: [appOrigin]

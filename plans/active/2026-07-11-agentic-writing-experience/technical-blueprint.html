@@ -13,7 +13,7 @@
       <p class="eyebrow">Architecture direction</p>
       <h1>Technical blueprint</h1>
       <p class="lede">A web-first collaborative story platform built around multi-book projects, scene-sized documents, a prose-aware version graph, shared Story Canvas objects, and one accountable proposal path for humans and agents.</p>
-      <p class="meta"><strong>Status:</strong> server-authoritative topology accepted in ADR 0002, Lakebase/Hono backend implemented in ADR 0004, and Google accounts/project access implemented in ADR 0005; real-time/editorial transport remains open<br>
+      <p class="meta"><strong>Status:</strong> server-authoritative topology accepted in ADR 0002, Lakebase/Hono backend implemented in ADR 0004, Google accounts/project access implemented in ADR 0005, and owner-only Draft/history/recovery plus Canvas foundations implemented under ADRs 0006/0007; real-time/editorial transport remains open<br>
         <strong>Committed constraints preserved:</strong> Tiptap, platform-neutral core, writer ownership, and MCP parity</p>
     </header>
 
@@ -260,7 +260,7 @@
         <h3>Offline replication and larger teams</h3>
         <p>Add full offline editing, cross-device conflict support, organization roles, approval workflows, and broader CRDT coverage only when the launch topology and real usage justify them.</p>
       </div>
-      <p>ADR 0002 fixes authority and collaboration depth. ADR 0004 selects the Lakebase/Hono runtime, and ADR 0005 selects Google/Better Auth identity, first-party browser sessions, writer profiles, owner memberships, auth-first entry, and archive/restore. Real-time transport, collaboration roles/invitations, backup, retention, browser-recovery expiry, permanent deletion, account exit, and remote MCP authorization remain open.</p>
+      <p>ADR 0002 fixes authority and collaboration depth. ADR 0004 selects the Lakebase/Hono runtime, ADR 0005 selects identity/access, ADR 0006 now implements scene prose, leases, personal history, and bounded recovery, and ADR 0007 now implements the project Canvas board, typed links, spine/drift, snapshots, and accessible ordered view. Real-time transport, collaboration roles/invitations, comments/suggestions, backup/retention policy, permanent deletion, export/account exit, and remote MCP authorization remain open.</p>
     </section>
 
     <section>
@@ -312,8 +312,8 @@
     <section>
       <h2>ADR queue and decision timing</h2>
       <ol>
-        <li><strong>Multi-book project, Story Canvas, and truth states:</strong> before the scaffold model expands.</li>
-        <li><strong>Editor document, stable block IDs, revision graph, variants, and provenance:</strong> before production Tiptap persistence or import.</li>
+        <li><strong>Multi-book project, Story Canvas, and truth states:</strong> canonical ownership is accepted in ADR 0003; project-board spatial state, links, authority, spine behavior, and accessibility are accepted in <a href="../../../docs/adr/0007-story-canvas-spatial-state.md">ADR 0007</a>.</li>
+        <li><strong>Editor document, stable block IDs, revision graph, variants, provenance, leases, and recovery:</strong> accepted in <a href="../../../docs/adr/0006-scene-documents-revisions-and-recovery.md">ADR 0006</a> before production Tiptap persistence.</li>
         <li><strong>Server authority, minimal browser recovery, and editorial collaboration:</strong> accepted in <a href="../../../docs/adr/0002-server-authoritative-web-collaboration.md">ADR 0002</a>; the implementation spike must select concrete services and protocols.</li>
         <li><strong>Identity and initial project access:</strong> accepted in <a href="../../../docs/adr/0005-authenticated-accounts-and-project-access.md">ADR 0005</a> for Google accounts, profiles, owner memberships, and first-party sessions. Editor roles, invitations, and remote MCP access remain later decisions.</li>
         <li><strong>Agent authority and MCP mutation policy:</strong> before a real model or external client can create actionable proposals.</li>

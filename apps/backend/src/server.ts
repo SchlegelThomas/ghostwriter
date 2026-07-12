@@ -7,6 +7,8 @@ const config = loadConfig();
 const runtime = createBackendRuntime(config);
 const app = createApp({
   services: runtime.services,
+  writing: runtime.writing,
+  canvas: runtime.canvas,
   identity: runtime.identity,
   auth: runtime.auth,
   allowedOrigins: config.auth.trustedOrigins

@@ -8,8 +8,10 @@ writer's project directly.
 > The current feature branch adds ADR 0005 Google/Better Auth accounts, writer profiles, owner-scoped
 > projects, a first-party Pages-to-Fly API path, and safe end-to-end commands for the current
 > project/book/manuscript-structure/scene-metadata/story-knowledge kernel. Local real-Google
-> acceptance and automated verification pass; PR/release approval remains. Tiptap prose and revision
-> history, Story Canvas, subscriptions, real-time collaboration, and AI remain later slices.
+> acceptance is preserved at pushed checkpoint `a73d532`. The uncommitted expanded milestone now
+> adds durable Tiptap prose, owner leases, checkpoints/variants/compare/restore, encrypted
+> unacknowledged-work recovery, and server-authoritative Story Canvas/Split state. All 121 tests and
+> 13 browser journeys pass. Subscriptions, collaborators, AI, import/export, and purge remain later.
 
 ## Orientation
 

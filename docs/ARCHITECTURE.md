@@ -132,6 +132,42 @@ ADR 0005 establishes the identity spine used by all real project access:
 
 See [ADR 0005](adr/0005-authenticated-accounts-and-project-access.md).
 
+## Implemented writing, revision, and Canvas foundation (2026-07-12)
+
+The founder expanded the active pre-PR epic from authenticated metadata CRUD into the complete
+single-owner writing loop from the living design. Two accepted ADRs now have working vertical
+implementations:
+
+- [ADR 0006](adr/0006-scene-documents-revisions-and-recovery.md) selects canonical versioned
+  ProseMirror JSON with stable block IDs, a dedicated scene working version, append-only meaningful
+  checkpoints and variant heads, owner-session leases, block-aware compare/restore, and a bounded
+  IndexedDB recovery buffer for unacknowledged prose.
+- [ADR 0007](adr/0007-story-canvas-spatial-state.md) selects one project-owned Canvas board with
+  dedicated versioning, relational objects/links referencing canonical scene/story IDs, separate
+  per-writer viewport preferences, manuscript-derived spine/drift, and an accessible ordered view.
+
+The concurrency boundary is intentionally split: project metadata keeps `project.version`, scene
+prose uses a per-scene working version, and Canvas spatial state uses a board version. Postgres
+metadata persistence now updates stable canonical rows rather than deleting/rebuilding scenes.
+
+- `packages/editor` owns strict schema-v1 ProseMirror JSON, stable block IDs, canonical hashing and
+  block-aware comparison plus the SSR-safe web Tiptap component. Core imports only its DOM-free
+  document contract.
+- Scene document/revision/variant/lease tables and repository contracts support acknowledged
+  working saves, meaningful immutable checkpoints, named variants, compare, restore-as-new, and
+  owner-session lease conflicts. Errors and diagnostics remain prose-free.
+- The browser save queue serializes debounced writes. A seven-day AES-GCM IndexedDB buffer stores
+  only unacknowledged scene text, asks before recovery, and clears after matching acknowledgement
+  or sign-out; it is not an offline project replica.
+- Canvas uses relational current-state boards/objects/links, immutable snapshots, personal viewport
+  preferences, a manuscript-derived spine, and a separate board version. The combined unit of work
+  atomically creates a manuscript scene, genesis document, and Canvas card.
+- The responsive client exposes Draft, Canvas, Split, and Project setup. Wide web supports spatial
+  editing and inspectors; narrow web defaults to an ordered keyboard/screen-reader representation.
+  Canvas position and story-order hints expose drift but never reorder the manuscript.
+- Canonical MCP writes, real-time subscriptions/presence, editor invitations, comments/suggestions,
+  image generation, and full offline access remain explicit later decisions.
+
 ## Accepted product requirements (2026-07-11)
 
 - Responsive real-time web is the primary product; desktop and mobile are convenience surfaces
@@ -190,8 +226,9 @@ plan's record-log plus update this section.
 | Decision | Options on the table | Notes |
 |---|---|---|
 | Real-time transport | subscriptions over the shared DB, actor/room model, CRDT coordination service | Database chosen (Lakebase, ADR 0004); live-update transport, presence, and reconnect semantics still open |
-| Content history | content-addressed checkpoint/variant graph, event sourcing, literal Git repository | Recommend immutable prose-aware version graph; do not expose Git mechanics or event-source keystrokes |
-| Browser recovery | IndexedDB, OPFS, simpler encrypted draft buffer | Store only unacknowledged recovery data; clear safely after server acknowledgement |
+| Content history | content-addressed checkpoint/variant graph, event sourcing, literal Git repository | Implemented foundation under ADR 0006: acknowledged working state plus immutable meaningful checkpoints |
+| Browser recovery | IndexedDB, OPFS, simpler encrypted draft buffer | Implemented under ADR 0006: bounded encrypted IndexedDB for unacknowledged prose only |
+| Story Canvas state | relational board objects/links, aggregate JSON board, scene-only placement fields | Implemented foundation under ADR 0007: project board with dedicated version, canonical ID references, manuscript-derived spine, and accessible ordered projection |
 | Build tooling | pnpm native workspace orchestration; revisit Turborepo only when measured need appears | Resolved for scaffold |
 | AI providers | Anthropic, OpenAI, local models via Ollama | `packages/ai` should abstract this from day one |
 

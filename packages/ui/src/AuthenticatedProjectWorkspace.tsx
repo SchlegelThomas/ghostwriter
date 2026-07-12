@@ -26,9 +26,13 @@ import type {
 } from "@ghostwriter/core";
 import { ghostwriterTheme } from "./theme.js";
 
+export type ProjectWorkspaceMode = "draft" | "canvas" | "split" | "setup";
+
 export type AuthenticatedProjectWorkspaceProps = Readonly<{
   project: ProjectNavigator;
   profileDisplayName: string;
+  mode: ProjectWorkspaceMode;
+  selectedSceneId?: SceneId;
   busy?: boolean;
   saveState?: "saved" | "saving" | "error";
   error?: string;
@@ -36,6 +40,10 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   onRefresh(): void;
   onSignOut(): void;
   onCommand(command: ProjectCommand): void;
+  onModeChange(mode: ProjectWorkspaceMode): void;
+  onSelectedSceneIdChange(sceneId: SceneId | undefined): void;
+  renderCanvas?: ReactNode;
+  renderDraft?(scene: ProjectNavigatorScene | undefined): ReactNode;
 }>;
 
 const { colors, fonts } = ghostwriterTheme;
@@ -191,6 +199,34 @@ function allScenes(project: ProjectNavigator): ProjectNavigatorScene[] {
   return project.books.flatMap(orderedScenes);
 }
 
+type ScenePlacement = Readonly<{
+  chapter?: ProjectNavigatorChapter;
+  scenes: readonly ProjectNavigatorScene[];
+}>;
+
+type Confirmation = Readonly<{
+  title: string;
+  detail: string;
+  confirmLabel: string;
+  action(): void;
+}>;
+
+function scenePlacement(
+  book: ProjectNavigatorBook,
+  id: SceneId
+): ScenePlacement | undefined {
+  for (const part of book.parts) {
+    for (const chapter of part.chapters) {
+      if (chapter.scenes.some((scene) => scene.id === id)) {
+        return { chapter, scenes: chapter.scenes };
+      }
+    }
+  }
+  return book.unassignedScenes.some((scene) => scene.id === id)
+    ? { scenes: book.unassignedScenes }
+    : undefined;
+}
+
 function swapped<Value>(values: readonly Value[], from: number, to: number): Value[] {
   if (to < 0 || to >= values.length) return [...values];
   const result = [...values];
@@ -220,13 +256,19 @@ function Section({
 export function AuthenticatedProjectWorkspace({
   project,
   profileDisplayName,
+  mode,
+  selectedSceneId,
   busy = false,
   saveState = "saved",
   error,
   onBack,
   onRefresh,
   onSignOut,
-  onCommand
+  onCommand,
+  onModeChange,
+  onSelectedSceneIdChange,
+  renderCanvas,
+  renderDraft
 }: AuthenticatedProjectWorkspaceProps) {
   const compact = useWindowDimensions().width < 920;
   const firstBook = project.books[0];
@@ -250,8 +292,9 @@ export function AuthenticatedProjectWorkspace({
     selectedPart?.chapters.find((chapter) => chapter.id === selectedChapterId) ??
     selectedPart?.chapters[0];
   const projectScenes = useMemo(() => allScenes(project), [project]);
-  const [selectedSceneId, setSelectedSceneId] = useState<SceneId | undefined>(
-    projectScenes[0]?.id
+  const bookScenes = useMemo(
+    () => (selectedBook === undefined ? [] : orderedScenes(selectedBook)),
+    [selectedBook]
   );
   const selectedScene =
     projectScenes.find((scene) => scene.id === selectedSceneId) ??
@@ -300,6 +343,10 @@ export function AuthenticatedProjectWorkspace({
     useState<StoryKnowledgeAuthority>(
       selectedKnowledge?.authority ?? "planned"
     );
+  const [showArchivedBooks, setShowArchivedBooks] = useState(false);
+  const [showArchivedScenes, setShowArchivedScenes] = useState(false);
+  const [showArchivedKnowledge, setShowArchivedKnowledge] = useState(false);
+  const [confirmation, setConfirmation] = useState<Confirmation>();
 
   useEffect(() => setProjectTitle(project.title), [project.title]);
   useEffect(() => {
@@ -336,6 +383,30 @@ export function AuthenticatedProjectWorkspace({
     setScenePovId(selectedScene?.povStoryKnowledgeId);
   }, [selectedScene]);
   useEffect(() => {
+    if (mode === "setup" && selectedSceneId === undefined) return;
+    if (
+      selectedSceneId === undefined ||
+      !projectScenes.some((scene) => scene.id === selectedSceneId)
+    ) {
+      onSelectedSceneIdChange(projectScenes[0]?.id);
+    }
+  }, [
+    onSelectedSceneIdChange,
+    mode,
+    projectScenes,
+    selectedSceneId
+  ]);
+  useEffect(() => {
+    if (mode === "setup") return;
+    if (selectedSceneId === undefined) return;
+    const sceneBook = project.books.find((book) =>
+      orderedScenes(book).some((scene) => scene.id === selectedSceneId)
+    );
+    if (sceneBook !== undefined && sceneBook.id !== selectedBookId) {
+      setSelectedBookId(sceneBook.id);
+    }
+  }, [mode, project.books, selectedBookId, selectedSceneId]);
+  useEffect(() => {
     setKnowledgeLabel(selectedKnowledge?.label ?? "");
     setKnowledgeKind(selectedKnowledge?.kind ?? "character");
     setKnowledgeAuthority(selectedKnowledge?.authority ?? "planned");
@@ -355,14 +426,56 @@ export function AuthenticatedProjectWorkspace({
       : selectedPart.chapters.findIndex(
           (chapter) => chapter.id === selectedChapter.id
         );
+  const visibleBooks = project.books.filter(
+    (book) => showArchivedBooks || book.archivedAt === undefined
+  );
+  const visibleScenes = bookScenes.filter(
+    (scene) => showArchivedScenes || scene.archivedAt === undefined
+  );
+  const visibleKnowledge = project.storyKnowledge.filter(
+    (knowledge) => showArchivedKnowledge || knowledge.archivedAt === undefined
+  );
+  const activeBookCount = project.books.filter(
+    (book) => book.archivedAt === undefined
+  ).length;
+  const selectedBookIsLastActive =
+    selectedBook?.archivedAt === undefined && activeBookCount <= 1;
+  const selectedKnowledgeIsPov =
+    selectedKnowledge !== undefined &&
+    projectScenes.some(
+      (scene) => scene.povStoryKnowledgeId === selectedKnowledge.id
+    );
+  const selectedPlacement =
+    selectedBook === undefined || selectedScene === undefined
+      ? undefined
+      : scenePlacement(selectedBook, selectedScene.id);
+  const selectedSceneIndex =
+    selectedScene === undefined || selectedPlacement === undefined
+      ? -1
+      : selectedPlacement.scenes.findIndex(
+          (scene) => scene.id === selectedScene.id
+        );
 
   function command(value: ProjectCommand): void {
     if (!busy) onCommand(value);
   }
 
+  function selectBook(book: ProjectNavigatorBook): void {
+    setSelectedBookId(book.id);
+    const scenes = orderedScenes(book);
+    if (!scenes.some((scene) => scene.id === selectedSceneId)) {
+      onSelectedSceneIdChange(scenes[0]?.id);
+    }
+  }
+
+  function requestConfirmation(value: Confirmation): void {
+    if (!busy) setConfirmation(value);
+  }
+
   function moveSceneTo(
     targetBook: ProjectNavigatorBook,
-    targetChapter?: ProjectNavigatorChapter
+    targetChapter?: ProjectNavigatorChapter,
+    position?: number
   ): void {
     if (selectedScene === undefined) return;
     const existingIds =
@@ -374,9 +487,28 @@ export function AuthenticatedProjectWorkspace({
       sceneId: selectedScene.id,
       bookId: targetBook.id,
       ...(targetChapter === undefined ? {} : { chapterId: targetChapter.id }),
-      position: existingIds.filter((id) => id !== selectedScene.id).length
+      position:
+        position ?? existingIds.filter((id) => id !== selectedScene.id).length
     });
   }
+
+  function reorderSelectedScene(offset: -1 | 1): void {
+    if (
+      selectedBook === undefined ||
+      selectedPlacement === undefined ||
+      selectedSceneIndex < 0
+    ) {
+      return;
+    }
+    moveSceneTo(
+      selectedBook,
+      selectedPlacement.chapter,
+      selectedSceneIndex + offset
+    );
+  }
+
+  const draftVisible = mode === "draft" || mode === "split";
+  const canvasVisible = mode === "canvas" || mode === "split";
 
   return (
     <View style={styles.screen}>
@@ -409,13 +541,154 @@ export function AuthenticatedProjectWorkspace({
         </View>
       </View>
 
+      <View accessibilityLabel="Writing workspace modes" style={styles.modeBar}>
+        <Text style={styles.modeBarLabel}>Workspace</Text>
+        <View style={styles.modeActions}>
+          <Button
+            disabled={busy}
+            label="Draft"
+            onPress={() => onModeChange("draft")}
+            primary={mode === "draft"}
+          />
+          <Button
+            disabled={busy}
+            label="Canvas"
+            onPress={() => onModeChange("canvas")}
+            primary={mode === "canvas"}
+          />
+          {compact ? null : (
+            <Button
+              disabled={busy}
+              label="Split"
+              onPress={() => onModeChange("split")}
+              primary={mode === "split"}
+            />
+          )}
+          <Button
+            disabled={busy}
+            label="Project setup"
+            onPress={() => onModeChange("setup")}
+            primary={mode === "setup"}
+          />
+        </View>
+        <Text style={styles.modeDescription}>
+          {mode === "draft"
+            ? "Write and review the selected manuscript scene."
+            : mode === "canvas"
+              ? "Shape scenes and story knowledge spatially or in ordered view."
+              : mode === "split"
+                ? "Keep Canvas and the selected Draft scene in one wide workspace."
+                : "Manage project metadata, books, manuscript placement, and story records."}
+        </Text>
+      </View>
+
       <ScrollView contentContainerStyle={styles.content}>
         {error === undefined ? null : (
           <View accessibilityRole="alert" style={styles.error}>
             <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
+        {confirmation === undefined ? null : (
+          <View accessibilityRole="alert" style={styles.confirmation}>
+            <Text style={styles.confirmationTitle}>{confirmation.title}</Text>
+            <Text style={styles.confirmationDetail}>{confirmation.detail}</Text>
+            <View style={styles.actionRow}>
+              <Button label="Cancel" onPress={() => setConfirmation(undefined)} />
+              <Button
+                danger
+                label={confirmation.confirmLabel}
+                onPress={() => {
+                  setConfirmation(undefined);
+                  confirmation.action();
+                }}
+              />
+            </View>
+          </View>
+        )}
 
+        {mode === "setup" ? null : (
+          <View style={styles.sceneNavigator}>
+            <View style={styles.sceneNavigatorHeading}>
+              <View style={styles.sceneNavigatorCopy}>
+                <Text style={styles.sceneNavigatorEyebrow}>Manuscript scenes</Text>
+                <Text style={styles.sceneNavigatorTitle}>
+                  {selectedScene?.title ?? "Choose a scene"}
+                </Text>
+              </View>
+              <Text style={styles.sceneNavigatorMeta}>
+                One selection is shared by Draft, Canvas, and Split.
+              </Text>
+            </View>
+            {projectScenes.length === 0 ? (
+              <Text style={styles.muted}>
+                Create a scene from Canvas or Project setup to begin writing.
+              </Text>
+            ) : (
+              <ScrollView
+                contentContainerStyle={styles.sceneNavigatorList}
+                horizontal
+                showsHorizontalScrollIndicator
+              >
+                {projectScenes.map((scene) => (
+                  <Pressable
+                    accessibilityLabel={`Scene ${scene.title}`}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: scene.id === selectedScene?.id }}
+                    key={scene.id}
+                    onPress={() => onSelectedSceneIdChange(scene.id)}
+                    style={[
+                      styles.sceneNavigatorRow,
+                      scene.id === selectedScene?.id &&
+                        styles.sceneNavigatorRowSelected
+                    ]}
+                  >
+                    <Text style={styles.sceneNavigatorScene}>{scene.title}</Text>
+                    <Text style={styles.sceneNavigatorSceneMeta}>
+                      {scene.status}
+                      {scene.archivedAt === undefined ? "" : " · archived"}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        )}
+
+        {mode === "setup" ? null : (
+          <View
+            style={[
+              styles.workSurface,
+              mode === "split" && styles.workSurfaceSplit,
+              compact && styles.workSurfaceCompact
+            ]}
+          >
+            {canvasVisible ? (
+              <View key="canvas" style={styles.workSurfacePane}>
+                {renderCanvas ?? (
+                  <Section eyebrow="Canvas" title="Story Canvas is unavailable">
+                    <Text style={styles.muted}>
+                      Reload the project to open its Canvas.
+                    </Text>
+                  </Section>
+                )}
+              </View>
+            ) : null}
+            {draftVisible ? (
+              <View key="draft" style={styles.workSurfacePane}>
+                {renderDraft?.(selectedScene) ?? (
+                  <Section eyebrow="Draft" title="Choose or create a scene">
+                    <Text style={styles.muted}>
+                      Draft opens one canonical manuscript scene at a time.
+                    </Text>
+                  </Section>
+                )}
+              </View>
+            ) : null}
+          </View>
+        )}
+
+        {mode === "setup" ? (
+          <>
         <Section eyebrow="Project" title="Project identity and lifecycle">
           <Field
             disabled={busy}
@@ -436,12 +709,20 @@ export function AuthenticatedProjectWorkspace({
               danger={project.archivedAt === undefined}
               disabled={busy}
               label={project.archivedAt === undefined ? "Archive project" : "Restore project"}
-              onPress={() =>
-                command({
-                  type: "project.setArchived",
-                  archived: project.archivedAt === undefined
-                })
-              }
+              onPress={() => {
+                if (project.archivedAt !== undefined) {
+                  command({ type: "project.setArchived", archived: false });
+                  return;
+                }
+                requestConfirmation({
+                  title: "Archive this project?",
+                  detail:
+                    "It will leave your active library, but its books, scenes, and history remain recoverable.",
+                  confirmLabel: "Confirm archive project",
+                  action: () =>
+                    command({ type: "project.setArchived", archived: true })
+                });
+              }}
             />
           </View>
         </Section>
@@ -468,13 +749,28 @@ export function AuthenticatedProjectWorkspace({
                   }}
                 />
               </View>
+              <View style={styles.filterRow}>
+                <Button
+                  disabled={busy}
+                  label={showArchivedBooks ? "Hide archived books" : "Show archived books"}
+                  onPress={() => setShowArchivedBooks(!showArchivedBooks)}
+                />
+                <Text style={styles.filterSummary}>
+                  {visibleBooks.length} of {project.books.length} books shown
+                </Text>
+              </View>
               <View style={styles.selectionList}>
-                {project.books.map((book, index) => (
+                {visibleBooks.map((book) => {
+                  const index = project.books.findIndex(
+                    (candidate) => candidate.id === book.id
+                  );
+                  return (
                   <Pressable
+                    accessibilityLabel={`Book ${book.title}`}
                     accessibilityRole="button"
                     accessibilityState={{ selected: book.id === selectedBook?.id }}
                     key={book.id}
-                    onPress={() => setSelectedBookId(book.id)}
+                    onPress={() => selectBook(book)}
                     style={[
                       styles.selectionRow,
                       book.id === selectedBook?.id && styles.selectionRowActive
@@ -489,7 +785,8 @@ export function AuthenticatedProjectWorkspace({
                       </Text>
                     </View>
                   </Pressable>
-                ))}
+                  );
+                })}
               </View>
               {selectedBook === undefined ? null : (
                 <View style={styles.editorBlock}>
@@ -554,21 +851,43 @@ export function AuthenticatedProjectWorkspace({
                     />
                     <Button
                       danger={selectedBook.archivedAt === undefined}
-                      disabled={busy}
+                      disabled={busy || selectedBookIsLastActive}
                       label={
                         selectedBook.archivedAt === undefined
-                          ? "Archive"
-                          : "Restore"
+                          ? "Archive book"
+                          : "Restore book"
                       }
-                      onPress={() =>
-                        command({
-                          type: "book.setArchived",
-                          bookId: selectedBook.id,
-                          archived: selectedBook.archivedAt === undefined
-                        })
-                      }
+                      onPress={() => {
+                        if (selectedBook.archivedAt !== undefined) {
+                          command({
+                            type: "book.setArchived",
+                            bookId: selectedBook.id,
+                            archived: false
+                          });
+                          return;
+                        }
+                        requestConfirmation({
+                          title: `Archive ${selectedBook.title}?`,
+                          detail:
+                            "Its manuscript and scenes remain recoverable. Ghostwriter always keeps at least one active book.",
+                          confirmLabel: "Confirm archive book",
+                          action: () => {
+                            setShowArchivedBooks(true);
+                            command({
+                              type: "book.setArchived",
+                              bookId: selectedBook.id,
+                              archived: true
+                            });
+                          }
+                        });
+                      }}
                     />
                   </View>
+                  {selectedBookIsLastActive ? (
+                    <Text style={styles.guidance}>
+                      Create or restore another active book before archiving this one.
+                    </Text>
+                  ) : null}
                 </View>
               )}
             </Section>
@@ -604,6 +923,7 @@ export function AuthenticatedProjectWorkspace({
                   <View style={styles.choiceRow}>
                     {selectedBook.parts.map((part) => (
                       <Pressable
+                        accessibilityLabel={`Part ${part.title}`}
                         accessibilityRole="button"
                         accessibilityState={{
                           selected: part.id === selectedPart?.id
@@ -687,14 +1007,26 @@ export function AuthenticatedProjectWorkspace({
                           disabled={busy || selectedPart.chapters.length > 0}
                           label="Remove empty part"
                           onPress={() =>
-                            command({
-                              type: "part.removeEmpty",
-                              bookId: selectedBook.id,
-                              partId: selectedPart.id
+                            requestConfirmation({
+                              title: `Remove ${selectedPart.title}?`,
+                              detail:
+                                "Only this empty structural container will be removed. No scenes or prose are deleted.",
+                              confirmLabel: "Confirm remove part",
+                              action: () =>
+                                command({
+                                  type: "part.removeEmpty",
+                                  bookId: selectedBook.id,
+                                  partId: selectedPart.id
+                                })
                             })
                           }
                         />
                       </View>
+                      {selectedPart.chapters.length > 0 ? (
+                        <Text style={styles.guidance}>
+                          Remove or move every chapter before removing this part.
+                        </Text>
+                      ) : null}
 
                       <View style={styles.divider} />
                       <View style={styles.addRow}>
@@ -724,6 +1056,7 @@ export function AuthenticatedProjectWorkspace({
                       <View style={styles.choiceRow}>
                         {selectedPart.chapters.map((chapter) => (
                           <Pressable
+                            accessibilityLabel={`Chapter ${chapter.title}`}
                             accessibilityRole="button"
                             accessibilityState={{
                               selected: chapter.id === selectedChapter?.id
@@ -816,15 +1149,27 @@ export function AuthenticatedProjectWorkspace({
                               disabled={busy || selectedChapter.scenes.length > 0}
                               label="Remove empty chapter"
                               onPress={() =>
-                                command({
-                                  type: "chapter.removeEmpty",
-                                  bookId: selectedBook.id,
-                                  partId: selectedPart.id,
-                                  chapterId: selectedChapter.id
+                                requestConfirmation({
+                                  title: `Remove ${selectedChapter.title}?`,
+                                  detail:
+                                    "Only this empty structural container will be removed. Archived scenes still count as scenes and must be moved first.",
+                                  confirmLabel: "Confirm remove chapter",
+                                  action: () =>
+                                    command({
+                                      type: "chapter.removeEmpty",
+                                      bookId: selectedBook.id,
+                                      partId: selectedPart.id,
+                                      chapterId: selectedChapter.id
+                                    })
                                 })
                               }
                             />
                           </View>
+                          {selectedChapter.scenes.length > 0 ? (
+                            <Text style={styles.guidance}>
+                              Move every active or archived scene before removing this chapter.
+                            </Text>
+                          ) : null}
                         </>
                       )}
                     </View>
@@ -868,13 +1213,25 @@ export function AuthenticatedProjectWorkspace({
                   />
                 </View>
               )}
+              <View style={styles.filterRow}>
+                <Button
+                  disabled={busy}
+                  label={showArchivedScenes ? "Hide archived scenes" : "Show archived scenes"}
+                  onPress={() => setShowArchivedScenes(!showArchivedScenes)}
+                />
+                <Text style={styles.filterSummary}>
+                  {visibleScenes.length} of {bookScenes.length} scenes in{" "}
+                  {selectedBook?.title ?? "this book"}
+                </Text>
+              </View>
               <View style={styles.selectionList}>
-                {projectScenes.map((scene) => (
+                {visibleScenes.map((scene) => (
                   <Pressable
+                    accessibilityLabel={`Scene ${scene.title}`}
                     accessibilityRole="button"
                     accessibilityState={{ selected: scene.id === selectedScene?.id }}
                     key={scene.id}
-                    onPress={() => setSelectedSceneId(scene.id)}
+                    onPress={() => onSelectedSceneIdChange(scene.id)}
                     style={[
                       styles.selectionRow,
                       scene.id === selectedScene?.id && styles.selectionRowActive
@@ -973,34 +1330,74 @@ export function AuthenticatedProjectWorkspace({
                           ? "Archive scene"
                           : "Restore scene"
                       }
-                      onPress={() =>
-                        command({
-                          type: "scene.setArchived",
-                          sceneId: selectedScene.id,
-                          archived: selectedScene.archivedAt === undefined
-                        })
+                      onPress={() => {
+                        if (selectedScene.archivedAt !== undefined) {
+                          command({
+                            type: "scene.setArchived",
+                            sceneId: selectedScene.id,
+                            archived: false
+                          });
+                          return;
+                        }
+                        requestConfirmation({
+                          title: `Archive ${selectedScene.title}?`,
+                          detail:
+                            "The scene stays in manuscript placement and history. You can show archived scenes and restore it.",
+                          confirmLabel: "Confirm archive scene",
+                          action: () => {
+                            setShowArchivedScenes(true);
+                            command({
+                              type: "scene.setArchived",
+                              sceneId: selectedScene.id,
+                              archived: true
+                            });
+                          }
+                        });
+                      }}
+                    />
+                  </View>
+                  <Text style={[styles.fieldLabel, styles.moveLabel]}>Scene order</Text>
+                  <View style={styles.actionRow}>
+                    <Button
+                      disabled={busy || selectedSceneIndex <= 0}
+                      label="Scene ↑"
+                      onPress={() => reorderSelectedScene(-1)}
+                    />
+                    <Button
+                      disabled={
+                        busy ||
+                        selectedPlacement === undefined ||
+                        selectedSceneIndex < 0 ||
+                        selectedSceneIndex >= selectedPlacement.scenes.length - 1
                       }
+                      label="Scene ↓"
+                      onPress={() => reorderSelectedScene(1)}
                     />
                   </View>
                   <Text style={[styles.fieldLabel, styles.moveLabel]}>
                     Move to the end of…
                   </Text>
                   <View style={styles.actionRow}>
-                    {project.books.map((book) => (
-                      <Button
-                        disabled={busy}
-                        key={book.id}
-                        label={`${book.title} · Unassigned`}
-                        onPress={() => moveSceneTo(book)}
-                      />
-                    ))}
-                    {selectedBook === undefined || selectedChapter === undefined ? null : (
-                      <Button
-                        disabled={busy}
-                        label={`${selectedBook.title} · ${selectedChapter.title}`}
-                        onPress={() => moveSceneTo(selectedBook, selectedChapter)}
-                      />
-                    )}
+                    {project.books
+                      .filter((book) => book.archivedAt === undefined)
+                      .flatMap((book) => [
+                        <Button
+                          disabled={busy}
+                          key={`${book.id}:unassigned`}
+                          label={`${book.title} · Unassigned`}
+                          onPress={() => moveSceneTo(book)}
+                        />,
+                        ...book.parts.flatMap((part) =>
+                          part.chapters.map((chapter) => (
+                            <Button
+                              disabled={busy}
+                              key={`${book.id}:${chapter.id}`}
+                              label={`${book.title} · ${chapter.title}`}
+                              onPress={() => moveSceneTo(book, chapter)}
+                            />
+                          ))
+                        )
+                      ])}
                   </View>
                 </View>
               )}
@@ -1040,9 +1437,24 @@ export function AuthenticatedProjectWorkspace({
                   setNewKnowledgeLabel("");
                 }}
               />
+              <View style={styles.filterRow}>
+                <Button
+                  disabled={busy}
+                  label={
+                    showArchivedKnowledge
+                      ? "Hide archived story knowledge"
+                      : "Show archived story knowledge"
+                  }
+                  onPress={() => setShowArchivedKnowledge(!showArchivedKnowledge)}
+                />
+                <Text style={styles.filterSummary}>
+                  {visibleKnowledge.length} of {project.storyKnowledge.length} records shown
+                </Text>
+              </View>
               <View style={[styles.selectionList, styles.knowledgeList]}>
-                {project.storyKnowledge.map((knowledge) => (
+                {visibleKnowledge.map((knowledge) => (
                   <Pressable
+                    accessibilityLabel={`Story knowledge ${knowledge.label}`}
                     accessibilityRole="button"
                     accessibilityState={{
                       selected: knowledge.id === selectedKnowledge?.id
@@ -1105,23 +1517,46 @@ export function AuthenticatedProjectWorkspace({
                     />
                     <Button
                       danger={selectedKnowledge.archivedAt === undefined}
-                      disabled={busy}
+                      disabled={busy || selectedKnowledgeIsPov}
                       label={
                         selectedKnowledge.archivedAt === undefined
-                          ? "Archive"
-                          : "Restore"
+                          ? "Archive story knowledge"
+                          : "Restore story knowledge"
                       }
-                      onPress={() =>
-                        command({
-                          type: "storyKnowledge.setArchived",
-                          storyKnowledgeId: selectedKnowledge.id,
-                          archived: selectedKnowledge.archivedAt === undefined
-                        })
-                      }
+                      onPress={() => {
+                        if (selectedKnowledge.archivedAt !== undefined) {
+                          command({
+                            type: "storyKnowledge.setArchived",
+                            storyKnowledgeId: selectedKnowledge.id,
+                            archived: false
+                          });
+                          return;
+                        }
+                        requestConfirmation({
+                          title: `Archive ${selectedKnowledge.label}?`,
+                          detail:
+                            "Its scene links remain available for history. Records used as a scene POV must be unassigned first.",
+                          confirmLabel: "Confirm archive story knowledge",
+                          action: () => {
+                            setShowArchivedKnowledge(true);
+                            command({
+                              type: "storyKnowledge.setArchived",
+                              storyKnowledgeId: selectedKnowledge.id,
+                              archived: true
+                            });
+                          }
+                        });
+                      }}
                     />
                     {selectedScene === undefined ? null : (
                       <Button
-                        disabled={busy}
+                        disabled={
+                          busy ||
+                          (selectedScene.archivedAt !== undefined &&
+                            !selectedKnowledge.linkedSceneIds.includes(
+                              selectedScene.id
+                            ))
+                        }
                         label={
                           selectedKnowledge.linkedSceneIds.includes(
                             selectedScene.id
@@ -1142,6 +1577,17 @@ export function AuthenticatedProjectWorkspace({
                       />
                     )}
                   </View>
+                  {selectedScene?.archivedAt !== undefined &&
+                  !selectedKnowledge.linkedSceneIds.includes(selectedScene.id) ? (
+                    <Text style={styles.guidance}>
+                      Restore {selectedScene.title} before creating a new story link.
+                    </Text>
+                  ) : null}
+                  {selectedKnowledgeIsPov ? (
+                    <Text style={styles.guidance}>
+                      Clear this record from every scene POV before archiving it.
+                    </Text>
+                  ) : null}
                 </View>
               )}
             </Section>
@@ -1155,6 +1601,8 @@ export function AuthenticatedProjectWorkspace({
             cannot yet preserve.
           </Text>
         </Section>
+          </>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -1209,6 +1657,37 @@ const styles = StyleSheet.create({
   saveStateError: {
     color: colors.red
   },
+  modeBar: {
+    alignItems: "center",
+    backgroundColor: colors.brandDark,
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 9,
+    paddingHorizontal: 14,
+    paddingVertical: 9
+  },
+  modeBarLabel: {
+    color: colors.railText,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 8,
+    letterSpacing: 1.2,
+    textTransform: "uppercase"
+  },
+  modeActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6
+  },
+  modeDescription: {
+    color: colors.railText,
+    flex: 1,
+    fontFamily: fonts.ui,
+    fontSize: 8,
+    lineHeight: 13,
+    minWidth: 220
+  },
   content: {
     gap: 14,
     marginHorizontal: "auto",
@@ -1225,6 +1704,111 @@ const styles = StyleSheet.create({
     color: colors.red,
     fontFamily: fonts.uiMedium,
     fontSize: 10
+  },
+  confirmation: {
+    backgroundColor: colors.amberSoft,
+    borderColor: colors.amber,
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 12
+  },
+  confirmationTitle: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 11
+  },
+  confirmationDetail: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 9,
+    lineHeight: 14,
+    marginBottom: 9,
+    marginTop: 4
+  },
+  sceneNavigator: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 9,
+    minWidth: 0,
+    padding: 12
+  },
+  sceneNavigatorHeading: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    justifyContent: "space-between"
+  },
+  sceneNavigatorCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  sceneNavigatorEyebrow: {
+    color: colors.kicker,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 7,
+    letterSpacing: 1.2,
+    textTransform: "uppercase"
+  },
+  sceneNavigatorTitle: {
+    color: colors.ink,
+    fontFamily: fonts.story,
+    fontSize: 20,
+    marginTop: 2
+  },
+  sceneNavigatorMeta: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 8,
+    lineHeight: 12,
+    maxWidth: 300
+  },
+  sceneNavigatorList: {
+    gap: 6,
+    paddingBottom: 2
+  },
+  sceneNavigatorRow: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 7,
+    borderWidth: 1,
+    minWidth: 170,
+    padding: 8
+  },
+  sceneNavigatorRowSelected: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent
+  },
+  sceneNavigatorScene: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 8
+  },
+  sceneNavigatorSceneMeta: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 7,
+    marginTop: 2
+  },
+  workSurface: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 12,
+    minWidth: 0,
+    width: "100%"
+  },
+  workSurfaceSplit: {
+    alignItems: "stretch"
+  },
+  workSurfaceCompact: {
+    flexDirection: "column"
+  },
+  workSurfacePane: {
+    flex: 1,
+    minWidth: 0,
+    width: "100%"
   },
   columns: {
     alignItems: "flex-start",
@@ -1302,6 +1886,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 7
+  },
+  filterRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    justifyContent: "space-between",
+    marginBottom: 10
+  },
+  filterSummary: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 8
   },
   button: {
     alignItems: "center",
@@ -1418,6 +2015,13 @@ const styles = StyleSheet.create({
   },
   knowledgeList: {
     marginTop: 12
+  },
+  guidance: {
+    color: colors.amber,
+    fontFamily: fonts.uiMedium,
+    fontSize: 8,
+    lineHeight: 13,
+    marginTop: 7
   },
   muted: {
     color: colors.muted,

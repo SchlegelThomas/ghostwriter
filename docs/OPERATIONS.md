@@ -117,6 +117,11 @@ DATABASE_URL=postgres://… pnpm db:migrate
 Migrations are checked into git, applied to each PR's Lakebase branch in CI, and applied to
 `production` on deploy. They are forward-only.
 
+The expanded writing branch adds migrations 0004–0006 for scene documents/revisions/leases,
+variants, and relational Story Canvas state/history/preferences. PGlite migration and repository
+contracts pass locally; these migrations remain unapplied to production until the normal PR branch
+and merge-driven backend workflows run.
+
 ### Per-PR database branches
 
 `.github/workflows/db-branch.yml` creates `pr-<number>` from `production` (with a TTL), migrates it,

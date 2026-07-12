@@ -333,7 +333,7 @@ function updatedArchive(
   return archived ? current ?? now : undefined;
 }
 
-function applyCommand(
+export function applyProjectCommandToRecords(
   records: ProjectRecords,
   command: ProjectCommand,
   ids: IdGenerator,
@@ -649,7 +649,13 @@ function applyCommand(
       break;
     }
     case "storyKnowledge.setSceneLink": {
-      findScene(scenes, command.sceneId);
+      const scene = findScene(scenes, command.sceneId);
+      if (command.linked && scene.archivedAt !== undefined) {
+        throw new ProjectCommandError(
+          "INVALID_PLACEMENT",
+          "Restore the scene before linking story knowledge to it."
+        );
+      }
       const existing = findKnowledge(storyKnowledge, command.storyKnowledgeId);
       const linked = existing.linkedSceneIds.includes(command.sceneId);
       const linkedSceneIds =
@@ -722,7 +728,7 @@ export function createProjectCommandServices(dependencies: {
         throw new ProjectVersionConflictError(input.projectId, input.expectedVersion);
       }
 
-      const updated = applyCommand(
+      const updated = applyProjectCommandToRecords(
         records,
         input.command,
         dependencies.ids,
