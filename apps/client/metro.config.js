@@ -5,14 +5,18 @@ import { getDefaultConfig } from "expo/metro-config.js";
 const clientRoot = path.dirname(fileURLToPath(import.meta.url));
 const config = getDefaultConfig(clientRoot);
 const sharedPackagesRoot = `${path.resolve(clientRoot, "../../packages")}${path.sep}`;
+const clientSourceRoot = `${path.resolve(clientRoot, "src")}${path.sep}`;
+const clientEntry = path.resolve(clientRoot, "App.tsx");
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  const isSharedTypeScriptEsmImport =
-    context.originModulePath.startsWith(sharedPackagesRoot) &&
+  const isTypeScriptEsmImport =
+    (context.originModulePath.startsWith(sharedPackagesRoot) ||
+      context.originModulePath.startsWith(clientSourceRoot) ||
+      context.originModulePath === clientEntry) &&
     moduleName.startsWith(".") &&
     moduleName.endsWith(".js");
 
-  if (isSharedTypeScriptEsmImport) {
+  if (isTypeScriptEsmImport) {
     try {
       return context.resolveRequest(
         context,

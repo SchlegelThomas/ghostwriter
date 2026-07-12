@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Authenticated project CRUD — record log</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter record log</p>
+      <h1>Authenticated project creation and core CRUD</h1>
+      <p class="meta"><a href="plan.html">Return to delivery plan</a> · <strong>Branch:</strong> <code>feat/authenticated-project-crud</code></p>
+    </header>
+
+    <article>
+      <h2>2026-07-11 17:46 — Major epic opened from current main</h2>
+      <p>The founder directed one major epic: first make Google authentication and real account/profile creation work end to end, then replace the fixture-only product with the complete set of safe mutations needed by the current multi-book domain kernel. The work must follow the repository planning harness.</p>
+      <p>The previous working branch was clean. Local <code>main</code> was switched to and fast-forwarded by two commits to <code>origin/main</code>, then <code>feat/authenticated-project-crud</code> was created. No push, pull request, deployment, cloud configuration, or commit was performed.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 17:58 — Existing seams and scope boundary reviewed</h2>
+      <p>The current product is still a read-only Bellwether fixture in the Expo client and local MCP process. The deployed Hono backend exposes only health and a public project-navigator read; core has <code>createStoryProject</code> plus the navigator query; and both memory and Postgres repositories are insert-oriented. The database already stores normalized projects, books, manuscript parts/chapters, scene metadata, story knowledge, and edition references, but has no account, profile, owner membership, archive, or concurrency records.</p>
+      <p>The epic will use domain commands rather than generic CRUD. Its proposed mutation boundary is the currently implemented project/book/manuscript-structure/scene-metadata/story-knowledge kernel. Tiptap prose, revisions, mutable editions, collaboration, real-time sync, Story Canvas, AI, remote MCP authorization, export/account exit, and permanent purge remain out of scope.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 18:06 — Living design and identity constraints reviewed</h2>
+      <p>The living Story Canvas 2.0 source and the plan-scoped 1.0 screens were reviewed before product planning. They establish the warm chrome, explicit ownership language, project home, and account-gated save intent. The living artifact also contains older “No account required” and “Saved locally” labels that conflict with accepted ADR 0002. The implementation will not copy those labels or edit the founder-authored design; the founder will confirm whether any temporary pre-auth spark is part of a later onboarding slice.</p>
+      <p>Current official guidance supports a self-hosted Better Auth integration with Hono, Drizzle/Postgres, Google, and Expo. Its session guidance also confirms that the current <code>pages.dev</code> frontend and <code>fly.dev</code> backend cannot safely depend on third-party cookies, especially in Safari. A same-origin Cloudflare Pages proxy or an owned shared parent domain is required for a production-quality browser session.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 18:12 — Founder decisions queued before implementation</h2>
+      <p>The proposed plan recommends Better Auth with Google only; a first-party <code>/api</code> proxy from Cloudflare Pages to Fly unless a shared custom domain is available; sign-in before canonical project creation; archive/restore instead of irreversible authored-content deletion; and explicit MCP mutation exceptions until scoped agent authorization exists.</p>
+      <p>These are security, product, data-loss, and operational choices, so implementation is paused until the founder confirms or revises them. A service credential also appears to have been entered directly in local shell history; its value was not copied. Rotation is required before production auth work.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 18:20 — Identity, entry, deletion, and epic scope accepted</h2>
+      <p>The founder accepted self-hosted Better Auth with Google on Hono/Lakebase, a same-origin Cloudflare Pages <code>/api</code> proxy to Fly, authentication before every product or onboarding surface, and archive/restore instead of permanent authored-content purge. Google and Cloudflare configuration should be driven through CLI where possible, pausing for approval or console-only work.</p>
+      <p>The implementation scope is the current kernel: projects, books, manuscript parts/chapters, scene metadata, and story knowledge. Tiptap prose plus revision history and the Story Canvas remain follow-ups. Their dependency, intent, acceptance, decision, verification, and non-goal outlines are now preserved in <a href="follow-ups.html">follow-ups.html</a> without activating extra plans or branches.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 18:28 — ADR 0005 accepted and canonical docs updated</h2>
+      <p><a href="../../../docs/adr/0005-authenticated-accounts-and-project-access.md">ADR 0005</a> records Google-only Better Auth, opaque database sessions, the same-origin Pages proxy, provider-neutral accounts/profiles, owner memberships, core authorization, auth-first entry, archive/restore, exact callback registration, and the production-inert test identity boundary.</p>
+      <p><code>docs/PRODUCT.md</code> now records the auth-first product boundary and <code>docs/ARCHITECTURE.md</code> records the accepted identity/access topology. Implementation may now begin inside the accepted plan.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 18:42 — Authentication and profile foundation complete</h2>
+      <p>Installed Better Auth 1.6 with the official Drizzle adapter. The Hono runtime now mounts the auth handler, validates exact auth origins/configuration, uses encrypted provider-token storage, disables implicit email linking, keeps database-backed seven-day sessions without a cookie cache, and exposes protected session/profile bootstrap through a transport-neutral gateway. The web client uses the same-origin HTTP contract; native auth dependencies remain deferred until a native surface is shipped.</p>
+      <p>Added provider-neutral account/profile core services with idempotent first-login creation and version-checked profile updates; matching memory and Postgres adapters; Better Auth user/account/session/verification tables; writer profiles; initial owner-membership storage; project version/archive columns; and forward-only migrations 0001–0002. OAuth initiation persists state in migrated PGlite, protected routes reject missing sessions, and the targeted core/storage/backend suites pass (10 tests) with all workspace typechecks green.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 18:55 — Project ownership enforced across core and storage</h2>
+      <p>Added provider-neutral <code>AccountId</code>, owner memberships, shared owner policy, non-disclosing access errors, account-scoped project listing, and project version/archive fields. Project creation now writes the project, first book, and owner membership atomically; navigator reads require the server-resolved owner account.</p>
+      <p>Memory and Postgres adapters implement the same membership queries and account-scoped project list. The backend maps unauthorized and unknown project reads to the same not-found response. Targeted core/storage/backend ownership tests pass (22 tests), including cross-account isolation, and all workspace typechecks remain green.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 19:18 — Current-kernel command surface complete</h2>
+      <p>Implemented 22 typed domain commands for project rename/archive, book create/update/reorder/archive, part and chapter create/rename/reorder/safe empty removal, scene create/update/move/archive, and story-knowledge create/update/link/archive. Every command rechecks owner scope and expected project version, validates the complete normalized project, increments exactly once, and applies atomically. Last-active-book removal, nonempty structure removal, archived POV assignment, POV knowledge archival, stale writes, bad order, and unsafe cross-book edition movement fail without partial effects.</p>
+      <p>Memory and Postgres now share an expected-version aggregate replacement contract for metadata commands. Postgres updates the project version conditionally, rebuilds normalized child rows inside one transaction, preserves memberships, and reload-validates the result. Archive columns are migration 0003. Core and Postgres command suites pass, and the capability registry records all 22 web-bound canonical commands with explicit MCP security exceptions rather than exposing unauthenticated direct writes.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 19:34 — Authenticated HTTP API and first-party proxy complete</h2>
+      <p>The Hono API now exposes account/profile bootstrap and versioned profile update, account-scoped project list/create, owner-scoped navigator reads, and a schema-validated typed command endpoint. Mutations require an exact trusted Origin; request bodies are bounded and validated; authorization, validation, unsafe-removal, not-found, and stale-version failures map to stable non-content-bearing status codes. Backend tests cover profile creation/update, create/list, command/stale behavior, untrusted origins, missing sessions, and cross-account non-disclosure.</p>
+      <p>Added a typed Cloudflare Pages Function under the client shell that streams only <code>/api/*</code> to the fixed HTTPS Fly origin, removes hop-by-hop headers, sets forwarding metadata, preserves separate <code>Set-Cookie</code> values, disables caching, and returns content-free upstream failures. Wrangler 4.110 is pinned for the client, generated binding/runtime types are checked during typecheck, build scripts are explicitly approved, and local/CI deploy commands now execute from <code>apps/client</code> so Pages detects the Function. API and proxy suites pass.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 20:03 — Auth-first responsive product and browser journey complete</h2>
+      <p>Replaced the Bellwether fixture bootstrap with an auth-first client state machine and live API adapter. Signed-out writers see only the branded Google gate. Signed-in writers can update their profile, list active or archived projects, create/open projects, and execute the full accepted command surface through shared responsive React Native screens. Save state changes to <em>Saved to project</em> only after acknowledgement; stale writes reload the latest project and ask the writer to review.</p>
+      <p>The live workspace exposes project and book lifecycle, series order, part/chapter structure and safe removal, scene metadata/POV/placement/archive, story-knowledge authority/link/archive, and a truthful read-only editions notice. Expo's web output is now a deployable single-page export rather than a directory without an index. A production-inert PGlite E2E server and Playwright suite exercise sign-in, profile creation/update, project/hierarchy/story mutation, reopen durability, archive/restore, sign-out, and a 390 × 844 narrow-web check. Both Chromium journeys pass and CI now installs Chromium and runs them.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 20:12 — Live OAuth ownership and credential risk clarified</h2>
+      <p>Cloudflare reports the existing public Pages host as <code>https://ghostwriter-di2.pages.dev</code>; the production Google callback is therefore <code>https://ghostwriter-di2.pages.dev/api/auth/callback/google</code>. The founder chose a new dedicated Google Cloud project owned by the currently configured <code>thomas@move-ai.io</code> account rather than reusing the unrelated active <code>buddy-shopper</code> project.</p>
+      <p>Google CLI credentials required reauthentication, so the standard browser login was started before project creation. The founder explicitly chose not to rotate the pre-existing Databricks secret in this epic and will rotate it later. The plan and operations docs record that residual risk; all new Better Auth and Google secrets must still enter Fly through stdin/secret storage rather than command arguments.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 12:51 — Dedicated Google Cloud project created</h2>
+      <p>The founder authorized <code>tas9117@gmail.com</code> to own the Google Auth project instead of requiring the expired <code>thomas@move-ai.io</code> CLI session. The account was authenticated and the dedicated <code>ghostwriter-app-2026</code> project was created with the display name <em>Ghostwriter</em>; the unrelated <code>buddy-shopper</code> project remains untouched.</p>
+      <p>Google's supported consumer Sign in with Google setup still requires the Google Auth Platform console. The project-specific Auth overview was opened for branding, external audience, test-user, and web-client configuration. Client credentials remain pending and must not be copied into the repository or record log.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 12:56 — OAuth credentials staged without exposing secrets</h2>
+      <p>The founder created the Ghostwriter web client and downloaded its credential JSON. The file shape was validated without printing values, a fresh Better Auth secret was generated, and <code>BETTER_AUTH_SECRET</code>, <code>GOOGLE_CLIENT_ID</code>, and <code>GOOGLE_CLIENT_SECRET</code> were imported to Fly as staged secrets. They are not active on a VM and no deployment was triggered.</p>
+      <p>The downloaded credential file was deleted after import, and root-level Google client-download patterns were added to <code>.gitignore</code>. Google's supported consumer OAuth tooling does not expose web-client origin or redirect mutation through <code>gcloud</code>; the exact local and production URI allowlists still require the opened Auth Platform console before deployment and smoke verification.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 13:04 — Real Google flow exposed and fixed a sign-out request defect</h2>
+      <p>The configured local Google flow completed against a one-day <code>oauth-smoke-20260712</code> Lakebase branch: provider consent, durable account/profile creation, project creation, and reload succeeded. The first sign-out attempt failed and left its database session active, so the provider smoke is not yet marked complete.</p>
+      <p>The failure was reproduced independently: the client sent an <code>application/json</code> content type with no body, which Better Auth correctly rejected as <code>400 BAD_REQUEST</code>; a valid empty JSON object returns <code>200</code>. The client now sends <code>{}</code>, with a regression test. The targeted client/auth tests and client typecheck pass; a live sign-out retry remains.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 13:06 — Local acceptance complete and temporary resources removed</h2>
+      <p>The founder repeated sign-out successfully after the request fix. Lakebase then reported zero active session rows, proving server-side revocation rather than a client-only state change. The full local writer outcome now passes: real Google consent, one durable account/profile, project creation, reload, and sign-out.</p>
+      <p><code>pnpm verify</code> passes all workspace typechecks, ESLint, and 44 Vitest tests. Both wide and narrow Chromium journeys pass. The one-day OAuth smoke database branch and both downloaded credential JSON copies were deleted; only non-secret callback/project metadata remains in documentation. The three Fly auth secrets remain staged for the normal feature release, with no manual production deployment.</p>
+      <p>Implementation and local acceptance are complete. The plan remains active until an approved push and pull request exercise the real PR database branch and CI, followed by the normal merge-driven production release and post-release smoke.</p>
+    </article>
+  </main>
+</body>
+</html>

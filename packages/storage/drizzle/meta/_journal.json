@@ -8,6 +8,27 @@
       "when": 1783795826798,
       "tag": "0000_previous_sentinels",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783810870698,
+      "tag": "0001_lying_the_liberteens",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783811025066,
+      "tag": "0002_solid_the_hunter",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783811421553,
+      "tag": "0003_sad_speedball",
+      "breakpoints": true
     }
   ]
 }

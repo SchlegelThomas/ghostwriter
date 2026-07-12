@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "expo start",
     "web": "expo start --web",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && wrangler types ./functions/env.d.ts --check"
   },
   "dependencies": {
     "@expo-google-fonts/cormorant-garamond": "^0.4.1",
@@ -25,6 +25,8 @@
     "react-native-web": "latest"
   },
   "devDependencies": {
-    "@types/react": "latest"
+    "@types/react": "latest",
+    "serve": "^14.2.6",
+    "wrangler": "^4.110.0"
   }
 }

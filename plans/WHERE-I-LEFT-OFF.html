@@ -11,12 +11,12 @@
     <header>
       <p class="eyebrow">Session handoff</p>
       <h1>Where we left off</h1>
-      <p><strong>Last updated:</strong> 2026-07-11 · <strong>Current branch:</strong> <code>main</code></p>
+      <p><strong>Last updated:</strong> 2026-07-12 · <strong>Current branch:</strong> <code>feat/authenticated-project-crud</code></p>
     </header>
 
     <section>
       <h2>Current state</h2>
-      <p>PR #4 is merged to <code>main</code>. Ghostwriter now has a real, deployed backend: a normalized multi-book domain kernel; a responsive brand-aligned fixture navigator and MCP tool over the same core query; a Drizzle Postgres <code>ProjectRepository</code> adapter; and a Node/Hono service running on Fly.io backed by Databricks Lakebase. CI runs hermetic tests (PGlite), gives every PR its own Lakebase database branch, and deploys the backend on merge. Editing, collaboration, Story Canvas, auth, and AI are still not implemented.</p>
+      <p>PR #4 is merged to <code>main</code>. On <code>feat/authenticated-project-crud</code>, the accepted epic implements ADR 0005 Better Auth/Google identity, writer profiles, owner-scoped projects, a same-origin Pages-to-Fly API, and 22 safe expected-version commands for the current project/book/manuscript-structure/scene-metadata/story-knowledge kernel. Local real-Google consent, durable account/profile and project creation/reload, and server-side sign-out revocation pass; <code>pnpm verify</code> and both wide/narrow Playwright journeys are green. The dedicated <code>ghostwriter-app-2026</code> project/client is configured and all three auth secrets are staged on Fly. Implementation and local acceptance are complete; approved PR/CI and the merge-driven release remain.</p>
       <p><strong>Live:</strong> backend at <code>https://ghostwriter-backend.fly.dev</code> (<code>/health</code> ok; DB-backed route authenticates to Lakebase via the CI/app service principal). Lakebase project <code>projects/ghostwriter</code> (branch <code>production</code>, endpoint <code>primary</code>, AWS <code>us-east-2</code>, PG 17) is provisioned and migrated.</p>
     </section>
 
@@ -48,15 +48,19 @@
     </section>
 
     <section>
-      <h2>Active plan</h2>
-      <p>The only remaining active plan is the product/architecture blueprint: <a href="active/2026-07-11-agentic-writing-experience/plan.html">agentic writing experience</a>, which retains the experience, technical, agent, roadmap, and visual artifacts plus the still-open platform decisions below. <strong>Living design source:</strong> <a href="designs/Ghostwriter%20Mockups%202.0.html">Ghostwriter Mockups 2.0</a> (never archived).</p>
+      <h2>Active plans</h2>
+      <ul>
+        <li><a href="active/2026-07-11-authenticated-project-crud/plan.html">Authenticated project creation and core CRUD</a> is active on <code>feat/authenticated-project-crud</code>. Implementation, docs, automated verification, exact Google URI configuration, and the local real-provider acceptance journey are complete. Fly auth secrets are staged for the normal feature release. The branch awaits explicit approval for commit/push/PR, PR database/CI evidence, and merge-driven production release.</li>
+        <li>The long-running product/architecture blueprint remains at <a href="active/2026-07-11-agentic-writing-experience/plan.html">agentic writing experience</a>, retaining the experience, technical, agent, roadmap, and visual artifacts plus later platform decisions.</li>
+      </ul>
+      <p><strong>Living design source:</strong> <a href="designs/Ghostwriter%20Mockups%202.0.html">Ghostwriter Mockups 2.0</a> (never archived).</p>
     </section>
 
     <section>
       <h2>Incomplete and awaiting founder review</h2>
       <p>The product direction is substantially accepted and the backend topology is now decided and deployed. These material decisions remain open:</p>
       <ol>
-        <li>Identity/authentication (Google OAuth accounts + profile creation) on top of the Lakebase backend.</li>
+        <li>Identity/authentication architecture, code, Google configuration, staged Fly secrets, and local real-provider acceptance are complete under ADR 0005. Remaining delivery evidence: approved push/PR, the automatic PR Lakebase branch migration and CI, merge-driven production deployment, and a post-release smoke before archiving the epic.</li>
         <li>Subscription/billing management.</li>
         <li>Real-time transport, presence, scene leases, backup/retention/deletion, and remote MCP authorization (backend/database selected in ADR 0004; live-update layer still open).</li>
         <li>Initial import/export formats; browser access is the accepted primary portability experience.</li>
@@ -67,7 +71,7 @@
 
     <section>
       <h2>Recommended next step</h2>
-      <p>Start the next plan for <strong>Google OAuth accounts and profile creation</strong> (branch <code>feat/&lt;slug&gt;</code>, new ADR for identity), then subscription management. Both build on the deployed Lakebase backend. Keep the real-time transport, formats, AI-provider, and marketplace items open until their plans need them.</p>
+      <p>Review the completed branch and obtain explicit founder approval before committing, pushing, or opening its pull request. Let the PR workflow create/migrate the Lakebase branch and run CI; after green review, obtain merge approval so the normal production workflows activate the staged auth secrets and deploy both surfaces. Complete a post-release Google smoke, then archive the epic. The founder deferred the pre-existing Databricks credential rotation and will handle it later. Keep subscriptions, real-time transport, editor/history, Story Canvas, formats, AI-provider, and marketplace work outside this epic.</p>
     </section>
 
     <section>

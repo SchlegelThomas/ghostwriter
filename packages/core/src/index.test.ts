@@ -8,6 +8,7 @@ import {
   DomainValidationError,
   GHOSTWRITER_CAPABILITIES,
   projectId,
+  PROJECT_COMMAND_CAPABILITIES,
   PROJECT_NAVIGATOR_CAPABILITY,
   sceneId,
   type BookId
@@ -153,5 +154,15 @@ describe("capability parity registry", () => {
         mcp: "ghostwriter_project_navigator"
       }
     });
+  });
+
+  it("records an explicit MCP security exception for every canonical command", () => {
+    expect(PROJECT_COMMAND_CAPABILITIES).toHaveLength(22);
+    for (const capability of PROJECT_COMMAND_CAPABILITIES) {
+      expect(capability.access).toBe("apply");
+      expect(capability.bindings.ui).toBe("AuthenticatedProjectWorkspace");
+      expect(capability.bindings.mcp).toBeUndefined();
+      expect(capability.bindings.mcpException).toContain("scoped agent grants");
+    }
   });
 });

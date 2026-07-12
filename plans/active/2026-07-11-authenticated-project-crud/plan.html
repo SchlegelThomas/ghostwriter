@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Authenticated project creation and core CRUD</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter major delivery epic</p>
+      <h1>Authenticated project creation and core CRUD</h1>
+      <p class="meta"><strong>Status:</strong> implementation and local acceptance complete — awaiting PR/release<br>
+        <strong>Branch:</strong> <code>feat/authenticated-project-crud</code><br>
+        <strong>Owner:</strong> founder + agent</p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Replace the public Bellwether fixture with Ghostwriter's first real writer-owned loop: sign in with Google, create a durable account and profile, see only projects the account may access, create a project with its first book, and manage the currently implemented project hierarchy and story-knowledge records through the responsive web client, core use cases, Hono service, and Lakebase persistence.</p>
+      <p>This is one major epic and one branch, delivered as small vertical checkpoints. “CRUD” means explicit writer-domain commands with validation, authorization, conflict handling, and safe removal semantics—not arbitrary table endpoints, JSON Patch, hidden cascades, or transport logic that bypasses <code>packages/core</code>.</p>
+      <p><strong>Out of scope:</strong> passwords and additional identity providers; subscriptions; invitations and editor roles; real-time transport and scene leases; offline project replicas; Tiptap scene bodies; revisions, mutable editions, compare/restore, and history; Story Canvas implementation; AI; remote MCP authorization; full account exit/export; and irreversible content purge. Those capabilities require their accepted roadmap plans and, where applicable, new ADRs.</p>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ul>
+        <li>A new writer can choose <strong>Continue with Google</strong>, complete Google's real OAuth flow, return to Ghostwriter, and receive exactly one durable account/profile; repeating the flow resumes the same account without duplicate rows.</li>
+        <li>The browser resumes and revokes an opaque server-side session correctly, signs out cleanly, and never stores a Google token, provider secret, or durable session bearer in browser JavaScript storage.</li>
+        <li>OAuth callback URLs, trusted origins, CORS, cookies, CSRF/state handling, and production secrets are explicit and environment-specific. The primary web flow proxies <code>/api</code> through Cloudflare Pages to Fly so the browser uses first-party cookies rather than third-party cookies between <code>pages.dev</code> and <code>fly.dev</code>.</li>
+        <li>Authentication is required before every product and onboarding surface in this epic. No signed-out Spark, fixture workspace, or locally saved project state is exposed.</li>
+        <li>Signed-out requests receive <code>401</code>; authenticated writers receive <code>404</code> or <code>403</code> without leaking another account's project metadata; every project query and mutation enforces project access in shared policy before storage changes.</li>
+        <li>An authenticated writer sees a real project library, can create a project and first book, reload the browser, and reopen the same server-acknowledged Lakebase state with no fixture fallback.</li>
+        <li>A project owner can rename, archive, and restore a project. Archived projects leave the normal library and remain recoverable; permanent purge is unavailable in this epic.</li>
+        <li>A project owner can create, rename, change status, and reorder books while the domain continues to require at least one book and refuses unsafe or ambiguous removal.</li>
+        <li>A project owner can create, rename, reorder, and safely remove empty manuscript parts and chapters; create, edit metadata, move, reorder, archive, and restore scenes; and preserve one canonical manuscript order.</li>
+        <li>A project owner can create, edit, link, unlink, archive, and restore the kernel's story-knowledge records without creating cross-project, dangling POV, or dangling scene references.</li>
+        <li>Named editions remain read-only until immutable scene/project revisions exist; the UI and API do not imply that edition history is implemented.</li>
+        <li>Every mutation accepts an expected project version (or equivalent explicit precondition), applies atomically, and returns a stable conflict response without partial effects when the client's base is stale.</li>
+        <li>The web client shows <em>Saving</em>, <em>Saved</em>, validation, authorization, conflict, retryable failure, empty, and archived states truthfully. <em>Saved</em> appears only after durable backend acknowledgement.</li>
+        <li>Wide and narrow web layouts support the account gate, project library, creation flow, navigation, and core editing controls with keyboard operation, visible focus, semantic labels, and no hover-only action.</li>
+        <li>The capability registry identifies each new core use case and its web/backend binding. MCP read parity uses real core queries where authorization is available; canonical MCP mutations remain an explicit exception until the agent-authority and remote-authorization ADRs are accepted.</li>
+        <li>Hermetic browser and integration tests cover account bootstrap, session gating, project creation, representative update/archive/restore flows, stale writes, sign-out, and cross-account isolation. A manual acceptance run covers the real Google provider because CI does not automate a personal Google login.</li>
+        <li>Forward-only Drizzle migrations reproduce identity, profile, ownership, archive, and concurrency schema from empty in PGlite and on the PR's Lakebase branch. <code>pnpm verify</code>, the web export, and the selected end-to-end suite pass before handoff.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks</h2>
+      <ol>
+        <li>Record the accepted Better Auth + Google identity library, same-origin Pages proxy, auth-first entry boundary, archive/restore posture, and current-kernel CRUD boundary in ADR 0005 and a concise threat model.</li>
+        <li>Add provider-neutral actor/account/profile and project-access contracts to core. Keep Google, Better Auth, cookies, HTTP, and database types outside the domain and make owner authorization testable without a transport.</li>
+        <li>Integrate the selected Google OAuth implementation with Hono and Drizzle/Postgres, including user/account/session/verification records, idempotent writer-profile bootstrap, session lookup/revocation, strict configuration, and content-free errors/logging.</li>
+        <li>Give every project an explicit owner membership and migrate existing unowned fixture/seed behavior without granting production data globally. Add account-scoped project listing and ownership-aware project loading.</li>
+        <li>Implement the chosen same-origin or shared-parent-domain web path for <code>/api</code>, preserving secure <code>HttpOnly</code> cookies and redirects while keeping the Fly service as the canonical backend. Document local, preview, and production callback behavior.</li>
+        <li>Replace the fixture client bootstrap with session loading, signed-out, first-profile, project-library, create-project, authenticated workspace, sign-out, and failure states. Reuse the accepted product typography, chrome, and ownership language.</li>
+        <li>Expand core with task-oriented project, book, manuscript-structure, scene-metadata, and story-knowledge commands plus account-scoped queries, archive/restore rules, expected-version conflicts, and stable domain errors.</li>
+        <li>Upgrade memory and Postgres repository contracts to support those commands atomically. Add archive/version/ownership/profile schema, forward-only migrations, and contract parity across memory and PGlite.</li>
+        <li>Expose validated Hono endpoints that map authenticated requests to core use cases, stable HTTP statuses, exact version-precondition behavior for canonical mutations, and normalized response models. No route may mutate Drizzle tables directly.</li>
+        <li>Add responsive project-library and domain editing interactions for the accepted commands, including safe confirmation and refusal states. Do not add a fake prose editor or mutable edition controls.</li>
+        <li>Update the capability registry, backend bindings, and MCP read path or record a narrowly justified security exception for each mutation that cannot safely be exposed before MCP authorization.</li>
+        <li>Add core unit/property tests, repository contracts, auth/backend integration tests, client behavior tests, and a hermetic browser end-to-end journey with a test identity boundary. Add a separately documented real-Google smoke run.</li>
+        <li>Configure Google, Fly, and Cloudflare environments through CLI where possible, pausing for founder approval or console-only interaction; keep all new credentials out of command arguments/history; deploy a branch preview only with founder approval; and record callback, migration, and live-flow evidence without writing secrets to logs or plans. The founder explicitly deferred the pre-existing Databricks credential rotation outside this epic.</li>
+        <li>Update product/architecture/operations/API documentation, reconcile the active blueprint's identity decision, run full verification, update the handoff, and archive this plan only when the observable writer journey is complete.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li><strong>Core:</strong> account/profile bootstrap idempotency; owner access matrix; project/book/part/chapter/scene/story-knowledge invariants; archive/restore; safe-removal refusals; cross-project references; expected-version conflicts; atomic rollback.</li>
+        <li><strong>Repository contracts:</strong> run the same mutation/query suite against memory and migrated PGlite, including ownership indexes, cascade boundaries, transaction rollback, ordering, and concurrent stale writes.</li>
+        <li><strong>Auth/backend integration:</strong> mount the real auth handler against PGlite where practical; exercise session middleware, logout/revocation, malformed input, trusted origins, unauthenticated and cross-account requests, callback errors, and content-free diagnostics.</li>
+        <li><strong>Browser end to end:</strong> start a hermetic backend and web app; sign in through a test-only identity adapter that cannot activate in production; bootstrap a profile; create, reopen, mutate, archive, restore, conflict, and sign out. Keep provider-dependent Google behavior out of required CI.</li>
+        <li><strong>Real provider smoke:</strong> with registered local/preview callback URLs and founder-managed credentials, complete Google consent, first account/profile creation, session resume, project creation, reload, and sign-out. Record outcomes, never tokens or personal provider payloads.</li>
+        <li><strong>Security/privacy:</strong> verify secure cookie attributes, CSRF/state validation, exact redirect allowlists, no open redirect, no third-party-cookie dependency, no project ID leakage, no secret/token/client payload logging, and immediate session rejection after sign-out.</li>
+        <li><strong>Migration:</strong> migrate from an empty database and the current production-shaped schema; confirm existing fixture data does not become publicly accessible; exercise the PR Lakebase branch before merge.</li>
+        <li><strong>Accessibility/responsiveness:</strong> keyboard and screen-reader smoke checks at approximately 1440 × 960 and 390 × 844 for sign-in, library, create, edit, conflict, archive, empty, loading, and error states.</li>
+        <li><strong>Commands:</strong> targeted Vitest suites while iterating, then <code>pnpm verify</code>, production web export, Playwright (if accepted), migration checks, and changed-document link/structure validation before handoff.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p>Create <code>docs/adr/0005-authenticated-accounts-and-project-access.md</code> for the accepted identity provider integration, session transport, profile ownership, project membership, and authorization boundaries. Maintain <code>docs/API.md</code> for the authenticated transport, typed commands, version/removal semantics, errors, and MCP exceptions. Update <code>docs/ARCHITECTURE.md</code> with identity/access and task-oriented mutation flow; <code>docs/OPERATIONS.md</code> with Google callbacks, environment variables, secret rotation, first-party proxy behavior, and live verification; <code>docs/PRODUCT.md</code> with the accepted auth-first boundary; and <code>README.md</code> plus <code>plans/WHERE-I-LEFT-OFF.html</code> with truthful status.</p>
+      <p>Create and maintain <a href="follow-ups.html">follow-up delivery specifications</a> for the scene editor/revision-history slice and the Story Canvas slice. They remain roadmap candidates rather than active plans or branches until this epic is complete and the founder selects the next outcome.</p>
+      <p><strong>Living design source:</strong> reviewed <a href="../../designs/Ghostwriter%20Mockups%202.0.html">Ghostwriter Mockups 2.0</a> before product work. Its Story Canvas and workspace hierarchy guide chrome and language, but its “No account required” and “Saved locally” labels conflict with ADR 0002's accepted server-authoritative online-only product. This epic does not edit the founder-authored artifact or implement Spark/Canvas; the accepted auth entry boundary will be recorded here and stale local-save labels will not be copied into production UI. The plan-scoped 1.0 mockup already says “sign in to create and save the project,” which is compatible with an optional future pre-auth spark that is not canonical project state.</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li><strong>Accepted identity stack:</strong> self-host Better Auth on the existing Hono backend, use its Drizzle/Postgres adapter and Google provider, and keep Google as the only login method in this epic. Managed auth adds a new data processor/cost boundary; custom OAuth/session code adds avoidable security risk.</li>
+        <li><strong>Accepted web session topology:</strong> proxy <code>/api</code> through the Cloudflare Pages origin to Fly. Direct credentialed cookies between <code>pages.dev</code> and <code>fly.dev</code> are third-party and fail in privacy-restrictive browsers.</li>
+        <li><strong>Accepted entry boundary:</strong> require Google sign-in before entering any product or onboarding surface. A temporary pre-auth Spark is not part of this epic.</li>
+        <li><strong>Accepted deletion posture:</strong> archive/restore authored records and refuse ambiguous structural deletion. Permanent project/account purge waits for export, retention, backup, and account-exit policy so this epic does not violate writer ownership.</li>
+        <li><strong>Accepted scope boundary:</strong> “current core” covers project, book, part/chapter order, scene metadata, and story-knowledge records. The requested editor/revision and Story Canvas follow-ups are documented separately; editions mutation, comments, collaborators, real-time transport, and AI remain later outcomes.</li>
+        <li><strong>MCP:</strong> exposing direct canonical author CRUD to an unauthenticated local fixture server would violate the accepted agent authority direction. Read bindings may advance; mutation parity is documented as a temporary security exception until scoped grants and remote/local authorization are accepted.</li>
+        <li><strong>OAuth environments:</strong> Google requires exact callback URLs and does not support wildcard branch previews. Local, one stable acceptance environment, and production need deliberate registration; required CI uses a deterministic test identity boundary.</li>
+        <li><strong>Accepted credential-rotation deferral:</strong> an existing backend service credential was entered directly in local shell history. Its value was not copied. The founder chose to rotate it later; this accepted residual risk is recorded rather than silently treated as resolved. All new auth secrets use stdin/secret stores.</li>
+        <li><strong>Epic size:</strong> one branch satisfies the founder's requested major epic, but implementation remains checkpointed. If a checkpoint reveals a new product, security, cost, or data-loss decision, stop and update this plan before continuing.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked disabled> Founder confirmed identity stack, session topology, entry boundary, deletion semantics, and current-kernel CRUD scope</li>
+        <li><input type="checkbox" checked disabled> Feature branch created from up-to-date <code>main</code></li>
+        <li><input type="checkbox" checked disabled> Current handoff, active blueprint, ADRs, operations, code seams, and living design reviewed</li>
+        <li><input type="checkbox" checked disabled> Plan accepted and ADR 0005 recorded</li>
+        <li><input type="checkbox" checked disabled> Google account/profile creation works end to end</li>
+        <li><input type="checkbox" checked disabled> Project ownership and authorization enforced end to end</li>
+        <li><input type="checkbox" checked disabled> Project library and create/open/archive/restore journey complete</li>
+        <li><input type="checkbox" checked disabled> Accepted book/manuscript/scene/story-knowledge commands complete</li>
+        <li><input type="checkbox" checked disabled> Memory and Postgres adapters plus migrations complete</li>
+        <li><input type="checkbox" checked disabled> Backend and responsive web bindings complete</li>
+        <li><input type="checkbox" checked disabled> Capability/MCP parity audit complete</li>
+        <li><input type="checkbox" checked disabled> Automated and real-provider acceptance verification complete</li>
+        <li><input type="checkbox" checked disabled> Google/Fly auth environment configured; pre-existing Databricks rotation recorded as separately deferred</li>
+        <li><input type="checkbox" checked disabled> Docs, handoff, and active blueprint decisions updated</li>
+        <li><input type="checkbox" disabled> Plan archived after the full writer outcome passes</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

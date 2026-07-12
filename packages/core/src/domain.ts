@@ -16,7 +16,8 @@ export type DomainValidationCode =
   | "UNKNOWN_REFERENCE"
   | "CROSS_PROJECT_REFERENCE"
   | "CROSS_BOOK_REFERENCE"
-  | "INCOMPLETE_MANUSCRIPT";
+  | "INCOMPLETE_MANUSCRIPT"
+  | "INVALID_VERSION";
 
 export class DomainValidationError extends Error {
   readonly code: DomainValidationCode;
@@ -98,9 +99,16 @@ export type Project = Readonly<{
   title: string;
   bookIds: readonly BookId[];
   createdAt: string;
+  version: number;
+  archivedAt?: string;
 }>;
 
-export function createProject(input: Project): Project {
+export type ProjectInput = Omit<Project, "version"> &
+  Readonly<{
+    version?: number;
+  }>;
+
+export function createProject(input: ProjectInput): Project {
   if (input.bookIds.length === 0) {
     throw new DomainValidationError(
       "INCOMPLETE_MANUSCRIPT",
@@ -109,12 +117,25 @@ export function createProject(input: Project): Project {
   }
 
   assertUniqueReferences(input.bookIds, "Project books");
+  const version = input.version ?? 1;
+  if (!Number.isSafeInteger(version) || version < 1) {
+    throw new DomainValidationError(
+      "INVALID_VERSION",
+      "Project version must be a positive integer."
+    );
+  }
+  const archivedAt =
+    input.archivedAt === undefined
+      ? undefined
+      : requireText(input.archivedAt, "Project archive time");
 
   return Object.freeze({
     id: input.id,
     title: requireText(input.title, "Project title"),
     bookIds: freezeList(input.bookIds),
-    createdAt: requireText(input.createdAt, "Project creation time")
+    createdAt: requireText(input.createdAt, "Project creation time"),
+    version,
+    ...(archivedAt === undefined ? {} : { archivedAt })
   });
 }
 
@@ -180,16 +201,22 @@ export type Book = Readonly<{
   status: BookStatus;
   manuscript: ManuscriptStructure;
   createdAt: string;
+  archivedAt?: string;
 }>;
 
 export function createBook(input: Book): Book {
+  const archivedAt =
+    input.archivedAt === undefined
+      ? undefined
+      : requireText(input.archivedAt, "Book archive time");
   return Object.freeze({
     id: input.id,
     projectId: input.projectId,
     title: requireText(input.title, "Book title"),
     status: input.status,
     manuscript: createManuscriptStructure(input.manuscript),
-    createdAt: requireText(input.createdAt, "Book creation time")
+    createdAt: requireText(input.createdAt, "Book creation time"),
+    ...(archivedAt === undefined ? {} : { archivedAt })
   });
 }
 
@@ -203,11 +230,16 @@ export type Scene = Readonly<{
   status: SceneStatus;
   summary?: string;
   povStoryKnowledgeId?: StoryKnowledgeId;
+  archivedAt?: string;
 }>;
 
 export function createScene(input: Scene): Scene {
   const summary =
     input.summary === undefined ? undefined : requireText(input.summary, "Scene summary");
+  const archivedAt =
+    input.archivedAt === undefined
+      ? undefined
+      : requireText(input.archivedAt, "Scene archive time");
 
   return Object.freeze({
     id: input.id,
@@ -218,7 +250,8 @@ export function createScene(input: Scene): Scene {
     ...(summary === undefined ? {} : { summary }),
     ...(input.povStoryKnowledgeId === undefined
       ? {}
-      : { povStoryKnowledgeId: input.povStoryKnowledgeId })
+      : { povStoryKnowledgeId: input.povStoryKnowledgeId }),
+    ...(archivedAt === undefined ? {} : { archivedAt })
   });
 }
 
@@ -238,10 +271,15 @@ export type StoryKnowledge = Readonly<{
   kind: StoryKnowledgeKind;
   authority: StoryKnowledgeAuthority;
   linkedSceneIds: readonly SceneId[];
+  archivedAt?: string;
 }>;
 
 export function createStoryKnowledge(input: StoryKnowledge): StoryKnowledge {
   assertUniqueReferences(input.linkedSceneIds, `Story knowledge "${input.id}" linked scenes`);
+  const archivedAt =
+    input.archivedAt === undefined
+      ? undefined
+      : requireText(input.archivedAt, "Story knowledge archive time");
 
   return Object.freeze({
     id: input.id,
@@ -249,7 +287,8 @@ export function createStoryKnowledge(input: StoryKnowledge): StoryKnowledge {
     label: requireText(input.label, "Story knowledge label"),
     kind: input.kind,
     authority: input.authority,
-    linkedSceneIds: freezeList(input.linkedSceneIds)
+    linkedSceneIds: freezeList(input.linkedSceneIds),
+    ...(archivedAt === undefined ? {} : { archivedAt })
   });
 }
 
@@ -306,6 +345,9 @@ export type ProjectRecords = Readonly<{
   storyKnowledge: readonly StoryKnowledge[];
   editions: readonly BookEdition[];
 }>;
+
+export type ProjectRecordsInput = Omit<ProjectRecords, "project"> &
+  Readonly<{ project: ProjectInput }>;
 
 function assertUniqueIds(records: ProjectRecords): void {
   const entries: Array<readonly [string, string]> = [
@@ -477,7 +519,7 @@ export function validateProjectRecords(records: ProjectRecords): void {
   }
 }
 
-export function defineProjectRecords(input: ProjectRecords): ProjectRecords {
+export function defineProjectRecords(input: ProjectRecordsInput): ProjectRecords {
   const records = Object.freeze({
     project: createProject(input.project),
     books: freezeList(input.books.map(createBook)),

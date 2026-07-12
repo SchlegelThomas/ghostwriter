@@ -5,7 +5,12 @@ import { createBackendRuntime } from "./services.js";
 
 const config = loadConfig();
 const runtime = createBackendRuntime(config);
-const app = createApp({ services: runtime.services });
+const app = createApp({
+  services: runtime.services,
+  identity: runtime.identity,
+  auth: runtime.auth,
+  allowedOrigins: config.auth.trustedOrigins
+});
 
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
   console.log(`Ghostwriter backend listening on port ${info.port}`);

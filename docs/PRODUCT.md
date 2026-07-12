@@ -46,6 +46,12 @@ unacknowledged work, not a complete offline project. Cross-device access, presen
 tracked suggestions, and version review update in real time. Only one collaborator directly edits
 a scene body at a time; same-scene multi-cursor editing is deferred. See ADR 0002.
 
+All product and onboarding surfaces require an authenticated account in the first shared-project
+release. Google is the initial sign-in method; first login creates a provider-neutral Ghostwriter
+writer profile. There is no public fixture workspace or locally saved pre-auth project. A future
+temporary Spark-before-sign-in flow requires its own accepted product plan and cannot imply a
+canonical local or offline project. See ADR 0005.
+
 ## Core experience
 
 - A project may contain one book or a multi-book series with shared characters, world rules,

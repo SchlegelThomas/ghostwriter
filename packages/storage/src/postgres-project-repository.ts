@@ -2,8 +2,10 @@ import {
   createBook,
   createBookEdition,
   createProject,
+  createProjectMembership,
   createScene,
   createStoryKnowledge,
+  defineProjectRecords,
   DomainValidationError,
   bookId,
   chapterId,
@@ -14,20 +16,28 @@ import {
   sceneId,
   storyKnowledgeId,
   validateProjectRecords,
+  accountId,
   type Book,
   type BookEdition,
   type BookStatus,
   type Project,
   type ProjectId,
   type ProjectRecords,
+  type AccountId,
+  type ProjectMembership,
+  type ProjectRole,
   type Scene,
   type SceneStatus,
   type StoryKnowledge,
   type StoryKnowledgeAuthority,
   type StoryKnowledgeKind
 } from "@ghostwriter/core";
-import { asc, eq } from "drizzle-orm";
-import type { ProjectRecordWriter, ProjectRepository } from "@ghostwriter/core";
+import { and, asc, eq, isNull } from "drizzle-orm";
+import {
+  ProjectVersionConflictError,
+  type ProjectRecordWriter,
+  type ProjectRepository
+} from "@ghostwriter/core";
 import type { RepositoryDatabase } from "./client.js";
 import {
   bookUnassignedScenes,
@@ -37,6 +47,7 @@ import {
   manuscriptChapterScenes,
   manuscriptChapters,
   manuscriptParts,
+  projectMemberships,
   projects,
   scenes,
   storyKnowledge,
@@ -50,6 +61,11 @@ type WriteBuffer = {
   scenes: Scene[];
   storyKnowledge: StoryKnowledge[];
   editions: BookEdition[];
+  memberships: ProjectMembership[];
+  replacements: Array<{
+    records: ProjectRecords;
+    expectedVersion: number;
+  }>;
 };
 
 function emptyBuffer(): WriteBuffer {
@@ -59,7 +75,9 @@ function emptyBuffer(): WriteBuffer {
     books: [],
     scenes: [],
     storyKnowledge: [],
-    editions: []
+    editions: [],
+    memberships: [],
+    replacements: []
   };
 }
 
@@ -108,6 +126,19 @@ function makeWriter(buffer: WriteBuffer): ProjectRecordWriter {
       const frozen = createBookEdition(edition);
       claimIds(buffer, [frozen.id]);
       buffer.editions.push(frozen);
+    },
+    insertProjectMembership(membership: ProjectMembership): void {
+      buffer.memberships.push(createProjectMembership(membership));
+    },
+    replaceProjectRecords(records: ProjectRecords, expectedVersion: number): void {
+      const frozen = defineProjectRecords(records);
+      if (frozen.project.version !== expectedVersion + 1) {
+        throw new DomainValidationError(
+          "INVALID_VERSION",
+          "A replacement project must increment its version exactly once."
+        );
+      }
+      buffer.replacements.push({ records: frozen, expectedVersion });
     }
   });
 }
@@ -125,13 +156,30 @@ function bookPosition(buffer: WriteBuffer, book: Book): number {
   return owner.bookIds.indexOf(book.id);
 }
 
-async function persistBuffer(exec: RepositoryDatabase, buffer: WriteBuffer): Promise<void> {
-  if (buffer.projects.length > 0) {
+async function persistBuffer(
+  exec: RepositoryDatabase,
+  buffer: WriteBuffer,
+  options: Readonly<{ insertProjects?: boolean; insertMemberships?: boolean }> = {}
+): Promise<void> {
+  if (options.insertProjects !== false && buffer.projects.length > 0) {
     await exec.insert(projects).values(
       buffer.projects.map((project) => ({
         id: project.id,
         title: project.title,
-        createdAt: project.createdAt
+        createdAt: project.createdAt,
+        version: project.version,
+        archivedAt: project.archivedAt ?? null
+      }))
+    );
+  }
+
+  if (options.insertMemberships !== false && buffer.memberships.length > 0) {
+    await exec.insert(projectMemberships).values(
+      buffer.memberships.map((membership) => ({
+        projectId: membership.projectId,
+        accountId: membership.accountId,
+        role: membership.role,
+        createdAt: membership.createdAt
       }))
     );
   }
@@ -144,7 +192,8 @@ async function persistBuffer(exec: RepositoryDatabase, buffer: WriteBuffer): Pro
         position: bookPosition(buffer, book),
         title: book.title,
         status: book.status,
-        createdAt: book.createdAt
+        createdAt: book.createdAt,
+        archivedAt: book.archivedAt ?? null
       }))
     );
   }
@@ -158,7 +207,8 @@ async function persistBuffer(exec: RepositoryDatabase, buffer: WriteBuffer): Pro
         title: scene.title,
         status: scene.status,
         summary: scene.summary ?? null,
-        povStoryKnowledgeId: scene.povStoryKnowledgeId ?? null
+        povStoryKnowledgeId: scene.povStoryKnowledgeId ?? null,
+        archivedAt: scene.archivedAt ?? null
       }))
     );
   }
@@ -209,7 +259,8 @@ async function persistBuffer(exec: RepositoryDatabase, buffer: WriteBuffer): Pro
         projectId: knowledge.projectId,
         label: knowledge.label,
         kind: knowledge.kind,
-        authority: knowledge.authority
+        authority: knowledge.authority,
+        archivedAt: knowledge.archivedAt ?? null
       }))
     );
   }
@@ -257,6 +308,51 @@ async function persistBuffer(exec: RepositoryDatabase, buffer: WriteBuffer): Pro
   }
 }
 
+async function persistReplacements(
+  exec: RepositoryDatabase,
+  replacements: WriteBuffer["replacements"]
+): Promise<void> {
+  for (const replacement of replacements) {
+    const { records, expectedVersion } = replacement;
+    const [updated] = await exec
+      .update(projects)
+      .set({
+        title: records.project.title,
+        createdAt: records.project.createdAt,
+        version: records.project.version,
+        archivedAt: records.project.archivedAt ?? null
+      })
+      .where(
+        and(
+          eq(projects.id, records.project.id),
+          eq(projects.version, expectedVersion)
+        )
+      )
+      .returning({ id: projects.id });
+
+    if (updated === undefined) {
+      throw new ProjectVersionConflictError(records.project.id, expectedVersion);
+    }
+
+    await exec.delete(editions).where(eq(editions.projectId, records.project.id));
+    await exec
+      .delete(storyKnowledge)
+      .where(eq(storyKnowledge.projectId, records.project.id));
+    await exec.delete(books).where(eq(books.projectId, records.project.id));
+
+    const replacementBuffer = emptyBuffer();
+    replacementBuffer.projects.push(records.project);
+    replacementBuffer.books.push(...records.books);
+    replacementBuffer.scenes.push(...records.scenes);
+    replacementBuffer.storyKnowledge.push(...records.storyKnowledge);
+    replacementBuffer.editions.push(...records.editions);
+    await persistBuffer(exec, replacementBuffer, {
+      insertProjects: false,
+      insertMemberships: false
+    });
+  }
+}
+
 async function queryProject(
   exec: RepositoryDatabase,
   id: ProjectId
@@ -276,7 +372,9 @@ async function queryProject(
     id: projectId(row.id),
     title: row.title,
     bookIds: bookRows.map((book) => bookId(book.id)),
-    createdAt: row.createdAt
+    createdAt: row.createdAt,
+    version: row.version,
+    ...(row.archivedAt === null ? {} : { archivedAt: row.archivedAt })
   });
 }
 
@@ -340,7 +438,8 @@ async function queryBooks(
           parts,
           unassignedSceneIds: unassignedRows.map((entry) => sceneId(entry.sceneId))
         },
-        createdAt: book.createdAt
+        createdAt: book.createdAt,
+        ...(book.archivedAt === null ? {} : { archivedAt: book.archivedAt })
       })
     );
   }
@@ -364,7 +463,8 @@ async function queryScenes(
       ...(scene.summary === null ? {} : { summary: scene.summary }),
       ...(scene.povStoryKnowledgeId === null
         ? {}
-        : { povStoryKnowledgeId: storyKnowledgeId(scene.povStoryKnowledgeId) })
+        : { povStoryKnowledgeId: storyKnowledgeId(scene.povStoryKnowledgeId) }),
+      ...(scene.archivedAt === null ? {} : { archivedAt: scene.archivedAt })
     })
   );
 }
@@ -393,7 +493,10 @@ async function queryStoryKnowledge(
         label: knowledge.label,
         kind: knowledge.kind as StoryKnowledgeKind,
         authority: knowledge.authority as StoryKnowledgeAuthority,
-        linkedSceneIds: linkRows.map((entry) => sceneId(entry.sceneId))
+        linkedSceneIds: linkRows.map((entry) => sceneId(entry.sceneId)),
+        ...(knowledge.archivedAt === null
+          ? {}
+          : { archivedAt: knowledge.archivedAt })
       })
     );
   }
@@ -459,6 +562,8 @@ function affectedProjectIds(buffer: WriteBuffer): readonly ProjectId[] {
   for (const scene of buffer.scenes) ids.add(scene.projectId);
   for (const knowledge of buffer.storyKnowledge) ids.add(knowledge.projectId);
   for (const edition of buffer.editions) ids.add(edition.projectId);
+  for (const membership of buffer.memberships) ids.add(membership.projectId);
+  for (const replacement of buffer.replacements) ids.add(replacement.records.project.id);
 
   return [...ids];
 }
@@ -482,7 +587,12 @@ function postgresErrorCode(error: unknown): string | undefined {
 }
 
 function mapPersistError(error: unknown): never {
-  if (error instanceof DomainValidationError) throw error;
+  if (
+    error instanceof DomainValidationError ||
+    error instanceof ProjectVersionConflictError
+  ) {
+    throw error;
+  }
 
   const code = postgresErrorCode(error);
 
@@ -517,6 +627,46 @@ export function createPostgresProjectRepository(db: RepositoryDatabase): Project
     listEditions(id: ProjectId): Promise<readonly BookEdition[]> {
       return queryEditions(db, id);
     },
+    async getProjectMembership(
+      id: ProjectId,
+      idOfAccount: AccountId
+    ): Promise<ProjectMembership | undefined> {
+      const [row] = await db
+        .select()
+        .from(projectMemberships)
+        .where(
+          and(
+            eq(projectMemberships.projectId, id),
+            eq(projectMemberships.accountId, idOfAccount)
+          )
+        )
+        .limit(1);
+      return row === undefined
+        ? undefined
+        : createProjectMembership({
+            projectId: projectId(row.projectId),
+            accountId: accountId(row.accountId),
+            role: row.role as ProjectRole,
+            createdAt: row.createdAt
+          });
+    },
+    async listProjectsForAccount(
+      idOfAccount: AccountId,
+      options: Readonly<{ includeArchived?: boolean }> = {}
+    ): Promise<readonly Project[]> {
+      const conditions = [eq(projectMemberships.accountId, idOfAccount)];
+      if (options.includeArchived !== true) conditions.push(isNull(projects.archivedAt));
+      const rows = await db
+        .select({ id: projects.id })
+        .from(projectMemberships)
+        .innerJoin(projects, eq(projectMemberships.projectId, projects.id))
+        .where(and(...conditions))
+        .orderBy(asc(projects.createdAt));
+      const ownedProjects = await Promise.all(
+        rows.map((row) => queryProject(db, projectId(row.id)))
+      );
+      return ownedProjects.filter((project): project is Project => project !== undefined);
+    },
     async transaction<Result>(
       operation: (writer: ProjectRecordWriter) => Result | Promise<Result>
     ): Promise<Result> {
@@ -527,6 +677,7 @@ export function createPostgresProjectRepository(db: RepositoryDatabase): Project
         await db.transaction(async (tx) => {
           const exec = tx as unknown as RepositoryDatabase;
           await persistBuffer(exec, buffer);
+          await persistReplacements(exec, buffer.replacements);
 
           for (const id of affectedProjectIds(buffer)) {
             const records = await loadProjectRecords(exec, id);

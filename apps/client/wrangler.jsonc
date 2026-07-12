@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "ghostwriter",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2026-07-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "GHOSTWRITER_API_ORIGIN": "https://ghostwriter-backend.fly.dev"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

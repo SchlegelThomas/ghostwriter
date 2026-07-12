@@ -12,12 +12,15 @@ const sceneSchema = z.object({
   title: z.string(),
   status: z.enum(["planned", "drafting", "revising", "complete"]),
   summary: z.string().optional(),
-  povStoryKnowledgeId: z.string().optional()
+  povStoryKnowledgeId: z.string().optional(),
+  archivedAt: z.string().optional()
 });
 
 const projectNavigatorOutputSchema = z.object({
   id: z.string(),
   title: z.string(),
+  version: z.number().int().positive(),
+  archivedAt: z.string().optional(),
   books: z.array(
     z.object({
       id: z.string(),
@@ -37,6 +40,7 @@ const projectNavigatorOutputSchema = z.object({
         })
       ),
       unassignedScenes: z.array(sceneSchema),
+      archivedAt: z.string().optional(),
       editions: z.array(
         z.object({
           id: z.string(),
@@ -54,7 +58,9 @@ const projectNavigatorOutputSchema = z.object({
       label: z.string(),
       kind: z.enum(["character", "location", "world-rule", "thread", "custom"]),
       authority: z.enum(["planned", "confirmed", "inferred", "disputed"]),
-      linkedSceneCount: z.number().int().nonnegative()
+      linkedSceneIds: z.array(z.string()),
+      linkedSceneCount: z.number().int().nonnegative(),
+      archivedAt: z.string().optional()
     })
   ),
   totals: z.object({
@@ -69,6 +75,10 @@ function projectNavigatorOutput(): z.infer<typeof projectNavigatorOutputSchema> 
   return {
     id: BELLWETHER_FIXTURE_NAVIGATOR.id,
     title: BELLWETHER_FIXTURE_NAVIGATOR.title,
+    version: BELLWETHER_FIXTURE_NAVIGATOR.version,
+    ...(BELLWETHER_FIXTURE_NAVIGATOR.archivedAt === undefined
+      ? {}
+      : { archivedAt: BELLWETHER_FIXTURE_NAVIGATOR.archivedAt }),
     books: BELLWETHER_FIXTURE_NAVIGATOR.books.map((book) => ({
       id: book.id,
       title: book.title,
@@ -83,11 +93,13 @@ function projectNavigatorOutput(): z.infer<typeof projectNavigatorOutputSchema> 
         }))
       })),
       unassignedScenes: book.unassignedScenes.map((scene) => ({ ...scene })),
+      ...(book.archivedAt === undefined ? {} : { archivedAt: book.archivedAt }),
       editions: book.editions.map((edition) => ({ ...edition })),
       sceneCount: book.sceneCount
     })),
     storyKnowledge: BELLWETHER_FIXTURE_NAVIGATOR.storyKnowledge.map((knowledge) => ({
-      ...knowledge
+      ...knowledge,
+      linkedSceneIds: [...knowledge.linkedSceneIds]
     })),
     totals: { ...BELLWETHER_FIXTURE_NAVIGATOR.totals }
   };

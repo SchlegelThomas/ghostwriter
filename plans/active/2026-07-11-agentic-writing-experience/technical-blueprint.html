@@ -13,7 +13,7 @@
       <p class="eyebrow">Architecture direction</p>
       <h1>Technical blueprint</h1>
       <p class="lede">A web-first collaborative story platform built around multi-book projects, scene-sized documents, a prose-aware version graph, shared Story Canvas objects, and one accountable proposal path for humans and agents.</p>
-      <p class="meta"><strong>Status:</strong> server-authoritative online-only v1 and editorial collaboration depth accepted in ADR 0002; backend/runtime implementation remains open<br>
+      <p class="meta"><strong>Status:</strong> server-authoritative topology accepted in ADR 0002, Lakebase/Hono backend implemented in ADR 0004, and Google accounts/project access implemented in ADR 0005; real-time/editorial transport remains open<br>
         <strong>Committed constraints preserved:</strong> Tiptap, platform-neutral core, writer ownership, and MCP parity</p>
     </header>
 
@@ -260,7 +260,7 @@
         <h3>Offline replication and larger teams</h3>
         <p>Add full offline editing, cross-device conflict support, organization roles, approval workflows, and broader CRDT coverage only when the launch topology and real usage justify them.</p>
       </div>
-      <p>ADR 0002 fixes authority and collaboration depth. The implementation spike must still select identity, authentication, encryption, server runtime, database, real-time transport, deletion, retention, backup, browser-recovery expiry, account exit, and remote MCP authorization.</p>
+      <p>ADR 0002 fixes authority and collaboration depth. ADR 0004 selects the Lakebase/Hono runtime, and ADR 0005 selects Google/Better Auth identity, first-party browser sessions, writer profiles, owner memberships, auth-first entry, and archive/restore. Real-time transport, collaboration roles/invitations, backup, retention, browser-recovery expiry, permanent deletion, account exit, and remote MCP authorization remain open.</p>
     </section>
 
     <section>
@@ -315,7 +315,7 @@
         <li><strong>Multi-book project, Story Canvas, and truth states:</strong> before the scaffold model expands.</li>
         <li><strong>Editor document, stable block IDs, revision graph, variants, and provenance:</strong> before production Tiptap persistence or import.</li>
         <li><strong>Server authority, minimal browser recovery, and editorial collaboration:</strong> accepted in <a href="../../../docs/adr/0002-server-authoritative-web-collaboration.md">ADR 0002</a>; the implementation spike must select concrete services and protocols.</li>
-        <li><strong>Identity, author/editor roles, invitations, and remote project access:</strong> before shared projects are exposed.</li>
+        <li><strong>Identity and initial project access:</strong> accepted in <a href="../../../docs/adr/0005-authenticated-accounts-and-project-access.md">ADR 0005</a> for Google accounts, profiles, owner memberships, and first-party sessions. Editor roles, invitations, and remote MCP access remain later decisions.</li>
         <li><strong>Agent authority and MCP mutation policy:</strong> before a real model or external client can create actionable proposals.</li>
         <li><strong>AI provider, credentials, egress, and web boundary:</strong> before shipping provider calls on any surface.</li>
         <li><strong>Full offline replication and same-scene co-editing:</strong> only when validated demand justifies replacing the v1 lease/revision model.</li>

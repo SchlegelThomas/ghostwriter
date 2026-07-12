@@ -11,7 +11,7 @@ ghostwriter/
     client/       # Expo universal app; responsive real-time web is the primary product
     desktop/      # Optional Electron shell adding filesystem and credential conveniences
     mcp/          # MCP server exposing Ghostwriter to external agents
-    backend/      # Required shared-project identity/sync shell; runtime is still open
+    backend/      # Node/Hono shared-project identity and application shell
   packages/
     core/         # domain model + logic: multi-book projects, scenes, revisions, policy
     ui/           # shared React Native components (render on web via react-native-web)
@@ -74,7 +74,7 @@ Phase 1.1 replaces the scaffold manuscript object with the first shared product 
   structured output against the core fixture, and closes it cleanly.
 
 See [ADR 0003](adr/0003-multi-book-domain-boundaries.md). Tiptap scene bodies, the revision graph,
-identity, real-time sync, recovery, and Story Canvas mutation remain later plans.
+real-time sync, recovery, and Story Canvas mutation remain later plans.
 
 ## Implemented backend and persistence (2026-07-11)
 
@@ -92,8 +92,45 @@ ADR 0004 makes the server-authoritative store concrete:
 - The database is **Databricks Lakebase** (serverless Postgres). CI branches the database per pull
   request (copy-on-write) via `scripts/lakebase.sh`; production deploys migrate and ship the backend.
 
-See [ADR 0004](adr/0004-lakebase-backend-and-cicd.md). Identity/auth, profiles, subscriptions,
-real-time transport, and browser recovery remain later plans on top of this backend.
+See [ADR 0004](adr/0004-lakebase-backend-and-cicd.md). Subscriptions, real-time transport, and
+browser recovery remain later plans on top of this backend.
+
+## Implemented identity, project access, and kernel mutations (2026-07-11)
+
+ADR 0005 establishes the identity spine used by all real project access:
+
+- **Better Auth** runs inside the Node/Hono backend with its Drizzle/Postgres adapter and Google as
+  the only initial login provider. Auth/session/provider types remain outside `packages/core`.
+- The browser uses opaque database-backed sessions in secure HttpOnly cookies. Cloudflare Pages
+  proxies its same-origin `/api/*` path to Fly; the product does not depend on third-party cookies
+  between `pages.dev` and `fly.dev` or durable browser bearer tokens.
+- Core owns provider-neutral account/profile, project-membership, and authorization contracts.
+  Every query and command receives a server-resolved actor and enforces project scope before
+  storage effects. Client-supplied account IDs never grant access.
+- First login idempotently creates one writer profile. Creating a project atomically creates its
+  owner membership; account-scoped project listing follows membership rather than global project
+  enumeration.
+- Authentication precedes every product/onboarding surface. Authored records archive and restore;
+  permanent purge waits for export, backup, retention, and account-exit policy.
+- Google requires exact callback registration. Required CI uses a production-inert test identity
+  boundary. A live-provider acceptance run passed locally on 2026-07-12 for consent, durable
+  account/profile bootstrap, project creation/reload, and server-side sign-out revocation;
+  production still receives its own post-release smoke.
+- Core exposes 22 typed, owner-authorized, expected-version commands for project/book/manuscript
+  structure/scene metadata/story knowledge. Memory and Postgres share one transaction contract;
+  Postgres conditionally advances the project version and atomically replaces normalized metadata
+  children while preserving memberships. This aggregate replacement is for low-frequency metadata,
+  not the future scene-body editor write path.
+- Hono exposes validated account/profile, account-scoped project, navigator, and typed-command
+  endpoints with stable error codes and strict mutation origins. The responsive client binds all 22
+  commands and shows <em>Saved</em> only after the returned server version is installed.
+- Authored kernel records archive/restore; empty parts/chapters may be safely removed. Named editions
+  remain read-only until immutable scene/project revisions exist.
+- Canonical MCP command bindings are explicit security exceptions, not omissions: direct external
+  writes wait for scoped grants and the agent-authority/remote-authorization ADR. Fixture MCP reads
+  continue to exercise the shared navigator projection.
+
+See [ADR 0005](adr/0005-authenticated-accounts-and-project-access.md).
 
 ## Accepted product requirements (2026-07-11)
 

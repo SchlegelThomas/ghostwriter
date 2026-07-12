@@ -17,14 +17,11 @@ if [ ! -f apps/client/package.json ]; then
   exit 1
 fi
 
-if ! command -v wrangler >/dev/null 2>&1; then
-  echo "wrangler not found. One-time setup: npm i -g wrangler && wrangler login" >&2
-  echo "Full instructions in docs/OPERATIONS.md." >&2
-  exit 1
-fi
-
 echo "Building web export from branch '$BRANCH'..."
 pnpm --filter client exec expo export --platform web
 
 echo "Deploying preview for '$BRANCH' to Cloudflare Pages..."
-wrangler pages deploy apps/client/dist --project-name=ghostwriter --branch="$BRANCH"
+(
+  cd apps/client
+  pnpm exec wrangler pages deploy dist --project-name=ghostwriter --branch="$BRANCH"
+)

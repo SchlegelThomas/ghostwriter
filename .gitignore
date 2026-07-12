@@ -1,7 +1,12 @@
 node_modules/
 dist/
 .expo/
+test-results/
+playwright-report/
+blob-report/
 .DS_Store
 .env
 .env.*
 !.env.example
+/ghostwriter_client.json
+/client_secret_*.json

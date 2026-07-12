@@ -14,7 +14,16 @@ import {
   type StoryKnowledge,
   validateProjectRecords
 } from "./domain.js";
-import type { ProjectRecordWriter, ProjectRepository } from "./project-repository.js";
+import {
+  createProjectMembership,
+  type AccountId,
+  type ProjectMembership
+} from "./identity.js";
+import {
+  ProjectVersionConflictError,
+  type ProjectRecordWriter,
+  type ProjectRepository
+} from "./project-repository.js";
 
 type MemoryState = {
   projects: Map<string, Project>;
@@ -22,6 +31,7 @@ type MemoryState = {
   scenes: Map<string, Scene>;
   storyKnowledge: Map<string, StoryKnowledge>;
   editions: Map<string, BookEdition>;
+  memberships: Map<string, ProjectMembership>;
 };
 
 function emptyState(): MemoryState {
@@ -30,7 +40,8 @@ function emptyState(): MemoryState {
     books: new Map(),
     scenes: new Map(),
     storyKnowledge: new Map(),
-    editions: new Map()
+    editions: new Map(),
+    memberships: new Map()
   };
 }
 
@@ -49,6 +60,12 @@ function cloneState(state: MemoryState): MemoryState {
     ),
     editions: new Map(
       [...state.editions].map(([id, edition]) => [id, createBookEdition(edition)])
+    ),
+    memberships: new Map(
+      [...state.memberships].map(([key, membership]) => [
+        key,
+        createProjectMembership(membership)
+      ])
     )
   };
 }
@@ -137,6 +154,15 @@ function validateState(state: MemoryState): void {
     }
   }
 
+  for (const membership of state.memberships.values()) {
+    if (!state.projects.has(membership.projectId)) {
+      throw new DomainValidationError(
+        "UNKNOWN_REFERENCE",
+        `Membership references unknown project "${membership.projectId}".`
+      );
+    }
+  }
+
   for (const project of state.projects.values()) {
     validateProjectRecords(recordsForProject(state, project));
   }
@@ -183,6 +209,55 @@ function writerFor(state: MemoryState): ProjectRecordWriter {
     insertEdition(edition: BookEdition): void {
       assertNewDefinitionIds(state, [edition.id]);
       state.editions.set(edition.id, createBookEdition(edition));
+    },
+    insertProjectMembership(membership: ProjectMembership): void {
+      const frozen = createProjectMembership(membership);
+      const key = `${frozen.projectId}:${frozen.accountId}`;
+      if (state.memberships.has(key)) {
+        throw new DomainValidationError(
+          "DUPLICATE_REFERENCE",
+          `Project membership already exists for "${frozen.accountId}".`
+        );
+      }
+      state.memberships.set(key, frozen);
+    },
+    replaceProjectRecords(records: ProjectRecords, expectedVersion: number): void {
+      validateProjectRecords(records);
+      const current = state.projects.get(records.project.id);
+      if (current === undefined || current.version !== expectedVersion) {
+        throw new ProjectVersionConflictError(records.project.id, expectedVersion);
+      }
+      if (records.project.version !== expectedVersion + 1) {
+        throw new DomainValidationError(
+          "INVALID_VERSION",
+          "A replacement project must increment its version exactly once."
+        );
+      }
+
+      for (const [id, book] of state.books) {
+        if (book.projectId === records.project.id) state.books.delete(id);
+      }
+      for (const [id, scene] of state.scenes) {
+        if (scene.projectId === records.project.id) state.scenes.delete(id);
+      }
+      for (const [id, knowledge] of state.storyKnowledge) {
+        if (knowledge.projectId === records.project.id) {
+          state.storyKnowledge.delete(id);
+        }
+      }
+      for (const [id, edition] of state.editions) {
+        if (edition.projectId === records.project.id) state.editions.delete(id);
+      }
+
+      state.projects.set(records.project.id, createProject(records.project));
+      for (const book of records.books) state.books.set(book.id, createBook(book));
+      for (const scene of records.scenes) state.scenes.set(scene.id, createScene(scene));
+      for (const knowledge of records.storyKnowledge) {
+        state.storyKnowledge.set(knowledge.id, createStoryKnowledge(knowledge));
+      }
+      for (const edition of records.editions) {
+        state.editions.set(edition.id, createBookEdition(edition));
+      }
     }
   });
 }
@@ -199,12 +274,16 @@ function addSeed(state: MemoryState, records: ProjectRecords): void {
 }
 
 export function createMemoryProjectRepository(
-  seeds: readonly ProjectRecords[] = []
+  seeds: readonly ProjectRecords[] = [],
+  membershipSeeds: readonly ProjectMembership[] = []
 ): ProjectRepository {
   let state = emptyState();
   let transactionTail: Promise<void> = Promise.resolve();
 
   for (const records of seeds) addSeed(state, records);
+  for (const membership of membershipSeeds) {
+    writerFor(state).insertProjectMembership(membership);
+  }
   validateState(state);
 
   return Object.freeze({
@@ -231,6 +310,33 @@ export function createMemoryProjectRepository(
       return [...state.editions.values()]
         .filter((edition) => edition.projectId === projectId)
         .map(createBookEdition);
+    },
+    async getProjectMembership(
+      projectId: ProjectId,
+      accountId: AccountId
+    ): Promise<ProjectMembership | undefined> {
+      const membership = state.memberships.get(`${projectId}:${accountId}`);
+      return membership === undefined
+        ? undefined
+        : createProjectMembership(membership);
+    },
+    async listProjectsForAccount(
+      accountId: AccountId,
+      options: Readonly<{ includeArchived?: boolean }> = {}
+    ): Promise<readonly Project[]> {
+      const projectIds = new Set(
+        [...state.memberships.values()]
+          .filter((membership) => membership.accountId === accountId)
+          .map((membership) => membership.projectId)
+      );
+      return [...state.projects.values()]
+        .filter(
+          (project) =>
+            projectIds.has(project.id) &&
+            (options.includeArchived === true || project.archivedAt === undefined)
+        )
+        .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+        .map(createProject);
     },
     async transaction<Result>(
       operation: (writer: ProjectRecordWriter) => Result | Promise<Result>

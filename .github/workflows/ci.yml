@@ -39,3 +39,11 @@ jobs:
       - name: Verify (typecheck + lint + test)
         if: steps.scaffold.outputs.exists == 'true'
         run: pnpm verify
+
+      - name: Install Chromium for browser tests
+        if: steps.scaffold.outputs.exists == 'true'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Authenticated browser journey
+        if: steps.scaffold.outputs.exists == 'true'
+        run: pnpm test:e2e
