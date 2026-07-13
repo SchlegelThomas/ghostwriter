@@ -264,6 +264,44 @@ export function acknowledgementForProjectCommand(
             })
       };
     }
+    case "chapter.update": {
+      const oldChapter = findChapter(
+        before,
+        command.bookId,
+        command.partId,
+        command.chapterId
+      );
+      const newChapter = findChapter(
+        after,
+        command.bookId,
+        command.partId,
+        command.chapterId
+      );
+      return {
+        title:
+          command.title !== undefined && command.summary === undefined
+            ? "Chapter renamed"
+            : "Chapter updated",
+        detail: `${newChapter?.title ?? oldChapter?.title ?? "Chapter"} · Saved to project`,
+        ...(oldChapter === undefined
+          ? {}
+          : {
+              inverse: {
+                type: "chapter.update" as const,
+                bookId: command.bookId,
+                partId: command.partId,
+                chapterId: command.chapterId,
+                ...(command.title === undefined
+                  ? {}
+                  : { title: oldChapter.title }),
+                ...(command.summary === undefined
+                  ? {}
+                  : { summary: oldChapter.summary ?? null })
+              },
+              actionLabel: "Undo" as const
+            })
+      };
+    }
     case "chapter.reorder":
       return {
         title: "Chapter order updated",
@@ -296,7 +334,10 @@ export function acknowledgementForProjectCommand(
         command.title === undefined ? undefined : "title",
         command.status === undefined ? undefined : "status",
         command.summary === undefined ? undefined : "summary",
-        command.povStoryKnowledgeId === undefined ? undefined : "POV"
+        command.povStoryKnowledgeId === undefined ? undefined : "POV",
+        command.backdrop === undefined ? undefined : "backdrop",
+        command.music === undefined ? undefined : "music",
+        command.imageRefs === undefined ? undefined : "images"
       ].filter((field): field is string => field !== undefined);
       return {
         title:
@@ -326,7 +367,16 @@ export function acknowledgementForProjectCommand(
                   : {
                       povStoryKnowledgeId:
                         oldScene.povStoryKnowledgeId ?? null
-                    })
+                    }),
+                ...(command.backdrop === undefined
+                  ? {}
+                  : { backdrop: oldScene.backdrop ?? null }),
+                ...(command.music === undefined
+                  ? {}
+                  : { music: oldScene.music ?? null }),
+                ...(command.imageRefs === undefined
+                  ? {}
+                  : { imageRefs: oldScene.imageRefs ?? null })
               },
               actionLabel: "Undo" as const
             })
@@ -387,7 +437,9 @@ export function acknowledgementForProjectCommand(
         title:
           command.label !== undefined &&
           command.kind === undefined &&
-          command.authority === undefined
+          command.authority === undefined &&
+          command.notes === undefined &&
+          command.aliases === undefined
             ? "Story record renamed"
             : "Story record updated",
         detail: `${newKnowledge?.label ?? oldKnowledge?.label ?? "Story record"} · Saved to project`,
@@ -405,7 +457,13 @@ export function acknowledgementForProjectCommand(
                   : { kind: oldKnowledge.kind }),
                 ...(command.authority === undefined
                   ? {}
-                  : { authority: oldKnowledge.authority })
+                  : { authority: oldKnowledge.authority }),
+                ...(command.notes === undefined
+                  ? {}
+                  : { notes: oldKnowledge.notes ?? null }),
+                ...(command.aliases === undefined
+                  ? {}
+                  : { aliases: oldKnowledge.aliases ?? null })
               },
               actionLabel: "Undo" as const
             })
@@ -427,6 +485,29 @@ export function acknowledgementForProjectCommand(
           type: "storyKnowledge.setSceneLink",
           storyKnowledgeId: command.storyKnowledgeId,
           sceneId: command.sceneId,
+          linked: !command.linked
+        },
+        actionLabel: "Undo"
+      };
+    }
+    case "storyKnowledge.setKnowledgeLink": {
+      const from =
+        findKnowledge(after, command.fromId) ??
+        findKnowledge(before, command.fromId);
+      const to =
+        findKnowledge(after, command.toId) ?? findKnowledge(before, command.toId);
+      return {
+        title: command.linked
+          ? "Knowledge link added"
+          : "Knowledge link removed",
+        detail: `${from?.label ?? "Story record"} → ${
+          to?.label ?? "Story record"
+        } (${command.kind}) · Saved to project`,
+        inverse: {
+          type: "storyKnowledge.setKnowledgeLink",
+          fromId: command.fromId,
+          toId: command.toId,
+          kind: command.kind,
           linked: !command.linked
         },
         actionLabel: "Undo"
@@ -496,6 +577,17 @@ export function acknowledgementForCanvasCommand(
       return {
         title: "Canvas object resized",
         detail: "Object dimensions · Saved to Canvas",
+        actionLabel: "Undo"
+      };
+    case "canvas.object.setScopePlacement":
+      return {
+        title: "Canvas scope placement saved",
+        detail:
+          command.scopeKind === "project"
+            ? "Project layout · Saved to Canvas"
+            : command.scopeKind === "chapter"
+              ? "Chapter layout · Saved to Canvas"
+              : "Scene layout · Saved to Canvas",
         actionLabel: "Undo"
       };
     case "canvas.object.archive":

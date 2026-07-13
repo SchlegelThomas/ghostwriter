@@ -14,6 +14,7 @@ import {
   partId,
   projectId,
   sceneId,
+  storyKnowledgeId,
   type IdGenerator,
   type ProjectRepository
 } from "@ghostwriter/core";
@@ -339,6 +340,156 @@ describe("postgres project repository", () => {
       navigator.books.find((book) => book.id === bookId("book-origin"))?.parts
     ).toEqual([]);
     expect(navigator).toMatchObject({ title: "After", version: 10 });
+  });
+
+  it("persists chapter summary, scene ambience, and knowledge depth", async () => {
+    const repository = await freshRepository();
+    const services = createGhostwriterServices({
+      projects: repository,
+      ids: sequenceIds([
+        "project-depth",
+        "book-depth",
+        "part-depth",
+        "chapter-depth",
+        "scene-depth",
+        "knowledge-mara",
+        "knowledge-island"
+      ]),
+      clock: { now: () => "2026-07-12T20:00:00.000Z" }
+    });
+    const projectIdValue = await services.createStoryProject({
+      ownerAccountId: OWNER_ACCOUNT_ID,
+      title: "Depth Story",
+      firstBookTitle: "Book One"
+    });
+    let navigator = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: projectIdValue,
+      expectedVersion: 1,
+      command: {
+        type: "part.create",
+        bookId: bookId("book-depth"),
+        title: "Part One"
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: projectIdValue,
+      expectedVersion: navigator.version,
+      command: {
+        type: "chapter.create",
+        bookId: bookId("book-depth"),
+        partId: partId("part-depth"),
+        title: "Chapter One"
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: projectIdValue,
+      expectedVersion: navigator.version,
+      command: {
+        type: "chapter.update",
+        bookId: bookId("book-depth"),
+        partId: partId("part-depth"),
+        chapterId: chapterId("chapter-depth"),
+        summary: "Folder objectives"
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: projectIdValue,
+      expectedVersion: navigator.version,
+      command: {
+        type: "scene.create",
+        bookId: bookId("book-depth"),
+        chapterId: chapterId("chapter-depth"),
+        title: "Opening"
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: projectIdValue,
+      expectedVersion: navigator.version,
+      command: {
+        type: "storyKnowledge.create",
+        label: "Mara",
+        kind: "character",
+        authority: "planned"
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: projectIdValue,
+      expectedVersion: navigator.version,
+      command: {
+        type: "storyKnowledge.create",
+        label: "Island",
+        kind: "location",
+        authority: "confirmed"
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: projectIdValue,
+      expectedVersion: navigator.version,
+      command: {
+        type: "scene.update",
+        sceneId: sceneId("scene-depth"),
+        backdrop: { url: "https://cdn.example.com/fog.jpg", caption: "Fog" },
+        music: { url: "https://cdn.example.com/theme.mp3" },
+        imageRefs: [
+          { url: "https://cdn.example.com/mara.png", alt: "Mara" }
+        ]
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: projectIdValue,
+      expectedVersion: navigator.version,
+      command: {
+        type: "storyKnowledge.update",
+        storyKnowledgeId: storyKnowledgeId("knowledge-mara"),
+        notes: "Answers late calls.",
+        aliases: ["Caller"]
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: projectIdValue,
+      expectedVersion: navigator.version,
+      command: {
+        type: "storyKnowledge.setKnowledgeLink",
+        fromId: storyKnowledgeId("knowledge-mara"),
+        toId: storyKnowledgeId("knowledge-island"),
+        kind: "cast",
+        linked: true
+      }
+    });
+
+    const reloaded = await services.getProjectNavigator(
+      OWNER_ACCOUNT_ID,
+      projectIdValue
+    );
+    expect(reloaded?.books[0]?.parts[0]?.chapters[0]).toMatchObject({
+      summary: "Folder objectives"
+    });
+    expect(reloaded?.books[0]?.parts[0]?.chapters[0]?.scenes[0]).toMatchObject({
+      backdrop: { url: "https://cdn.example.com/fog.jpg", caption: "Fog" },
+      music: { url: "https://cdn.example.com/theme.mp3" },
+      imageRefs: [{ url: "https://cdn.example.com/mara.png", alt: "Mara" }]
+    });
+    expect(
+      reloaded?.storyKnowledge.find(
+        (knowledge) => knowledge.id === storyKnowledgeId("knowledge-mara")
+      )
+    ).toMatchObject({
+      notes: "Answers late calls.",
+      aliases: ["Caller"],
+      linkedKnowledge: [
+        { toId: storyKnowledgeId("knowledge-island"), kind: "cast" }
+      ]
+    });
+    expect(navigator.version).toBe(reloaded?.version);
   });
 
   it("rejects a duplicate seed and leaves the store unchanged", async () => {

@@ -100,12 +100,16 @@ and links reference canonical scene and story-knowledge IDs; they never copy sce
 another manuscript-order authority.
 
 - `GET /api/projects/{projectId}/canvas` idempotently initializes and returns `{ board, spine }`.
-  The board contains canonical objects and typed links, including archived provisional dismissals.
-  The spine is derived at read time from canonical book/part/chapter/unassigned scene order.
+  The board contains canonical objects, typed links, and optional `scopePlacements` keyed by
+  `(objectId, scopeKind, scopeId?)`. Missing placements fall back to each object's global geometry.
+  Scope layouts are interpretive only; manuscript order stays on the tree. The spine is derived at
+  read time from canonical book/part/chapter/unassigned scene order.
 - `POST /api/projects/{projectId}/canvas/commands` accepts `expectedCanvasVersion` and one closed
-  Canvas command. A completed create/place/update/move/resize/archive/restore/confirm/dismiss
-  gesture advances the board exactly once and creates one immutable, SHA-256 content-addressed
-  snapshot. Pointer-move events are not API commands.
+  Canvas command. A completed create/place/update/move/resize/setScopePlacement/archive/restore/
+  confirm/dismiss gesture advances the board exactly once and creates one immutable, SHA-256
+  content-addressed snapshot. `canvas.object.setScopePlacement` upserts a scope layout without
+  rewriting object identity; when `scopeKind` is `project`, it also updates global x/y/(optional)
+  width/height so the project lens stays a single source. Pointer-move events are not API commands.
 - `GET /api/projects/{projectId}/canvas/history` returns newest-first snapshot metadata without
   snapshot bodies.
 - `POST /api/projects/{projectId}/canvas/history/restore` accepts `expectedCanvasVersion` and an
@@ -157,22 +161,24 @@ Manuscript structure:
 - `part.reorder`
 - `part.removeEmpty`
 - `chapter.create`
-- `chapter.rename`
+- `chapter.rename` (title-only; prefer `chapter.update`)
+- `chapter.update` (`title?`, `summary?` with `null` to clear)
 - `chapter.reorder`
 - `chapter.removeEmpty`
 
 Scenes:
 
 - `scene.create`
-- `scene.update`
+- `scene.update` (`title?`, `status?`, `summary?`, `povStoryKnowledgeId?`, `backdrop?`, `music?`, `imageRefs?`; media fields accept `null` to clear; URLs must be absolute http(s))
 - `scene.move`
 - `scene.setArchived`
 
 Story knowledge:
 
 - `storyKnowledge.create`
-- `storyKnowledge.update`
+- `storyKnowledge.update` (`label?`, `kind?`, `authority?`, `notes?`, `aliases?`; `null` clears notes/aliases)
 - `storyKnowledge.setSceneLink`
+- `storyKnowledge.setKnowledgeLink` (`fromId`, `toId`, `kind` of `cast` | `theme` | `development-cycle` | `breadcrumb` | `related`, `linked`)
 - `storyKnowledge.setArchived`
 
 Each command has a closed schema in `apps/backend/src/api-contract.ts` and a domain implementation in
@@ -215,7 +221,7 @@ request bodies.
 
 ## MCP parity
 
-The existing fixture MCP navigator uses the same core projection. All 22 project commands plus
+The existing fixture MCP navigator uses the same core projection. All 24 project commands plus
 scene lease/save/checkpoint/variant/restore web bindings are registered with explicit MCP
 exceptions: direct external-agent writes remain unavailable until scoped grants and remote/local
 MCP authorization are accepted. Authenticated scene workspace/history reads and prose-bearing

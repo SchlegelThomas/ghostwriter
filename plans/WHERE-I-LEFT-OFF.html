@@ -16,7 +16,7 @@
 
     <section>
       <h2>Current state</h2>
-      <p>PR #4 is merged to <code>main</code>. On <code>feat/authenticated-project-crud</code>, the accepted tree + DAG shell, drill/workflow lenses, Book Reader, resizable Split, and scene handoffs are implemented locally. <code>pnpm verify</code> passes 150 tests; Playwright is 9/13 green after the tree-shell migration with four journeys still under triage. Next: close Playwright gaps, final coherence pass, checkpoint commit/push, PR CI, release.</p>
+      <p>PR #4 is merged to <code>main</code>. On <code>feat/authenticated-project-crud</code>, the tree + DAG shell plus the writer-workspace-depth expansion (ADRs 0008/0009) are implemented locally: chapter folder objectives, tree DnD, scene URL ambience, deeper story knowledge and K↔K links, Canvas scope placements, book-like Reader with ElevenLabs TTS route, and MCP chat dock. <code>pnpm verify</code> passes 157 tests. Active plan: <a href="active/2026-07-12-writer-workspace-depth/plan.html">Writer workspace depth</a>. Next: live visual review, set <code>ELEVENLABS_API_KEY</code> when ready for voice, OpenAI key later for chat completion, then PR/CI.</p>
       <p><strong>Live:</strong> backend at <code>https://ghostwriter-backend.fly.dev</code> (<code>/health</code> ok; DB-backed route authenticates to Lakebase via the CI/app service principal). Lakebase project <code>projects/ghostwriter</code> (branch <code>production</code>, endpoint <code>primary</code>, AWS <code>us-east-2</code>, PG 17) is provisioned and migrated.</p>
     </section>
 

@@ -13,6 +13,27 @@ const sceneSchema = z.object({
   status: z.enum(["planned", "drafting", "revising", "complete"]),
   summary: z.string().optional(),
   povStoryKnowledgeId: z.string().optional(),
+  backdrop: z
+    .object({
+      url: z.string(),
+      caption: z.string().optional()
+    })
+    .optional(),
+  music: z
+    .object({
+      url: z.string(),
+      label: z.string().optional()
+    })
+    .optional(),
+  imageRefs: z
+    .array(
+      z.object({
+        url: z.string(),
+        alt: z.string(),
+        caption: z.string().optional()
+      })
+    )
+    .optional(),
   archivedAt: z.string().optional()
 });
 
@@ -34,6 +55,7 @@ const projectNavigatorOutputSchema = z.object({
             z.object({
               id: z.string(),
               title: z.string(),
+              summary: z.string().optional(),
               scenes: z.array(sceneSchema)
             })
           )
@@ -59,6 +81,20 @@ const projectNavigatorOutputSchema = z.object({
       kind: z.enum(["character", "location", "world-rule", "thread", "custom"]),
       authority: z.enum(["planned", "confirmed", "inferred", "disputed"]),
       linkedSceneIds: z.array(z.string()),
+      linkedKnowledge: z.array(
+        z.object({
+          toId: z.string(),
+          kind: z.enum([
+            "cast",
+            "theme",
+            "development-cycle",
+            "breadcrumb",
+            "related"
+          ])
+        })
+      ),
+      notes: z.string().optional(),
+      aliases: z.array(z.string()).optional(),
       linkedSceneCount: z.number().int().nonnegative(),
       archivedAt: z.string().optional()
     })
@@ -72,6 +108,24 @@ const projectNavigatorOutputSchema = z.object({
 });
 
 function projectNavigatorOutput(): z.infer<typeof projectNavigatorOutputSchema> {
+  const mapScene = (
+    scene: (typeof BELLWETHER_FIXTURE_NAVIGATOR.books)[number]["unassignedScenes"][number]
+  ) => ({
+    id: scene.id,
+    title: scene.title,
+    status: scene.status,
+    ...(scene.summary === undefined ? {} : { summary: scene.summary }),
+    ...(scene.povStoryKnowledgeId === undefined
+      ? {}
+      : { povStoryKnowledgeId: scene.povStoryKnowledgeId }),
+    ...(scene.backdrop === undefined ? {} : { backdrop: { ...scene.backdrop } }),
+    ...(scene.music === undefined ? {} : { music: { ...scene.music } }),
+    ...(scene.imageRefs === undefined
+      ? {}
+      : { imageRefs: scene.imageRefs.map((ref) => ({ ...ref })) }),
+    ...(scene.archivedAt === undefined ? {} : { archivedAt: scene.archivedAt })
+  });
+
   return {
     id: BELLWETHER_FIXTURE_NAVIGATOR.id,
     title: BELLWETHER_FIXTURE_NAVIGATOR.title,
@@ -89,17 +143,30 @@ function projectNavigatorOutput(): z.infer<typeof projectNavigatorOutputSchema> 
         chapters: part.chapters.map((chapter) => ({
           id: chapter.id,
           title: chapter.title,
-          scenes: chapter.scenes.map((scene) => ({ ...scene }))
+          ...(chapter.summary === undefined ? {} : { summary: chapter.summary }),
+          scenes: chapter.scenes.map(mapScene)
         }))
       })),
-      unassignedScenes: book.unassignedScenes.map((scene) => ({ ...scene })),
+      unassignedScenes: book.unassignedScenes.map(mapScene),
       ...(book.archivedAt === undefined ? {} : { archivedAt: book.archivedAt }),
       editions: book.editions.map((edition) => ({ ...edition })),
       sceneCount: book.sceneCount
     })),
     storyKnowledge: BELLWETHER_FIXTURE_NAVIGATOR.storyKnowledge.map((knowledge) => ({
-      ...knowledge,
-      linkedSceneIds: [...knowledge.linkedSceneIds]
+      id: knowledge.id,
+      label: knowledge.label,
+      kind: knowledge.kind,
+      authority: knowledge.authority,
+      linkedSceneIds: [...knowledge.linkedSceneIds],
+      linkedSceneCount: knowledge.linkedSceneCount,
+      linkedKnowledge: knowledge.linkedKnowledge.map((link) => ({ ...link })),
+      ...(knowledge.notes === undefined ? {} : { notes: knowledge.notes }),
+      ...(knowledge.aliases === undefined
+        ? {}
+        : { aliases: [...knowledge.aliases] }),
+      ...(knowledge.archivedAt === undefined
+        ? {}
+        : { archivedAt: knowledge.archivedAt })
     })),
     totals: { ...BELLWETHER_FIXTURE_NAVIGATOR.totals }
   };

@@ -163,7 +163,7 @@ describe("capability parity registry", () => {
   });
 
   it("records an explicit MCP security exception for every canonical command", () => {
-    expect(PROJECT_COMMAND_CAPABILITIES).toHaveLength(22);
+    expect(PROJECT_COMMAND_CAPABILITIES).toHaveLength(24);
     for (const capability of PROJECT_COMMAND_CAPABILITIES) {
       expect(capability.access).toBe("apply");
       expect(capability.bindings.ui).toBe(

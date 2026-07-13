@@ -15,9 +15,11 @@ import type {
   ProjectNavigatorChapter,
   ProjectNavigatorScene,
   SceneId,
+  SceneImageRef,
   SceneStatus,
   StoryKnowledgeAuthority,
-  StoryKnowledgeKind
+  StoryKnowledgeKind,
+  StoryKnowledgeLinkKind
 } from "@ghostwriter/core";
 import {
   resolveManuscriptSelection,
@@ -50,6 +52,13 @@ const KNOWLEDGE_AUTHORITIES: readonly StoryKnowledgeAuthority[] = [
   "confirmed",
   "inferred",
   "disputed"
+];
+const KNOWLEDGE_LINK_KINDS: readonly StoryKnowledgeLinkKind[] = [
+  "cast",
+  "theme",
+  "development-cycle",
+  "breadcrumb",
+  "related"
 ];
 
 type Confirmation = Readonly<{
@@ -304,6 +313,231 @@ function ChoiceGroup<Value extends string>({
   );
 }
 
+function parseAliases(value: string): readonly string[] {
+  return value
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+function SceneAmbienceSection({
+  scene,
+  busy,
+  onCommand
+}: Readonly<{
+  scene: ProjectNavigatorScene;
+  busy: boolean;
+  onCommand(command: ProjectCommand): Promise<boolean>;
+}>) {
+  const [imageDraftUrl, setImageDraftUrl] = useState("");
+  const [imageDraftAlt, setImageDraftAlt] = useState("");
+  const [imageDraftCaption, setImageDraftCaption] = useState("");
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const audioRef = useRef<{ pause(): void; play(): Promise<void> } | null>(
+    null
+  );
+
+  useEffect(() => {
+    return () => {
+      audioRef.current?.pause();
+      audioRef.current = null;
+    };
+  }, [scene.id, scene.music?.url]);
+
+  async function playMusic(): Promise<void> {
+    if (scene.music === undefined) return;
+    if (typeof Audio === "undefined") return;
+    audioRef.current?.pause();
+    const audio = new Audio(scene.music.url);
+    audioRef.current = audio;
+    setMusicPlaying(true);
+    try {
+      await audio.play();
+      audio.onended = () => setMusicPlaying(false);
+    } catch {
+      setMusicPlaying(false);
+    }
+  }
+
+  function stopMusic(): void {
+    audioRef.current?.pause();
+    audioRef.current = null;
+    setMusicPlaying(false);
+  }
+
+  const imageRefs = scene.imageRefs ?? [];
+
+  return (
+    <Section title="Scene ambience">
+      <Text style={styles.help}>
+        Writer-owned URL references. Ghostwriter does not host or proxy these
+        files yet.
+      </Text>
+      <CommitField
+        disabled={busy}
+        emptyAsNull
+        label="Backdrop URL"
+        onCommit={(url) =>
+          runAmbience(onCommand, scene.id, {
+            backdrop:
+              url === null
+                ? null
+                : { url, caption: scene.backdrop?.caption }
+          })
+        }
+        value={scene.backdrop?.url ?? ""}
+      />
+      <CommitField
+        disabled={busy || scene.backdrop === undefined}
+        emptyAsNull
+        label="Backdrop caption"
+        onCommit={(caption) =>
+          scene.backdrop === undefined
+            ? Promise.resolve(false)
+            : runAmbience(onCommand, scene.id, {
+                backdrop: {
+                  url: scene.backdrop.url,
+                  ...(caption === null ? {} : { caption })
+                }
+              })
+        }
+        value={scene.backdrop?.caption ?? ""}
+      />
+      <CommitField
+        disabled={busy}
+        emptyAsNull
+        label="Music URL"
+        onCommit={(url) =>
+          runAmbience(onCommand, scene.id, {
+            music:
+              url === null ? null : { url, label: scene.music?.label }
+          })
+        }
+        value={scene.music?.url ?? ""}
+      />
+      <CommitField
+        disabled={busy || scene.music === undefined}
+        emptyAsNull
+        label="Music label"
+        onCommit={(label) =>
+          scene.music === undefined
+            ? Promise.resolve(false)
+            : runAmbience(onCommand, scene.id, {
+                music: {
+                  url: scene.music.url,
+                  ...(label === null ? {} : { label })
+                }
+              })
+        }
+        value={scene.music?.label ?? ""}
+      />
+      {scene.music === undefined ? null : (
+        <View style={[styles.actionRow, styles.spaced]}>
+          <Button
+            disabled={busy || musicPlaying}
+            label={musicPlaying ? "Playing…" : "Play music"}
+            onPress={() => void playMusic()}
+            primary
+          />
+          <Button
+            disabled={!musicPlaying}
+            label="Stop music"
+            onPress={stopMusic}
+          />
+        </View>
+      )}
+      <Text style={[styles.fieldLabel, styles.spaced]}>Image references</Text>
+      {imageRefs.map((image, index) => (
+        <View key={`${image.url}-${index}`} style={styles.imageRefCard}>
+          <Text style={styles.help}>
+            {image.alt}
+            {image.caption === undefined ? "" : ` · ${image.caption}`}
+          </Text>
+          <Text numberOfLines={1} style={styles.help}>
+            {image.url}
+          </Text>
+          <Button
+            danger
+            disabled={busy}
+            label="Remove image ref"
+            onPress={() =>
+              void runAmbience(onCommand, scene.id, {
+                imageRefs: imageRefs.filter((_, candidate) => candidate !== index)
+              })
+            }
+          />
+        </View>
+      ))}
+      <TextInput
+        accessibilityLabel="New image URL"
+        editable={!busy}
+        onChangeText={setImageDraftUrl}
+        placeholder="https://…"
+        placeholderTextColor={colors.muted}
+        style={styles.input}
+        value={imageDraftUrl}
+      />
+      <TextInput
+        accessibilityLabel="New image alt text"
+        editable={!busy}
+        onChangeText={setImageDraftAlt}
+        placeholder="Alt text"
+        placeholderTextColor={colors.muted}
+        style={[styles.input, styles.spaced]}
+        value={imageDraftAlt}
+      />
+      <TextInput
+        accessibilityLabel="New image caption"
+        editable={!busy}
+        onChangeText={setImageDraftCaption}
+        placeholder="Caption (optional)"
+        placeholderTextColor={colors.muted}
+        style={[styles.input, styles.spaced]}
+        value={imageDraftCaption}
+      />
+      <View style={styles.spaced}>
+        <Button
+          disabled={
+            busy ||
+            imageDraftUrl.trim().length === 0 ||
+            imageDraftAlt.trim().length === 0
+          }
+          label="Add image reference"
+          onPress={() => {
+            const next: SceneImageRef = {
+              url: imageDraftUrl.trim(),
+              alt: imageDraftAlt.trim(),
+              ...(imageDraftCaption.trim().length === 0
+                ? {}
+                : { caption: imageDraftCaption.trim() })
+            };
+            void runAmbience(onCommand, scene.id, {
+              imageRefs: [...imageRefs, next]
+            }).then((ok) => {
+              if (!ok) return;
+              setImageDraftUrl("");
+              setImageDraftAlt("");
+              setImageDraftCaption("");
+            });
+          }}
+        />
+      </View>
+    </Section>
+  );
+}
+
+async function runAmbience(
+  onCommand: (command: ProjectCommand) => Promise<boolean>,
+  sceneId: SceneId,
+  patch: Omit<Extract<ProjectCommand, { type: "scene.update" }>, "type" | "sceneId">
+): Promise<boolean> {
+  return onCommand({
+    type: "scene.update",
+    sceneId,
+    ...patch
+  });
+}
+
 function Section({
   title,
   children
@@ -368,6 +602,8 @@ export function SelectionInspector({
   const resolved = resolveManuscriptSelection(project, selection);
   const [confirmation, setConfirmation] = useState<Confirmation>();
   const [moveQuery, setMoveQuery] = useState("");
+  const [knowledgeLinkKind, setKnowledgeLinkKind] =
+    useState<StoryKnowledgeLinkKind>("related");
   const heading = selectionHeading(project, selection);
   const scenes = useMemo(() => allScenes(project), [project]);
   const selectedWorkspaceScene = scenes.find(
@@ -377,6 +613,7 @@ export function SelectionInspector({
   useEffect(() => {
     setConfirmation(undefined);
     setMoveQuery("");
+    setKnowledgeLinkKind("related");
   }, [selection]);
 
   async function run(command: ProjectCommand): Promise<boolean> {
@@ -620,7 +857,7 @@ export function SelectionInspector({
     );
     content = (
       <>
-        <Section title="Chapter details">
+        <Section title="Chapter folder">
           <CommitField
             disabled={busy}
             label="Chapter title"
@@ -628,7 +865,7 @@ export function SelectionInspector({
               title === null
                 ? Promise.resolve(false)
                 : run({
-                    type: "chapter.rename",
+                    type: "chapter.update",
                     bookId: book.id,
                     partId: part.id,
                     chapterId: chapter.id,
@@ -637,9 +874,26 @@ export function SelectionInspector({
             }
             value={chapter.title}
           />
+          <CommitField
+            disabled={busy}
+            emptyAsNull
+            label="Objectives and cast notes"
+            multiline
+            onCommit={(summary) =>
+              run({
+                type: "chapter.update",
+                bookId: book.id,
+                partId: part.id,
+                chapterId: chapter.id,
+                summary
+              })
+            }
+            value={chapter.summary ?? ""}
+          />
           <Text style={styles.help}>
             {chapter.scenes.length}{" "}
-            {chapter.scenes.length === 1 ? "scene" : "scenes"}
+            {chapter.scenes.length === 1 ? "scene" : "scenes"} · folder
+            description stays with the chapter, not manuscript order.
           </Text>
         </Section>
         <Section title="Order and safe removal">
@@ -783,6 +1037,11 @@ export function SelectionInspector({
               ))}
           </View>
         </Section>
+        <SceneAmbienceSection
+          busy={busy}
+          onCommand={onCommand}
+          scene={scene}
+        />
         <Section title="Manuscript placement">
           <Text style={styles.help}>
             {placement === undefined
@@ -881,13 +1140,41 @@ export function SelectionInspector({
     selection.kind === "unassigned" &&
     resolved.book !== undefined
   ) {
+    const book = resolved.book;
+    const firstPart = book.parts[0];
     content = (
       <Section title="Unassigned scenes">
         <Text style={styles.help}>
-          {resolved.book.unassignedScenes.length} scenes are outside a chapter
-          in {resolved.book.title}. Add here from the tree, or select a scene
-          to move it into a chapter.
+          {book.unassignedScenes.length} scenes are outside a chapter in{" "}
+          {book.title}. Unassigned is a system bucket — it cannot be renamed.
+          Select a scene to move it into a chapter folder.
         </Text>
+        <View style={styles.spaced}>
+          <Button
+            disabled={busy || firstPart === undefined}
+            label="Create a chapter folder from the tree to name a scene group with objectives."
+            onPress={() => {
+              if (firstPart === undefined) return;
+              void run({
+                type: "chapter.create",
+                bookId: book.id,
+                partId: firstPart.id,
+                title: "New chapter folder"
+              });
+            }}
+            primary
+          />
+        </View>
+        {firstPart === undefined ? (
+          <Text style={styles.refusal}>
+            Add a part from the tree before creating a chapter folder.
+          </Text>
+        ) : (
+          <Text style={styles.help}>
+            Creates a chapter under {firstPart.title}. Rename it and add
+            objectives in the inspector.
+          </Text>
+        )}
       </Section>
     );
   } else if (selection.kind === "storyKnowledgeRoot") {
@@ -953,6 +1240,102 @@ export function SelectionInspector({
             options={KNOWLEDGE_AUTHORITIES}
             value={knowledge.authority}
           />
+          <CommitField
+            disabled={busy}
+            emptyAsNull
+            label="Notes"
+            multiline
+            onCommit={(notes) =>
+              run({
+                type: "storyKnowledge.update",
+                storyKnowledgeId: knowledge.id,
+                notes
+              })
+            }
+            value={knowledge.notes ?? ""}
+          />
+          <CommitField
+            disabled={busy}
+            emptyAsNull
+            label="Aliases (comma-separated)"
+            onCommit={(aliases) =>
+              run({
+                type: "storyKnowledge.update",
+                storyKnowledgeId: knowledge.id,
+                aliases:
+                  aliases === null ? null : parseAliases(aliases)
+              })
+            }
+            value={(knowledge.aliases ?? []).join(", ")}
+          />
+        </Section>
+        <Section title="Knowledge relationships">
+          <Text style={styles.help}>
+            Link this record to other story knowledge with an explicit kind.
+          </Text>
+          <ChoiceGroup
+            disabled={busy}
+            label="Link kind"
+            onChange={async (kind) => {
+              setKnowledgeLinkKind(kind);
+              return true;
+            }}
+            options={KNOWLEDGE_LINK_KINDS}
+            value={knowledgeLinkKind}
+          />
+          <View style={[styles.actionRow, styles.spaced]}>
+            {project.storyKnowledge
+              .filter(
+                (candidate) =>
+                  candidate.id !== knowledge.id &&
+                  candidate.archivedAt === undefined
+              )
+              .map((candidate) => {
+                const linked = knowledge.linkedKnowledge.some(
+                  (link) =>
+                    link.toId === candidate.id &&
+                    link.kind === knowledgeLinkKind
+                );
+                return (
+                  <Button
+                    disabled={busy}
+                    key={candidate.id}
+                    label={
+                      linked
+                        ? `Unlink ${candidate.label}`
+                        : `Link ${candidate.label}`
+                    }
+                    onPress={() =>
+                      void run({
+                        type: "storyKnowledge.setKnowledgeLink",
+                        fromId: knowledge.id,
+                        toId: candidate.id,
+                        kind: knowledgeLinkKind,
+                        linked: !linked
+                      })
+                    }
+                    selected={linked}
+                  />
+                );
+              })}
+          </View>
+          {knowledge.linkedKnowledge.length === 0 ? (
+            <Text style={styles.help}>No knowledge links yet.</Text>
+          ) : (
+            knowledge.linkedKnowledge.map((link) => {
+              const peer = project.storyKnowledge.find(
+                (candidate) => candidate.id === link.toId
+              );
+              return (
+                <Text
+                  key={`${link.kind}:${link.toId}`}
+                  style={styles.help}
+                >
+                  {link.kind} → {peer?.label ?? link.toId}
+                </Text>
+              );
+            })
+          )}
         </Section>
         <Section title="Selected scene link">
           {selectedWorkspaceScene === undefined ? (
@@ -1204,6 +1587,15 @@ const styles = StyleSheet.create({
   },
   destinationList: {
     gap: 5
+  },
+  imageRefCard: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 7,
+    borderWidth: 1,
+    gap: 5,
+    marginBottom: 7,
+    padding: 8
   },
   button: {
     alignItems: "center",

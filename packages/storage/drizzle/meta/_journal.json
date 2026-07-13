@@ -50,6 +50,20 @@
       "when": 1783886344138,
       "tag": "0006_bumpy_black_cat",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1783905062836,
+      "tag": "0007_romantic_klaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783905558808,
+      "tag": "0008_burly_black_bolt",
+      "breakpoints": true
     }
   ]
 }

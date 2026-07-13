@@ -27,10 +27,15 @@ import {
   type ProjectMembership,
   type ProjectRole,
   type Scene,
+  type SceneBackdrop,
+  type SceneImageRef,
+  type SceneMusic,
   type SceneStatus,
   type StoryKnowledge,
   type StoryKnowledgeAuthority,
-  type StoryKnowledgeKind
+  type StoryKnowledgeKind,
+  type StoryKnowledgeLink,
+  type StoryKnowledgeLinkKind
 } from "@ghostwriter/core";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import {
@@ -51,6 +56,7 @@ import {
   projects,
   scenes,
   storyKnowledge,
+  storyKnowledgeLinks,
   storyKnowledgeScenes
 } from "./schema.js";
 
@@ -208,6 +214,9 @@ async function persistBuffer(
         status: scene.status,
         summary: scene.summary ?? null,
         povStoryKnowledgeId: scene.povStoryKnowledgeId ?? null,
+        backdrop: scene.backdrop ?? null,
+        music: scene.music ?? null,
+        imageRefs: scene.imageRefs === undefined ? null : [...scene.imageRefs],
         archivedAt: scene.archivedAt ?? null
       }))
     );
@@ -227,7 +236,8 @@ async function persistBuffer(
           id: chapter.id,
           partId: part.id,
           position: chapterIndex,
-          title: chapter.title
+          title: chapter.title,
+          summary: chapter.summary ?? null
         });
 
         chapter.sceneIds.forEach((sceneReference, sceneIndex) => {
@@ -260,12 +270,15 @@ async function persistBuffer(
         label: knowledge.label,
         kind: knowledge.kind,
         authority: knowledge.authority,
+        notes: knowledge.notes ?? null,
+        aliases: knowledge.aliases === undefined ? null : [...knowledge.aliases],
         archivedAt: knowledge.archivedAt ?? null
       }))
     );
   }
 
   const knowledgeSceneRows: Array<typeof storyKnowledgeScenes.$inferInsert> = [];
+  const knowledgeLinkRows: Array<typeof storyKnowledgeLinks.$inferInsert> = [];
   for (const knowledge of buffer.storyKnowledge) {
     knowledge.linkedSceneIds.forEach((sceneReference, index) => {
       knowledgeSceneRows.push({
@@ -274,9 +287,19 @@ async function persistBuffer(
         position: index
       });
     });
+    for (const link of knowledge.linkedKnowledge) {
+      knowledgeLinkRows.push({
+        fromId: knowledge.id,
+        toId: link.toId,
+        kind: link.kind
+      });
+    }
   }
   if (knowledgeSceneRows.length > 0) {
     await exec.insert(storyKnowledgeScenes).values(knowledgeSceneRows);
+  }
+  if (knowledgeLinkRows.length > 0) {
+    await exec.insert(storyKnowledgeLinks).values(knowledgeLinkRows);
   }
 
   if (buffer.editions.length > 0) {
@@ -317,6 +340,7 @@ type ReplacementRows = Readonly<{
   unassignedRows: Array<typeof bookUnassignedScenes.$inferInsert>;
   knowledgeRows: Array<typeof storyKnowledge.$inferInsert>;
   knowledgeSceneRows: Array<typeof storyKnowledgeScenes.$inferInsert>;
+  knowledgeLinkRows: Array<typeof storyKnowledgeLinks.$inferInsert>;
   editionRows: Array<typeof editions.$inferInsert>;
   editionRefRows: Array<typeof editionSceneRevisions.$inferInsert>;
 }>;
@@ -339,6 +363,7 @@ function replacementRows(records: ProjectRecords): ReplacementRows {
   const unassignedRows: ReplacementRows["unassignedRows"] = [];
   const knowledgeRows: ReplacementRows["knowledgeRows"] = [];
   const knowledgeSceneRows: ReplacementRows["knowledgeSceneRows"] = [];
+  const knowledgeLinkRows: ReplacementRows["knowledgeLinkRows"] = [];
   const editionRows: ReplacementRows["editionRows"] = [];
   const editionRefRows: ReplacementRows["editionRefRows"] = [];
 
@@ -361,7 +386,8 @@ function replacementRows(records: ProjectRecords): ReplacementRows {
           id: chapter.id,
           partId: part.id,
           position: chapterIndex,
-          title: chapter.title
+          title: chapter.title,
+          summary: chapter.summary ?? null
         });
 
         chapter.sceneIds.forEach((sceneReference, sceneIndex) => {
@@ -392,6 +418,9 @@ function replacementRows(records: ProjectRecords): ReplacementRows {
       status: scene.status,
       summary: scene.summary ?? null,
       povStoryKnowledgeId: scene.povStoryKnowledgeId ?? null,
+      backdrop: scene.backdrop ?? null,
+      music: scene.music ?? null,
+      imageRefs: scene.imageRefs === undefined ? null : [...scene.imageRefs],
       archivedAt: scene.archivedAt ?? null
     });
   }
@@ -403,6 +432,8 @@ function replacementRows(records: ProjectRecords): ReplacementRows {
       label: knowledge.label,
       kind: knowledge.kind,
       authority: knowledge.authority,
+      notes: knowledge.notes ?? null,
+      aliases: knowledge.aliases === undefined ? null : [...knowledge.aliases],
       archivedAt: knowledge.archivedAt ?? null
     });
 
@@ -413,6 +444,14 @@ function replacementRows(records: ProjectRecords): ReplacementRows {
         position: sceneIndex
       });
     });
+
+    for (const link of knowledge.linkedKnowledge) {
+      knowledgeLinkRows.push({
+        fromId: knowledge.id,
+        toId: link.toId,
+        kind: link.kind
+      });
+    }
   }
 
   for (const edition of records.editions) {
@@ -444,6 +483,7 @@ function replacementRows(records: ProjectRecords): ReplacementRows {
     unassignedRows,
     knowledgeRows,
     knowledgeSceneRows,
+    knowledgeLinkRows,
     editionRows,
     editionRefRows
   };
@@ -514,6 +554,9 @@ async function clearReplacementLinks(
     await exec
       .delete(storyKnowledgeScenes)
       .where(inArray(storyKnowledgeScenes.storyKnowledgeId, existing.knowledgeIds));
+    await exec
+      .delete(storyKnowledgeLinks)
+      .where(inArray(storyKnowledgeLinks.fromId, existing.knowledgeIds));
   }
   if (existing.editionIds.length > 0) {
     await exec
@@ -556,6 +599,8 @@ async function persistStableReplacementRows(
           label: row.label,
           kind: row.kind,
           authority: row.authority,
+          notes: row.notes,
+          aliases: row.aliases,
           archivedAt: row.archivedAt
         })
         .where(eq(storyKnowledge.id, row.id));
@@ -576,6 +621,9 @@ async function persistStableReplacementRows(
           status: row.status,
           summary: row.summary,
           povStoryKnowledgeId: row.povStoryKnowledgeId,
+          backdrop: row.backdrop,
+          music: row.music,
+          imageRefs: row.imageRefs,
           archivedAt: row.archivedAt
         })
         .where(eq(scenes.id, row.id));
@@ -608,7 +656,8 @@ async function persistStableReplacementRows(
         .set({
           partId: row.partId,
           position: row.position,
-          title: row.title
+          title: row.title,
+          summary: row.summary
         })
         .where(eq(manuscriptChapters.id, row.id));
     } else {
@@ -715,6 +764,9 @@ async function insertReplacementLinks(
   if (rows.knowledgeSceneRows.length > 0) {
     await exec.insert(storyKnowledgeScenes).values(rows.knowledgeSceneRows);
   }
+  if (rows.knowledgeLinkRows.length > 0) {
+    await exec.insert(storyKnowledgeLinks).values(rows.knowledgeLinkRows);
+  }
   if (rows.editionRefRows.length > 0) {
     await exec.insert(editionSceneRevisions).values(rows.editionRefRows);
   }
@@ -817,7 +869,8 @@ async function queryBooks(
         chapters.push({
           id: chapterId(chapter.id),
           title: chapter.title,
-          sceneIds: chapterSceneRows.map((entry) => sceneId(entry.sceneId))
+          sceneIds: chapterSceneRows.map((entry) => sceneId(entry.sceneId)),
+          ...(chapter.summary === null ? {} : { summary: chapter.summary })
         });
       }
 
@@ -866,6 +919,13 @@ async function queryScenes(
       ...(scene.povStoryKnowledgeId === null
         ? {}
         : { povStoryKnowledgeId: storyKnowledgeId(scene.povStoryKnowledgeId) }),
+      ...(scene.backdrop === null
+        ? {}
+        : { backdrop: scene.backdrop as SceneBackdrop }),
+      ...(scene.music === null ? {} : { music: scene.music as SceneMusic }),
+      ...(scene.imageRefs === null
+        ? {}
+        : { imageRefs: scene.imageRefs as SceneImageRef[] }),
       ...(scene.archivedAt === null ? {} : { archivedAt: scene.archivedAt })
     })
   );
@@ -887,6 +947,13 @@ async function queryStoryKnowledge(
       .from(storyKnowledgeScenes)
       .where(eq(storyKnowledgeScenes.storyKnowledgeId, knowledge.id))
       .orderBy(asc(storyKnowledgeScenes.position));
+    const knowledgeLinkRows = await exec
+      .select({
+        toId: storyKnowledgeLinks.toId,
+        kind: storyKnowledgeLinks.kind
+      })
+      .from(storyKnowledgeLinks)
+      .where(eq(storyKnowledgeLinks.fromId, knowledge.id));
 
     result.push(
       createStoryKnowledge({
@@ -896,6 +963,16 @@ async function queryStoryKnowledge(
         kind: knowledge.kind as StoryKnowledgeKind,
         authority: knowledge.authority as StoryKnowledgeAuthority,
         linkedSceneIds: linkRows.map((entry) => sceneId(entry.sceneId)),
+        linkedKnowledge: knowledgeLinkRows.map(
+          (entry): StoryKnowledgeLink => ({
+            toId: storyKnowledgeId(entry.toId),
+            kind: entry.kind as StoryKnowledgeLinkKind
+          })
+        ),
+        ...(knowledge.notes === null ? {} : { notes: knowledge.notes }),
+        ...(knowledge.aliases === null
+          ? {}
+          : { aliases: knowledge.aliases as string[] }),
         ...(knowledge.archivedAt === null
           ? {}
           : { archivedAt: knowledge.archivedAt })

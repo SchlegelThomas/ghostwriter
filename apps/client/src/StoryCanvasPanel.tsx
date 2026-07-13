@@ -5,11 +5,13 @@ import type {
   CanvasObject,
   CanvasObjectId,
   CanvasRevisionId,
+  CanvasScopePlacement,
   ProjectNavigator,
   ProjectNavigatorScene,
   SceneId,
   StoryKnowledgeId
 } from "@ghostwriter/core";
+import { resolveObjectGeometry } from "@ghostwriter/core";
 import {
   CANVAS_CAMERA_TRANSITION_MS,
   PROVISIONAL_BEAT_FIXTURE_SOURCE,
@@ -70,6 +72,33 @@ import {
 const { colors, fonts } = ghostwriterTheme;
 const OBJECT_NUDGE = 24;
 const OBJECT_RESIZE = 24;
+
+function canvasScopeRefFromDrill(scope: CanvasDrillScope): Readonly<{
+  scopeKind: "project" | "chapter" | "scene";
+  scopeId?: string;
+}> {
+  switch (scope.kind) {
+    case "project":
+      return { scopeKind: "project" };
+    case "chapter":
+      return { scopeKind: "chapter", scopeId: scope.chapterId };
+    case "scene":
+      return { scopeKind: "scene", scopeId: scope.sceneId };
+  }
+}
+
+function withResolvedGeometry(
+  object: CanvasObject,
+  placements: readonly CanvasScopePlacement[],
+  scope: CanvasDrillScope
+): CanvasObject {
+  const geometry = resolveObjectGeometry(
+    object,
+    placements,
+    canvasScopeRefFromDrill(scope)
+  );
+  return { ...object, ...geometry };
+}
 
 export type CanvasPanelMessage = Readonly<{
   kind: "error" | "conflict";
@@ -676,6 +705,7 @@ export function StoryCanvasPanel({
   viewportRef.current = viewport;
 
   const board = workspace?.board;
+  const scopePlacements = board?.scopePlacements ?? [];
   const scenes = useMemo(
     () => new Map(allScenes(project).map((scene) => [scene.id, scene])),
     [project]
@@ -683,6 +713,10 @@ export function StoryCanvasPanel({
   const selectedObject = board?.objects.find(
     (object) => object.id === selectedObjectId
   );
+  const selectedObjectDisplay =
+    selectedObject === undefined
+      ? undefined
+      : withResolvedGeometry(selectedObject, scopePlacements, drillScope);
   const selectedCanonicalState =
     selectedObject === undefined
       ? undefined
@@ -699,7 +733,9 @@ export function StoryCanvasPanel({
           drillScope,
           workflowLens
         );
-  const projectedObjects = lensProjection?.objects ?? activeObjects;
+  const projectedObjects = (lensProjection?.objects ?? activeObjects).map(
+    (object) => withResolvedGeometry(object, scopePlacements, drillScope)
+  );
   const projectedLinks = lensProjection?.links ?? [];
   const activeLinks =
     workflowLens === "relationships" ||
@@ -708,7 +744,10 @@ export function StoryCanvasPanel({
       ? projectedLinks
       : (board?.links.filter((link) => link.archivedAt === undefined) ?? []);
   const objectById = new Map(
-    (board?.objects ?? []).map((object) => [object.id, object])
+    (board?.objects ?? []).map((object) => [
+      object.id,
+      withResolvedGeometry(object, scopePlacements, drillScope)
+    ])
   );
   const outline =
     board === undefined || workspace === undefined
@@ -913,14 +952,28 @@ export function StoryCanvasPanel({
     x: number,
     y: number
   ): Promise<void> {
+    if (drillScope.kind === "project") {
+      await sendCommand({
+        type: "canvas.object.move",
+        objectId: object.id,
+        x,
+        y,
+        ...(object.parentRegionId === undefined
+          ? {}
+          : { parentRegionId: object.parentRegionId })
+      });
+      return;
+    }
+    const scope = canvasScopeRefFromDrill(drillScope);
     await sendCommand({
-      type: "canvas.object.move",
+      type: "canvas.object.setScopePlacement",
       objectId: object.id,
+      scopeKind: scope.scopeKind,
+      ...(scope.scopeId === undefined ? {} : { scopeId: scope.scopeId }),
       x,
       y,
-      ...(object.parentRegionId === undefined
-        ? {}
-        : { parentRegionId: object.parentRegionId })
+      width: object.width,
+      height: object.height
     });
   }
 
@@ -1386,6 +1439,178 @@ export function StoryCanvasPanel({
               ) : null}
             </View>
 
+            <Text style={styles.inspectorSectionTitle}>Typed links</Text>
+            <Text style={styles.emptyText}>
+              Select a second object below to connect story-knowledge cards and
+              scenes with a typed Canvas link. Drag objects to keep positions.
+            </Text>
+            <View style={styles.choiceRow}>
+              {(
+                [
+                  "pin",
+                  "thread",
+                  "beat",
+                  "dependency",
+                  "reference"
+                ] as const
+              ).map((kind) => (
+                <CanvasButton
+                  disabled={busy}
+                  key={kind}
+                  label={kind}
+                  onPress={() => setLinkKind(kind)}
+                  selected={linkKind === kind}
+                />
+              ))}
+            </View>
+            <Field
+              disabled={busy}
+              label="Link label (optional)"
+              onChangeText={setLinkLabel}
+              placeholder="What connects these?"
+              value={linkLabel}
+            />
+            <Text style={styles.fieldLabel}>Link to object</Text>
+            <View style={styles.choiceRow}>
+              {linkTargets.length === 0 ? (
+                <Text style={styles.emptyText}>Add another active object first.</Text>
+              ) : (
+                linkTargets.map((target) => (
+                  <CanvasButton
+                    disabled={busy}
+                    key={target.id}
+                    label={`${objectKindLabel(target)} · ${target.label}`}
+                    onPress={() => setLinkTargetId(target.id)}
+                    selected={linkTargetId === target.id}
+                  />
+                ))
+              )}
+            </View>
+            <View style={styles.actionRow}>
+              <CanvasButton
+                disabled={busy || linkTargetId === undefined}
+                label={`Create confirmed ${linkKind} link`}
+                onPress={() => createLink("confirmed")}
+                primary
+              />
+              <CanvasButton
+                disabled={busy || linkTargetId === undefined}
+                label={`Create provisional ${linkKind} fixture`}
+                onPress={() => createLink("provisional")}
+              />
+            </View>
+
+            <View style={styles.linkList}>
+              {relatedLinks.map((link) => {
+                const otherId =
+                  link.fromObjectId === selectedObject.id
+                    ? link.toObjectId
+                    : link.fromObjectId;
+                const other = objectById.get(otherId);
+                return (
+                  <Pressable
+                    accessibilityLabel={`Select ${link.kind} link to ${
+                      other?.label ?? "unavailable object"
+                    }`}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: link.id === selectedLinkId }}
+                    key={link.id}
+                    onPress={() => setSelectedLinkId(link.id)}
+                    style={[
+                      styles.linkRow,
+                      link.id === selectedLinkId && styles.linkRowSelected,
+                      link.authority === "provisional" &&
+                        styles.linkRowProvisional
+                    ]}
+                  >
+                    <Text style={styles.linkTitle}>
+                      {link.kind} · {other?.label ?? "Unavailable object"}
+                    </Text>
+                    <Text style={styles.linkMeta}>{linkStateLabel(link)}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {selectedLink === undefined ? null : (
+              <View style={styles.selectedLink}>
+                <Field
+                  disabled={busy || selectedLink.archivedAt !== undefined}
+                  label="Selected link label"
+                  onChangeText={setLinkLabel}
+                  value={linkLabel}
+                />
+                <View style={styles.actionRow}>
+                  <CanvasButton
+                    disabled={
+                      busy ||
+                      selectedLink.archivedAt !== undefined ||
+                      linkLabel.trim().length === 0
+                    }
+                    label="Save link label"
+                    onPress={() =>
+                      void sendCommand({
+                        type: "canvas.link.update",
+                        linkId: selectedLink.id,
+                        changes: { label: linkLabel.trim() }
+                      })
+                    }
+                  />
+                  {selectedLink.archivedAt === undefined ? (
+                    <CanvasButton
+                      danger
+                      disabled={busy}
+                      label="Archive link"
+                      onPress={() =>
+                        void sendCommand({
+                          type: "canvas.link.archive",
+                          linkId: selectedLink.id
+                        })
+                      }
+                    />
+                  ) : (
+                    <CanvasButton
+                      disabled={busy}
+                      label="Restore link"
+                      onPress={() =>
+                        void sendCommand({
+                          type: "canvas.link.restore",
+                          linkId: selectedLink.id
+                        })
+                      }
+                    />
+                  )}
+                  {selectedLink.authority === "provisional" &&
+                  selectedLink.archivedAt === undefined ? (
+                    <>
+                      <CanvasButton
+                        disabled={busy}
+                        label="Confirm link"
+                        onPress={() =>
+                          void sendCommand({
+                            type: "canvas.link.confirm",
+                            linkId: selectedLink.id
+                          })
+                        }
+                        primary
+                      />
+                      <CanvasButton
+                        danger
+                        disabled={busy}
+                        label="Dismiss link"
+                        onPress={() =>
+                          void sendCommand({
+                            type: "canvas.link.dismiss",
+                            linkId: selectedLink.id
+                          })
+                        }
+                      />
+                    </>
+                  ) : null}
+                </View>
+              </View>
+            )}
+
             {selectedObject.kind === "note" ? (
               <>
                 <Text style={styles.inspectorSectionTitle}>Note metadata</Text>
@@ -1572,9 +1797,9 @@ export function StoryCanvasPanel({
                   label={String(label)}
                   onPress={() =>
                     void moveObject(
-                      selectedObject,
-                      selectedObject.x + Number(dx),
-                      selectedObject.y + Number(dy)
+                      selectedObjectDisplay ?? selectedObject,
+                      (selectedObjectDisplay ?? selectedObject).x + Number(dx),
+                      (selectedObjectDisplay ?? selectedObject).y + Number(dy)
                     )
                   }
                 />
@@ -1684,174 +1909,6 @@ export function StoryCanvasPanel({
                   />
                 ))}
             </View>
-
-            <Text style={styles.inspectorSectionTitle}>Typed links</Text>
-            <View style={styles.choiceRow}>
-              {(
-                [
-                  "pin",
-                  "thread",
-                  "beat",
-                  "dependency",
-                  "reference"
-                ] as const
-              ).map((kind) => (
-                <CanvasButton
-                  disabled={busy}
-                  key={kind}
-                  label={kind}
-                  onPress={() => setLinkKind(kind)}
-                  selected={linkKind === kind}
-                />
-              ))}
-            </View>
-            <Field
-              disabled={busy}
-              label="Link label (optional)"
-              onChangeText={setLinkLabel}
-              placeholder="What connects these?"
-              value={linkLabel}
-            />
-            <Text style={styles.fieldLabel}>Link to object</Text>
-            <View style={styles.choiceRow}>
-              {linkTargets.length === 0 ? (
-                <Text style={styles.emptyText}>Add another active object first.</Text>
-              ) : (
-                linkTargets.map((target) => (
-                  <CanvasButton
-                    disabled={busy}
-                    key={target.id}
-                    label={target.label}
-                    onPress={() => setLinkTargetId(target.id)}
-                    selected={linkTargetId === target.id}
-                  />
-                ))
-              )}
-            </View>
-            <View style={styles.actionRow}>
-              <CanvasButton
-                disabled={busy || linkTargetId === undefined}
-                label={`Create confirmed ${linkKind} link`}
-                onPress={() => createLink("confirmed")}
-                primary
-              />
-              <CanvasButton
-                disabled={busy || linkTargetId === undefined}
-                label={`Create provisional ${linkKind} fixture`}
-                onPress={() => createLink("provisional")}
-              />
-            </View>
-
-            <View style={styles.linkList}>
-              {relatedLinks.map((link) => {
-                const otherId =
-                  link.fromObjectId === selectedObject.id
-                    ? link.toObjectId
-                    : link.fromObjectId;
-                const other = objectById.get(otherId);
-                return (
-                  <Pressable
-                    accessibilityLabel={`Select ${link.kind} link to ${
-                      other?.label ?? "unavailable object"
-                    }`}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: link.id === selectedLinkId }}
-                    key={link.id}
-                    onPress={() => setSelectedLinkId(link.id)}
-                    style={[
-                      styles.linkRow,
-                      link.id === selectedLinkId && styles.linkRowSelected,
-                      link.authority === "provisional" &&
-                        styles.linkRowProvisional
-                    ]}
-                  >
-                    <Text style={styles.linkTitle}>
-                      {link.kind} · {other?.label ?? "Unavailable object"}
-                    </Text>
-                    <Text style={styles.linkMeta}>{linkStateLabel(link)}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {selectedLink === undefined ? null : (
-              <View style={styles.selectedLink}>
-                <Field
-                  disabled={busy || selectedLink.archivedAt !== undefined}
-                  label="Selected link label"
-                  onChangeText={setLinkLabel}
-                  value={linkLabel}
-                />
-                <View style={styles.actionRow}>
-                  <CanvasButton
-                    disabled={
-                      busy ||
-                      selectedLink.archivedAt !== undefined ||
-                      linkLabel.trim().length === 0
-                    }
-                    label="Save link label"
-                    onPress={() =>
-                      void sendCommand({
-                        type: "canvas.link.update",
-                        linkId: selectedLink.id,
-                        changes: { label: linkLabel.trim() }
-                      })
-                    }
-                  />
-                  {selectedLink.archivedAt === undefined ? (
-                    <CanvasButton
-                      danger
-                      disabled={busy}
-                      label="Archive link"
-                      onPress={() =>
-                        void sendCommand({
-                          type: "canvas.link.archive",
-                          linkId: selectedLink.id
-                        })
-                      }
-                    />
-                  ) : (
-                    <CanvasButton
-                      disabled={busy}
-                      label="Restore link"
-                      onPress={() =>
-                        void sendCommand({
-                          type: "canvas.link.restore",
-                          linkId: selectedLink.id
-                        })
-                      }
-                    />
-                  )}
-                  {selectedLink.authority === "provisional" &&
-                  selectedLink.archivedAt === undefined ? (
-                    <>
-                      <CanvasButton
-                        disabled={busy}
-                        label="Confirm link"
-                        onPress={() =>
-                          void sendCommand({
-                            type: "canvas.link.confirm",
-                            linkId: selectedLink.id
-                          })
-                        }
-                        primary
-                      />
-                      <CanvasButton
-                        danger
-                        disabled={busy}
-                        label="Dismiss link"
-                        onPress={() =>
-                          void sendCommand({
-                            type: "canvas.link.dismiss",
-                            linkId: selectedLink.id
-                          })
-                        }
-                      />
-                    </>
-                  ) : null}
-                </View>
-              </View>
-            )}
           </>
         )}
       </View>
@@ -1923,6 +1980,15 @@ export function StoryCanvasPanel({
                 label="Outline"
                 onPress={() => setView("outline")}
                 selected={view === "outline"}
+              />
+              <CanvasButton
+                disabled={busy || selectedObject === undefined}
+                label="Link objects"
+                onPress={() => {
+                  if (selectedObject === undefined) return;
+                  setShowInspector(true);
+                }}
+                primary={selectedObject !== undefined}
               />
             </>
           ) : (

@@ -26,12 +26,39 @@ import { ghostwriterTheme } from "./theme.js";
 
 const { colors, fonts } = ghostwriterTheme;
 
+export type ReaderVoicePack = "default" | "narrative" | "noir" | "soft";
+
 export type BookReaderPanelProps = Readonly<{
   projection?: BookReaderProjection;
   busy?: boolean;
   error?: string;
+  voicePack?: ReaderVoicePack;
+  speaking?: boolean;
   onExit(): void;
+  onVoicePackChange?(pack: ReaderVoicePack): void;
+  onSpeak?(text: string, voicePack: ReaderVoicePack): void | Promise<void>;
+  onStopSpeak?(): void;
 }>;
+
+const VOICE_PACKS: readonly ReaderVoicePack[] = [
+  "default",
+  "narrative",
+  "noir",
+  "soft"
+];
+
+function blocksToSpeechText(blocks: readonly SceneBlockV1[]): string {
+  return blocks
+    .map((block) => {
+      if (block.type === "horizontalRule") return "";
+      if (block.type === "blockquote") {
+        return blocksToSpeechText(block.content);
+      }
+      return inlineText(block.content);
+    })
+    .filter((part) => part.trim().length > 0)
+    .join("\n\n");
+}
 
 function inlineText(nodes: readonly SceneInlineNodeV1[] | undefined): string {
   if (nodes === undefined) return "";
@@ -138,12 +165,96 @@ function sceneLinksForSpread(
   return links;
 }
 
+function VoiceControls({
+  voicePack,
+  speaking,
+  disabled,
+  onVoicePackChange,
+  onSpeak,
+  onStopSpeak,
+  speechText
+}: Readonly<{
+  voicePack: ReaderVoicePack;
+  speaking: boolean;
+  disabled?: boolean;
+  onVoicePackChange?(pack: ReaderVoicePack): void;
+  onSpeak?(text: string, voicePack: ReaderVoicePack): void | Promise<void>;
+  onStopSpeak?(): void;
+  speechText: string;
+}>) {
+  if (onSpeak === undefined && onStopSpeak === undefined) return null;
+  return (
+    <View style={styles.voiceControls}>
+      <Text style={styles.voiceLabel}>Voice</Text>
+      <View style={styles.voicePackRow}>
+        {VOICE_PACKS.map((pack) => (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: voicePack === pack }}
+            disabled={disabled}
+            key={pack}
+            onPress={() => onVoicePackChange?.(pack)}
+            style={[
+              styles.voicePackButton,
+              voicePack === pack && styles.voicePackButtonSelected
+            ]}
+          >
+            <Text
+              style={[
+                styles.voicePackText,
+                voicePack === pack && styles.voicePackTextSelected
+              ]}
+            >
+              {pack}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      <View style={styles.voiceActionRow}>
+        <Pressable
+          accessibilityRole="button"
+          disabled={
+            disabled ||
+            speaking ||
+            onSpeak === undefined ||
+            speechText.trim().length === 0
+          }
+          onPress={() => void onSpeak?.(speechText, voicePack)}
+          style={[styles.navButton, styles.voicePlayButton]}
+        >
+          <Text style={[styles.navButtonText, styles.voicePlayButtonText]}>
+            Play
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={disabled || !speaking || onStopSpeak === undefined}
+          onPress={() => onStopSpeak?.()}
+          style={styles.navButton}
+        >
+          <Text style={styles.navButtonText}>Stop</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 function WideReader({
   projection,
-  onExit
+  onExit,
+  voicePack,
+  speaking,
+  onVoicePackChange,
+  onSpeak,
+  onStopSpeak
 }: Readonly<{
   projection: BookReaderProjection;
   onExit(): void;
+  voicePack: ReaderVoicePack;
+  speaking: boolean;
+  onVoicePackChange?(pack: ReaderVoicePack): void;
+  onSpeak?(text: string, voicePack: ReaderVoicePack): void | Promise<void>;
+  onStopSpeak?(): void;
 }>) {
   const pages = useMemo(
     () => paginateBookReaderProjection(projection),
@@ -161,6 +272,11 @@ function WideReader({
   >(projection.chapters[0]?.id);
   const spread = spreads[spreadIndex] ?? spreads[0];
   const links = sceneLinksForSpread(projection, spreadIndex, pages);
+  const speechText = useMemo(() => {
+    const left = (spread?.left?.blocks ?? []).map((entry) => entry.block);
+    const right = (spread?.right?.blocks ?? []).map((entry) => entry.block);
+    return blocksToSpeechText([...left, ...right]);
+  }, [spread]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -186,7 +302,7 @@ function WideReader({
           <Text style={styles.exitButtonText}>Exit reader</Text>
         </Pressable>
         <View style={styles.readerHeading}>
-          <Text style={styles.readerEyebrow}>Book reader</Text>
+          <Text style={styles.readerEyebrow}>Bound reader</Text>
           <Text style={styles.readerTitle}>{projection.bookTitle}</Text>
         </View>
         <Pressable
@@ -237,21 +353,42 @@ function WideReader({
         ))}
       </ScrollView>
 
+      <VoiceControls
+        onSpeak={onSpeak}
+        onStopSpeak={onStopSpeak}
+        onVoicePackChange={onVoicePackChange}
+        speaking={speaking}
+        speechText={speechText}
+        voicePack={voicePack}
+      />
+
       <View style={styles.spreadRegion}>
         <Text style={styles.runningHeader}>
-          {spread?.left?.runningHeader ?? spread?.right?.runningHeader ?? projection.bookTitle}
+          {spread?.left?.runningHeader ??
+            spread?.right?.runningHeader ??
+            projection.bookTitle}
         </Text>
-        <View style={styles.spread}>
-          <View style={[styles.page, styles.pageLeft]}>
-            <PageContent
-              blocks={(spread?.left?.blocks ?? []).map((entry) => entry.block)}
-            />
-          </View>
-          <View style={styles.spine} />
-          <View style={[styles.page, styles.pageRight]}>
-            <PageContent
-              blocks={(spread?.right?.blocks ?? []).map((entry) => entry.block)}
-            />
+        <View style={styles.spreadShell}>
+          <View style={styles.spread}>
+            <View style={[styles.page, styles.pageLeft]}>
+              <PageContent
+                blocks={(spread?.left?.blocks ?? []).map((entry) => entry.block)}
+              />
+              <Text style={[styles.pageNumber, styles.pageNumberLeft]}>
+                {spread?.left === undefined ? " " : spread.left.index + 1}
+              </Text>
+            </View>
+            <View style={styles.spine}>
+              <View style={styles.spineShadow} />
+            </View>
+            <View style={[styles.page, styles.pageRight]}>
+              <PageContent
+                blocks={(spread?.right?.blocks ?? []).map((entry) => entry.block)}
+              />
+              <Text style={[styles.pageNumber, styles.pageNumberRight]}>
+                {spread?.right === undefined ? " " : spread.right.index + 1}
+              </Text>
+            </View>
           </View>
         </View>
         <LinksRail links={links} visible={linksVisible} />
@@ -289,10 +426,20 @@ function WideReader({
 
 function NarrowReader({
   projection,
-  onExit
+  onExit,
+  voicePack,
+  speaking,
+  onVoicePackChange,
+  onSpeak,
+  onStopSpeak
 }: Readonly<{
   projection: BookReaderProjection;
   onExit(): void;
+  voicePack: ReaderVoicePack;
+  speaking: boolean;
+  onVoicePackChange?(pack: ReaderVoicePack): void;
+  onSpeak?(text: string, voicePack: ReaderVoicePack): void | Promise<void>;
+  onStopSpeak?(): void;
 }>) {
   const scrollRef = useRef<ScrollView>(null);
   const landmarkOffsets = useRef(new Map<string, number>());
@@ -305,6 +452,13 @@ function NarrowReader({
   });
 
   const currentScene = projection.scenes[sceneIndex];
+  const speechText = useMemo(
+    () =>
+      currentScene === undefined
+        ? ""
+        : blocksToSpeechText(currentScene.document.document.content),
+    [currentScene]
+  );
 
   return (
     <View style={styles.readerScreen}>
@@ -313,10 +467,19 @@ function NarrowReader({
           <Text style={styles.exitButtonText}>Exit reader</Text>
         </Pressable>
         <View style={styles.readerHeading}>
-          <Text style={styles.readerEyebrow}>Book reader</Text>
+          <Text style={styles.readerEyebrow}>Bound reader</Text>
           <Text style={styles.readerTitle}>{projection.bookTitle}</Text>
         </View>
       </View>
+
+      <VoiceControls
+        onSpeak={onSpeak}
+        onStopSpeak={onStopSpeak}
+        onVoicePackChange={onVoicePackChange}
+        speaking={speaking}
+        speechText={speechText}
+        voicePack={voicePack}
+      />
 
       <ScrollView
         horizontal
@@ -418,7 +581,12 @@ export function BookReaderPanel({
   projection,
   busy = false,
   error,
-  onExit
+  voicePack = "default",
+  speaking = false,
+  onExit,
+  onVoicePackChange,
+  onSpeak,
+  onStopSpeak
 }: BookReaderPanelProps) {
   const { width } = useWindowDimensions();
   const narrow = width < 760;
@@ -445,21 +613,37 @@ export function BookReaderPanel({
   }
 
   return narrow ? (
-    <NarrowReader onExit={onExit} projection={projection} />
+    <NarrowReader
+      onExit={onExit}
+      onSpeak={onSpeak}
+      onStopSpeak={onStopSpeak}
+      onVoicePackChange={onVoicePackChange}
+      projection={projection}
+      speaking={speaking}
+      voicePack={voicePack}
+    />
   ) : (
-    <WideReader onExit={onExit} projection={projection} />
+    <WideReader
+      onExit={onExit}
+      onSpeak={onSpeak}
+      onStopSpeak={onStopSpeak}
+      onVoicePackChange={onVoicePackChange}
+      projection={projection}
+      speaking={speaking}
+      voicePack={voicePack}
+    />
   );
 }
 
 const styles = StyleSheet.create({
   readerScreen: {
-    backgroundColor: colors.paper,
+    backgroundColor: "#e8dfd0",
     flex: 1,
     minHeight: 0
   },
   readerTopbar: {
     alignItems: "center",
-    backgroundColor: colors.topbar,
+    backgroundColor: "#f4eee4",
     borderBottomColor: colors.line,
     borderBottomWidth: 1,
     flexDirection: "row",
@@ -516,7 +700,7 @@ const styles = StyleSheet.create({
     color: colors.accent
   },
   chapterTabs: {
-    backgroundColor: colors.wash,
+    backgroundColor: "#efe6d8",
     maxHeight: 44
   },
   chapterTab: {
@@ -536,6 +720,57 @@ const styles = StyleSheet.create({
   chapterTabTextSelected: {
     color: colors.accent
   },
+  voiceControls: {
+    backgroundColor: "#f7f1e7",
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10
+  },
+  voiceLabel: {
+    color: colors.muted,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 8,
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
+  },
+  voicePackRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6
+  },
+  voicePackButton: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 5
+  },
+  voicePackButtonSelected: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent
+  },
+  voicePackText: {
+    color: colors.muted,
+    fontFamily: fonts.uiMedium,
+    fontSize: 9
+  },
+  voicePackTextSelected: {
+    color: colors.accent
+  },
+  voiceActionRow: {
+    flexDirection: "row",
+    gap: 8
+  },
+  voicePlayButton: {
+    backgroundColor: colors.brandDark,
+    borderColor: colors.brandDark
+  },
+  voicePlayButtonText: {
+    color: "#ffffff"
+  },
   spreadRegion: {
     flex: 1,
     padding: 16
@@ -544,42 +779,74 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontFamily: fonts.ui,
     fontSize: 9,
+    letterSpacing: 0.6,
     marginBottom: 8,
-    textAlign: "center"
+    textAlign: "center",
+    textTransform: "uppercase"
+  },
+  spreadShell: {
+    flex: 1,
+    minHeight: 360,
+    shadowColor: "#3a2f24",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18
   },
   spread: {
+    backgroundColor: "#d9cdb8",
+    borderRadius: 4,
     flex: 1,
     flexDirection: "row",
     gap: 0,
-    minHeight: 360
+    minHeight: 360,
+    overflow: "hidden"
   },
   page: {
-    backgroundColor: colors.panel,
-    borderColor: colors.documentLine,
-    borderWidth: 1,
+    backgroundColor: "#f7f0e4",
     flex: 1,
-    padding: 24
+    paddingBottom: 28,
+    paddingHorizontal: 28,
+    paddingTop: 24,
+    position: "relative"
   },
   pageLeft: {
-    borderRightWidth: 0,
-    borderTopRightRadius: 0,
-    borderBottomRightRadius: 0
+    borderRightWidth: 0
   },
   pageRight: {
-    borderLeftWidth: 0,
-    borderTopLeftRadius: 0,
-    borderBottomLeftRadius: 0
+    borderLeftWidth: 0
   },
   spine: {
-    backgroundColor: colors.line,
-    width: 10
+    backgroundColor: "#c9b89f",
+    position: "relative",
+    width: 14
+  },
+  spineShadow: {
+    backgroundColor: "rgba(60, 45, 30, 0.18)",
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0
+  },
+  pageNumber: {
+    bottom: 10,
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 9,
+    position: "absolute"
+  },
+  pageNumberLeft: {
+    left: 24
+  },
+  pageNumberRight: {
+    right: 24
   },
   paragraph: {
     color: colors.ink,
     fontFamily: fonts.story,
-    fontSize: 16,
-    lineHeight: 26,
-    marginBottom: 12
+    fontSize: 17,
+    lineHeight: 28,
+    marginBottom: 14
   },
   heading: {
     color: colors.ink,

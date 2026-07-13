@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Record log — Writer workspace depth</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Delivery record</p>
+      <h1>Writer workspace depth</h1>
+    </header>
+
+    <article>
+      <h2>2026-07-12 20:10 — Founder live review expands depth scope</h2>
+      <p>On the Consciousness project, the founder identified: Unassigned/folder naming with objectives/cast description; tree and Canvas drag-drop; per-layer Canvas coordinates; story-knowledge relationships (characters, development cycles, theme breadcrumbs); scene backdrop/music/images; deeper knowledge records; book-like Reader; ElevenLabs voice selection (pattern from peer <code>wrapper</code> repo); in-app MCP chat; OpenAI key later.</p>
+      <p>Decisions locked for autonomous delivery: chapters are named scene folders with summary/objectives; Unassigned stays a system bucket; media v1 is URL+metadata; knowledge gains notes/aliases/K↔K links; Canvas stores scope-keyed placements; TTS is server-side ElevenLabs; MCP chat ships tool-capable UI before LLM completion.</p>
+      <p>ADRs 0008 and 0009 drafted. Implementation begins at Checkpoint A on <code>feat/authenticated-project-crud</code>.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 20:20 — Writer-visible UI checkpoints A–F landed</h2>
+      <p>UI agent coordinated with concurrent domain/storage work. Navigator now projects chapter summary, scene ambience, and knowledge notes/aliases/links. Inspector edits chapter title+objectives via <code>chapter.update</code>; Unassigned offers a primary create-chapter path; scene ambience and knowledge depth fields commit through existing commands. Manuscript tree gains HTML5 scene drag-drop with drop highlights while Alt+Arrow reorder remains. Canvas typed-link controls moved to the top of the object inspector with a toolbar “Link objects” entry. Book Reader gains cream paper chrome, voice pack selector, and play/stop wired to <code>POST /api/reader/speak</code>. <code>WorkspaceChatPanel</code> docks from the rail and echoes capability matches via <code>POST /api/workspace/chat</code>. ElevenLabs port lives in <code>apps/backend/src/voice.ts</code>.</p>
+      <p><strong>Evidence:</strong> <code>pnpm verify</code> — 152 tests passed.</p>
+      <p><strong>Remaining gaps:</strong> Canvas scope-keyed placements (checkpoint C) still need domain+UI if not finished by sibling; storage persistence of depth fields depends on sibling migration <code>0007</code>; Reader TTS returns 503 without <code>ELEVENLABS_API_KEY</code>; chat is tool-echo only until OpenAI; no new Playwright journey for DnD/TTS/chat yet; plan todos / WHERE-I-LEFT-OFF not archived.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 20:45 — Checkpoint C Canvas scope placements</h2>
+      <p>Implemented ADR 0009 scope-keyed placements end-to-end: core types + <code>resolveObjectGeometry</code> + <code>canvas.object.setScopePlacement</code>; board carries <code>scopePlacements</code>; migration <code>0008_burly_black_bolt</code> adds <code>canvas_scope_placements</code>; memory/Postgres repositories round-trip placements; API contract accepts the command; Story Canvas renders resolved geometry per drill scope and writes placements on non-project drag.</p>
+      <p><strong>API shape:</strong> board responses include <code>scopePlacements[]</code>; new command <code>canvas.object.setScopePlacement</code> with <code>{ objectId, scopeKind, scopeId?, x, y, width?, height? }</code>. Project scope also updates global object geometry.</p>
+      <p><strong>Evidence:</strong> <code>pnpm verify</code> — 157 tests passed.</p>
+    </article>
+  </main>
+</body>
+</html>

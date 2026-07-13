@@ -151,6 +151,9 @@ export const scenes = pgTable("scenes", {
   status: text("status").notNull(),
   summary: text("summary"),
   povStoryKnowledgeId: text("pov_story_knowledge_id"),
+  backdrop: jsonb("backdrop"),
+  music: jsonb("music"),
+  imageRefs: jsonb("image_refs"),
   archivedAt: text("archived_at")
 });
 
@@ -279,7 +282,8 @@ export const manuscriptChapters = pgTable("manuscript_chapters", {
     .notNull()
     .references(() => manuscriptParts.id, { onDelete: "cascade" }),
   position: integer("position").notNull(),
-  title: text("title").notNull()
+  title: text("title").notNull(),
+  summary: text("summary")
 });
 
 export const manuscriptChapterScenes = pgTable(
@@ -318,6 +322,8 @@ export const storyKnowledge = pgTable("story_knowledge", {
   label: text("label").notNull(),
   kind: text("kind").notNull(),
   authority: text("authority").notNull(),
+  notes: text("notes"),
+  aliases: jsonb("aliases"),
   archivedAt: text("archived_at")
 });
 
@@ -333,6 +339,20 @@ export const storyKnowledgeScenes = pgTable(
     position: integer("position").notNull()
   },
   (table) => [primaryKey({ columns: [table.storyKnowledgeId, table.sceneId] })]
+);
+
+export const storyKnowledgeLinks = pgTable(
+  "story_knowledge_links",
+  {
+    fromId: text("from_id")
+      .notNull()
+      .references(() => storyKnowledge.id, { onDelete: "cascade" }),
+    toId: text("to_id")
+      .notNull()
+      .references(() => storyKnowledge.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull()
+  },
+  (table) => [primaryKey({ columns: [table.fromId, table.toId, table.kind] })]
 );
 
 export const canvasBoards = pgTable("canvas_boards", {
@@ -462,6 +482,33 @@ export const canvasLinks = pgTable(
   ]
 );
 
+export const canvasScopePlacements = pgTable(
+  "canvas_scope_placements",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => canvasBoards.projectId, { onDelete: "cascade" }),
+    objectId: text("object_id")
+      .notNull()
+      .references(() => canvasObjects.id, { onDelete: "cascade" }),
+    scopeKind: text("scope_kind").notNull(),
+    /** Empty string means no scope id (project lens). */
+    scopeId: text("scope_id").notNull().default(""),
+    x: doublePrecision("x").notNull(),
+    y: doublePrecision("y").notNull(),
+    width: doublePrecision("width"),
+    height: doublePrecision("height")
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.projectId, table.objectId, table.scopeKind, table.scopeId],
+      name: "canvas_scope_placements_pk"
+    }),
+    index("canvas_scope_placements_project_id_index").on(table.projectId),
+    index("canvas_scope_placements_object_id_index").on(table.objectId)
+  ]
+);
+
 export const canvasViewportPreferences = pgTable(
   "canvas_viewport_preferences",
   {
@@ -577,9 +624,11 @@ export const ghostwriterSchema = {
   bookUnassignedScenes,
   storyKnowledge,
   storyKnowledgeScenes,
+  storyKnowledgeLinks,
   canvasBoards,
   canvasObjects,
   canvasLinks,
+  canvasScopePlacements,
   canvasViewportPreferences,
   canvasRevisions,
   editions,

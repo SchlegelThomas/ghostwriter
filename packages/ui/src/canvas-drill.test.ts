@@ -151,7 +151,8 @@ const board: CanvasBoard = {
       authority: "provisional",
       sourceKey: "fixture:beat:link"
     }
-  ]
+  ],
+  scopePlacements: []
 };
 
 describe("canvas drill stack", () => {

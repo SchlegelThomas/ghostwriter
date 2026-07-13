@@ -7,11 +7,15 @@ import {
   type ProjectId,
   type ProjectRecords,
   type Scene,
+  type SceneBackdrop,
   type SceneId,
+  type SceneImageRef,
+  type SceneMusic,
   type SceneStatus,
   type StoryKnowledgeAuthority,
   type StoryKnowledgeId,
   type StoryKnowledgeKind,
+  type StoryKnowledgeLink,
   validateProjectRecords
 } from "./domain.js";
 
@@ -21,12 +25,16 @@ export type ProjectNavigatorScene = Readonly<{
   status: SceneStatus;
   summary?: string;
   povStoryKnowledgeId?: StoryKnowledgeId;
+  backdrop?: SceneBackdrop;
+  music?: SceneMusic;
+  imageRefs?: readonly SceneImageRef[];
   archivedAt?: string;
 }>;
 
 export type ProjectNavigatorChapter = Readonly<{
   id: ChapterId;
   title: string;
+  summary?: string;
   scenes: readonly ProjectNavigatorScene[];
 }>;
 
@@ -61,6 +69,9 @@ export type ProjectNavigatorKnowledge = Readonly<{
   authority: StoryKnowledgeAuthority;
   linkedSceneIds: readonly SceneId[];
   linkedSceneCount: number;
+  linkedKnowledge: readonly StoryKnowledgeLink[];
+  notes?: string;
+  aliases?: readonly string[];
   archivedAt?: string;
 }>;
 
@@ -104,6 +115,9 @@ function requireScene(
     ...(scene.povStoryKnowledgeId === undefined
       ? {}
       : { povStoryKnowledgeId: scene.povStoryKnowledgeId }),
+    ...(scene.backdrop === undefined ? {} : { backdrop: scene.backdrop }),
+    ...(scene.music === undefined ? {} : { music: scene.music }),
+    ...(scene.imageRefs === undefined ? {} : { imageRefs: scene.imageRefs }),
     ...(scene.archivedAt === undefined ? {} : { archivedAt: scene.archivedAt })
   });
 }
@@ -132,6 +146,7 @@ export function projectNavigatorFromRecords(records: ProjectRecords): ProjectNav
             Object.freeze({
               id: chapter.id,
               title: chapter.title,
+              ...(chapter.summary === undefined ? {} : { summary: chapter.summary }),
               scenes: freezeList(
                 chapter.sceneIds.map((sceneId) => requireScene(sceneById, sceneId))
               )
@@ -176,6 +191,11 @@ export function projectNavigatorFromRecords(records: ProjectRecords): ProjectNav
         authority: knowledge.authority,
         linkedSceneIds: freezeList(knowledge.linkedSceneIds),
         linkedSceneCount: knowledge.linkedSceneIds.length,
+        linkedKnowledge: freezeList(knowledge.linkedKnowledge),
+        ...(knowledge.notes === undefined ? {} : { notes: knowledge.notes }),
+        ...(knowledge.aliases === undefined
+          ? {}
+          : { aliases: freezeList(knowledge.aliases) }),
         ...(knowledge.archivedAt === undefined
           ? {}
           : { archivedAt: knowledge.archivedAt })

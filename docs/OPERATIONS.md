@@ -63,6 +63,11 @@ fly secrets import --app ghostwriter-backend --stage
 # Deploy the staged values with the feature release.
 ```
 
+Optional Reader TTS: set `ELEVENLABS_API_KEY` (and optional `ELEVENLABS_VOICE_DEFAULT`,
+`ELEVENLABS_VOICE_NARRATIVE`, `ELEVENLABS_VOICE_NOIR`, `ELEVENLABS_VOICE_SOFT`) on the backend.
+Without the key, `POST /api/reader/speak` returns `503 VOICE_UNAVAILABLE` and the Reader UI stays
+usable. Optional later chat completion: `OPENAI_API_KEY` — until set, the MCP chat dock is
+tool-invoke only.
 `BETTER_AUTH_URL` and `AUTH_TRUSTED_ORIGINS` are non-secret values in
 `apps/backend/fly.toml`. Google requires exact redirect registration and has no wildcard branch
 callback, so required CI uses the hermetic identity boundary; a real Google login is a separate

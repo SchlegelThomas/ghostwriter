@@ -239,6 +239,8 @@ export function canvasHistoryLabel(revision: CanvasRevisionMetadata): string {
       return "Object moved";
     case "canvas.object.resize":
       return "Object resized";
+    case "canvas.object.setScopePlacement":
+      return "Scope placement updated";
     case "canvas.object.archive":
       return "Object archived";
     case "canvas.object.restore":

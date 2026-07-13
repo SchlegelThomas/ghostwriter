@@ -35,7 +35,7 @@ const ids = () =>
     chapter: ["chapter-one", "chapter-two"],
     scene: ["scene-one"],
     sceneDocumentBlock: [],
-    storyKnowledge: ["knowledge-one"],
+    storyKnowledge: ["knowledge-one", "knowledge-two"],
     edition: [],
     revision: [],
     sceneVariant: [],
@@ -252,6 +252,156 @@ describe("project commands", () => {
         chapters: [{ id: chapterId("chapter-two"), title: "Second Chapter" }]
       }
     ]);
+  });
+
+  it("updates chapter summary, scene ambience URLs, and knowledge depth", async () => {
+    const { execute } = await setup();
+    let navigator = await execute(1, {
+      type: "part.create",
+      bookId: bookId("book-one"),
+      title: "Part One"
+    });
+    navigator = await execute(navigator.version, {
+      type: "chapter.create",
+      bookId: bookId("book-one"),
+      partId: partId("part-one"),
+      title: "Chapter One"
+    });
+    navigator = await execute(navigator.version, {
+      type: "chapter.update",
+      bookId: bookId("book-one"),
+      partId: partId("part-one"),
+      chapterId: chapterId("chapter-one"),
+      summary: "Objectives: land Mara on the island."
+    });
+    navigator = await execute(navigator.version, {
+      type: "scene.create",
+      bookId: bookId("book-one"),
+      chapterId: chapterId("chapter-one"),
+      title: "Opening"
+    });
+    navigator = await execute(navigator.version, {
+      type: "storyKnowledge.create",
+      label: "Mara",
+      kind: "character",
+      authority: "planned"
+    });
+    navigator = await execute(navigator.version, {
+      type: "storyKnowledge.create",
+      label: "Bellwether",
+      kind: "location",
+      authority: "confirmed"
+    });
+    navigator = await execute(navigator.version, {
+      type: "scene.update",
+      sceneId: sceneId("scene-one"),
+      backdrop: {
+        url: "https://cdn.example.com/backdrop.jpg",
+        caption: "Fog over the harbor"
+      },
+      music: { url: "https://cdn.example.com/score.mp3", label: "Harbor theme" },
+      imageRefs: [
+        {
+          url: "https://cdn.example.com/mara.png",
+          alt: "Mara at the pier",
+          caption: "Reference still"
+        }
+      ]
+    });
+    navigator = await execute(navigator.version, {
+      type: "storyKnowledge.update",
+      storyKnowledgeId: storyKnowledgeId("knowledge-one"),
+      notes: "Answers every late-night call.",
+      aliases: ["Caller", "M. Venn"]
+    });
+    navigator = await execute(navigator.version, {
+      type: "storyKnowledge.setKnowledgeLink",
+      fromId: storyKnowledgeId("knowledge-one"),
+      toId: storyKnowledgeId("knowledge-two"),
+      kind: "cast",
+      linked: true
+    });
+
+    expect(navigator.books[0]?.parts[0]?.chapters[0]).toMatchObject({
+      id: chapterId("chapter-one"),
+      summary: "Objectives: land Mara on the island."
+    });
+    expect(navigator.books[0]?.parts[0]?.chapters[0]?.scenes[0]).toMatchObject({
+      backdrop: {
+        url: "https://cdn.example.com/backdrop.jpg",
+        caption: "Fog over the harbor"
+      },
+      music: { url: "https://cdn.example.com/score.mp3", label: "Harbor theme" },
+      imageRefs: [
+        {
+          url: "https://cdn.example.com/mara.png",
+          alt: "Mara at the pier",
+          caption: "Reference still"
+        }
+      ]
+    });
+    expect(
+      navigator.storyKnowledge.find(
+        (knowledge) => knowledge.id === storyKnowledgeId("knowledge-one")
+      )
+    ).toMatchObject({
+      notes: "Answers every late-night call.",
+      aliases: ["Caller", "M. Venn"],
+      linkedKnowledge: [
+        { toId: storyKnowledgeId("knowledge-two"), kind: "cast" }
+      ]
+    });
+
+    await expect(
+      execute(navigator.version, {
+        type: "scene.update",
+        sceneId: sceneId("scene-one"),
+        backdrop: { url: "ftp://cdn.example.com/bad.jpg" }
+      })
+    ).rejects.toMatchObject({ code: "INVALID_URL" });
+
+    navigator = await execute(navigator.version, {
+      type: "scene.update",
+      sceneId: sceneId("scene-one"),
+      backdrop: null,
+      music: null,
+      imageRefs: null
+    });
+    navigator = await execute(navigator.version, {
+      type: "chapter.update",
+      bookId: bookId("book-one"),
+      partId: partId("part-one"),
+      chapterId: chapterId("chapter-one"),
+      summary: null
+    });
+    navigator = await execute(navigator.version, {
+      type: "storyKnowledge.setKnowledgeLink",
+      fromId: storyKnowledgeId("knowledge-one"),
+      toId: storyKnowledgeId("knowledge-two"),
+      kind: "cast",
+      linked: false
+    });
+    navigator = await execute(navigator.version, {
+      type: "storyKnowledge.update",
+      storyKnowledgeId: storyKnowledgeId("knowledge-one"),
+      notes: null,
+      aliases: null
+    });
+
+    expect(navigator.books[0]?.parts[0]?.chapters[0]?.summary).toBeUndefined();
+    expect(navigator.books[0]?.parts[0]?.chapters[0]?.scenes[0]?.backdrop).toBeUndefined();
+    expect(
+      navigator.storyKnowledge.find(
+        (knowledge) => knowledge.id === storyKnowledgeId("knowledge-one")
+      )
+    ).toMatchObject({
+      linkedKnowledge: []
+    });
+    expect(
+      navigator.storyKnowledge.find(
+        (knowledge) => knowledge.id === storyKnowledgeId("knowledge-one")
+      )?.notes
+    ).toBeUndefined();
   });
 
   it("rejects stale writes and unsafe archive operations atomically", async () => {

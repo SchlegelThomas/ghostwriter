@@ -548,3 +548,40 @@ export function restoreSceneRevision(
     })
   );
 }
+
+export type ReaderVoicePack = "default" | "narrative" | "noir" | "soft";
+
+export type SynthesizeReaderSpeechResponse = Readonly<{
+  audioBase64: string;
+  mimeType: string;
+}>;
+
+export function synthesizeReaderSpeech(input: Readonly<{
+  text: string;
+  voice?: ReaderVoicePack;
+}>): Promise<SynthesizeReaderSpeechResponse> {
+  return requestJson(
+    "/api/reader/speak",
+    jsonRequest("POST", {
+      text: input.text,
+      ...(input.voice === undefined ? {} : { voice: input.voice })
+    })
+  );
+}
+
+export type WorkspaceChatResponse = Readonly<{
+  reply: string;
+}>;
+
+export function sendWorkspaceChat(input: Readonly<{
+  message: string;
+  projectId?: string;
+}>): Promise<WorkspaceChatResponse> {
+  return requestJson(
+    "/api/workspace/chat",
+    jsonRequest("POST", {
+      message: input.message,
+      ...(input.projectId === undefined ? {} : { projectId: input.projectId })
+    })
+  );
+}

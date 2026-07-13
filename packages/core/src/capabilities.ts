@@ -86,6 +86,12 @@ export const PROJECT_COMMAND_CAPABILITIES: readonly GhostwriterCapability[] =
       "chapter.rename"
     ),
     canonicalCommand(
+      "chapter.update",
+      "Update manuscript chapter metadata",
+      "book",
+      "chapter.update"
+    ),
+    canonicalCommand(
       "chapter.reorder",
       "Reorder manuscript chapters",
       "book",
@@ -123,6 +129,12 @@ export const PROJECT_COMMAND_CAPABILITIES: readonly GhostwriterCapability[] =
       "Link story knowledge to a scene",
       "project",
       "storyKnowledge.setSceneLink"
+    ),
+    canonicalCommand(
+      "storyKnowledge.linkKnowledge",
+      "Link story knowledge to another knowledge record",
+      "project",
+      "storyKnowledge.setKnowledgeLink"
     ),
     canonicalCommand(
       "storyKnowledge.archive",

@@ -82,6 +82,41 @@ const knowledgeKind = z.enum([
   "custom"
 ]);
 const knowledgeAuthority = z.enum(["planned", "confirmed", "inferred", "disputed"]);
+const knowledgeLinkKind = z.enum([
+  "cast",
+  "theme",
+  "development-cycle",
+  "breadcrumb",
+  "related"
+]);
+const httpUrl = z
+  .string()
+  .trim()
+  .min(1)
+  .max(2_000)
+  .refine((value) => {
+    try {
+      const parsed = new URL(value);
+      return parsed.protocol === "http:" || parsed.protocol === "https:";
+    } catch {
+      return false;
+    }
+  }, "Must be an absolute http(s) URL");
+const sceneBackdrop = z.object({
+  url: httpUrl,
+  caption: z.string().trim().min(1).max(500).optional()
+});
+const sceneMusic = z.object({
+  url: httpUrl,
+  label: z.string().trim().min(1).max(200).optional()
+});
+const sceneImageRef = z.object({
+  url: httpUrl,
+  alt: z.string().trim().min(1).max(500),
+  caption: z.string().trim().min(1).max(500).optional()
+});
+const longText = z.string().trim().min(1).max(20_000);
+const alias = z.string().trim().min(1).max(200);
 
 export const createProjectRequestSchema = z.object({
   title,
@@ -140,6 +175,14 @@ const commandSchema = z.discriminatedUnion("type", [
     title
   }),
   z.object({
+    type: z.literal("chapter.update"),
+    bookId: id,
+    partId: id,
+    chapterId: id,
+    title: title.optional(),
+    summary: z.string().trim().min(1).max(5_000).nullable().optional()
+  }),
+  z.object({
     type: z.literal("chapter.reorder"),
     bookId: id,
     partId: id,
@@ -164,7 +207,10 @@ const commandSchema = z.discriminatedUnion("type", [
     title: title.optional(),
     status: sceneStatus.optional(),
     summary: z.string().trim().min(1).max(5_000).nullable().optional(),
-    povStoryKnowledgeId: id.nullable().optional()
+    povStoryKnowledgeId: id.nullable().optional(),
+    backdrop: sceneBackdrop.nullable().optional(),
+    music: sceneMusic.nullable().optional(),
+    imageRefs: z.array(sceneImageRef).max(50).nullable().optional()
   }),
   z.object({
     type: z.literal("scene.move"),
@@ -189,12 +235,21 @@ const commandSchema = z.discriminatedUnion("type", [
     storyKnowledgeId: id,
     label: title.optional(),
     kind: knowledgeKind.optional(),
-    authority: knowledgeAuthority.optional()
+    authority: knowledgeAuthority.optional(),
+    notes: longText.nullable().optional(),
+    aliases: z.array(alias).max(50).nullable().optional()
   }),
   z.object({
     type: z.literal("storyKnowledge.setSceneLink"),
     storyKnowledgeId: id,
     sceneId: id,
+    linked: z.boolean()
+  }),
+  z.object({
+    type: z.literal("storyKnowledge.setKnowledgeLink"),
+    fromId: id,
+    toId: id,
+    kind: knowledgeLinkKind,
     linked: z.boolean()
   }),
   z.object({
@@ -383,6 +438,34 @@ const canvasCommandSchema = z.discriminatedUnion("type", [
     .strict(),
   z
     .object({
+      type: z.literal("canvas.object.setScopePlacement"),
+      objectId: canvasObjectReference,
+      scopeKind: z.enum(["project", "chapter", "scene"]),
+      scopeId: z.string().trim().min(1).max(200).optional(),
+      x: canvasCoordinate,
+      y: canvasCoordinate,
+      width: canvasDimension.optional(),
+      height: canvasDimension.optional()
+    })
+    .strict()
+    .superRefine((value, context) => {
+      if (value.scopeKind === "project" && value.scopeId !== undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "A project Canvas scope must not carry a scope ID.",
+          path: ["scopeId"]
+        });
+      }
+      if (value.scopeKind !== "project" && value.scopeId === undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Chapter and scene Canvas scopes require a scope ID.",
+          path: ["scopeId"]
+        });
+      }
+    }),
+  z
+    .object({
       type: z.enum([
         "canvas.object.archive",
         "canvas.object.restore",
@@ -546,6 +629,7 @@ export function toProjectCommand(command: ParsedCommand): ProjectCommand {
         partId: partId(command.partId)
       };
     case "chapter.rename":
+    case "chapter.update":
     case "chapter.removeEmpty":
       return {
         ...command,
@@ -619,6 +703,12 @@ export function toProjectCommand(command: ParsedCommand): ProjectCommand {
         ...command,
         storyKnowledgeId: storyKnowledgeId(command.storyKnowledgeId),
         sceneId: sceneId(command.sceneId)
+      };
+    case "storyKnowledge.setKnowledgeLink":
+      return {
+        ...command,
+        fromId: storyKnowledgeId(command.fromId),
+        toId: storyKnowledgeId(command.toId)
       };
   }
 }

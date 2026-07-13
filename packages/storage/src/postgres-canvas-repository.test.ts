@@ -21,6 +21,7 @@ import {
   canvasLinks,
   canvasObjects,
   canvasRevisions,
+  canvasScopePlacements,
   canvasViewportPreferences,
   sceneDocuments,
   scenes,
@@ -476,5 +477,70 @@ describe("Postgres Story Canvas repository", () => {
         eq(scenes.id, sceneId("scene-arrival-at-bellwether"))
       )
     ).rejects.toBeDefined();
+  });
+
+  it("round-trips scope-keyed placements through board load", async () => {
+    const { db, canvases, services } = await setup();
+    await services.getCanvasWorkspace({
+      accountId: OWNER,
+      projectId: PROJECT_ID
+    });
+    let workspace = await services.executeCanvasCommand({
+      accountId: OWNER,
+      projectId: PROJECT_ID,
+      expectedCanvasVersion: 1,
+      command: { type: "canvas.object.create", object: note("Scoped note") }
+    });
+    const objectId = workspace.board.objects[0]!.id;
+    workspace = await services.executeCanvasCommand({
+      accountId: OWNER,
+      projectId: PROJECT_ID,
+      expectedCanvasVersion: 2,
+      command: {
+        type: "canvas.object.setScopePlacement",
+        objectId,
+        scopeKind: "chapter",
+        scopeId: "chapter-arrival",
+        x: 55,
+        y: 66,
+        width: 180,
+        height: 110
+      }
+    });
+    expect(workspace.board.scopePlacements).toEqual([
+      expect.objectContaining({
+        objectId,
+        scopeKind: "chapter",
+        scopeId: "chapter-arrival",
+        x: 55,
+        y: 66,
+        width: 180,
+        height: 110
+      })
+    ]);
+    expect(await db.select().from(canvasScopePlacements)).toEqual([
+      expect.objectContaining({
+        projectId: PROJECT_ID,
+        objectId,
+        scopeKind: "chapter",
+        scopeId: "chapter-arrival",
+        x: 55,
+        y: 66,
+        width: 180,
+        height: 110
+      })
+    ]);
+    await expect(canvases.getBoard(PROJECT_ID)).resolves.toMatchObject({
+      version: 3,
+      scopePlacements: [
+        expect.objectContaining({
+          objectId,
+          scopeKind: "chapter",
+          scopeId: "chapter-arrival",
+          x: 55,
+          y: 66
+        })
+      ]
+    });
   });
 });

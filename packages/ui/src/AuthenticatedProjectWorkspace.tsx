@@ -9,6 +9,7 @@ import {
   View
 } from "react-native";
 import type {
+  GhostwriterCapability,
   ProjectCommand,
   ProjectNavigator,
   ProjectNavigatorScene,
@@ -26,7 +27,7 @@ import {
   type CanvasWorkflowLens
 } from "./canvas-drill.js";
 import { CanvasDrillBar } from "./CanvasDrillBar.js";
-import { ManuscriptTree } from "./ManuscriptTree.js";
+import { ManuscriptTree, type SceneMoveDestination } from "./ManuscriptTree.js";
 import {
   resolveManuscriptSelection,
   sceneSelection,
@@ -40,6 +41,10 @@ import {
   writeStoredSplitRatio
 } from "./split-layout.js";
 import { ghostwriterTheme } from "./theme.js";
+import {
+  WorkspaceChatPanel,
+  type WorkspaceChatMessage
+} from "./WorkspaceChatPanel.js";
 
 export type ProjectWorkspaceMode = "draft" | "canvas" | "split";
 
@@ -74,6 +79,9 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   storageAccountId?: string;
   renderCanvas?: ReactNode;
   renderDraft?(scene: ProjectNavigatorScene | undefined): ReactNode;
+  chatCapabilities?: readonly GhostwriterCapability[];
+  chatMessages?: readonly WorkspaceChatMessage[];
+  onChatSend?(message: string): Promise<void> | void;
 }>;
 
 const { colors, fonts, shell } = ghostwriterTheme;
@@ -203,12 +211,16 @@ export function AuthenticatedProjectWorkspace({
   onWorkflowLensChange = () => undefined,
   storageAccountId,
   renderCanvas,
-  renderDraft
+  renderDraft,
+  chatCapabilities = [],
+  chatMessages = [],
+  onChatSend
 }: AuthenticatedProjectWorkspaceProps) {
   const { width } = useWindowDimensions();
   const wide = width >= 1240;
   const narrow = width < 760;
   const [splitRatio, setSplitRatio] = useState(SPLIT_RATIO_DEFAULT);
+  const [chatOpen, setChatOpen] = useState(false);
   const splitSurfaceRef = useRef<View>(null);
   useEffect(() => {
     if (storageAccountId === undefined) {
@@ -497,6 +509,21 @@ export function AuthenticatedProjectWorkspace({
     return false;
   }
 
+  async function moveScene(
+    target: Extract<ManuscriptSelection, { kind: "scene" }>,
+    destination: SceneMoveDestination
+  ): Promise<boolean> {
+    return onCommand({
+      type: "scene.move",
+      sceneId: target.sceneId,
+      bookId: destination.bookId,
+      ...(destination.chapterId === undefined
+        ? {}
+        : { chapterId: destination.chapterId }),
+      position: destination.position
+    });
+  }
+
   const tree = (
     <ManuscriptTree
       busy={busy}
@@ -506,6 +533,7 @@ export function AuthenticatedProjectWorkspace({
         onEnterChapter(next);
         if (mode !== "canvas" && mode !== "split") onModeChange("canvas");
       }}
+      onMoveScene={moveScene}
       onOpenScene={(next) => {
         chooseSelection(next);
         onModeChange("draft");
@@ -596,6 +624,14 @@ export function AuthenticatedProjectWorkspace({
               onPress={onOpenReader}
             />
           )}
+          {onChatSend === undefined ? null : (
+            <Button
+              disabled={busy}
+              label={chatOpen ? "Hide chat" : "Chat"}
+              onPress={() => setChatOpen((current) => !current)}
+              selected={chatOpen}
+            />
+          )}
           <Button disabled={busy} label="Sign out" onPress={onSignOut} />
         </View>
       </View>
@@ -667,6 +703,15 @@ export function AuthenticatedProjectWorkspace({
                 label="Reader"
                 onPress={onOpenReader}
                 selected={false}
+              />
+            )}
+            {onChatSend === undefined ? null : (
+              <RailButton
+                disabled={busy}
+                glyph="M"
+                label="Chat"
+                onPress={() => setChatOpen((current) => !current)}
+                selected={chatOpen}
               />
             )}
             <View style={styles.railSpacer} />
@@ -797,6 +842,24 @@ export function AuthenticatedProjectWorkspace({
             ]}
           >
             {inspector}
+          </View>
+        ) : null}
+
+        {chatOpen && onChatSend !== undefined ? (
+          <View
+            style={[
+              styles.chatRegion,
+              narrow && styles.narrowRegion
+            ]}
+          >
+            <WorkspaceChatPanel
+              busy={busy}
+              capabilities={chatCapabilities}
+              messages={chatMessages}
+              onClose={() => setChatOpen(false)}
+              onSend={onChatSend}
+              open={chatOpen}
+            />
           </View>
         ) : null}
       </View>
@@ -980,6 +1043,13 @@ const styles = StyleSheet.create({
     minHeight: 0,
     minWidth: 0,
     width: 310
+  },
+  chatRegion: {
+    borderLeftColor: colors.line,
+    borderLeftWidth: 1,
+    minHeight: 0,
+    minWidth: 0,
+    width: 300
   },
   collapsedRegion: {
     flexShrink: 0,

@@ -14,6 +14,7 @@ import type {
   SceneId,
   StoryProjectSummary
 } from "@ghostwriter/core";
+import { GHOSTWRITER_CAPABILITIES } from "@ghostwriter/core";
 import {
   AccountGateScreen,
   AuthenticatedProjectWorkspace,
@@ -29,7 +30,9 @@ import {
   ghostwriterTheme,
   ProjectLibraryScreen,
   type AcknowledgementToast,
-  type ProjectWorkspaceMode
+  type ProjectWorkspaceMode,
+  type ReaderVoicePack,
+  type WorkspaceChatMessage
 } from "@ghostwriter/ui";
 import { useFonts } from "expo-font";
 import { useEffect, useReducer, useRef, useState } from "react";
@@ -61,7 +64,9 @@ import {
   releaseSceneLease,
   restoreCanvasRevision,
   saveCanvasPreference,
+  sendWorkspaceChat,
   signOut,
+  synthesizeReaderSpeech,
   undoCanvas,
   updateWriterProfile,
   type BookReaderResponse,
@@ -184,6 +189,11 @@ export default function App() {
   const [readerProjection, setReaderProjection] = useState<BookReaderResponse>();
   const [readerLoading, setReaderLoading] = useState(false);
   const [readerError, setReaderError] = useState<string>();
+  const [readerVoicePack, setReaderVoicePack] =
+    useState<ReaderVoicePack>("default");
+  const [readerSpeaking, setReaderSpeaking] = useState(false);
+  const readerAudioRef = useRef<{ pause(): void } | null>(null);
+  const [chatMessages, setChatMessages] = useState<WorkspaceChatMessage[]>([]);
   const readerReturnStateRef = useRef<ReaderReturnState | undefined>(undefined);
   const draftPanelRef = useRef<DraftPanelHandle>(null);
   const selectedProjectRef = useRef<ProjectNavigator | undefined>(undefined);
@@ -1006,6 +1016,9 @@ export default function App() {
 
   function exitReader(): void {
     const restore = readerReturnStateRef.current;
+    readerAudioRef.current?.pause();
+    readerAudioRef.current = null;
+    setReaderSpeaking(false);
     setReaderProjection(undefined);
     setReaderError(undefined);
     setReaderLoading(false);
@@ -1014,6 +1027,79 @@ export default function App() {
     setSelectedSceneId(restore.selectedSceneId);
     setSelectedCanvasObjectId(restore.selectedCanvasObjectId);
     readerReturnStateRef.current = undefined;
+  }
+
+  async function speakReaderPassage(
+    text: string,
+    voicePack: ReaderVoicePack
+  ): Promise<void> {
+    readerAudioRef.current?.pause();
+    readerAudioRef.current = null;
+    setReaderSpeaking(true);
+    try {
+      const speech = await synthesizeReaderSpeech({ text, voice: voicePack });
+      if (typeof Audio === "undefined") {
+        setReaderSpeaking(false);
+        return;
+      }
+      const audio = new Audio(
+        `data:${speech.mimeType};base64,${speech.audioBase64}`
+      );
+      readerAudioRef.current = audio;
+      audio.onended = () => {
+        setReaderSpeaking(false);
+        readerAudioRef.current = null;
+      };
+      await audio.play();
+    } catch (cause) {
+      setReaderSpeaking(false);
+      setReaderError(
+        cause instanceof GhostwriterApiError
+          ? cause.message
+          : "Ghostwriter could not speak this passage."
+      );
+    }
+  }
+
+  function stopReaderSpeech(): void {
+    readerAudioRef.current?.pause();
+    readerAudioRef.current = null;
+    setReaderSpeaking(false);
+  }
+
+  async function handleChatSend(message: string): Promise<void> {
+    const userMessage: WorkspaceChatMessage = {
+      id: `chat-user-${Date.now()}`,
+      role: "user",
+      body: message
+    };
+    setChatMessages((current) => [...current, userMessage]);
+    try {
+      const result = await sendWorkspaceChat({
+        message,
+        projectId: selectedProject?.id
+      });
+      setChatMessages((current) => [
+        ...current,
+        {
+          id: `chat-assistant-${Date.now()}`,
+          role: "assistant",
+          body: result.reply
+        }
+      ]);
+    } catch (cause) {
+      setChatMessages((current) => [
+        ...current,
+        {
+          id: `chat-system-${Date.now()}`,
+          role: "system",
+          body:
+            cause instanceof GhostwriterApiError
+              ? cause.message
+              : "Chat could not complete that turn."
+        }
+      ]);
+    }
   }
 
   async function handleCanvasFailure(cause: unknown): Promise<void> {
@@ -1446,7 +1532,12 @@ export default function App() {
           busy={readerLoading}
           error={readerError}
           onExit={exitReader}
+          onSpeak={speakReaderPassage}
+          onStopSpeak={stopReaderSpeech}
+          onVoicePackChange={setReaderVoicePack}
           projection={readerProjection}
+          speaking={readerSpeaking}
+          voicePack={readerVoicePack}
         />
       );
     }
@@ -1461,10 +1552,13 @@ export default function App() {
           !canvasBusy
         }
         busy={busy}
+        chatCapabilities={GHOSTWRITER_CAPABILITIES}
+        chatMessages={chatMessages}
         drillStack={drillStack}
         error={error}
         mode={workspaceMode}
         onBack={() => void leaveProject()}
+        onChatSend={handleChatSend}
         onCommand={runCommand}
         onDrillBack={handleDrillBack}
         onDrillTo={handleDrillTo}

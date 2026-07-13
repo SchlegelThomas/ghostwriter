@@ -78,7 +78,8 @@ const navigator: ProjectNavigator = {
       kind: "character",
       authority: "confirmed",
       linkedSceneIds: [],
-      linkedSceneCount: 0
+      linkedSceneCount: 0,
+      linkedKnowledge: []
     },
     {
       id: archivedKnowledge,
@@ -87,6 +88,7 @@ const navigator: ProjectNavigator = {
       authority: "planned",
       linkedSceneIds: [],
       linkedSceneCount: 0,
+      linkedKnowledge: [],
       archivedAt: "2026-07-12T20:00:00.000Z"
     }
   ],
@@ -162,6 +164,7 @@ describe("Canvas presentation helpers", () => {
       version: 3,
       objects: [archived, active, later],
       links: [],
+      scopePlacements: [],
       createdAt: "2026-07-12T19:00:00.000Z",
       updatedAt: "2026-07-12T20:00:00.000Z"
     };
@@ -219,6 +222,7 @@ describe("Canvas presentation helpers", () => {
       version: 2,
       objects: [placed],
       links: [],
+      scopePlacements: [],
       createdAt: "2026-07-12T19:00:00.000Z",
       updatedAt: "2026-07-12T20:02:00.000Z"
     };
@@ -276,6 +280,7 @@ describe("Canvas presentation helpers", () => {
       version: 2,
       objects: [selectedCard],
       links: [],
+      scopePlacements: [],
       createdAt: "2026-07-12T19:00:00.000Z",
       updatedAt: "2026-07-12T20:00:00.000Z"
     };

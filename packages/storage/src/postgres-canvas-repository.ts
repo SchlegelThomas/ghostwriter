@@ -8,6 +8,7 @@ import {
   createCanvasLink,
   createCanvasObject,
   createCanvasRevision,
+  createCanvasScopePlacement,
   createCanvasViewportPreference,
   projectId,
   sceneId,
@@ -25,6 +26,8 @@ import {
   type CanvasRevision,
   type CanvasRevisionMetadata,
   type CanvasRevisionReason,
+  type CanvasScopeKind,
+  type CanvasScopePlacement,
   type ProjectId
 } from "@ghostwriter/core";
 import { and, asc, desc, eq, notInArray, sql } from "drizzle-orm";
@@ -34,6 +37,7 @@ import {
   canvasLinks,
   canvasObjects,
   canvasRevisions,
+  canvasScopePlacements,
   canvasViewportPreferences,
   projects
 } from "./schema.js";
@@ -106,8 +110,24 @@ function linkFromRow(row: typeof canvasLinks.$inferSelect): CanvasLink {
   });
 }
 
+function placementFromRow(
+  row: typeof canvasScopePlacements.$inferSelect
+): CanvasScopePlacement {
+  return createCanvasScopePlacement({
+    objectId: canvasObjectId(row.objectId),
+    scopeKind: row.scopeKind as CanvasScopeKind,
+    ...(row.scopeId === "" ? {} : { scopeId: row.scopeId }),
+    x: row.x,
+    y: row.y,
+    ...(row.width === null ? {} : { width: row.width }),
+    ...(row.height === null ? {} : { height: row.height })
+  });
+}
+
 function storedBoard(value: unknown): CanvasBoard {
-  const raw = value as CanvasBoard;
+  const raw = value as CanvasBoard & {
+    scopePlacements?: readonly CanvasScopePlacement[];
+  };
   return createCanvasBoard({
     projectId: projectId(raw.projectId),
     version: raw.version,
@@ -136,6 +156,12 @@ function storedBoard(value: unknown): CanvasBoard {
         projectId: projectId(link.projectId),
         fromObjectId: canvasObjectId(link.fromObjectId),
         toObjectId: canvasObjectId(link.toObjectId)
+      })
+    ),
+    scopePlacements: (raw.scopePlacements ?? []).map((placement) =>
+      createCanvasScopePlacement({
+        ...placement,
+        objectId: canvasObjectId(placement.objectId)
       })
     ),
     createdAt: raw.createdAt,
@@ -199,7 +225,7 @@ async function queryBoard(
     .where(eq(canvasBoards.projectId, id))
     .limit(1);
   if (boardRow === undefined) return undefined;
-  const [objectRows, linkRows] = await Promise.all([
+  const [objectRows, linkRows, placementRows] = await Promise.all([
     db
       .select()
       .from(canvasObjects)
@@ -209,13 +235,23 @@ async function queryBoard(
       .select()
       .from(canvasLinks)
       .where(eq(canvasLinks.projectId, id))
-      .orderBy(asc(canvasLinks.id))
+      .orderBy(asc(canvasLinks.id)),
+    db
+      .select()
+      .from(canvasScopePlacements)
+      .where(eq(canvasScopePlacements.projectId, id))
+      .orderBy(
+        asc(canvasScopePlacements.objectId),
+        asc(canvasScopePlacements.scopeKind),
+        asc(canvasScopePlacements.scopeId)
+      )
   ]);
   return createCanvasBoard({
     projectId: projectId(boardRow.projectId),
     version: boardRow.version,
     objects: objectRows.map(objectFromRow),
     links: linkRows.map(linkFromRow),
+    scopePlacements: placementRows.map(placementFromRow),
     createdAt: boardRow.createdAt,
     updatedAt: boardRow.updatedAt
   });
@@ -263,6 +299,22 @@ function linkRow(link: CanvasLink): typeof canvasLinks.$inferInsert {
     provenance: link.provenance ?? null,
     archivedAt: link.archivedAt ?? null,
     dismissedAt: link.dismissedAt ?? null
+  };
+}
+
+function placementRow(
+  projectIdValue: ProjectId,
+  placement: CanvasScopePlacement
+): typeof canvasScopePlacements.$inferInsert {
+  return {
+    projectId: projectIdValue,
+    objectId: placement.objectId,
+    scopeKind: placement.scopeKind,
+    scopeId: placement.scopeId ?? "",
+    x: placement.x,
+    y: placement.y,
+    width: placement.width ?? null,
+    height: placement.height ?? null
   };
 }
 
@@ -361,6 +413,23 @@ async function upsertLinks(
         dismissedAt: sql`excluded.dismissed_at`
       }
     });
+}
+
+async function replaceScopePlacements(
+  db: RepositoryDatabase,
+  board: CanvasBoard
+): Promise<void> {
+  await db
+    .delete(canvasScopePlacements)
+    .where(eq(canvasScopePlacements.projectId, board.projectId));
+  if (board.scopePlacements.length === 0) return;
+  await db
+    .insert(canvasScopePlacements)
+    .values(
+      board.scopePlacements.map((placement) =>
+        placementRow(board.projectId, placement)
+      )
+    );
 }
 
 async function removeMissingRows(
@@ -560,6 +629,7 @@ export function createPostgresCanvasRepository(
           await upsertLinks(exec, board);
           await removeMissingRows(exec, board);
           await restoreRegionParents(exec, board);
+          await replaceScopePlacements(exec, board);
           await insertRevision(exec, revision);
           const persisted = await queryBoard(exec, board.projectId);
           if (persisted === undefined) {

@@ -57,6 +57,13 @@ import {
   updateProfileRequestSchema
 } from "./api-contract.js";
 import type { AuthGateway, AuthenticatedSession } from "./auth.js";
+import {
+  ElevenLabsVoicePort,
+  toReaderVoicePack,
+  type VoiceSynthesisPort
+} from "./voice.js";
+import { z } from "zod";
+import { GHOSTWRITER_CAPABILITIES } from "@ghostwriter/core";
 
 export type BackendDependencies = Readonly<{
   services: GhostwriterServices;
@@ -66,7 +73,18 @@ export type BackendDependencies = Readonly<{
   identity: IdentityServices;
   auth: AuthGateway;
   allowedOrigins?: readonly string[];
+  voice?: VoiceSynthesisPort;
 }>;
+
+const readerSpeakRequestSchema = z.object({
+  text: z.string().trim().min(1).max(2_400),
+  voice: z.enum(["default", "narrative", "noir", "soft"]).optional()
+});
+
+const workspaceChatRequestSchema = z.object({
+  message: z.string().trim().min(1).max(4_000),
+  projectId: z.string().trim().min(1).max(200).optional()
+});
 
 type BackendEnvironment = {
   Variables: {
@@ -396,6 +414,81 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
         : { pinSceneId: resolvedPinSceneId })
     });
     return context.json(bookReaderResponse(projection));
+  });
+
+  app.post("/api/reader/speak", async (context) => {
+    const parsed = await parseJsonRequest(context.req.raw, readerSpeakRequestSchema);
+    if (!parsed.success) {
+      return context.json(
+        {
+          error: "Invalid request.",
+          code: parsed.code,
+          ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
+        },
+        parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
+      );
+    }
+    const voice =
+      dependencies.voice ?? ElevenLabsVoicePort.fromEnvOrUndefined();
+    if (voice === undefined) {
+      return context.json(
+        {
+          error: "Reader voice is not configured on this server.",
+          code: "VOICE_UNAVAILABLE"
+        },
+        503
+      );
+    }
+    const pack = toReaderVoicePack(parsed.data.voice);
+    const speech = await voice.synthesize(parsed.data.text, pack);
+    if (speech === null) {
+      return context.json(
+        {
+          error: "Reader voice could not synthesize this passage.",
+          code: "VOICE_UNAVAILABLE"
+        },
+        503
+      );
+    }
+    return context.json(speech);
+  });
+
+  app.post("/api/workspace/chat", async (context) => {
+    const parsed = await parseJsonRequest(
+      context.req.raw,
+      workspaceChatRequestSchema
+    );
+    if (!parsed.success) {
+      return context.json(
+        {
+          error: "Invalid request.",
+          code: parsed.code,
+          ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
+        },
+        parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
+      );
+    }
+    const capabilities = GHOSTWRITER_CAPABILITIES.filter((capability) =>
+      capability.title
+        .toLocaleLowerCase()
+        .includes(parsed.data.message.toLocaleLowerCase().slice(0, 24))
+    ).slice(0, 5);
+    const listed =
+      capabilities.length > 0
+        ? capabilities.map((capability) => `• ${capability.title}`).join("\n")
+        : GHOSTWRITER_CAPABILITIES.slice(0, 8)
+            .map((capability) => `• ${capability.title}`)
+            .join("\n");
+    return context.json({
+      reply: [
+        "Tool-only chat is active. OpenAI completion is not configured yet.",
+        parsed.data.projectId === undefined
+          ? "No project context was supplied."
+          : `Open project: ${parsed.data.projectId}`,
+        "Matching capabilities:",
+        listed
+      ].join("\n")
+    });
   });
 
   app.post("/api/projects/:projectId/commands", async (context) => {

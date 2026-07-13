@@ -21,7 +21,8 @@ export type DomainValidationCode =
   | "CROSS_PROJECT_REFERENCE"
   | "CROSS_BOOK_REFERENCE"
   | "INCOMPLETE_MANUSCRIPT"
-  | "INVALID_VERSION";
+  | "INVALID_VERSION"
+  | "INVALID_URL";
 
 export class DomainValidationError extends Error {
   readonly code: DomainValidationCode;
@@ -40,6 +41,26 @@ function requireText(value: string, field: string): string {
     throw new DomainValidationError("EMPTY_VALUE", `${field} must not be empty.`);
   }
 
+  return normalized;
+}
+
+function requireHttpUrl(value: string, field: string): string {
+  const normalized = requireText(value, field);
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new DomainValidationError(
+      "INVALID_URL",
+      `${field} must be an absolute http(s) URL.`
+    );
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new DomainValidationError(
+      "INVALID_URL",
+      `${field} must be an absolute http(s) URL.`
+    );
+  }
   return normalized;
 }
 
@@ -165,15 +186,21 @@ export type ManuscriptChapter = Readonly<{
   id: ChapterId;
   title: string;
   sceneIds: readonly SceneId[];
+  summary?: string;
 }>;
 
 export function createManuscriptChapter(input: ManuscriptChapter): ManuscriptChapter {
   assertUniqueReferences(input.sceneIds, `Chapter "${input.id}" scenes`);
+  const summary =
+    input.summary === undefined
+      ? undefined
+      : requireText(input.summary, "Chapter summary");
 
   return Object.freeze({
     id: input.id,
     title: requireText(input.title, "Chapter title"),
-    sceneIds: freezeList(input.sceneIds)
+    sceneIds: freezeList(input.sceneIds),
+    ...(summary === undefined ? {} : { summary })
   });
 }
 
@@ -242,6 +269,22 @@ export function createBook(input: Book): Book {
 
 export type SceneStatus = "planned" | "drafting" | "revising" | "complete";
 
+export type SceneBackdrop = Readonly<{
+  url: string;
+  caption?: string;
+}>;
+
+export type SceneMusic = Readonly<{
+  url: string;
+  label?: string;
+}>;
+
+export type SceneImageRef = Readonly<{
+  url: string;
+  alt: string;
+  caption?: string;
+}>;
+
 export type Scene = Readonly<{
   id: SceneId;
   projectId: ProjectId;
@@ -250,8 +293,43 @@ export type Scene = Readonly<{
   status: SceneStatus;
   summary?: string;
   povStoryKnowledgeId?: StoryKnowledgeId;
+  backdrop?: SceneBackdrop;
+  music?: SceneMusic;
+  imageRefs?: readonly SceneImageRef[];
   archivedAt?: string;
 }>;
+
+function createSceneBackdrop(input: SceneBackdrop): SceneBackdrop {
+  const caption =
+    input.caption === undefined
+      ? undefined
+      : requireText(input.caption, "Scene backdrop caption");
+  return Object.freeze({
+    url: requireHttpUrl(input.url, "Scene backdrop URL"),
+    ...(caption === undefined ? {} : { caption })
+  });
+}
+
+function createSceneMusic(input: SceneMusic): SceneMusic {
+  const label =
+    input.label === undefined ? undefined : requireText(input.label, "Scene music label");
+  return Object.freeze({
+    url: requireHttpUrl(input.url, "Scene music URL"),
+    ...(label === undefined ? {} : { label })
+  });
+}
+
+function createSceneImageRef(input: SceneImageRef): SceneImageRef {
+  const caption =
+    input.caption === undefined
+      ? undefined
+      : requireText(input.caption, "Scene image caption");
+  return Object.freeze({
+    url: requireHttpUrl(input.url, "Scene image URL"),
+    alt: requireText(input.alt, "Scene image alt text"),
+    ...(caption === undefined ? {} : { caption })
+  });
+}
 
 export function createScene(input: Scene): Scene {
   const summary =
@@ -260,6 +338,13 @@ export function createScene(input: Scene): Scene {
     input.archivedAt === undefined
       ? undefined
       : requireText(input.archivedAt, "Scene archive time");
+  const backdrop =
+    input.backdrop === undefined ? undefined : createSceneBackdrop(input.backdrop);
+  const music = input.music === undefined ? undefined : createSceneMusic(input.music);
+  const imageRefs =
+    input.imageRefs === undefined
+      ? undefined
+      : freezeList(input.imageRefs.map(createSceneImageRef));
 
   return Object.freeze({
     id: input.id,
@@ -271,6 +356,9 @@ export function createScene(input: Scene): Scene {
     ...(input.povStoryKnowledgeId === undefined
       ? {}
       : { povStoryKnowledgeId: input.povStoryKnowledgeId }),
+    ...(backdrop === undefined ? {} : { backdrop }),
+    ...(music === undefined ? {} : { music }),
+    ...(imageRefs === undefined ? {} : { imageRefs }),
     ...(archivedAt === undefined ? {} : { archivedAt })
   });
 }
@@ -284,6 +372,18 @@ export type StoryKnowledgeKind =
 
 export type StoryKnowledgeAuthority = "planned" | "confirmed" | "inferred" | "disputed";
 
+export type StoryKnowledgeLinkKind =
+  | "cast"
+  | "theme"
+  | "development-cycle"
+  | "breadcrumb"
+  | "related";
+
+export type StoryKnowledgeLink = Readonly<{
+  toId: StoryKnowledgeId;
+  kind: StoryKnowledgeLinkKind;
+}>;
+
 export type StoryKnowledge = Readonly<{
   id: StoryKnowledgeId;
   projectId: ProjectId;
@@ -291,11 +391,38 @@ export type StoryKnowledge = Readonly<{
   kind: StoryKnowledgeKind;
   authority: StoryKnowledgeAuthority;
   linkedSceneIds: readonly SceneId[];
+  linkedKnowledge: readonly StoryKnowledgeLink[];
+  notes?: string;
+  aliases?: readonly string[];
   archivedAt?: string;
 }>;
 
+function createStoryKnowledgeLink(input: StoryKnowledgeLink): StoryKnowledgeLink {
+  return Object.freeze({
+    toId: input.toId,
+    kind: input.kind
+  });
+}
+
 export function createStoryKnowledge(input: StoryKnowledge): StoryKnowledge {
   assertUniqueReferences(input.linkedSceneIds, `Story knowledge "${input.id}" linked scenes`);
+  assertUniqueReferences(
+    input.linkedKnowledge.map((link) => `${link.kind}:${link.toId}`),
+    `Story knowledge "${input.id}" linked knowledge`
+  );
+  const notes =
+    input.notes === undefined
+      ? undefined
+      : requireText(input.notes, "Story knowledge notes");
+  const aliases =
+    input.aliases === undefined
+      ? undefined
+      : freezeList(
+          input.aliases.map((alias) => requireText(alias, "Story knowledge alias"))
+        );
+  if (aliases !== undefined) {
+    assertUniqueReferences(aliases, `Story knowledge "${input.id}" aliases`);
+  }
   const archivedAt =
     input.archivedAt === undefined
       ? undefined
@@ -308,6 +435,9 @@ export function createStoryKnowledge(input: StoryKnowledge): StoryKnowledge {
     kind: input.kind,
     authority: input.authority,
     linkedSceneIds: freezeList(input.linkedSceneIds),
+    linkedKnowledge: freezeList(input.linkedKnowledge.map(createStoryKnowledgeLink)),
+    ...(notes === undefined ? {} : { notes }),
+    ...(aliases === undefined ? {} : { aliases }),
     ...(archivedAt === undefined ? {} : { archivedAt })
   });
 }
@@ -502,6 +632,21 @@ export function validateProjectRecords(records: ProjectRecords): void {
         throw new DomainValidationError(
           "UNKNOWN_REFERENCE",
           `Story knowledge "${knowledge.id}" references unknown scene "${linkedSceneId}".`
+        );
+      }
+    }
+
+    for (const link of knowledge.linkedKnowledge) {
+      if (link.toId === knowledge.id) {
+        throw new DomainValidationError(
+          "UNKNOWN_REFERENCE",
+          `Story knowledge "${knowledge.id}" cannot link to itself.`
+        );
+      }
+      if (!knowledgeById.has(link.toId)) {
+        throw new DomainValidationError(
+          "UNKNOWN_REFERENCE",
+          `Story knowledge "${knowledge.id}" references unknown knowledge "${link.toId}".`
         );
       }
     }

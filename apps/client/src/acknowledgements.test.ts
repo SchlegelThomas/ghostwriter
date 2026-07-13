@@ -85,7 +85,8 @@ const before: ProjectNavigator = {
       kind: "character",
       authority: "confirmed",
       linkedSceneIds: [firstScene],
-      linkedSceneCount: 1
+      linkedSceneCount: 1,
+      linkedKnowledge: []
     }
   ],
   totals: { books: 2, scenes: 2, storyKnowledge: 1, editions: 0 }

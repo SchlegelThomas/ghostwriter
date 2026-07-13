@@ -79,14 +79,21 @@ The active branch now proves the first owner-only version of the core promise:
   checkpoints, named variants, block-aware comparison, restore-as-new, and explicit crash recovery;
 - Draft and Story Canvas share canonical scene/story IDs, selected scene context, and Split view;
 - Story Canvas persists spatial objects, notes, regions, story-knowledge/image metadata, typed
-  confirmed or provisional links, personal viewport state, snapshot restore/undo, and a
-  manuscript-derived spine that exposes drift without reordering prose;
-- wide web supports spatial writing; narrow web uses an ordered keyboard/screen-reader Canvas
-  posture instead of pretending freeform drag fits a phone.
+  confirmed or provisional links, personal viewport state, snapshot restore/undo, scope-keyed
+  placements per drill layer, and a manuscript-derived spine that exposes drift without reordering
+  prose;
+- Chapters act as named scene folders with objectives/cast notes; scenes may carry URL backdrop,
+  music, and image references; story knowledge supports notes, aliases, and typed knowledge links;
+- Reader presents bound-book spreads with optional ElevenLabs voice packs (server-side TTS);
+- An in-app MCP chat dock lists capabilities and can invoke read tools; OpenAI completion waits on
+  a configured key;
+- wide web supports spatial writing and tree drag-and-drop; narrow web uses an ordered
+  keyboard/screen-reader Canvas posture instead of pretending freeform drag fits a phone.
 
 This milestone does not yet deliver collaborators, comments/suggestions, real-time subscriptions or
-presence, AI/image generation, import/export, account exit, permanent purge, or native freeform
-Canvas editing. Product copy must not imply those later outcomes already ship.
+presence, AI/image generation, binary media hosting (R2), import/export, account exit, permanent
+purge, or native freeform Canvas editing. Product copy must not imply those later outcomes already
+ship.
 
 ## Product principles
 
