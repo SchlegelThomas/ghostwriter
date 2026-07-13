@@ -19,7 +19,7 @@ export const PROJECT_NAVIGATOR_CAPABILITY = Object.freeze({
   scope: "project",
   coreUseCase: "getProjectNavigator",
   bindings: Object.freeze({
-    ui: "ProjectNavigatorScreen",
+    ui: "ManuscriptTree",
     mcp: "ghostwriter_project_navigator"
   })
 }) satisfies GhostwriterCapability;
@@ -40,7 +40,7 @@ function canonicalCommand(
     scope,
     coreUseCase: `executeProjectCommand:${command}`,
     bindings: Object.freeze({
-      ui: "AuthenticatedProjectWorkspace",
+      ui: "ManuscriptTree + SelectionInspector",
       mcpException: MCP_CANONICAL_MUTATION_EXCEPTION
     })
   });
@@ -321,6 +321,20 @@ export const CANVAS_MUTATION_CAPABILITIES: readonly GhostwriterCapability[] =
     })
   ]);
 
+export const BOOK_READER_CAPABILITY = Object.freeze({
+  id: "book.reader.read",
+  title: "Read a book manuscript in the bound reader",
+  access: "read",
+  scope: "book",
+  coreUseCase: "getBookReader",
+  bindings: Object.freeze({
+    ui: "BookReaderPanel",
+    web: "GET /api/projects/{projectId}/books/{bookId}/reader",
+    mcpException:
+      "Book reader prose reads require authenticated project authority that the current MCP binding does not have."
+  })
+}) satisfies GhostwriterCapability;
+
 export const GHOSTWRITER_CAPABILITIES: readonly GhostwriterCapability[] = Object.freeze([
   PROJECT_NAVIGATOR_CAPABILITY,
   ...PROJECT_COMMAND_CAPABILITIES,
@@ -328,5 +342,6 @@ export const GHOSTWRITER_CAPABILITIES: readonly GhostwriterCapability[] = Object
   ...SCENE_HISTORY_CAPABILITIES,
   ...SCENE_WRITING_MUTATION_CAPABILITIES,
   ...CANVAS_READ_CAPABILITIES,
-  ...CANVAS_MUTATION_CAPABILITIES
+  ...CANVAS_MUTATION_CAPABILITIES,
+  BOOK_READER_CAPABILITY
 ]);

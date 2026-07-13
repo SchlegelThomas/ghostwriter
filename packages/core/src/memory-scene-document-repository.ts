@@ -222,6 +222,18 @@ export function createMemorySceneDocumentRepository(): SceneDocumentRepository {
       const head = state.heads.get(sceneId);
       return head === undefined ? undefined : createSceneDocumentHead(head);
     },
+    async getHeads(
+      sceneIds: readonly SceneId[]
+    ): Promise<ReadonlyMap<SceneId, SceneDocumentHead>> {
+      const heads = new Map<SceneId, SceneDocumentHead>();
+      for (const sceneId of sceneIds) {
+        const head = state.heads.get(sceneId);
+        if (head !== undefined) {
+          heads.set(sceneId, createSceneDocumentHead(head));
+        }
+      }
+      return heads;
+    },
     async getRevision(revisionId: RevisionId): Promise<SceneRevision | undefined> {
       const revision = state.revisions.get(revisionId);
       return revision === undefined ? undefined : createSceneRevision(revision);

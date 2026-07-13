@@ -199,6 +199,9 @@ importers:
       '@ghostwriter/core':
         specifier: workspace:*
         version: link:../core
+      '@ghostwriter/editor':
+        specifier: workspace:*
+        version: link:../editor
       react:
         specifier: '*'
         version: 19.2.7

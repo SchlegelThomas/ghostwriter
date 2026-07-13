@@ -421,4 +421,27 @@ describe("postgres scene document repository", () => {
       sceneDocumentRepository.getRevision(workspace.head.checkpointRevisionId)
     ).resolves.toMatchObject({ reason: "genesis", sceneId: SCENE_ID });
   });
+
+  it("batch-reads scene heads in one query", async () => {
+    const { sceneDocumentRepository, writing } = await setup();
+    await writing.acquireOrRenewSceneLease({
+      ...scope,
+      sessionId: "session-owner"
+    });
+    await writing.saveWorkingSceneDocument({
+      ...scope,
+      sessionId: "session-owner",
+      expectedWorkingVersion: 1,
+      document: documentWith("Batch read", "block-batch")
+    });
+    const heads = await sceneDocumentRepository.getHeads([
+      SCENE_ID,
+      sceneId("scene-not-in-this-project")
+    ]);
+    expect(heads.size).toBe(1);
+    expect(heads.get(SCENE_ID)).toMatchObject({
+      workingVersion: 2,
+      document: documentWith("Batch read", "block-batch")
+    });
+  });
 });

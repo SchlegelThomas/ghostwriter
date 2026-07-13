@@ -1,5 +1,6 @@
 import type {
   BookId,
+  BookReaderProjection,
   CanvasBoard,
   CanvasCommand,
   CanvasObjectId,
@@ -273,6 +274,25 @@ export function createProject(input: {
   firstBookTitle: string;
 }): Promise<ProjectNavigator> {
   return requestJson("/api/projects", jsonRequest("POST", input));
+}
+
+export type BookReaderResponse = BookReaderProjection;
+
+export function getBookReader(input: Readonly<{
+  projectId: string;
+  bookId: BookId;
+  pinSceneId?: string;
+}>): Promise<BookReaderResponse> {
+  const params = new URLSearchParams();
+  if (input.pinSceneId !== undefined) {
+    params.set("pinSceneId", input.pinSceneId);
+  }
+  const query = params.toString();
+  return requestJson(
+    `/api/projects/${encodeURIComponent(input.projectId)}/books/${encodeURIComponent(input.bookId)}/reader${
+      query.length > 0 ? `?${query}` : ""
+    }`
+  );
 }
 
 export function getProject(projectId: string): Promise<ProjectNavigator> {

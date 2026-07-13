@@ -10,7 +10,23 @@ import type {
   SceneId,
   StoryKnowledgeId
 } from "@ghostwriter/core";
-import { ghostwriterTheme } from "@ghostwriter/ui";
+import {
+  CANVAS_CAMERA_TRANSITION_MS,
+  PROVISIONAL_BEAT_FIXTURE_SOURCE,
+  canvasDrillScopeKey,
+  chapterBoundOverlays,
+  currentDrillScope,
+  ghostwriterTheme,
+  interpolateCanvasViewport,
+  projectCanvasLensProjection,
+  readPrefersReducedMotion,
+  sceneDrillScope,
+  targetViewportForDrillScope,
+  workflowLensLabel,
+  type CanvasDrillScope,
+  type CanvasDrillStack,
+  type CanvasWorkflowLens
+} from "@ghostwriter/ui";
 import {
   useEffect,
   useMemo,
@@ -54,10 +70,9 @@ import {
 const { colors, fonts } = ghostwriterTheme;
 const OBJECT_NUDGE = 24;
 const OBJECT_RESIZE = 24;
-const PROVISIONAL_BEAT_SOURCE = "fixture:beat:first-turn";
 
 export type CanvasPanelMessage = Readonly<{
-  kind: "notice" | "error" | "conflict";
+  kind: "error" | "conflict";
   text: string;
 }>;
 
@@ -92,6 +107,14 @@ export type StoryCanvasPanelProps = Readonly<{
   onSelectObject(objectId: CanvasObjectId | undefined): void;
   onSelectScene(sceneId: SceneId): void;
   onUndo(): Promise<void>;
+  drillStack?: CanvasDrillStack;
+  workflowLens?: CanvasWorkflowLens;
+  onDrillIntoChapter?(
+    scope: Extract<CanvasDrillScope, { kind: "chapter" }>
+  ): void;
+  onDrillIntoScene?(
+    scope: Extract<CanvasDrillScope, { kind: "scene" }>
+  ): void;
 }>;
 
 type CanvasView = "spatial" | "outline";
@@ -259,20 +282,26 @@ function SpatialObjectCard({
   selected,
   detail,
   staleLabel,
+  dimmed = false,
+  primary = false,
   onDismiss,
   onMove,
   onReview,
-  onSelect
+  onSelect,
+  onDrillIntoScene
 }: Readonly<{
   object: CanvasObject;
   viewport: CanvasViewport;
   selected: boolean;
   detail: string;
   staleLabel?: string;
+  dimmed?: boolean;
+  primary?: boolean;
   onDismiss(object: CanvasObject): Promise<void>;
   onMove(object: CanvasObject, x: number, y: number): Promise<void>;
   onReview(object: CanvasObject): void;
   onSelect(object: CanvasObject): void;
+  onDrillIntoScene?(object: CanvasObject): void;
 }>) {
   const [dragDelta, setDragDelta] = useState({ x: 0, y: 0 });
   const draggedRef = useRef(false);
@@ -322,6 +351,8 @@ function SpatialObjectCard({
         object.kind === "image-reference" && styles.imageObject,
         object.authority === "provisional" && styles.provisionalObject,
         staleLabel !== undefined && styles.staleObject,
+        dimmed && styles.dimmedObject,
+        primary && styles.primaryObject,
         selected && styles.spatialObjectSelected,
         {
           ...(object.kind === "note" && object.note?.color !== undefined
@@ -363,6 +394,22 @@ function SpatialObjectCard({
           {detail}
         </Text>
       </Pressable>
+      {object.kind === "scene-card" && onDrillIntoScene !== undefined ? (
+        <Pressable
+          accessibilityLabel={`Enter scene lens for ${object.label}`}
+          accessibilityRole="button"
+          onPress={(event) => {
+            event.stopPropagation();
+            onDrillIntoScene(object);
+          }}
+          style={({ pressed }) => [
+            styles.quickAction,
+            pressed && styles.pressed
+          ]}
+        >
+          <Text style={styles.quickActionText}>Enter scene</Text>
+        </Pressable>
+      ) : null}
       {object.authority === "provisional" &&
       object.archivedAt === undefined ? (
         <View style={styles.quickActionRow}>
@@ -576,7 +623,11 @@ export function StoryCanvasPanel({
   onRestoreRevision,
   onSelectObject,
   onSelectScene,
-  onUndo
+  onUndo,
+  drillStack = [{ kind: "project" }],
+  workflowLens = "outline",
+  onDrillIntoChapter = () => undefined,
+  onDrillIntoScene = () => undefined
 }: StoryCanvasPanelProps) {
   const compact = useWindowDimensions().width < 720;
   const [view, setView] = useState<CanvasView>(compact ? "outline" : "spatial");
@@ -616,6 +667,13 @@ export function StoryCanvasPanel({
   const [sceneY, setSceneY] = useState("140");
   const [sceneWidth, setSceneWidth] = useState("260");
   const [sceneHeight, setSceneHeight] = useState("160");
+  const [cameraTransitioning, setCameraTransitioning] = useState(false);
+  const animationFrameRef = useRef<number | undefined>(undefined);
+  const viewportByScopeRef = useRef(new Map<string, CanvasViewport>());
+  const drillScope = currentDrillScope(drillStack);
+  const previousDrillKeyRef = useRef(canvasDrillScopeKey(drillScope));
+  const viewportRef = useRef(viewport);
+  viewportRef.current = viewport;
 
   const board = workspace?.board;
   const scenes = useMemo(
@@ -632,8 +690,23 @@ export function StoryCanvasPanel({
   const selectedLink = board?.links.find((link) => link.id === selectedLinkId);
   const activeObjects =
     board?.objects.filter((object) => object.archivedAt === undefined) ?? [];
+  const lensProjection =
+    board === undefined
+      ? undefined
+      : projectCanvasLensProjection(
+          project,
+          board,
+          drillScope,
+          workflowLens
+        );
+  const projectedObjects = lensProjection?.objects ?? activeObjects;
+  const projectedLinks = lensProjection?.links ?? [];
   const activeLinks =
-    board?.links.filter((link) => link.archivedAt === undefined) ?? [];
+    workflowLens === "relationships" ||
+    workflowLens === "continuity" ||
+    workflowLens === "review"
+      ? projectedLinks
+      : (board?.links.filter((link) => link.archivedAt === undefined) ?? []);
   const objectById = new Map(
     (board?.objects ?? []).map((object) => [object.id, object])
   );
@@ -644,15 +717,19 @@ export function StoryCanvasPanel({
   const visibleObjects =
     board === undefined
       ? []
-      : [...visibleCanvasObjects(activeObjects, viewport, surfaceSize)].sort(
+      : [...visibleCanvasObjects(projectedObjects, viewport, surfaceSize)].sort(
           (left, right) => left.z - right.z
         );
-  const activeSceneCard = activeObjects.find(
+  const chapterOverlays =
+    board === undefined || drillScope.kind !== "project"
+      ? []
+      : chapterBoundOverlays(project, board);
+  const activeSceneCard = projectedObjects.find(
     (object) =>
       object.kind === "scene-card" && object.sceneId === selectedSceneId
   );
   const hasProvisionalBeat = (board?.objects ?? []).some(
-    (object) => object.sourceKey === PROVISIONAL_BEAT_SOURCE
+    (object) => object.sourceKey === PROVISIONAL_BEAT_FIXTURE_SOURCE
   );
   const maxZ = Math.max(0, ...(board?.objects.map((object) => object.z) ?? []));
   const minZ = Math.min(0, ...(board?.objects.map((object) => object.z) ?? []));
@@ -695,6 +772,75 @@ export function StoryCanvasPanel({
       setShowInspector(false);
     }
   }, [compact]);
+
+  useEffect(() => {
+    if (workflowLens === "review") {
+      setShowHistory(true);
+      void onLoadHistory();
+    }
+  }, [onLoadHistory, workflowLens]);
+
+  useEffect(() => {
+    if (board === undefined) return;
+    const drillKey = canvasDrillScopeKey(drillScope);
+    const previousKey = previousDrillKeyRef.current;
+    if (previousKey !== drillKey) {
+      viewportByScopeRef.current.set(previousKey, viewportRef.current);
+      previousDrillKeyRef.current = drillKey;
+    }
+
+    const restored = viewportByScopeRef.current.get(drillKey);
+    const target =
+      restored ??
+      targetViewportForDrillScope(project, board, drillScope, surfaceSize);
+    if (target === undefined) return;
+
+    if (animationFrameRef.current !== undefined) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = undefined;
+    }
+
+    if (readPrefersReducedMotion()) {
+      setViewport(target);
+      void onPreferenceChange({
+        ...target,
+        ...(selectedObjectId === undefined
+          ? { selectedObjectId: null }
+          : { selectedObjectId })
+      });
+      return;
+    }
+
+    const from = viewportRef.current;
+    const startedAt = performance.now();
+    setCameraTransitioning(true);
+    const step = (now: number): void => {
+      const progress = Math.min(
+        1,
+        (now - startedAt) / CANVAS_CAMERA_TRANSITION_MS
+      );
+      const next = interpolateCanvasViewport(from, target, progress);
+      setViewport(next);
+      if (progress < 1) {
+        animationFrameRef.current = requestAnimationFrame(step);
+        return;
+      }
+      setCameraTransitioning(false);
+      animationFrameRef.current = undefined;
+      void onPreferenceChange({
+        ...target,
+        ...(selectedObjectId === undefined
+          ? { selectedObjectId: null }
+          : { selectedObjectId })
+      });
+    };
+    animationFrameRef.current = requestAnimationFrame(step);
+    return () => {
+      if (animationFrameRef.current !== undefined) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [board, drillScope, project, surfaceSize.height, surfaceSize.width]);
 
   useEffect(() => {
     if (preference === undefined || preference === null) return;
@@ -776,6 +922,14 @@ export function StoryCanvasPanel({
         ? {}
         : { parentRegionId: object.parentRegionId })
     });
+  }
+
+  function enterSceneFromObject(object: CanvasObject): void {
+    if (object.sceneId === undefined) return;
+    const scope = sceneDrillScope(project, object.sceneId);
+    if (scope === undefined) return;
+    onSelectScene(object.sceneId);
+    onDrillIntoScene(scope);
   }
 
   function selectObject(object: CanvasObject): void {
@@ -867,7 +1021,7 @@ export function StoryCanvasPanel({
         note: {
           body: "Provisional beat fixture: the apparent success creates a harder choice."
         },
-        sourceKey: PROVISIONAL_BEAT_SOURCE,
+        sourceKey: PROVISIONAL_BEAT_FIXTURE_SOURCE,
         provenance: "Deterministic Ghostwriter review fixture; no model call."
       }
     });
@@ -1719,7 +1873,9 @@ export function StoryCanvasPanel({
           <Text style={styles.canvasMeta}>
             {board === undefined
               ? "Canvas not loaded"
-              : `${board.objects.length} objects · ${board.links.length} links · version ${board.version}`}
+              : `${projectedObjects.length} scoped objects · ${board.links.length} links · ${workflowLensLabel(
+                  workflowLens
+                )} lens`}
           </Text>
           <Text
             accessibilityLabel="Canvas save status"
@@ -1737,10 +1893,9 @@ export function StoryCanvasPanel({
 
       {message === undefined ? null : (
         <View
-          accessibilityRole={message.kind === "notice" ? undefined : "alert"}
+          accessibilityRole="alert"
           style={[
             styles.message,
-            message.kind === "notice" && styles.messageNotice,
             message.kind === "conflict" && styles.messageConflict
           ]}
         >
@@ -2170,8 +2325,9 @@ export function StoryCanvasPanel({
                       />
                     </View>
                     <Text style={styles.viewportSummary}>
-                      Showing {visibleObjects.length} of {activeObjects.length} active
-                      objects
+                      {cameraTransitioning
+                        ? "Moving into scope…"
+                        : `Showing ${visibleObjects.length} of ${projectedObjects.length} scoped objects`}
                     </Text>
                   </View>
                   <View
@@ -2179,6 +2335,37 @@ export function StoryCanvasPanel({
                     onLayout={updateSurfaceSize}
                     style={styles.surface}
                   >
+                    {chapterOverlays.map((overlay) => {
+                      const frame = {
+                        left:
+                          (overlay.bounds.x - viewport.x) * viewport.zoom,
+                        top: (overlay.bounds.y - viewport.y) * viewport.zoom,
+                        width: overlay.bounds.width * viewport.zoom,
+                        height: overlay.bounds.height * viewport.zoom
+                      };
+                      return (
+                        <Pressable
+                          accessibilityLabel={`Enter chapter ${overlay.label}`}
+                          accessibilityRole="button"
+                          key={`${overlay.scope.chapterId}`}
+                          onPress={() => onDrillIntoChapter(overlay.scope)}
+                          style={({ pressed }) => [
+                            styles.chapterOverlay,
+                            pressed && styles.pressed,
+                            {
+                              height: Math.max(96, frame.height),
+                              left: frame.left,
+                              top: frame.top,
+                              width: Math.max(160, frame.width)
+                            }
+                          ]}
+                        >
+                          <Text style={styles.chapterOverlayLabel}>
+                            Enter {overlay.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
                     <View style={[styles.lane, styles.laneOne]}>
                       <Text style={styles.laneLabel}>Beginning</Text>
                     </View>
@@ -2217,19 +2404,28 @@ export function StoryCanvasPanel({
                       return (
                         <SpatialObjectCard
                           detail={objectDetail(object, scenes, project)}
+                          dimmed={lensProjection?.dimmedObjectIds.has(object.id)}
                           key={object.id}
                           object={object}
                           onDismiss={dismissObject}
+                          onDrillIntoScene={
+                            drillScope.kind === "scene"
+                              ? undefined
+                              : enterSceneFromObject
+                          }
                           onMove={moveObject}
                           onReview={reviewObject}
                           onSelect={selectObject}
+                          primary={lensProjection?.primaryObjectIds.has(
+                            object.id
+                          )}
                           selected={object.id === selectedObjectId}
                           staleLabel={canonicalState.label}
                           viewport={viewport}
                         />
                       );
                     })}
-                    {activeObjects.length === 0 ? (
+                    {projectedObjects.length === 0 ? (
                       <View style={styles.surfaceEmpty}>
                         <Text style={styles.emptyTitle}>An open board</Text>
                         <Text style={styles.emptyText}>
@@ -2254,7 +2450,11 @@ export function StoryCanvasPanel({
                       resize, link, archive, confirm, or dismiss it.
                     </Text>
                   </View>
-                  {outline.length === 0 ? (
+                  {outline.filter((item) =>
+                    projectedObjects.some(
+                      (object) => object.id === item.object.id
+                    )
+                  ).length === 0 ? (
                     <View style={styles.outlineEmpty}>
                       <Text style={styles.emptyTitle}>Nothing placed yet</Text>
                       <Text style={styles.emptyText}>
@@ -2264,7 +2464,13 @@ export function StoryCanvasPanel({
                     </View>
                   ) : (
                     <View style={styles.outlineList}>
-                      {outline.map((item, index) => {
+                      {outline
+                        .filter((item) =>
+                          projectedObjects.some(
+                            (object) => object.id === item.object.id
+                          )
+                        )
+                        .map((item, index) => {
                         const canonicalState = canvasCanonicalReferenceState(
                           item.object,
                           project
@@ -2293,6 +2499,12 @@ export function StoryCanvasPanel({
                               canonicalState.stale && styles.outlineRowStale,
                               item.object.id === selectedObjectId &&
                                 styles.outlineRowSelected,
+                              lensProjection?.dimmedObjectIds.has(
+                                item.object.id
+                              ) && styles.outlineRowDimmed,
+                              lensProjection?.primaryObjectIds.has(
+                                item.object.id
+                              ) && styles.outlineRowPrimary,
                               pressed && styles.pressed
                             ]}
                           >
@@ -2422,10 +2634,6 @@ const styles = StyleSheet.create({
     gap: 10,
     justifyContent: "space-between",
     padding: 11
-  },
-  messageNotice: {
-    backgroundColor: colors.greenSoft,
-    borderBottomColor: colors.green
   },
   messageConflict: {
     backgroundColor: colors.amberSoft,
@@ -2845,6 +3053,31 @@ const styles = StyleSheet.create({
     borderColor: colors.red,
     borderWidth: 2
   },
+  dimmedObject: {
+    opacity: 0.42
+  },
+  primaryObject: {
+    borderColor: colors.kicker,
+    borderWidth: 2
+  },
+  chapterOverlay: {
+    alignItems: "flex-start",
+    backgroundColor: "rgba(117,69,53,0.08)",
+    borderColor: colors.accent,
+    borderRadius: 10,
+    borderStyle: "dashed",
+    borderWidth: 2,
+    justifyContent: "flex-end",
+    padding: 10,
+    position: "absolute",
+    zIndex: 40
+  },
+  chapterOverlayLabel: {
+    color: colors.accent,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 8,
+    textTransform: "uppercase"
+  },
   spatialObjectSelected: {
     borderColor: colors.kicker,
     borderWidth: 3
@@ -2995,6 +3228,13 @@ const styles = StyleSheet.create({
   outlineRowSelected: {
     backgroundColor: colors.accentSoft,
     borderColor: colors.accent
+  },
+  outlineRowDimmed: {
+    opacity: 0.5
+  },
+  outlineRowPrimary: {
+    borderColor: colors.kicker,
+    borderWidth: 2
   },
   outlineIndex: {
     color: colors.kicker,

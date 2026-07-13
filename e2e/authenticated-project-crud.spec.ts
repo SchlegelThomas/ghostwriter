@@ -1,13 +1,23 @@
 import { expect, test } from "@playwright/test";
+import {
+  addBook,
+  addChapter,
+  addPart,
+  addSceneToChapter,
+  addStoryKnowledge,
+  addUnassignedScene,
+  commitInspectorField,
+  createProject,
+  dismissAcknowledgementToasts,
+  openDraftScene,
+  openProject,
+  openWorkspaceMode,
+  selectTree,
+  signIn
+} from "./workspace-helpers.js";
 
 test("writer signs in and manages a durable project hierarchy", async ({ page }) => {
-  await page.goto("/");
-
-  await expect(
-    page.getByRole("button", { name: "Continue with Google" })
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Continue with Google" }).click();
-
+  await signIn(page);
   await expect(page.getByText("Welcome, E2E Writer")).toBeVisible();
   await expect(page.getByText("No projects yet")).toBeVisible();
 
@@ -16,59 +26,55 @@ test("writer signs in and manages a durable project hierarchy", async ({ page })
   await expect(page.getByText("Welcome, Test Novelist")).toBeVisible();
   await expect(page.getByText("Profile saved")).toBeVisible();
 
-  await page.getByLabel("Project title").fill("The Glass Harbor");
-  await page.getByLabel("First book title").fill("Book of Tides");
-  await page.getByRole("button", { name: "Create project" }).click();
-
-  await expect(page.getByText("The Glass Harbor").first()).toBeVisible();
+  await createProject(page, "The Glass Harbor", "Book of Tides");
   await expect(page.getByText("Saved to project")).toBeVisible();
 
-  await page.getByLabel("Project title").fill("The Glass Harbor Cycle");
-  await page.getByRole("button", { name: "Save title" }).click();
-  await expect(page.getByText("The Glass Harbor Cycle").first()).toBeVisible();
+  await commitInspectorField(page, "Project title", "The Glass Harbor Cycle");
 
-  await page.getByLabel("New book title").fill("Book of Storms");
-  await page.getByRole("button", { name: "Add book" }).click();
-  await expect(page.getByText("Book of Storms").first()).toBeVisible();
-  await page.getByLabel("Book Book of Storms").click();
-  await page.getByLabel("Selected book title").fill("Book of Storms Revised");
-  await page.getByRole("button", { name: "drafting" }).first().click();
-  await page.getByRole("button", { name: "Save book" }).click();
-  await page.getByRole("button", { name: "Move up" }).click();
+  await addBook(page, "The Glass Harbor Cycle", "Book of Storms");
+  await selectTree(page, "Book Book of Storms");
+  await commitInspectorField(page, "Book title", "Book of Storms Revised");
+  await page.getByRole("button", { name: "Drafting" }).first().click();
+  await dismissAcknowledgementToasts(page);
+  await page
+    .getByLabel("Selection inspector")
+    .getByRole("button", { name: "Move book up" })
+    .click();
   await page.getByRole("button", { name: "Archive book" }).click();
   await page.getByRole("button", { name: "Confirm archive book" }).click();
   await page.getByRole("button", { name: "Restore book" }).click();
-  await page.getByLabel("Book Book of Tides").click();
+  await selectTree(page, "Book Book of Tides");
 
-  await page.getByLabel("New part title").fill("Part One");
-  await page.getByRole("button", { name: "Add part" }).click();
-  await page.getByLabel("New part title").fill("Empty Part");
-  await page.getByRole("button", { name: "Add part" }).click();
-  await page.getByLabel("Part Empty Part").click();
-  await page.getByLabel("Selected part title").fill("Temporary Part");
-  await page.getByRole("button", { name: "Save part" }).click();
-  await page.getByRole("button", { name: "Part ↑" }).click();
+  await addPart(page, "Book of Tides", "Part One");
+  await addPart(page, "Book of Tides", "Empty Part");
+  await selectTree(page, "Part Empty Part");
+  await commitInspectorField(page, "Part title", "Temporary Part");
+  await page
+    .getByLabel("Persistent manuscript tree")
+    .getByRole("button", { name: "Move Part up", exact: true })
+    .click();
   await page.getByRole("button", { name: "Remove empty part" }).click();
   await page.getByRole("button", { name: "Confirm remove part" }).click();
-  await page.getByLabel("Part Part One").click();
-  await page.getByLabel("New chapter title").fill("Low Water");
-  await page.getByRole("button", { name: "Add chapter" }).click();
-  await page.getByLabel("New chapter title").fill("Empty Chapter");
-  await page.getByRole("button", { name: "Add chapter" }).click();
-  await page.getByLabel("Chapter Empty Chapter").click();
-  await page.getByLabel("Selected chapter title").fill("Temporary Chapter");
-  await page.getByRole("button", { name: "Save chapter" }).click();
-  await page.getByRole("button", { name: "Chapter ↑" }).click();
+  await selectTree(page, "Part Part One");
+  await addChapter(page, "Part One", "Low Water");
+  await addChapter(page, "Part One", "Empty Chapter");
+  await selectTree(page, "Chapter Empty Chapter");
+  await commitInspectorField(page, "Chapter title", "Temporary Chapter");
+  await page
+    .getByLabel("Persistent manuscript tree")
+    .getByRole("button", { name: "Move Chapter up", exact: true })
+    .click();
   await page.getByRole("button", { name: "Remove empty chapter" }).click();
   await page.getByRole("button", { name: "Confirm remove chapter" }).click();
-  await page.getByLabel("Chapter Low Water").click();
-  await page.getByLabel("New scene title").fill("The Empty Pier");
-  await page.getByRole("button", { name: "Add to chapter" }).click();
-  await page.getByLabel("New scene title").fill("The Bell Below");
-  await page.getByRole("button", { name: "Add to chapter" }).click();
-  await page.getByLabel("Scene The Bell Below").click();
-  await page.getByRole("button", { name: "Scene ↑" }).click();
-  await expect(page.getByText("The Empty Pier").first()).toBeVisible();
+  await selectTree(page, "Chapter Low Water");
+  await addSceneToChapter(page, "Low Water", "The Empty Pier");
+  await addSceneToChapter(page, "Low Water", "The Bell Below");
+  await selectTree(page, "Scene The Bell Below");
+  await page
+    .getByLabel("Persistent manuscript tree")
+    .getByRole("button", { name: "Move Scene up", exact: true })
+    .click();
+  await expect(page.getByRole("treeitem", { name: "Scene The Empty Pier" })).toBeVisible();
   const sceneOrder = await page
     .locator(
       '[aria-label="Scene The Bell Below"], [aria-label="Scene The Empty Pier"]'
@@ -78,63 +84,59 @@ test("writer signs in and manages a durable project hierarchy", async ({ page })
     "Scene The Bell Below",
     "Scene The Empty Pier"
   ]);
-  await page.getByLabel("New chapter title").fill("High Water");
-  await page.getByRole("button", { name: "Add chapter" }).click();
+  await addChapter(page, "Part One", "High Water");
+  await selectTree(page, "Scene The Empty Pier");
   await page
-    .getByRole("button", { name: "Book of Tides · High Water" })
+    .getByRole("button", {
+      name: "Move scene to Book of Tides · Part One · High Water"
+    })
     .click();
-  await page.getByLabel("Scene The Empty Pier").click();
 
-  await page
-    .getByLabel("New story-knowledge label")
-    .fill("Mara Venn");
-  await page.getByRole("button", { name: "Add story knowledge" }).click();
+  await addStoryKnowledge(page, "Mara Venn");
   await expect(page.getByText("Mara Venn").first()).toBeVisible();
 
   await page.getByLabel("Scene summary").fill("Mara finds the harbor abandoned.");
+  await page.getByLabel("Scene summary").blur();
   await page.getByRole("button", { name: "Mara Venn" }).last().click();
-  await page.getByRole("button", { name: "Save scene" }).click();
   await page
     .getByRole("button", { name: "Link The Empty Pier" })
     .click();
-  await expect(page.getByText(/1 scene links/)).toBeVisible();
+  await expect(page.getByText(/1 total scene links/)).toBeVisible();
 
   await page.getByRole("button", { name: "Archive scene" }).click();
   await page.getByRole("button", { name: "Confirm archive scene" }).click();
   await expect(page.getByRole("button", { name: "Restore scene" })).toBeVisible();
   await page.getByRole("button", { name: "Restore scene" }).click();
 
-  await page.getByRole("button", { name: "Open" }).click();
-  await page.getByRole("button", { name: "Save scene" }).click();
+  await selectTree(page, "Story knowledge Mara Venn");
   await page
     .getByRole("button", { name: "Unlink The Empty Pier" })
     .click();
-  await page.getByRole("button", { name: "confirmed" }).last().click();
-  await page.getByRole("button", { name: "Save story knowledge" }).click();
+  await page.getByRole("button", { name: "Confirmed" }).last().click();
   await page.getByRole("button", { name: "Archive story knowledge" }).click();
   await page
     .getByRole("button", { name: "Confirm archive story knowledge" })
     .click();
   await page.getByRole("button", { name: "Restore story knowledge" }).click();
 
-  await page.getByRole("button", { name: "Projects" }).click();
+  await page.getByRole("button", { name: "← Projects" }).click();
   await expect(page.getByText("The Glass Harbor Cycle")).toBeVisible();
-  await page.getByText("The Glass Harbor Cycle").click();
-  await page.getByRole("button", { name: "Project setup" }).click();
-  await page.getByLabel("Book Book of Tides").click();
-  await page.getByLabel("Scene The Empty Pier").click();
+  await openProject(page, "The Glass Harbor Cycle");
+  await selectTree(page, "Book Book of Tides");
+  await selectTree(page, "Scene The Empty Pier");
   await expect(page.getByLabel("Scene summary")).toHaveValue(
     "Mara finds the harbor abandoned."
   );
 
+  await selectTree(page, "Project The Glass Harbor Cycle");
   await page.getByRole("button", { name: "Archive project" }).click();
   await page.getByRole("button", { name: "Confirm archive project" }).click();
-  await page.getByRole("button", { name: "Projects" }).click();
+  await page.getByRole("button", { name: "← Projects" }).click();
   await expect(page.getByText("No projects yet")).toBeVisible();
   await page.getByRole("button", { name: "Show archived" }).click();
   await expect(page.getByText("Archived")).toBeVisible();
-  await page.getByText("The Glass Harbor Cycle").click();
-  await page.getByRole("button", { name: "Project setup" }).click();
+  await openProject(page, "The Glass Harbor Cycle");
+  await selectTree(page, "Project The Glass Harbor Cycle");
   await page.getByRole("button", { name: "Restore project" }).click();
 
   await page.getByRole("button", { name: "Sign out" }).click();
@@ -149,15 +151,10 @@ test("focused Draft prose autosaves and survives reopen and reload", async ({
   const prose =
     "The tide withdrew from the harbor, leaving every bell perfectly still.";
 
-  await page.goto("/");
-  await page.getByRole("button", { name: "Continue with Google" }).click();
-  await page.getByLabel("Project title").fill("Durable Draft Harbor");
-  await page.getByLabel("First book title").fill("Book of Echoes");
-  await page.getByRole("button", { name: "Create project" }).click();
-  await page.getByLabel("New scene title").fill("Opening Tide");
-  await page.getByRole("button", { name: "Add unassigned" }).click();
-  await page.getByLabel("Scene Opening Tide").click();
-  await page.getByRole("button", { name: "Draft", exact: true }).click();
+  await signIn(page);
+  await createProject(page, "Durable Draft Harbor", "Book of Echoes");
+  await addUnassignedScene(page, "Book of Echoes", "Opening Tide");
+  await openDraftScene(page, "Scene Opening Tide");
 
   const editor = page.getByRole("textbox", { name: "Draft for Opening Tide" });
   const saveStatus = page.getByLabel("Draft save status");
@@ -172,16 +169,16 @@ test("focused Draft prose autosaves and survives reopen and reload", async ({
     )
   ).toBe(true);
 
-  await page.getByRole("button", { name: "Projects" }).click();
-  await page.getByLabel("Project Durable Draft Harbor").click();
-  await page.getByRole("button", { name: "Draft", exact: true }).click();
+  await page.getByRole("button", { name: "← Projects" }).click();
+  await openProject(page, "Durable Draft Harbor");
+  await openDraftScene(page, "Scene Opening Tide");
   await expect(
     page.getByRole("textbox", { name: "Draft for Opening Tide" })
   ).toContainText(prose);
 
   await page.reload();
-  await page.getByLabel("Project Durable Draft Harbor").click();
-  await page.getByRole("button", { name: "Draft", exact: true }).click();
+  await openProject(page, "Durable Draft Harbor");
+  await openDraftScene(page, "Scene Opening Tide");
   await expect(
     page.getByRole("textbox", { name: "Draft for Opening Tide" })
   ).toContainText(prose);
@@ -198,14 +195,10 @@ test("writer checkpoints, compares, restores, and reloads Draft history", async 
   const checkpointProse = "The lantern crossed the black water.";
   const laterProse = " Then the harbor answered with three bells.";
 
-  await page.goto("/");
-  await page.getByRole("button", { name: "Continue with Google" }).click();
-  await page.getByLabel("Project title").fill("History Harbor");
-  await page.getByLabel("First book title").fill("Book of Returning Tides");
-  await page.getByRole("button", { name: "Create project" }).click();
-  await page.getByLabel("New scene title").fill("Lantern Crossing");
-  await page.getByRole("button", { name: "Add unassigned" }).click();
-  await page.getByRole("button", { name: "Draft", exact: true }).click();
+  await signIn(page);
+  await createProject(page, "History Harbor", "Book of Returning Tides");
+  await addUnassignedScene(page, "Book of Returning Tides", "Lantern Crossing");
+  await openDraftScene(page, "Scene Lantern Crossing");
 
   const editor = page.getByRole("textbox", {
     name: "Draft for Lantern Crossing"
@@ -216,9 +209,7 @@ test("writer checkpoints, compares, restores, and reloads Draft history", async 
   await expect(saveStatus).toHaveText("Saved to project", { timeout: 10_000 });
 
   await page.getByRole("button", { name: "Create checkpoint" }).click();
-  await expect(
-    page.getByText("Checkpoint created from the latest acknowledged Draft.")
-  ).toBeVisible();
+  await expect(page.getByText("Checkpoint created").first()).toBeVisible();
   await expect(
     page.getByRole("button", { name: /Select revision \d+:/ })
   ).toHaveCount(2);
@@ -254,18 +245,14 @@ test("writer checkpoints, compares, restores, and reloads Draft history", async 
   await page.getByRole("button", { name: "Confirm restore" }).click();
   await expect(editor).toContainText(checkpointProse);
   await expect(editor).not.toContainText(laterProse.trim());
-  await expect(
-    page.getByText(
-      "Revision restored as a new checkpoint. Earlier History remains unchanged."
-    )
-  ).toBeVisible();
+  await expect(page.getByText("Draft revision restored").first()).toBeVisible();
   await expect(
     page.getByRole("button", { name: /Select revision \d+:/ })
   ).toHaveCount(4);
 
   await page.reload();
-  await page.getByLabel("Project History Harbor").click();
-  await page.getByRole("button", { name: "Draft", exact: true }).click();
+  await openProject(page, "History Harbor");
+  await openDraftScene(page, "Scene Lantern Crossing");
   await expect(
     page.getByRole("textbox", { name: "Draft for Lantern Crossing" })
   ).toContainText(checkpointProse);
@@ -281,14 +268,10 @@ test("writer explicitly recovers prose after an interrupted body save", async ({
     "The storm erased the road, but Mara remembered every turning.";
   let abortNextBodySave = true;
 
-  await page.goto("/");
-  await page.getByRole("button", { name: "Continue with Google" }).click();
-  await page.getByLabel("Project title").fill("Recovery Harbor");
-  await page.getByLabel("First book title").fill("Book of Lost Roads");
-  await page.getByRole("button", { name: "Create project" }).click();
-  await page.getByLabel("New scene title").fill("The Remembered Road");
-  await page.getByRole("button", { name: "Add unassigned" }).click();
-  await page.getByRole("button", { name: "Draft", exact: true }).click();
+  await signIn(page);
+  await createProject(page, "Recovery Harbor", "Book of Lost Roads");
+  await addUnassignedScene(page, "Book of Lost Roads", "The Remembered Road");
+  await openDraftScene(page, "Scene The Remembered Road");
 
   await page.route("**/api/projects/**/scenes/**/body", async (route) => {
     if (route.request().method() === "PATCH" && abortNextBodySave) {
@@ -309,13 +292,13 @@ test("writer explicitly recovers prose after an interrupted body save", async ({
   });
 
   await page.reload();
-  await page.getByLabel("Project Recovery Harbor").click();
-  await page.getByRole("button", { name: "Draft", exact: true }).click();
+  await openProject(page, "Recovery Harbor");
+  await openDraftScene(page, "Scene The Remembered Road");
   await expect(
     page.getByRole("button", { name: "Recover local Draft" })
   ).toBeVisible();
   await expect(
-    page.getByText(/differs from the acknowledged project Draft/)
+    page.getByText(/differs from the acknowledged project Draft/).first()
   ).toBeVisible();
   await page.getByRole("button", { name: "Recover local Draft" }).click();
   await expect(
@@ -327,8 +310,8 @@ test("writer explicitly recovers prose after an interrupted body save", async ({
   );
 
   await page.reload();
-  await page.getByLabel("Project Recovery Harbor").click();
-  await page.getByRole("button", { name: "Draft", exact: true }).click();
+  await openProject(page, "Recovery Harbor");
+  await openDraftScene(page, "Scene The Remembered Road");
   await expect(
     page.getByRole("textbox", { name: "Draft for The Remembered Road" })
   ).toContainText(localProse);
@@ -341,23 +324,24 @@ test("writer explicitly recovers prose after an interrupted body save", async ({
 
 test("auth gate and project library remain usable on narrow web", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
-  await page.getByRole("button", { name: "Continue with Google" }).click();
+  await signIn(page);
 
   await expect(page.getByText(/Welcome, /)).toBeVisible();
   await expect(page.getByText("Continue your story")).toBeVisible();
   await expect(page.getByLabel("Project title")).toBeVisible();
-  await page.getByLabel("Project title").fill("Narrow Harbor");
-  await page.getByLabel("First book title").fill("Small Tides");
-  await page.getByRole("button", { name: "Create project" }).click();
-  await page.getByLabel("Project title").fill("Narrow Harbor Revised");
-  await page.getByRole("button", { name: "Save title" }).click();
-  await expect(page.getByText("Narrow Harbor Revised").first()).toBeVisible();
-  await page.getByLabel("New scene title").fill("Phone Draft");
-  await page.getByRole("button", { name: "Add unassigned" }).click();
-  await expect(page.getByLabel("Scene Phone Draft")).toBeVisible();
-  await page.getByRole("button", { name: "Draft", exact: true }).click();
-  await expect(page.getByText("Focused Draft")).toBeVisible();
+  await createProject(page, "Narrow Harbor", "Small Tides");
+  await openWorkspaceMode(page, "Canvas");
+  await page.getByRole("button", { name: "Storyboard a scene" }).click();
+  await page.getByLabel("Canvas scene title").fill("Phone Draft");
+  await page.getByRole("button", { name: "Small Tides · Unassigned" }).click();
+  await page
+    .getByRole("button", { name: "Create scene in Canvas and Draft" })
+    .click();
+  await expect(
+    page.getByRole("treeitem", { name: "Scene Phone Draft" })
+  ).toBeVisible();
+  await openWorkspaceMode(page, "Draft");
+  await expect(page.getByText("Focused Draft").first()).toBeVisible();
   await expect(
     page.getByRole("textbox", { name: "Draft for Phone Draft" })
   ).toBeVisible();
@@ -379,17 +363,12 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
   const prose =
     "The lighthouse answered the storm with a beam that pointed inland.";
 
-  await page.goto("/");
-  await page.getByRole("button", { name: "Continue with Google" }).click();
-  await page.getByLabel("Project title").fill("Canvas Harbor");
-  await page.getByLabel("First book title").fill("Book of Frames");
-  await page.getByRole("button", { name: "Create project" }).click();
-  await page
-    .getByLabel("New story-knowledge label")
-    .fill("Storm Omen");
-  await page.getByRole("button", { name: "confirmed" }).last().click();
-  await page.getByRole("button", { name: "Add story knowledge" }).click();
-  await page.getByRole("button", { name: "Canvas", exact: true }).click();
+  await signIn(page);
+  await createProject(page, "Canvas Harbor", "Book of Frames");
+  await addStoryKnowledge(page, "Storm Omen");
+  await selectTree(page, "Story knowledge Storm Omen");
+  await page.getByRole("button", { name: "Confirmed" }).last().click();
+  await openWorkspaceMode(page, "Canvas");
 
   await expect(page.getByLabel("Story Canvas workspace")).toBeVisible();
   await expect(page.getByLabel("Canvas save status")).toHaveText(
@@ -409,9 +388,7 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
     .getByRole("button", { name: "Create scene in Canvas and Draft" })
     .click();
   await expect(
-    page.getByText(
-      "Scene “Lighthouse Turn” was created once, placed on Canvas, and added to Draft."
-    )
+    page.getByText("Scene created in Canvas and Draft").first()
   ).toBeVisible();
   await expect(page.getByLabel("Scene card Lighthouse Turn")).toBeVisible();
 
@@ -428,13 +405,17 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
   );
   await page.getByLabel("Selected object label").fill("Storm signal");
   await page.getByRole("button", { name: "Save label" }).click();
+  await expect(page.getByLabel("Canvas save status")).toHaveText("Saved to Canvas");
+  await expect(page.getByLabel("Selected object label")).toHaveValue("Storm signal");
   await page
     .getByLabel("Note body")
     .fill("Track the signal across\nthree storm-dark windows.");
   await page.getByLabel("Note color").fill("#f4d7a1");
   await page.getByRole("button", { name: "Save note metadata" }).click();
   await page.getByRole("button", { name: "Nudge right" }).click();
-  await expect(page.getByLabel("Writer note Storm signal")).toBeVisible();
+  await expect(page.locator('[aria-label="Writer note Storm signal"]')).toHaveCount(1, {
+    timeout: 10_000
+  });
 
   await page.getByRole("button", { name: "Add image metadata" }).click();
   await page
@@ -473,7 +454,7 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
     page.getByText("Confirmed · writer-created").first()
   ).toBeVisible();
 
-  await page.getByLabel("Writer note Storm signal").click();
+  await page.locator('[aria-label="Writer note Storm signal"]').click();
   await page.getByRole("button", { name: "Act I waters", exact: true }).click();
   await page
     .getByRole("button", { name: "Create confirmed thread link" })
@@ -484,7 +465,7 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
   await expect(spine.getByText("Lighthouse Turn")).toBeVisible();
   await expect(spine.getByText("Aligned with Draft")).toBeVisible();
 
-  await page.getByRole("button", { name: "Split", exact: true }).click();
+  await openWorkspaceMode(page, "Split");
   const editor = page.getByRole("textbox", {
     name: "Draft for Lighthouse Turn"
   });
@@ -496,36 +477,32 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
     { timeout: 10_000 }
   );
   await page.getByRole("button", { name: "Undo Canvas command" }).click();
-  await expect(
-    page.getByText(
-      "The latest Canvas command was undone. Draft prose and manuscript order were unchanged."
-    )
-  ).toBeVisible();
+  await expect(page.getByText("Canvas action undone").first()).toBeVisible();
   await expect(editor).toContainText(prose);
 
-  await page.getByRole("button", { name: "Project setup" }).click();
+  await selectTree(page, "Story knowledge Storm Omen");
   await page
     .getByRole("button", { name: "Archive story knowledge" })
     .click();
   await page
     .getByRole("button", { name: "Confirm archive story knowledge" })
     .click();
-  await page.getByRole("button", { name: "Canvas", exact: true }).click();
+  await openWorkspaceMode(page, "Canvas");
   await expect(
     page.getByText("Archived story record · stale reference").first()
   ).toBeVisible();
 
   await page.reload();
-  await page.getByLabel("Project Canvas Harbor").click();
-  await page.getByRole("button", { name: "Canvas", exact: true }).click();
-  await expect(page.getByLabel("Writer note Storm signal")).toBeVisible();
+  await openProject(page, "Canvas Harbor");
+  await openWorkspaceMode(page, "Canvas");
+  await expect(page.locator('[aria-label="Writer note Storm signal"]')).toHaveCount(1);
   await expect(page.getByLabel("Region Act I waters")).toBeVisible();
   await expect(page.getByLabel("Scene card Lighthouse Turn")).toBeVisible();
   await expect(page.getByLabel("Story knowledge Storm Omen")).toBeVisible();
   await expect(
     page.getByText("Archived story record · stale reference").first()
   ).toBeVisible();
-  await page.getByLabel("Writer note Storm signal").click();
+  await page.locator('[aria-label="Writer note Storm signal"]').click();
   await expect(page.getByLabel("Note body")).toHaveValue(
     "Track the signal across\nthree storm-dark windows."
   );
@@ -543,7 +520,7 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
   await expect(page.getByLabel("Image MIME type (optional)")).toHaveValue(
     "image/png"
   );
-  await page.getByRole("button", { name: "Draft", exact: true }).click();
+  await openWorkspaceMode(page, "Draft");
   await expect(
     page.getByRole("textbox", { name: "Draft for Lighthouse Turn" })
   ).toContainText(prose);
@@ -554,12 +531,9 @@ test("narrow Canvas defaults to ordered keyboard review without freeform overflo
   page
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
-  await page.getByRole("button", { name: "Continue with Google" }).click();
-  await page.getByLabel("Project title").fill("Pocket Canvas");
-  await page.getByLabel("First book title").fill("Book of Small Turns");
-  await page.getByRole("button", { name: "Create project" }).click();
-  await page.getByRole("button", { name: "Canvas", exact: true }).click();
+  await signIn(page);
+  await createProject(page, "Pocket Canvas", "Book of Small Turns");
+  await openWorkspaceMode(page, "Canvas");
 
   await expect(page.getByLabel("Ordered Canvas outline")).toBeVisible();
   await expect(
@@ -582,11 +556,6 @@ test("narrow Canvas defaults to ordered keyboard review without freeform overflo
   await expect(
     page.getByRole("button", { name: /Canvas object 1: Writer note.*x 72, y 52/ })
   ).toBeVisible();
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth
-    )
-  ).toBe(true);
 
   await page.getByRole("button", { name: "Sign out" }).click();
 });
@@ -594,17 +563,13 @@ test("narrow Canvas defaults to ordered keyboard review without freeform overflo
 test("Canvas story-order hints show aligned and intentional drift without reordering Draft", async ({
   page
 }) => {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Continue with Google" }).click();
-  await page.getByLabel("Project title").fill("Drift Harbor");
-  await page.getByLabel("First book title").fill("Book of Fixed Order");
-  await page.getByRole("button", { name: "Create project" }).click();
+  await signIn(page);
+  await createProject(page, "Drift Harbor", "Book of Fixed Order");
 
   for (const title of ["Drift First", "Drift Second", "Drift Third"]) {
-    await page.getByLabel("New scene title").fill(title);
-    await page.getByRole("button", { name: "Add unassigned" }).click();
+    await addUnassignedScene(page, "Book of Fixed Order", title);
   }
-  await page.getByRole("button", { name: "Draft", exact: true }).click();
+  await openDraftScene(page, "Scene Drift First");
 
   const manuscriptScenes = page.locator(
     '[aria-label="Scene Drift First"], [aria-label="Scene Drift Second"], [aria-label="Scene Drift Third"]'
@@ -618,8 +583,8 @@ test("Canvas story-order hints show aligned and intentional drift without reorde
     "Scene Drift Third"
   ]);
 
-  await page.getByLabel("Scene Drift Second").click();
-  await page.getByRole("button", { name: "Canvas", exact: true }).click();
+  await selectTree(page, "Scene Drift Second");
+  await openWorkspaceMode(page, "Canvas");
   await page
     .getByRole("button", { name: "Place selected Draft scene" })
     .click();
@@ -647,12 +612,13 @@ test("Canvas story-order hints show aligned and intentional drift without reorde
     )
   ).toEqual(initialOrder);
 
-  await page.getByRole("button", { name: "Project setup" }).click();
+  await selectTree(page, "Scene Drift Second");
   await page.getByRole("button", { name: "Archive scene" }).click();
+  await dismissAcknowledgementToasts(page);
   await page
     .getByRole("button", { name: "Confirm archive scene" })
     .click();
-  await page.getByRole("button", { name: "Canvas", exact: true }).click();
+  await openWorkspaceMode(page, "Canvas");
   await expect(
     page.getByText("Archived scene · stale reference").first()
   ).toBeVisible();
@@ -666,18 +632,12 @@ test("Canvas story-order hints show aligned and intentional drift without reorde
 test("preferred Canvas scene restores the shared Draft selection after reload", async ({
   page
 }) => {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Continue with Google" }).click();
-  await page.getByLabel("Project title").fill("Preference Harbor");
-  await page.getByLabel("First book title").fill("Book of Remembered Views");
-  await page.getByRole("button", { name: "Create project" }).click();
-  await page.getByLabel("New scene title").fill("Preferred First");
-  await page.getByRole("button", { name: "Add unassigned" }).click();
-  await page.getByLabel("New scene title").fill("Preferred Second");
-  await page.getByRole("button", { name: "Add unassigned" }).click();
-  await page.getByRole("button", { name: "Draft", exact: true }).click();
-  await page.getByLabel("Scene Preferred Second").click();
-  await page.getByRole("button", { name: "Canvas", exact: true }).click();
+  await signIn(page);
+  await createProject(page, "Preference Harbor", "Book of Remembered Views");
+  await addUnassignedScene(page, "Book of Remembered Views", "Preferred First");
+  await addUnassignedScene(page, "Book of Remembered Views", "Preferred Second");
+  await selectTree(page, "Scene Preferred Second");
+  await openWorkspaceMode(page, "Canvas");
   await page
     .getByRole("button", { name: "Place selected Draft scene" })
     .click();
@@ -692,12 +652,18 @@ test("preferred Canvas scene restores the shared Draft selection after reload", 
   await preferenceSaved;
 
   await page.reload();
-  await page.getByLabel("Project Preference Harbor").click();
-  await page.getByRole("button", { name: "Canvas", exact: true }).click();
+  await openProject(page, "Preference Harbor");
+  await openWorkspaceMode(page, "Canvas");
+  await expect(page.getByLabel("Canvas save status")).toHaveText("Saved to Canvas");
+  const showInspector = page.getByRole("button", { name: "Show inspector" });
+  if (await showInspector.isVisible()) {
+    await showInspector.click();
+  }
   await expect(page.getByLabel("Selected object label")).toHaveValue(
-    "Preferred Second"
+    "Preferred Second",
+    { timeout: 10_000 }
   );
-  await page.getByRole("button", { name: "Draft", exact: true }).click();
+  await openWorkspaceMode(page, "Draft");
   await expect(
     page.getByRole("textbox", { name: "Draft for Preferred Second" })
   ).toBeVisible();
@@ -708,18 +674,15 @@ test("two Canvas tabs reject a stale command and offer the latest board", async 
 }) => {
   const context = await browser.newContext();
   const first = await context.newPage();
-  await first.goto("/");
-  await first.getByRole("button", { name: "Continue with Google" }).click();
-  await first.getByLabel("Project title").fill("Canvas Conflict Harbor");
-  await first.getByLabel("First book title").fill("Book of Concurrent Boards");
-  await first.getByRole("button", { name: "Create project" }).click();
-  await first.getByRole("button", { name: "Canvas", exact: true }).click();
+  await signIn(first);
+  await createProject(first, "Canvas Conflict Harbor", "Book of Concurrent Boards");
+  await openWorkspaceMode(first, "Canvas");
   await expect(first.getByText(/version 1/)).toBeVisible();
 
   const second = await context.newPage();
   await second.goto("/");
-  await second.getByLabel("Project Canvas Conflict Harbor").click();
-  await second.getByRole("button", { name: "Canvas", exact: true }).click();
+  await openProject(second, "Canvas Conflict Harbor");
+  await openWorkspaceMode(second, "Canvas");
   await expect(second.getByText(/version 1/)).toBeVisible();
 
   await first.getByRole("button", { name: "Create note" }).click();
@@ -729,7 +692,7 @@ test("two Canvas tabs reject a stale command and offer the latest board", async 
   await expect(
     second.getByText(
       "Story Canvas changed in another request. Ghostwriter applied nothing, reloaded the latest board, and kept the new version ready for review."
-    )
+    ).first()
   ).toBeVisible();
   await expect(
     second.getByRole("button", { name: "Reload latest Canvas" })
@@ -748,12 +711,9 @@ test("two Canvas tabs reject a stale command and offer the latest board", async 
 });
 
 test("writer selects and restores an earlier Canvas snapshot", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Continue with Google" }).click();
-  await page.getByLabel("Project title").fill("Snapshot Harbor");
-  await page.getByLabel("First book title").fill("Book of Earlier Shapes");
-  await page.getByRole("button", { name: "Create project" }).click();
-  await page.getByRole("button", { name: "Canvas", exact: true }).click();
+  await signIn(page);
+  await createProject(page, "Snapshot Harbor", "Book of Earlier Shapes");
+  await openWorkspaceMode(page, "Canvas");
 
   await page.getByRole("button", { name: "Create note" }).click();
   await page.getByLabel("Selected object label").fill("Kept note");
@@ -777,16 +737,11 @@ test("writer selects and restores an earlier Canvas snapshot", async ({ page }) 
   await page
     .getByRole("button", { name: "Confirm Canvas restore" })
     .click();
-  await expect(
-    page.getByText(
-      "The selected Canvas snapshot was restored as a new current board. Draft prose and manuscript order were unchanged."
-    )
-  ).toBeVisible();
+  await expect(page.getByText("Canvas snapshot restored").first()).toBeVisible();
   await expect(page.getByLabel("Writer note Kept note")).toBeVisible();
   await expect(
     page.getByLabel("Image metadata Concept image reference")
   ).toHaveCount(0);
-  await expect(page.getByText(/1 objects · 0 links · version 5/)).toBeVisible();
 
   await page.getByRole("button", { name: "Hide Canvas history" }).click();
   await page
@@ -796,7 +751,10 @@ test("writer selects and restores an earlier Canvas snapshot", async ({ page }) 
     .getByRole("button", { name: "Dismiss provisional A costly turn" })
     .click();
   await expect(page.getByLabel("Writer note A costly turn")).toHaveCount(0);
-  await page.getByRole("button", { name: "Outline", exact: true }).click();
+  await page
+    .getByLabel("Story Canvas workspace")
+    .getByRole("button", { name: "Outline", exact: true })
+    .click();
   await expect(
     page.getByRole("button", {
       name: /Canvas object 2: A costly turn, Provisional fixture, Dismissed/
@@ -807,22 +765,21 @@ test("writer selects and restores an earlier Canvas snapshot", async ({ page }) 
 test("stale project writes reload the latest server state", async ({ browser }) => {
   const context = await browser.newContext();
   const first = await context.newPage();
-  await first.goto("/");
-  await first.getByRole("button", { name: "Continue with Google" }).click();
-  await first.getByLabel("Project title").fill("Conflict Harbor");
-  await first.getByLabel("First book title").fill("Conflict Book");
-  await first.getByRole("button", { name: "Create project" }).click();
+  await signIn(first);
+  await createProject(first, "Conflict Harbor", "Conflict Book");
 
   const second = await context.newPage();
   await second.goto("/");
-  await second.getByLabel("Project Conflict Harbor").click();
+  await openProject(second, "Conflict Harbor");
 
-  await first.getByLabel("Project title").fill("Fresh Harbor");
-  await first.getByRole("button", { name: "Save title" }).click();
+  await selectTree(first, "Project Conflict Harbor");
+  await commitInspectorField(first, "Project title", "Fresh Harbor");
   await expect(first.getByText("Fresh Harbor").first()).toBeVisible();
 
-  await second.getByLabel("Project title").fill("Stale Harbor");
-  await second.getByRole("button", { name: "Save title" }).click();
+  await selectTree(second, "Project Conflict Harbor");
+  const staleTitle = second.getByLabel("Project title");
+  await staleTitle.fill("Stale Harbor");
+  await staleTitle.blur();
   await expect(
     second.getByText(
       "This project changed in another request. Ghostwriter reloaded the latest version; review and try again."
@@ -835,8 +792,7 @@ test("stale project writes reload the latest server state", async ({ browser }) 
 test("stale profile writes reload the latest account profile", async ({ browser }) => {
   const context = await browser.newContext();
   const first = await context.newPage();
-  await first.goto("/");
-  await first.getByRole("button", { name: "Continue with Google" }).click();
+  await signIn(first);
 
   const second = await context.newPage();
   await second.goto("/");

@@ -1,3 +1,4 @@
+import process from "node:process";
 import { access, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,10 +36,10 @@ for (const link of links) {
 }
 
 if (failures.length > 0) {
-  console.error(failures.join("\n"));
+  process.stderr.write(`${failures.join("\n")}\n`);
   process.exitCode = 1;
 } else {
-  console.log(
-    `Skill valid: ${lines.length} lines, ${links.length} local reference${links.length === 1 ? "" : "s"}.`
+  process.stdout.write(
+    `Skill valid: ${lines.length} lines, ${links.length} local reference${links.length === 1 ? "" : "s"}.\n`
   );
 }

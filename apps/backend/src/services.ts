@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   createCanvasServices,
+  createBookReaderServices,
   createIdentityServices,
   createGhostwriterServices,
   createSceneWritingServices,
@@ -8,6 +9,7 @@ import {
   type GhostwriterServices,
   type IdentityServices,
   type CanvasServices,
+  type BookReaderServices,
   type SceneWritingServices
 } from "@ghostwriter/core";
 import {
@@ -27,6 +29,7 @@ export type BackendRuntime = Readonly<{
   services: GhostwriterServices;
   writing: SceneWritingServices;
   canvas: CanvasServices;
+  reader: BookReaderServices;
   identity: IdentityServices;
   auth: AuthGateway;
   close(): Promise<void>;
@@ -66,8 +69,13 @@ export function createBackendRuntime(config: BackendConfig): BackendRuntime {
     ids,
     clock
   });
+  const reader = createBookReaderServices({
+    projects: repository,
+    sceneDocuments,
+    canvases
+  });
   const identity = createIdentityServices({ profiles, clock });
   const auth = createBetterAuthGateway(db, config.auth);
 
-  return { services, writing, canvas, identity, auth, close };
+  return { services, writing, canvas, reader, identity, auth, close };
 }

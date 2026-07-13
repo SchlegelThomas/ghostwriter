@@ -1,3 +1,5 @@
+export * from "./book-reader.js";
+export * from "./book-reader-services.js";
 export * from "./capabilities.js";
 export * from "./canvas.js";
 export * from "./canvas-repository.js";

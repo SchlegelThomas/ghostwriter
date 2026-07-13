@@ -67,6 +67,25 @@ export type DraftPanelProps = Readonly<{
   sceneId: string;
   sceneTitle: string;
   readOnly?: boolean;
+  onAcknowledgement?(event: DraftAcknowledgementEvent): void;
+  onActivityChange?(activity: DraftActivity): void;
+  onProblem?(problem: DraftProblemEvent): void;
+  onProblemResolved?(id: string): void;
+}>;
+
+export type DraftActivity = "idle" | "saving" | "problem";
+
+export type DraftAcknowledgementEvent = Readonly<{
+  kind: "save" | "checkpoint" | "variant" | "restore";
+  title: string;
+  detail: string;
+}>;
+
+export type DraftProblemEvent = Readonly<{
+  id: string;
+  title: string;
+  detail: string;
+  tone: "warning" | "error";
 }>;
 
 type LeasePhase = "loading" | "acquiring" | "held" | "readonly";
@@ -526,7 +545,17 @@ function leaseStatusText(
 
 export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
   function DraftPanel(
-    { accountId, projectId, sceneId, sceneTitle, readOnly = false },
+    {
+      accountId,
+      projectId,
+      sceneId,
+      sceneTitle,
+      readOnly = false,
+      onAcknowledgement,
+      onActivityChange,
+      onProblem,
+      onProblemResolved
+    },
     ref
   ) {
     const [document, setDocument] = useState<SceneDocumentV1>();
@@ -555,10 +584,19 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
     const recoveryRef = useRef<SceneRecoveryCoordinator | undefined>(
       undefined
     );
+    const acknowledgementCallbackRef = useRef(onAcknowledgement);
+    const activityCallbackRef = useRef(onActivityChange);
+    const problemCallbackRef = useRef(onProblem);
+    const problemResolvedCallbackRef = useRef(onProblemResolved);
+    const reportedProblemIdsRef = useRef(new Set<string>());
     const activeRef = useRef(false);
     const renewingRef = useRef(false);
     const releasePromiseRef = useRef<Promise<void> | undefined>(undefined);
     const transitionRef = useRef<Promise<void>>(Promise.resolve());
+    acknowledgementCallbackRef.current = onAcknowledgement;
+    activityCallbackRef.current = onActivityChange;
+    problemCallbackRef.current = onProblem;
+    problemResolvedCallbackRef.current = onProblemResolved;
 
     const refreshHistory = useCallback(
       async (currentCheckpointRevisionId?: string): Promise<void> => {
@@ -748,7 +786,14 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
               void localRecovery.current?.acknowledge(
                 acknowledgement.document
               );
-              if (active) setHead(acknowledgement);
+              if (active) {
+                setHead(acknowledgement);
+                acknowledgementCallbackRef.current?.({
+                  kind: "save",
+                  title: "Draft saved",
+                  detail: `${sceneTitle} · Draft version ${acknowledgement.workingVersion}`
+                });
+              }
             },
             onError: (cause) => {
               void handleSaveFailure(cause, queue);
@@ -1020,11 +1065,15 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
         setHead(nextHead);
         setComparison(undefined);
         setConfirmingRestore(false);
-        setHistoryNotice(
-          result.created
-            ? "Checkpoint created from the latest acknowledged Draft."
-            : "The Draft already matches its current checkpoint."
-        );
+        acknowledgementCallbackRef.current?.({
+          kind: "checkpoint",
+          title: result.created
+            ? "Checkpoint created"
+            : "Checkpoint already current",
+          detail: result.created
+            ? `${sceneTitle} · Latest acknowledged Draft preserved`
+            : `${sceneTitle} already matches its current checkpoint`
+        });
         await refreshHistory(result.head.checkpointRevisionId);
       } catch (cause) {
         await handleHistoryActionFailure(
@@ -1076,11 +1125,13 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
         setVariantName("");
         setComparison(undefined);
         setConfirmingRestore(false);
-        setHistoryNotice(
-          result.checkpointCreated
-            ? `Named variant “${result.variant.name}” created with a new checkpoint.`
-            : `Named variant “${result.variant.name}” now points to the current checkpoint.`
-        );
+        acknowledgementCallbackRef.current?.({
+          kind: "variant",
+          title: "Named variant created",
+          detail: result.checkpointCreated
+            ? `${result.variant.name} · New checkpoint preserved`
+            : `${result.variant.name} · Current checkpoint preserved`
+        });
         await refreshHistory(result.head.checkpointRevisionId);
       } catch (cause) {
         await handleHistoryActionFailure(
@@ -1174,9 +1225,12 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
         await recoveryRef.current?.discard();
         setComparison(undefined);
         setConfirmingRestore(false);
-        setHistoryNotice(
-          "Revision restored as a new checkpoint. Earlier History remains unchanged."
-        );
+        acknowledgementCallbackRef.current?.({
+          kind: "restore",
+          title: "Draft revision restored",
+          detail:
+            "Restored as a new checkpoint · Earlier History remains unchanged"
+        });
         await refreshHistory(result.head.checkpointRevisionId);
         if (activeRef.current) queue.resume();
       } catch (cause) {
@@ -1340,6 +1394,81 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
       setProblem(undefined);
       await reacquireAndRetry();
     }, [problem, reacquireAndRetry]);
+
+    useEffect(() => {
+      const nextIds = new Set<string>();
+      if (recoveryOffer !== undefined) {
+        const id = `draft-recovery:${sceneId}`;
+        nextIds.add(id);
+        problemCallbackRef.current?.({
+          id,
+          title: "Unsaved Draft recovered",
+          detail:
+            "Local prose differs from the acknowledged project Draft. Review Recover or Discard in Draft.",
+          tone: "warning"
+        });
+      }
+      if (recoveryMode === "tab-only") {
+        const id = `draft-recovery-storage:${sceneId}`;
+        nextIds.add(id);
+        problemCallbackRef.current?.({
+          id,
+          title: "Browser recovery is limited",
+          detail:
+            "New unacknowledged prose is protected only while this tab remains open.",
+          tone: "warning"
+        });
+      }
+      if (problem !== undefined) {
+        const id = `draft-problem:${sceneId}`;
+        nextIds.add(id);
+        problemCallbackRef.current?.({
+          id,
+          title:
+            problem.kind === "revision"
+              ? "Draft revision conflict"
+              : problem.kind === "lease"
+                ? "Draft lease needs attention"
+                : problem.kind === "save"
+                  ? "Draft not saved"
+                  : "Draft could not load",
+          detail: problem.message,
+          tone: problem.kind === "save" || problem.kind === "load" ? "error" : "warning"
+        });
+      }
+      for (const id of reportedProblemIdsRef.current) {
+        if (!nextIds.has(id)) problemResolvedCallbackRef.current?.(id);
+      }
+      reportedProblemIdsRef.current = nextIds;
+    }, [problem, recoveryMode, recoveryOffer, sceneId]);
+
+    useEffect(
+      () => () => {
+        for (const id of reportedProblemIdsRef.current) {
+          problemResolvedCallbackRef.current?.(id);
+        }
+        reportedProblemIdsRef.current.clear();
+      },
+      []
+    );
+
+    useEffect(() => {
+      if (problem !== undefined || recoveryOffer !== undefined) {
+        activityCallbackRef.current?.("problem");
+        return;
+      }
+      if (
+        saveSnapshot === undefined ||
+        saveSnapshot.status === "pending" ||
+        saveSnapshot.status === "saving" ||
+        leasePhase === "loading" ||
+        leasePhase === "acquiring"
+      ) {
+        activityCallbackRef.current?.("saving");
+        return;
+      }
+      activityCallbackRef.current?.("idle");
+    }, [leasePhase, problem, recoveryOffer, saveSnapshot]);
 
     const editorIsEditable =
       leasePhase === "held" &&

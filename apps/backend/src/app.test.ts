@@ -4,6 +4,7 @@ import {
   BELLWETHER_FIXTURE_NAVIGATOR,
   BELLWETHER_FIXTURE_PROJECT_ID,
   accountId,
+  createBookReaderServices,
   createCanvasServices,
   createProjectMembership,
   createGhostwriterServices,
@@ -123,6 +124,11 @@ async function seededApp(auth: AuthGateway = fakeAuth()) {
     ids,
     clock: { now: () => "2026-07-11T19:00:00.000Z" }
   });
+  const reader = createBookReaderServices({
+    projects: repository,
+    sceneDocuments,
+    canvases
+  });
   const identity = createIdentityServices({
     profiles: createMemoryWriterProfileRepository(),
     clock: { now: () => "2026-07-11T19:00:00.000Z" }
@@ -132,6 +138,7 @@ async function seededApp(auth: AuthGateway = fakeAuth()) {
     services,
     writing,
     canvas,
+    reader,
     identity,
     auth,
     allowedOrigins: [TEST_ORIGIN]
@@ -1067,5 +1074,57 @@ describe("backend app", () => {
     const response = await app.request("/api/projects/project-not-here/navigator");
 
     expect(response.status).toBe(404);
+  });
+
+  it("serves a bounded book reader projection without taking a scene lease", async () => {
+    const app = await seededApp();
+    const bookId = BELLWETHER_FIXTURE_NAVIGATOR.books[0]!.id;
+    const response = await app.request(
+      `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/books/${bookId}/reader?pinSceneId=${SCENE_ID}`
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      bookId,
+      bookTitle: "The Signal at Bellwether",
+      pinSceneId: SCENE_ID,
+      totals: { scenes: 4 }
+    });
+    expect(body.scenes.map((scene: { title: string }) => scene.title)).toEqual([
+      "Arrival at Bellwether",
+      "The dead frequency",
+      "The call that hasn't happened",
+      "The false rescue"
+    ]);
+
+    const lease = await app.request(
+      `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/scenes/${SCENE_ID}/lease`,
+      {
+        method: "POST",
+        headers: { origin: TEST_ORIGIN }
+      }
+    );
+    expect(lease.status).toBe(200);
+  });
+
+  it("does not disclose unknown books to non-owners", async () => {
+    const auth = switchableAuth(TEST_SESSION);
+    const app = await seededApp(auth.gateway);
+    const bookId = BELLWETHER_FIXTURE_NAVIGATOR.books[0]!.id;
+    auth.use({
+      ...TEST_SESSION,
+      account: {
+        ...TEST_SESSION.account,
+        id: "account-stranger"
+      }
+    });
+    const response = await app.request(
+      `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/books/${bookId}/reader`
+    );
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "PROJECT_NOT_FOUND"
+    });
   });
 });

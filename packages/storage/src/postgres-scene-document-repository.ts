@@ -36,7 +36,7 @@ import {
   type SceneVariant,
   type SceneVariantId
 } from "@ghostwriter/core";
-import { and, desc, eq, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import type { RepositoryDatabase } from "./client.js";
 import {
   sceneDocuments,
@@ -170,6 +170,25 @@ function leaseFromRow(
     renewedAt: row.renewedAt,
     expiresAt: row.expiresAt
   });
+}
+
+async function queryHeads(
+  db: RepositoryDatabase,
+  ids: readonly SceneId[]
+): Promise<ReadonlyMap<SceneId, SceneDocumentHead>> {
+  if (ids.length === 0) return new Map();
+
+  const rows = await db
+    .select()
+    .from(sceneDocuments)
+    .where(inArray(sceneDocuments.sceneId, [...ids]));
+
+  const heads = new Map<SceneId, SceneDocumentHead>();
+  for (const row of rows) {
+    const head = headFromRow(row);
+    heads.set(head.sceneId, head);
+  }
+  return heads;
 }
 
 async function queryHead(
@@ -434,6 +453,11 @@ export function createPostgresSceneDocumentRepository(
   return Object.freeze({
     getHead(id: SceneId): Promise<SceneDocumentHead | undefined> {
       return queryHead(db, id);
+    },
+    getHeads(
+      ids: readonly SceneId[]
+    ): Promise<ReadonlyMap<SceneId, SceneDocumentHead>> {
+      return queryHeads(db, ids);
     },
     getRevision(id: RevisionId): Promise<SceneRevision | undefined> {
       return queryRevision(db, id);

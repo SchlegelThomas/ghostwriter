@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { serve } from "@hono/node-server";
 import {
+  createBookReaderServices,
   createCanvasServices,
   createGhostwriterServices,
   createIdentityServices,
@@ -118,11 +119,17 @@ const canvas = createCanvasServices({
   ids,
   clock
 });
+const reader = createBookReaderServices({
+  projects,
+  sceneDocuments,
+  canvases
+});
 const identity = createIdentityServices({ profiles, clock });
 const app = createApp({
   services,
   writing,
   canvas,
+  reader,
   identity,
   auth: e2eAuthGateway(),
   allowedOrigins: [appOrigin]

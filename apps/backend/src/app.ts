@@ -1,5 +1,8 @@
 import {
   accountId,
+  BookNotFoundError,
+  BookReaderTooLargeError,
+  bookId,
   CanvasCommandError,
   CanvasNotFoundError,
   CanvasRevisionNotFoundError,
@@ -19,6 +22,8 @@ import {
   sceneId,
   SceneVariantNameConflictError,
   SceneWorkingVersionConflictError,
+  type BookReaderProjection,
+  type BookReaderServices,
   type CanvasRevisionMetadata,
   type CanvasServices,
   type CanvasWorkspace,
@@ -57,6 +62,7 @@ export type BackendDependencies = Readonly<{
   services: GhostwriterServices;
   writing: SceneWritingServices;
   canvas: CanvasServices;
+  reader: BookReaderServices;
   identity: IdentityServices;
   auth: AuthGateway;
   allowedOrigins?: readonly string[];
@@ -147,6 +153,36 @@ function canvasWorkspaceResponse(workspace: CanvasWorkspace) {
   return {
     board: workspace.board,
     spine: workspace.spine
+  };
+}
+
+function bookReaderResponse(projection: BookReaderProjection) {
+  return {
+    projectId: projection.projectId,
+    bookId: projection.bookId,
+    bookTitle: projection.bookTitle,
+    ...(projection.pinSceneId === undefined
+      ? {}
+      : { pinSceneId: projection.pinSceneId }),
+    scenes: projection.scenes.map((scene) => ({
+      sceneId: scene.sceneId,
+      title: scene.title,
+      status: scene.status,
+      ...(scene.summary === undefined ? {} : { summary: scene.summary }),
+      ...(scene.chapterId === undefined ? {} : { chapterId: scene.chapterId }),
+      ...(scene.chapterTitle === undefined
+        ? {}
+        : { chapterTitle: scene.chapterTitle }),
+      ...(scene.partId === undefined ? {} : { partId: scene.partId }),
+      ...(scene.partTitle === undefined ? {} : { partTitle: scene.partTitle }),
+      placement: scene.placement,
+      document: scene.document,
+      workingVersion: scene.workingVersion,
+      ...(scene.contentHash === undefined ? {} : { contentHash: scene.contentHash }),
+      links: scene.links
+    })),
+    chapters: projection.chapters,
+    totals: projection.totals
   };
 }
 
@@ -316,6 +352,50 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
     }
 
     return context.json(navigator);
+  });
+
+  app.get("/api/projects/:projectId/books/:bookId/reader", async (context) => {
+    const rawProjectId = context.req.param("projectId");
+    const rawBookId = context.req.param("bookId");
+    const pinSceneId = context.req.query("pinSceneId");
+
+    let id;
+    let resolvedBookId;
+    try {
+      id = projectId(rawProjectId);
+      resolvedBookId = bookId(rawBookId);
+    } catch (error) {
+      if (error instanceof DomainValidationError) {
+        return context.json({ error: "Invalid request id.", code: error.code }, 400);
+      }
+      throw error;
+    }
+
+    let resolvedPinSceneId;
+    if (pinSceneId !== undefined && pinSceneId.length > 0) {
+      try {
+        resolvedPinSceneId = sceneId(pinSceneId);
+      } catch (error) {
+        if (error instanceof DomainValidationError) {
+          return context.json(
+            { error: "Invalid pin scene id.", code: error.code },
+            400
+          );
+        }
+        throw error;
+      }
+    }
+
+    const authSession = context.get("authSession");
+    const projection = await dependencies.reader.getBookReader({
+      accountId: accountId(authSession.account.id),
+      projectId: id,
+      bookId: resolvedBookId,
+      ...(resolvedPinSceneId === undefined
+        ? {}
+        : { pinSceneId: resolvedPinSceneId })
+    });
+    return context.json(bookReaderResponse(projection));
   });
 
   app.post("/api/projects/:projectId/commands", async (context) => {
@@ -819,6 +899,21 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
       return context.json(
         { error: error.message, code: "INVALID_VARIANT_NAME" },
         422
+      );
+    }
+    if (error instanceof BookNotFoundError) {
+      return context.json(
+        { error: "Book not found.", code: "BOOK_NOT_FOUND" },
+        404
+      );
+    }
+    if (error instanceof BookReaderTooLargeError) {
+      return context.json(
+        {
+          error: "This book is too large to load in the reader.",
+          code: "BOOK_READER_TOO_LARGE"
+        },
+        413
       );
     }
     if (error instanceof ProjectAccessDeniedError) {

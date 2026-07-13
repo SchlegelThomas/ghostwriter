@@ -134,6 +134,9 @@ export type RestoreSceneRevisionInput = SceneConditionalMutationInput &
 
 export interface SceneDocumentRepository {
   getHead(sceneId: SceneId): Promise<SceneDocumentHead | undefined>;
+  getHeads(
+    sceneIds: readonly SceneId[]
+  ): Promise<ReadonlyMap<SceneId, SceneDocumentHead>>;
   getRevision(revisionId: RevisionId): Promise<SceneRevision | undefined>;
   getVariant(variantId: SceneVariantId): Promise<SceneVariant | undefined>;
   listRevisions(sceneId: SceneId): Promise<readonly SceneRevisionMetadata[]>;

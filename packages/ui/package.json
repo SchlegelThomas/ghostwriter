@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ghostwriter/core": "workspace:*"
+    "@ghostwriter/core": "workspace:*",
+    "@ghostwriter/editor": "workspace:*"
   },
   "peerDependencies": {
     "react": "*",
