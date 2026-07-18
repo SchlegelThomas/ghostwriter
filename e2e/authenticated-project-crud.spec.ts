@@ -811,7 +811,7 @@ test("pointer tree moves, Canvas drill, and workflow lenses preserve one scene",
     await lenses.getByRole("tab", { name: lens, exact: true }).click();
     // RN web omits aria-selected on tabs; assert the live Canvas status copy instead.
     await expect(
-      page.getByText(new RegExp(`· ${lens.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`))
+      page.getByText(new RegExp(`${lens.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} lens`))
     ).toBeVisible();
   }
 
