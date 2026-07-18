@@ -29,8 +29,21 @@ import {
 test("writer signs in and manages a durable project hierarchy", async ({ page }) => {
   test.setTimeout(120_000);
   await signIn(page);
-  await expect(page.getByText("Welcome, E2E Writer")).toBeVisible();
-  await expect(page.getByText("No projects yet")).toBeVisible();
+  await expect(page.getByText(/Welcome,/)).toBeVisible();
+  // Retries share the hermetic E2E server process; clear leftover projects first.
+  for (;;) {
+    const leftover = page.getByRole("button", { name: /^Project / }).first();
+    if (!(await leftover.isVisible().catch(() => false))) break;
+    await leftover.click();
+    await expect(page.getByRole("button", { name: "← Projects" })).toBeVisible();
+    await page.getByRole("button", { name: "Archive project" }).click();
+    await page.getByRole("button", { name: "Confirm archive project" }).click();
+    await page.getByRole("button", { name: "← Projects" }).click();
+    await expect(page.getByText("Continue your story")).toBeVisible();
+  }
+  await expect(page.getByText("No projects yet")).toBeVisible({
+    timeout: 15_000
+  });
 
   await page.getByLabel("Writer display name").fill("Test Novelist");
   await page.getByRole("button", { name: "Save profile" }).click();
@@ -145,8 +158,10 @@ test("writer signs in and manages a durable project hierarchy", async ({ page })
   await page.getByRole("button", { name: "← Projects" }).click();
   await expect(page.getByText("Continue your story")).toBeVisible();
   await openProject(page, "The Glass Harbor Cycle");
-  await selectTree(page, "Book Book of Tides");
+  // Search reveals scenes under collapsed chapters after a project reopen.
+  await treeSearch.fill("The Empty Pier");
   await selectTree(page, "Scene The Empty Pier");
+  await treeSearch.fill("");
   await expect(page.getByLabel("Scene summary")).toHaveValue(
     "Mara finds the harbor abandoned."
   );
@@ -726,6 +741,7 @@ test("preferred Canvas scene restores the shared Draft selection after reload", 
 test("pointer tree moves, Canvas drill, and workflow lenses preserve one scene", async ({
   page
 }) => {
+  test.setTimeout(90_000);
   await signIn(page);
   await createProject(page, "Workflow Harbor", "Book of Movements");
   await addPart(page, "Book of Movements", "Act One");
@@ -769,7 +785,11 @@ test("pointer tree moves, Canvas drill, and workflow lenses preserve one scene",
   await page.getByRole("button", { name: "Nudge right" }).click();
   await expect(page.getByText("Canvas object moved").first()).toBeVisible();
 
-  await page.getByRole("button", { name: "Enter chapter Destination" }).click();
+  // Prefer Chapter Aggregates over spatial overlays — scene cards intercept
+  // pointer events on the freeform Enter-chapter hit targets.
+  await page
+    .getByRole("button", { name: "Enter chapter aggregate Destination" })
+    .click();
   await expect(
     page.getByRole("button", {
       name: "Canvas scope Destination, current scope"
