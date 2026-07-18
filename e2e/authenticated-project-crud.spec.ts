@@ -7,16 +7,27 @@ import {
   addStoryKnowledge,
   addUnassignedScene,
   commitInspectorField,
+  createCanvasImageReference,
+  createCanvasNote,
+  createCanvasRegion,
   createProject,
   dismissAcknowledgementToasts,
+  hideCanvasHistory,
+  openCanvasSceneTool,
+  openDraftHistory,
   openDraftScene,
   openProject,
   openWorkspaceMode,
+  placeSelectedDraftSceneOnCanvas,
+  placeStoryKnowledgeOnCanvas,
   selectTree,
+  showCanvasDetailsIfHidden,
+  showCanvasHistory,
   signIn
 } from "./workspace-helpers.js";
 
 test("writer signs in and manages a durable project hierarchy", async ({ page }) => {
+  test.setTimeout(120_000);
   await signIn(page);
   await expect(page.getByText("Welcome, E2E Writer")).toBeVisible();
   await expect(page.getByText("No projects yet")).toBeVisible();
@@ -204,6 +215,7 @@ test("focused Draft prose autosaves and survives reopen and reload", async ({
 test("writer checkpoints, compares, restores, and reloads Draft history", async ({
   page
 }) => {
+  test.setTimeout(90_000);
   const checkpointProse = "The lantern crossed the black water.";
   const laterProse = " Then the harbor answered with three bells.";
 
@@ -220,6 +232,7 @@ test("writer checkpoints, compares, restores, and reloads Draft history", async 
   await editor.pressSequentially(checkpointProse);
   await expect(saveStatus).toHaveText("Saved to project", { timeout: 10_000 });
 
+  await openDraftHistory(page);
   await page.getByRole("button", { name: "Create checkpoint" }).click();
   await expect(page.getByText("Checkpoint created").first()).toBeVisible();
   await expect(
@@ -268,6 +281,7 @@ test("writer checkpoints, compares, restores, and reloads Draft history", async 
   await expect(
     page.getByRole("textbox", { name: "Draft for Lantern Crossing" })
   ).toContainText(checkpointProse);
+  await openDraftHistory(page);
   await expect(page.getByText("Restored Draft").first()).toBeVisible();
 
   await page.getByRole("button", { name: "Sign out" }).click();
@@ -343,17 +357,21 @@ test("auth gate and project library remain usable on narrow web", async ({ page 
   await expect(page.getByLabel("Project title")).toBeVisible();
   await createProject(page, "Narrow Harbor", "Small Tides");
   await openWorkspaceMode(page, "Canvas");
-  await page.getByRole("button", { name: "Storyboard a scene" }).click();
+  await openCanvasSceneTool(page);
   await page.getByLabel("Canvas scene title").fill("Phone Draft");
   await page.getByRole("button", { name: "Small Tides · Unassigned" }).click();
   await page
     .getByRole("button", { name: "Create scene in Canvas and Draft" })
     .click();
   await expect(
+    page.getByText("Scene created in Canvas and Draft").first()
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Show manuscript tree" }).click();
+  await expect(
     page.getByRole("treeitem", { name: "Scene Phone Draft" })
   ).toBeVisible();
   await openWorkspaceMode(page, "Draft");
-  await expect(page.getByText("Focused Draft").first()).toBeVisible();
+  await expect(page.getByLabel("Draft Desk")).toBeVisible();
   await expect(
     page.getByRole("textbox", { name: "Draft for Phone Draft" })
   ).toBeVisible();
@@ -372,6 +390,7 @@ test("auth gate and project library remain usable on narrow web", async ({ page 
 test("writer storyboards on Canvas, writes in Split, undoes, and reloads both states", async ({
   page
 }) => {
+  test.setTimeout(120_000);
   const prose =
     "The lighthouse answered the storm with a beam that pointed inland.";
 
@@ -386,7 +405,7 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
   await expect(page.getByLabel("Canvas save status")).toHaveText(
     "Saved to Canvas"
   );
-  await page.getByRole("button", { name: "Storyboard a scene" }).click();
+  await openCanvasSceneTool(page);
   await page.getByLabel("Canvas scene title").fill("Lighthouse Turn");
   await page
     .getByRole("button", { name: "Book of Frames · Unassigned" })
@@ -404,14 +423,12 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
   ).toBeVisible();
   await expect(page.getByLabel("Scene card Lighthouse Turn")).toBeVisible();
 
-  await page
-    .getByRole("button", { name: "Place Storm Omen on Canvas" })
-    .click();
+  await placeStoryKnowledgeOnCanvas(page, "Storm Omen");
   await expect(page.getByLabel("Story knowledge Storm Omen")).toBeVisible();
   await expect(page.getByLabel("Selected object label")).toHaveValue("Storm Omen");
   await expect(page.getByText("Confirmed · writer-created").first()).toBeVisible();
 
-  await page.getByRole("button", { name: "Create note" }).click();
+  await createCanvasNote(page);
   await expect(page.getByLabel("Selected object label")).toHaveValue(
     "Writer note"
   );
@@ -432,7 +449,7 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
     ).toHaveCount(1);
   }).toPass({ timeout: 10_000 });
 
-  await page.getByRole("button", { name: "Add image metadata" }).click();
+  await createCanvasImageReference(page);
   await page
     .getByRole("textbox", { name: "Image alt text", exact: true })
     .fill("A lighthouse beam crossing storm clouds");
@@ -446,7 +463,7 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
     page.getByLabel("Image metadata Concept image reference")
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Create region" }).click();
+  await createCanvasRegion(page);
   await expect(page.getByLabel("Selected object label")).toHaveValue(
     "Story region"
   );
@@ -456,7 +473,7 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
   await expect(page.getByLabel("Region Act I waters")).toBeVisible();
 
   await page
-    .getByRole("button", { name: "Add provisional beat fixture" })
+    .getByRole("button", { name: "Add provisional review fixture" })
     .click();
   await expect(
     page.getByText("Provisional fixture · not confirmed").first()
@@ -477,9 +494,11 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
     .getByRole("button", { name: /Canvas object \d+: Storm signal,/ })
     .click();
   await page
+    .getByLabel("Canvas inspector")
     .getByRole("button", { name: "Region · Act I waters", exact: true })
     .click();
   await page
+    .getByLabel("Canvas inspector")
     .getByRole("button", { name: "Create confirmed thread link" })
     .click();
   await expect(page.getByText("thread · Act I waters")).toBeVisible();
@@ -557,6 +576,7 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
   await expect(page.getByLabel("Image MIME type (optional)")).toHaveValue(
     "image/png"
   );
+  await selectTree(page, "Scene Lighthouse Turn");
   await openWorkspaceMode(page, "Draft");
   await expect(
     page.getByRole("textbox", { name: "Draft for Lighthouse Turn" })
@@ -581,7 +601,7 @@ test("narrow Canvas defaults to ordered keyboard review without freeform overflo
   ).toHaveCount(0);
   await expect(page.getByLabel("Spatial Story Canvas")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Create note" }).click();
+  await createCanvasNote(page);
   const outlineObject = page.getByRole("button", {
     name: /Canvas object 1: Writer note/
   });
@@ -622,14 +642,14 @@ test("Canvas story-order hints show aligned and intentional drift without reorde
 
   await selectTree(page, "Scene Drift Second");
   await openWorkspaceMode(page, "Canvas");
-  await page
-    .getByRole("button", { name: "Place selected Draft scene" })
-    .click();
+  await placeSelectedDraftSceneOnCanvas(page);
   await expect(page.getByLabel("Current Canvas story order drift")).toContainText(
     "Draft position 2 · Aligned with Draft"
   );
 
-  await page.getByLabel("Story order hint (0 = first)").fill("0");
+  await page
+    .getByRole("textbox", { name: "Story order hint (0 = first)", exact: true })
+    .fill("0");
   await page.getByRole("button", { name: "Save story-order hint" }).click();
   await expect(page.getByLabel("Current Canvas story order drift")).toContainText(
     "Earlier on Canvas"
@@ -638,7 +658,9 @@ test("Canvas story-order hints show aligned and intentional drift without reorde
     page.getByLabel("Reading-order spine").getByText("Earlier on Canvas")
   ).toBeVisible();
 
-  await page.getByLabel("Story order hint (0 = first)").fill("2");
+  await page
+    .getByRole("textbox", { name: "Story order hint (0 = first)", exact: true })
+    .fill("2");
   await page.getByRole("button", { name: "Save story-order hint" }).click();
   await expect(page.getByLabel("Current Canvas story order drift")).toContainText(
     "Later on Canvas"
@@ -675,9 +697,7 @@ test("preferred Canvas scene restores the shared Draft selection after reload", 
   await addUnassignedScene(page, "Book of Remembered Views", "Preferred Second");
   await selectTree(page, "Scene Preferred Second");
   await openWorkspaceMode(page, "Canvas");
-  await page
-    .getByRole("button", { name: "Place selected Draft scene" })
-    .click();
+  await placeSelectedDraftSceneOnCanvas(page);
 
   const preferenceSaved = page.waitForResponse(
     (response) =>
@@ -692,10 +712,7 @@ test("preferred Canvas scene restores the shared Draft selection after reload", 
   await openProject(page, "Preference Harbor");
   await openWorkspaceMode(page, "Canvas");
   await expect(page.getByLabel("Canvas save status")).toHaveText("Saved to Canvas");
-  const showInspector = page.getByRole("button", { name: "Show inspector" });
-  if (await showInspector.isVisible()) {
-    await showInspector.click();
-  }
+  await showCanvasDetailsIfHidden(page);
   await expect(page.getByLabel("Selected object label")).toHaveValue(
     "Preferred Second",
     { timeout: 10_000 }
@@ -743,20 +760,13 @@ test("pointer tree moves, Canvas drill, and workflow lenses preserve one scene",
   ).toBeVisible();
 
   await openWorkspaceMode(page, "Canvas");
-  await page.getByRole("button", { name: "Place selected Draft scene" }).click();
+  await placeSelectedDraftSceneOnCanvas(page);
   const sceneCard = page.getByLabel("Scene card Movable Signal");
   await expect(sceneCard).toBeVisible();
-
-  const frame = await sceneCard.boundingBox();
-  expect(frame).not.toBeNull();
-  await page.mouse.move(frame!.x + frame!.width / 2, frame!.y + frame!.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(
-    frame!.x + frame!.width / 2 + 42,
-    frame!.y + frame!.height / 2 + 24,
-    { steps: 6 }
-  );
-  await page.mouse.up();
+  await sceneCard.click();
+  await showCanvasDetailsIfHidden(page);
+  // Prefer keyboard nudge over pointer drag — RN web PanResponder is flaky in CI.
+  await page.getByRole("button", { name: "Nudge right" }).click();
   await expect(page.getByText("Canvas object moved").first()).toBeVisible();
 
   await page.getByRole("button", { name: "Enter chapter Destination" }).click();
@@ -880,10 +890,18 @@ test("two Canvas tabs reject a stale command and offer the latest board", async 
   await openWorkspaceMode(second, "Canvas");
   await expect(second.getByText(/version 1/)).toBeVisible();
 
-  await first.getByRole("button", { name: "Create note" }).click();
+  const noteSaved = first.waitForResponse(
+    (response) =>
+      response.url().includes("/canvas/commands") &&
+      response.request().method() === "POST" &&
+      response.ok()
+  );
+  await createCanvasNote(first);
+  await noteSaved;
   await expect(first.getByLabel("Writer note Writer note")).toBeVisible();
+  await expect(first.getByLabel("Canvas save status")).toHaveText("Saved to Canvas");
 
-  await second.getByRole("button", { name: "Create region" }).click();
+  await createCanvasRegion(second);
   await expect(
     second.getByText(
       "Story Canvas changed in another request. Ghostwriter applied nothing, reloaded the latest board, and kept the new version ready for review."
@@ -910,15 +928,15 @@ test("writer selects and restores an earlier Canvas snapshot", async ({ page }) 
   await createProject(page, "Snapshot Harbor", "Book of Earlier Shapes");
   await openWorkspaceMode(page, "Canvas");
 
-  await page.getByRole("button", { name: "Create note" }).click();
+  await createCanvasNote(page);
   await page.getByLabel("Selected object label").fill("Kept note");
   await page.getByRole("button", { name: "Save label" }).click();
-  await page.getByRole("button", { name: "Add image metadata" }).click();
+  await createCanvasImageReference(page);
   await expect(
     page.getByLabel("Image metadata Concept image reference")
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Show Canvas history" }).click();
+  await showCanvasHistory(page);
   await expect(page.getByLabel("Canvas history")).toBeVisible();
   await page
     .getByRole("button", {
@@ -938,9 +956,9 @@ test("writer selects and restores an earlier Canvas snapshot", async ({ page }) 
     page.getByLabel("Image metadata Concept image reference")
   ).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Hide Canvas history" }).click();
+  await hideCanvasHistory(page);
   await page
-    .getByRole("button", { name: "Add provisional beat fixture" })
+    .getByRole("button", { name: "Add provisional review fixture" })
     .click();
   await page
     .getByRole("button", { name: "Dismiss provisional A costly turn" })

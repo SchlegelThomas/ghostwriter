@@ -18,7 +18,10 @@ export async function createProject(
 }
 
 export async function openProject(page: Page, title: string): Promise<void> {
-  await page.getByLabel(`Project ${title}`).click();
+  await page
+    .getByRole("button", { name: `Project ${title}`, exact: true })
+    .first()
+    .click();
   await expect(page.getByRole("button", { name: "← Projects" })).toBeVisible();
 }
 
@@ -171,18 +174,104 @@ export async function openDraftScene(
   const item = page.getByRole("treeitem", { name: sceneLabel });
   await item.click();
   await item.press("Enter");
-  await expect(page.getByText("Focused Draft").first()).toBeVisible();
+  await expect(page.getByLabel("Draft Desk")).toBeVisible();
+}
+
+export async function openDraftHistory(page: Page): Promise<void> {
+  const closeHistory = page.getByRole("button", { name: "Close History" });
+  if (await closeHistory.isVisible().catch(() => false)) {
+    return;
+  }
+  await page.getByRole("button", { name: "History", exact: true }).click();
+  await expect(page.getByLabel("Draft History drawer")).toBeVisible();
+}
+
+function canvasToolDock(page: Page) {
+  return page.getByLabel("Canvas tool dock");
+}
+
+function canvasUtilityBar(page: Page) {
+  return page.getByLabel("Canvas utility bar");
+}
+
+export async function activateCanvasTool(
+  page: Page,
+  label: string,
+  shortcut: string
+): Promise<void> {
+  await canvasToolDock(page)
+    .getByRole("button", { name: `${label} (${shortcut})` })
+    .click();
+}
+
+export async function createCanvasNote(page: Page): Promise<void> {
+  await activateCanvasTool(page, "Note", "N");
+}
+
+export async function createCanvasRegion(page: Page): Promise<void> {
+  await activateCanvasTool(page, "Region", "R");
+}
+
+export async function createCanvasImageReference(page: Page): Promise<void> {
+  await activateCanvasTool(page, "Image reference", "I");
+}
+
+export async function openCanvasSceneTool(page: Page): Promise<void> {
+  await activateCanvasTool(page, "Scene", "S");
+  await expect(page.getByLabel("Storyboard scene handoff")).toBeVisible();
+}
+
+export async function placeSelectedDraftSceneOnCanvas(page: Page): Promise<void> {
+  await openCanvasSceneTool(page);
+  const handoff = page.getByLabel("Storyboard scene handoff");
+  await handoff
+    .getByRole("button", { name: "Place selected Draft scene" })
+    .click();
+  await expect(page.getByText("Scene placed on Canvas").first()).toBeVisible({
+    timeout: 10_000
+  });
+  const cancel = handoff.getByRole("button", { name: "Cancel scene tool" });
+  if (await cancel.isVisible().catch(() => false)) {
+    await cancel.click();
+  }
+  await showCanvasDetailsIfHidden(page);
+}
+
+export async function placeStoryKnowledgeOnCanvas(
+  page: Page,
+  label: string
+): Promise<void> {
+  await activateCanvasTool(page, "Story record", "K");
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  await page
+    .getByLabel("Story knowledge placement")
+    .getByRole("button", { name: new RegExp(`^${escaped} ·`) })
+    .click();
+  await page.getByRole("button", { name: `Place ${label} on Canvas` }).click();
+}
+
+export async function showCanvasHistory(page: Page): Promise<void> {
+  await canvasUtilityBar(page)
+    .getByRole("button", { name: "Show Canvas history" })
+    .click();
+}
+
+export async function hideCanvasHistory(page: Page): Promise<void> {
+  await canvasUtilityBar(page)
+    .getByRole("button", { name: "Hide Canvas history" })
+    .click();
 }
 
 export async function openWorkspaceMode(
   page: Page,
   mode: "Draft" | "Canvas" | "Split" | "Reader"
 ): Promise<void> {
+  // RN web may concatenate glyph + label ("CCanvas") or keep a space ("C Canvas").
   const wideLabels = {
-    Draft: "D Draft",
-    Canvas: "C Canvas",
-    Split: "S Split",
-    Reader: "R Reader"
+    Draft: /D\s*Draft/,
+    Canvas: /C\s*Canvas/,
+    Split: /S\s*Split/,
+    Reader: /R\s*Reader/
   } as const;
   const wideButton = page
     .getByLabel("Project areas")
@@ -195,10 +284,12 @@ export async function openWorkspaceMode(
   await modeButton.click();
 }
 
-export async function showInspectorIfHidden(page: Page): Promise<void> {
-  const showInspector = page.getByRole("button", { name: "Show inspector" }).first();
-  if (await showInspector.isVisible()) {
-    await showInspector.click();
+export async function showCanvasDetailsIfHidden(page: Page): Promise<void> {
+  const showDetails = page
+    .getByLabel("Canvas utility bar")
+    .getByRole("button", { name: "Show Details" });
+  if (await showDetails.isVisible().catch(() => false)) {
+    await showDetails.click();
   }
 }
 
