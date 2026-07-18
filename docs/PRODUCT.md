@@ -46,6 +46,12 @@ unacknowledged work, not a complete offline project. Cross-device access, presen
 tracked suggestions, and version review update in real time. Only one collaborator directly edits
 a scene body at a time; same-scene multi-cursor editing is deferred. See ADR 0002.
 
+All product and onboarding surfaces require an authenticated account in the first shared-project
+release. Google is the initial sign-in method; first login creates a provider-neutral Ghostwriter
+writer profile. There is no public fixture workspace or locally saved pre-auth project. A future
+temporary Spark-before-sign-in flow requires its own accepted product plan and cannot imply a
+canonical local or offline project. See ADR 0005.
+
 ## Core experience
 
 - A project may contain one book or a multi-book series with shared characters, world rules,
@@ -62,6 +68,32 @@ a scene body at a time; same-scene multi-cursor editing is deferred. See ADR 000
 - Built-in and external agents act as assistants. They may draft ideas, suggest edits, or offer
   multiple prose variants, but their output stays provisional until an author or authorized
   editor chooses what to apply.
+
+## Current writing milestone — implemented locally 2026-07-12
+
+The active branch now proves the first owner-only version of the core promise:
+
+- authenticated writers create projects and manage the complete current manuscript/story-knowledge
+  kernel through safe server-acknowledged commands;
+- each scene has durable Tiptap prose, one direct-edit lease, clear save/conflict states, immutable
+  checkpoints, named variants, block-aware comparison, restore-as-new, and explicit crash recovery;
+- Draft and Story Canvas share canonical scene/story IDs, selected scene context, and Split view;
+- Story Canvas persists spatial objects, notes, regions, story-knowledge/image metadata, typed
+  confirmed or provisional links, personal viewport state, snapshot restore/undo, scope-keyed
+  placements per drill layer, and a manuscript-derived spine that exposes drift without reordering
+  prose;
+- Chapters act as named scene folders with objectives/cast notes; scenes may carry URL backdrop,
+  music, and image references; story knowledge supports notes, aliases, and typed knowledge links;
+- Reader presents bound-book spreads with optional ElevenLabs voice packs (server-side TTS);
+- An in-app MCP chat dock lists capabilities and can invoke read tools; OpenAI completion waits on
+  a configured key;
+- wide web supports spatial writing and tree drag-and-drop; narrow web uses an ordered
+  keyboard/screen-reader Canvas posture instead of pretending freeform drag fits a phone.
+
+This milestone does not yet deliver collaborators, comments/suggestions, real-time subscriptions or
+presence, AI/image generation, binary media hosting (R2), import/export, account exit, permanent
+purge, or native freeform Canvas editing. Product copy must not imply those later outcomes already
+ship.
 
 ## Product principles
 

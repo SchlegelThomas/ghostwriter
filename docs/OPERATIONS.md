@@ -14,17 +14,79 @@ database with Drizzle migrations, a Node/Hono service, and a database branch per
 | Database | Databricks Lakebase (serverless Postgres) | ADR 0004: standard Postgres, copy-on-write branch per PR, OAuth-token auth, portable |
 | Backend service | Node/Hono on Fly.io | Container deploy with a direct TCP path to Lakebase; thin shell over `packages/core` |
 | Migrations | Drizzle Kit (checked-in SQL) | `pnpm db:migrate`; applied in CI on PR branches and on deploy to production |
+| Identity | Better Auth + Google on the Hono service | ADR 0005; opaque Postgres sessions and provider-neutral writer profiles |
+| Browser API | Cloudflare Pages Function → Fly.io | Same-origin `/api/*` keeps auth cookies first-party and streams to the fixed backend |
 | Mobile builds (later) | Expo EAS free tier | ~30 builds/month free; EAS Update for OTA fixes |
 | Desktop distribution (later) | GitHub Releases | electron-builder artifacts attached by Actions, free |
 | MCP server | Runs locally (stdio) | No hosting needed; distribute via `npx` when it stabilizes |
 
-Expected future costs are the shared backend selected in the upcoming architecture spike and
-Apple's $99/yr developer account once iOS device/TestFlight builds start. Cloudflare Pages is
-used in **direct-upload** mode (we build
+Expected future costs are Lakebase/Fly usage beyond their available tiers and Apple's $99/yr
+developer account once iOS device/TestFlight builds start. Cloudflare Pages is used in
+**direct-upload** mode (we build
 in Actions or locally and push the artifact with `wrangler`), so Cloudflare's build-minute
 limits never apply.
 
 ## Environments and flows
+
+### Authentication and same-origin API (ADR 0005)
+
+The public web origin is `https://ghostwriter-di2.pages.dev`. Its Pages Function handles only
+`/api/*` and streams those requests to `https://ghostwriter-backend.fly.dev`; static asset requests
+do not traverse the function. Better Auth therefore sets first-party cookies for the Pages origin
+instead of relying on third-party `pages.dev` → `fly.dev` cookies.
+
+The dedicated Google Cloud project is `ghostwriter-app-2026` (display name `Ghostwriter`), owned
+by `tas9117@gmail.com`. Keep consumer OAuth branding and client configuration in this project;
+do not reuse an unrelated Google Cloud project.
+
+Production Google web-client configuration:
+
+- Authorized JavaScript origin: `https://ghostwriter-di2.pages.dev`
+- Authorized redirect URI:
+  `https://ghostwriter-di2.pages.dev/api/auth/callback/google`
+- Better Auth public URL: `https://ghostwriter-di2.pages.dev`
+- Trusted origins: canonical Pages host plus
+  `https://*.ghostwriter-di2.pages.dev` for branch preview aliases
+
+Branch preview OAuth (`feat-*.ghostwriter-di2.pages.dev`) keeps Google’s redirect on the
+canonical Pages callback (Google has no wildcard redirects). The backend trusts preview
+origins and sets the session cookie on `.ghostwriter-di2.pages.dev` so the alias can use
+the same login. Prefer the stable branch alias URL over one-off `*.pages.dev` hash deploys
+when validating beta builds.
+
+Local live-provider smoke configuration:
+
+- Client: `EXPO_PUBLIC_API_URL=http://localhost:8787 pnpm --filter client web`
+- Backend: `BETTER_AUTH_URL=http://localhost:8787` and
+  `AUTH_TRUSTED_ORIGINS=http://localhost:8081,http://localhost:8787`
+- Authorized JavaScript origins: `http://localhost:8081`, `http://localhost:8787`
+- Authorized redirect URI: `http://localhost:8787/api/auth/callback/google`
+
+The backend requires `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, and `GOOGLE_CLIENT_SECRET` as Fly
+secrets. Set them without putting values in command arguments or shell history:
+
+```bash
+fly secrets import --app ghostwriter-backend --stage
+# Enter NAME=VALUE lines through the interactive stdin, then Ctrl-D.
+# Deploy the staged values with the feature release.
+```
+
+Optional Reader TTS: set `ELEVENLABS_API_KEY` (and optional `ELEVENLABS_VOICE_DEFAULT`,
+`ELEVENLABS_VOICE_NARRATIVE`, `ELEVENLABS_VOICE_NOIR`, `ELEVENLABS_VOICE_SOFT`) on the backend.
+Without the key, `POST /api/reader/speak` returns `503 VOICE_UNAVAILABLE` and the Reader UI stays
+usable. Optional later chat completion: `OPENAI_API_KEY` — until set, the MCP chat dock is
+tool-invoke only.
+`BETTER_AUTH_URL` and `AUTH_TRUSTED_ORIGINS` are non-secret values in
+`apps/backend/fly.toml`. Google requires exact redirect registration and has no wildcard branch
+callback, so required CI uses the hermetic identity boundary; a real Google login is a separate
+local or production acceptance check. The test identity server refuses to start unless
+`GHOSTWRITER_E2E=1` and is never part of the production entry point.
+
+Validated locally on 2026-07-12 against a temporary migrated Lakebase branch: real Google consent,
+durable account/profile bootstrap, project creation and reload, and sign-out with zero remaining
+server sessions. The temporary branch and downloaded credential files were deleted afterward.
+The three Fly auth secrets are staged for the normal feature release; no production deployment was
+performed manually.
 
 ### Dev deploy — any local feature branch, on demand
 
@@ -67,6 +129,11 @@ DATABASE_URL=postgres://… pnpm db:migrate
 
 Migrations are checked into git, applied to each PR's Lakebase branch in CI, and applied to
 `production` on deploy. They are forward-only.
+
+The expanded writing branch adds migrations 0004–0006 for scene documents/revisions/leases,
+variants, and relational Story Canvas state/history/preferences. PGlite migration and repository
+contracts pass locally; these migrations remain unapplied to production until the normal PR branch
+and merge-driven backend workflows run.
 
 ### Per-PR database branches
 
@@ -113,23 +180,11 @@ Provisioned and wired automatically:
 - GitHub secrets `DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID`; variables `LAKEBASE_PROJECT_ID`,
   `LAKEBASE_USER` (= SP client id), `LAKEBASE_ENDPOINT_ID`.
 
-Remaining (need account/interactive access; see below):
-
-- `DATABRICKS_CLIENT_SECRET` — mint the SP's OAuth secret in the **account console** (workspace
-  Personal Access Tokens are disabled, so the on-behalf-of token path is unavailable and OAuth M2M
-  is required). Then `printf '%s' "<secret>" | gh secret set DATABRICKS_CLIENT_SECRET`.
-- Fly deploy (interactive login required):
-  ```bash
-  fly auth login
-  fly apps create ghostwriter-backend
-  fly secrets set --app ghostwriter-backend DATABRICKS_CLIENT_SECRET=<sp-oauth-secret>
-  fly deploy --config apps/backend/fly.toml --remote-only
-  printf '%s' "$(fly tokens create deploy)" | gh secret set FLY_API_TOKEN   # enables CI auto-deploy
-  ```
-  The backend authenticates to Lakebase with the service principal and refreshes the database token
-  itself (no `DATABASE_URL`); all non-secret connection settings are in `apps/backend/fly.toml`.
-- On the first PR run, confirm the SP can manage Lakebase branches; if `create-branch` returns a
-  permission error, grant `ghostwriter-ci` manage access on the `ghostwriter` project.
+Provisioning is complete: `DATABRICKS_CLIENT_SECRET` and `FLY_API_TOKEN` are configured, the Fly
+app is deployed, and the backend authenticates to Lakebase with the service principal. The current
+Databricks service-principal secret was entered directly in local shell history during initial
+provisioning; the founder accepted rotating it later. Rotation remains required security hygiene
+but is not an auth-epic deployment blocker by founder direction.
 
 ### Backend database connection
 
@@ -141,7 +196,8 @@ still use a plain `DATABASE_URL` or `PG*` variables.
 ### Required GitHub configuration
 
 Secrets: `DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID`, `DATABRICKS_CLIENT_SECRET` (service principal),
-`FLY_API_TOKEN`. Variables: `LAKEBASE_PROJECT_ID`, `LAKEBASE_USER`, and optionally
+`FLY_API_TOKEN`. Fly runtime secrets additionally include `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`,
+and `GOOGLE_CLIENT_SECRET`. Variables: `LAKEBASE_PROJECT_ID`, `LAKEBASE_USER`, and optionally
 `LAKEBASE_ENDPOINT_ID` (default `primary`).
 
 ```bash

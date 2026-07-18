@@ -3,15 +3,26 @@ import {
   BELLWETHER_FIXTURE,
   BELLWETHER_FIXTURE_NAVIGATOR,
   BELLWETHER_FIXTURE_PROJECT_ID,
+  accountId,
   bookId,
   createGhostwriterServices,
   createMemoryProjectRepository,
   createProject,
+  createProjectMembership,
   DomainValidationError,
+  ProjectAccessDeniedError,
   projectId,
   type IdGenerator,
   type ProjectId
 } from "./index.js";
+
+const OWNER_ACCOUNT_ID = accountId("account-owner");
+const BELLWETHER_OWNER = createProjectMembership({
+  projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+  accountId: OWNER_ACCOUNT_ID,
+  role: "owner",
+  createdAt: "2026-07-11T19:00:00.000Z"
+});
 
 function sequenceIds(values: readonly string[]): IdGenerator {
   let index = 0;
@@ -30,14 +41,14 @@ function sequenceIds(values: readonly string[]): IdGenerator {
 describe("project services", () => {
   it("reads a seeded project through the repository query boundary", async () => {
     const services = createGhostwriterServices({
-      projects: createMemoryProjectRepository([BELLWETHER_FIXTURE]),
+      projects: createMemoryProjectRepository([BELLWETHER_FIXTURE], [BELLWETHER_OWNER]),
       ids: sequenceIds([]),
       clock: { now: () => "2026-07-11T19:00:00.000Z" }
     });
 
-    await expect(services.getProjectNavigator(BELLWETHER_FIXTURE_PROJECT_ID)).resolves.toEqual(
-      BELLWETHER_FIXTURE_NAVIGATOR
-    );
+    await expect(
+      services.getProjectNavigator(OWNER_ACCOUNT_ID, BELLWETHER_FIXTURE_PROJECT_ID)
+    ).resolves.toEqual(BELLWETHER_FIXTURE_NAVIGATOR);
   });
 
   it("creates a valid project and first book atomically", async () => {
@@ -49,12 +60,15 @@ describe("project services", () => {
     });
 
     const newProjectId = await services.createStoryProject({
+      ownerAccountId: OWNER_ACCOUNT_ID,
       title: "  A Map of Quiet Stars  ",
       firstBookTitle: "  The Long Way Home  "
     });
 
     expect(newProjectId).toBe(projectId("project-new-story"));
-    await expect(services.getProjectNavigator(newProjectId)).resolves.toMatchObject({
+    await expect(
+      services.getProjectNavigator(OWNER_ACCOUNT_ID, newProjectId)
+    ).resolves.toMatchObject({
       title: "A Map of Quiet Stars",
       books: [
         {
@@ -71,6 +85,19 @@ describe("project services", () => {
         editions: 0
       }
     });
+    await expect(services.listStoryProjects(OWNER_ACCOUNT_ID)).resolves.toMatchObject([
+      {
+        id: newProjectId,
+        title: "A Map of Quiet Stars",
+        bookCount: 1,
+        version: 1
+      }
+    ]);
+    const otherAccountId = accountId("account-other");
+    await expect(services.listStoryProjects(otherAccountId)).resolves.toEqual([]);
+    await expect(
+      services.getProjectNavigator(otherAccountId, newProjectId)
+    ).rejects.toBeInstanceOf(ProjectAccessDeniedError);
   });
 
   it("rolls back a transaction whose final records violate invariants", async () => {
@@ -108,7 +135,7 @@ describe("project services", () => {
     expect(secondRead?.bookIds).toHaveLength(2);
   });
 
-  it("returns undefined for an unknown project", async () => {
+  it("does not reveal an unknown or unauthorized project", async () => {
     const services = createGhostwriterServices({
       projects: createMemoryProjectRepository(),
       ids: sequenceIds([]),
@@ -116,8 +143,11 @@ describe("project services", () => {
     });
 
     await expect(
-      services.getProjectNavigator(projectId("project-missing") as ProjectId)
-    ).resolves.toBeUndefined();
+      services.getProjectNavigator(
+        OWNER_ACCOUNT_ID,
+        projectId("project-missing") as ProjectId
+      )
+    ).rejects.toBeInstanceOf(ProjectAccessDeniedError);
   });
 });
 

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Writer workspace depth — folders, media, knowledge, reader TTS, MCP chat</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan</p>
+      <h1>Writer workspace depth</h1>
+      <p class="meta"><strong>Status:</strong> active — autonomous delivery<br>
+        <strong>Branch:</strong> <code>feat/authenticated-project-crud</code><br>
+        <strong>Owner:</strong> agent + founder<br>
+        <strong>Skill:</strong> <code>.cursor/skills/ghostwriter-autonomous-delivery</code></p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Respond to the 2026-07-12 live review of the Consciousness project. Writers need named scene folders with objectives/cast notes, drag-and-drop structure and Canvas placement, deeper story knowledge and typed relationships, scene ambience (backdrop/music/images), a book-like Reader with ElevenLabs voice selection, and an in-app MCP chat surface for capabilities. OpenAI keys arrive later; the chat shell must work with tool invocation first.</p>
+      <p><strong>Out of scope for this plan:</strong> binary R2 upload (URL/metadata first), real OpenAI inference until the founder provides a key, collaboration presence, marketplace, native freeform Canvas redesign beyond layer coords and links.</p>
+    </section>
+
+    <section>
+      <h2>Accepted product decisions</h2>
+      <ul>
+        <li><strong>Scene folders = Chapters</strong> (and Parts for higher structure). Chapters gain title + summary/objectives/cast notes. Unassigned remains the system bucket for unplaced scenes and surfaces a clear “Create chapter folder” path rather than becoming a renameable record.</li>
+        <li><strong>Media v1 = URL + metadata references</strong> on scenes (backdrop, music, image refs). R2 binary upload is a follow-on ADR; Canvas image-reference stays metadata-compatible.</li>
+        <li><strong>Story knowledge depth</strong> adds a notes/body field, optional aliases, and knowledge↔knowledge links with kinds (cast, theme, development-cycle, breadcrumb). Scene links and Canvas object links remain.</li>
+        <li><strong>Canvas layer coordinates</strong> persist as scope-keyed placements (project/chapter/scene) over the same object IDs—interpretive layouts, not a second manuscript order.</li>
+        <li><strong>Reader TTS</strong> follows the wrapper ElevenLabs pattern: server-only synthesis, voice packs, client playback, graceful silence when unconfigured.</li>
+        <li><strong>MCP chat</strong> is an authenticated in-app panel that lists Ghostwriter capabilities and can invoke registered tools; LLM routing waits on the founder’s OpenAI key.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ul>
+        <li>Chapter (scene folder) inspector edits title and objectives/description; toasts acknowledge; tree shows the summary snip.</li>
+        <li>Tree supports pointer drag-and-drop reorder/move of scenes (and keyboard Alt+Arrow parity remains); Canvas supports drag placement and creating typed links between story-knowledge cards and scenes.</li>
+        <li>Each Canvas drill layer retains distinct x/y placements for the same objects without changing manuscript order.</li>
+        <li>Scene inspector edits backdrop URL/caption, playable music URL/label, and related image URL refs; Reader and Draft can surface them.</li>
+        <li>Story knowledge records support notes body, aliases, and knowledge↔knowledge links with explicit kinds; Canvas Relationships lens highlights them.</li>
+        <li>Reader looks like a bound book (serif spreads, page chrome, chapter openers) and offers ElevenLabs voice pack selection with play/stop for the current spread/scene.</li>
+        <li>A docked MCP chat panel lists capabilities, runs read tools against the open project, and reserves a clear slot for later OpenAI tool-use.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Checkpoints</h2>
+      <ol>
+        <li><strong>A — Scene folders:</strong> chapter summary/objectives domain + inspector + navigator projection.</li>
+        <li><strong>B — Drag and drop:</strong> tree DnD move/reorder + Canvas object drag and link creation UX.</li>
+        <li><strong>C — Layer coords + knowledge graph:</strong> scope-keyed placements; knowledge notes/aliases/links; Relationships lens.</li>
+        <li><strong>D — Scene ambience:</strong> backdrop/music/image URL fields; inspector; Draft/Reader surface.</li>
+        <li><strong>E — Book Reader + ElevenLabs:</strong> visual book chrome; voice packs; server TTS route.</li>
+        <li><strong>F — MCP chat panel:</strong> docked UI; capability list; tool invoke against open project.</li>
+        <li><strong>G — Coherence:</strong> verify, docs, ADRs, checkpoint commits.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <ul>
+        <li><a href="../../docs/adr/0008-scene-folders-media-and-knowledge-depth.md">ADR 0008</a> — chapter folder metadata, scene URL media refs, knowledge depth and K↔K links.</li>
+        <li><a href="../../docs/adr/0009-canvas-scope-placements-reader-tts-mcp-chat.md">ADR 0009</a> — Canvas scope placements, ElevenLabs Reader TTS, in-app MCP chat shell.</li>
+        <li>Update Product, Architecture, API, Operations, living design notes, and handoff as each checkpoint lands.</li>
+      </ul>
+      <p><strong>Living design source:</strong> <a href="../designs/Ghostwriter%20Mockups%202.0.html">Ghostwriter Mockups 2.0</a> remains authoritative for Canvas/Draft/reader posture; this plan extends it with folder depth, ambience, TTS, and chat without replacing founder-authored screens wholesale.</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li>Unassigned rename rejected: synthetic bucket stays; chapters are the named folders.</li>
+        <li>URL media can break or go stale; UI labels them as writer-owned references, not hosted assets.</li>
+        <li>ElevenLabs key must stay server-side (Fly secret / local env); never in the client bundle.</li>
+        <li>OpenAI chat completion is gated until the founder supplies a key; tool-only chat ships first.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked disabled> Founder review captured; plan + ADRs drafted</li>
+        <li><input type="checkbox" checked disabled> Checkpoint A — chapter folder metadata</li>
+        <li><input type="checkbox" checked disabled> Checkpoint B — tree/Canvas drag-drop and links</li>
+        <li><input type="checkbox" checked disabled> Checkpoint C — layer coords + knowledge depth</li>
+        <li><input type="checkbox" checked disabled> Checkpoint D — scene ambience URL media</li>
+        <li><input type="checkbox" checked disabled> Checkpoint E — book Reader + ElevenLabs</li>
+        <li><input type="checkbox" checked disabled> Checkpoint F — MCP chat panel</li>
+        <li><input type="checkbox" checked disabled> Coherence, verify, docs, commits</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

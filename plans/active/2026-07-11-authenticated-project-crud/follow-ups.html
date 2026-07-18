@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Authenticated writing workspace — promoted specifications</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Promoted delivery specifications</p>
+      <h1>From authenticated records to writing and Canvas</h1>
+      <p>These specifications originally preserved later roadmap candidates. On 2026-07-12 the founder promoted scene prose, revision history, and Story Canvas state management into the active epic on the current branch before its pull request. The active plan now governs delivery; this document preserves the dependency and intent handoff.</p>
+      <p class="meta"><a href="plan.html">Return to the active epic</a> · <a href="../2026-07-11-agentic-writing-experience/delivery-roadmap.html">Delivery roadmap</a> · <a href="../../designs/Ghostwriter%20Mockups%202.0.html">Living design source</a></p>
+    </header>
+
+    <section>
+      <h2>Dependency handoff from the active epic</h2>
+      <ul>
+        <li>Google account/session and writer profile are durable and production-configured.</li>
+        <li>Every project has an authorized owner and every query/mutation passes through shared core policy.</li>
+        <li>Project, book, manuscript order, scene metadata, and story-knowledge commands are server-authoritative, expected-version checked, and available through the responsive web client.</li>
+        <li>The client has truthful loading, saving, saved, conflict, authorization, empty, archived, and retry states.</li>
+        <li>The database and browser end-to-end harness can be extended without live provider credentials.</li>
+      </ul>
+    </section>
+
+    <section>
+      <p class="eyebrow">Promoted milestone · after authenticated CRUD</p>
+      <h2>Scene editor and revision history</h2>
+      <p><strong>Suggested branch:</strong> <code>feat/scene-editor-revision-history</code></p>
+      <h3>Intent</h3>
+      <p>Turn scene metadata into a real writing surface: persist schema-versioned ProseMirror JSON with stable block IDs, edit it through Tiptap, acknowledge durable writes, and preserve immutable checkpoints and named variants so authors can write, compare, restore, and recover without fear.</p>
+      <h3>Required outcomes</h3>
+      <ul>
+        <li>One canonical ProseMirror document per scene, validated and migrated through platform-neutral editor codecs.</li>
+        <li>Tiptap on web with a narrow Expo DOM-component contract reserved for native; no DOM or Tiptap type enters core.</li>
+        <li>Debounced working-state writes guarded by a visible scene lease and expected scene revision; <em>Saved</em> only follows server acknowledgement.</li>
+        <li>Minimal encrypted browser recovery for unacknowledged text, cleared after acknowledgement and never presented as offline project access.</li>
+        <li>Immutable checkpoints at meaningful boundaries, content hashes, actor attribution, restore as a new revision, named variants, compare, and a revision-aware undo path.</li>
+        <li>Scene tree create/move/archive behavior from the active epic remains canonical; editor bodies never create a second manuscript order.</li>
+        <li>UI and MCP use the same read/revision/proposal core capabilities. Direct external-agent canonical writes remain prohibited.</li>
+      </ul>
+      <h3>Decisions and documentation</h3>
+      <p>Create the queued editor/revision ADR covering ProseMirror schema, stable block IDs, working state, checkpoint graph, content hashing, lease/revision semantics, retention, and recovery expiry. Reconcile roadmap candidates 1.3 and 1.4 into one plan only if the plan can still deliver and verify a coherent vertical outcome.</p>
+      <h3>Verification gate</h3>
+      <ul>
+        <li>Create, write, close, reopen, reconnect, conflict, compare, restore, and undo scenes without losing an acknowledged edit.</li>
+        <li>Schema round trips, migration fixtures, IME/paste/selection/keyboard behavior, large-scene performance, and crash recovery pass.</li>
+        <li>A stale write changes nothing and opens comparison/recovery; all checkpoints are attributable and content-addressed.</li>
+      </ul>
+      <h3>Explicit non-goals</h3>
+      <p>Same-scene multi-cursor editing, full offline replication, comments/suggestions, AI prose generation, import/export, and Story Canvas freeform editing.</p>
+    </section>
+
+    <section>
+      <p class="eyebrow">Promoted milestone · after authenticated CRUD and editor foundations</p>
+      <h2>Story Canvas foundation</h2>
+      <p><strong>Suggested branch:</strong> <code>feat/story-canvas-foundation</code></p>
+      <h3>Intent</h3>
+      <p>Implement the living Story Canvas 2.0 direction as a spatial view over the same authenticated project, scenes, and story records: writers can begin from a board or from prose, arrange ideas visually, and move between Canvas and Draft without duplicated truth or silent model authority.</p>
+      <h3>Required outcomes</h3>
+      <ul>
+        <li>Canvas objects and typed links reference canonical scene/story IDs; placement, regions, notes, and imagery metadata do not copy scene bodies.</li>
+        <li>Write-first and storyboard-first journeys converge on the same scene records. Creating a scene from a Canvas region states its manuscript placement before applying it.</li>
+        <li>The reading-order spine derives from canonical manuscript order, shows drift, and never silently reorders Draft.</li>
+        <li>Writer-created pins/links are solid; inferred cards, links, beats, and imagery are dashed/provisional until reviewed. No AI implementation is required for deterministic fixture proposals.</li>
+        <li>Canvas, Draft, and split view preserve selection and link context across wide web; narrow web is read/review/capture focused rather than freeform spatial editing.</li>
+        <li>Every Canvas mutation is authorized, expected-version checked, server-acknowledged, undoable through accepted history primitives, and represented in the capability registry.</li>
+      </ul>
+      <h3>Decisions and documentation</h3>
+      <p>Extend or supersede the domain-boundary ADR only if Canvas ownership changes. Specify the spatial data model, viewport/placement persistence, typed link lifecycle, attachment/image boundary, large-board indexing, accessibility alternative, and scene-handoff transaction before implementation. The living design remains the visual and interaction source and must not be regenerated by the delivery plan.</p>
+      <h3>Verification gate</h3>
+      <ul>
+        <li>Canvas and Draft always resolve the same scene IDs across create, rename, move, archive, restore, split view, and reload.</li>
+        <li>Empty, seeded, populated, region-selected, provisional, stale-link, spine-drift, read-only recovery, and 500+ object states are usable and measured.</li>
+        <li>Keyboard and screen-reader users can navigate an equivalent ordered representation and complete every canonical action without spatial drag gestures.</li>
+      </ul>
+      <h3>Explicit non-goals</h3>
+      <p>Image generation, automated manuscript derivation, real model calls, mobile freeform Canvas editing, marketplace assets, and simultaneous same-object co-editing.</p>
+    </section>
+  </main>
+</body>
+</html>

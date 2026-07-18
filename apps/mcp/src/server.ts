@@ -12,12 +12,36 @@ const sceneSchema = z.object({
   title: z.string(),
   status: z.enum(["planned", "drafting", "revising", "complete"]),
   summary: z.string().optional(),
-  povStoryKnowledgeId: z.string().optional()
+  povStoryKnowledgeId: z.string().optional(),
+  backdrop: z
+    .object({
+      url: z.string(),
+      caption: z.string().optional()
+    })
+    .optional(),
+  music: z
+    .object({
+      url: z.string(),
+      label: z.string().optional()
+    })
+    .optional(),
+  imageRefs: z
+    .array(
+      z.object({
+        url: z.string(),
+        alt: z.string(),
+        caption: z.string().optional()
+      })
+    )
+    .optional(),
+  archivedAt: z.string().optional()
 });
 
 const projectNavigatorOutputSchema = z.object({
   id: z.string(),
   title: z.string(),
+  version: z.number().int().positive(),
+  archivedAt: z.string().optional(),
   books: z.array(
     z.object({
       id: z.string(),
@@ -31,12 +55,14 @@ const projectNavigatorOutputSchema = z.object({
             z.object({
               id: z.string(),
               title: z.string(),
+              summary: z.string().optional(),
               scenes: z.array(sceneSchema)
             })
           )
         })
       ),
       unassignedScenes: z.array(sceneSchema),
+      archivedAt: z.string().optional(),
       editions: z.array(
         z.object({
           id: z.string(),
@@ -54,7 +80,23 @@ const projectNavigatorOutputSchema = z.object({
       label: z.string(),
       kind: z.enum(["character", "location", "world-rule", "thread", "custom"]),
       authority: z.enum(["planned", "confirmed", "inferred", "disputed"]),
-      linkedSceneCount: z.number().int().nonnegative()
+      linkedSceneIds: z.array(z.string()),
+      linkedKnowledge: z.array(
+        z.object({
+          toId: z.string(),
+          kind: z.enum([
+            "cast",
+            "theme",
+            "development-cycle",
+            "breadcrumb",
+            "related"
+          ])
+        })
+      ),
+      notes: z.string().optional(),
+      aliases: z.array(z.string()).optional(),
+      linkedSceneCount: z.number().int().nonnegative(),
+      archivedAt: z.string().optional()
     })
   ),
   totals: z.object({
@@ -66,9 +108,31 @@ const projectNavigatorOutputSchema = z.object({
 });
 
 function projectNavigatorOutput(): z.infer<typeof projectNavigatorOutputSchema> {
+  const mapScene = (
+    scene: (typeof BELLWETHER_FIXTURE_NAVIGATOR.books)[number]["unassignedScenes"][number]
+  ) => ({
+    id: scene.id,
+    title: scene.title,
+    status: scene.status,
+    ...(scene.summary === undefined ? {} : { summary: scene.summary }),
+    ...(scene.povStoryKnowledgeId === undefined
+      ? {}
+      : { povStoryKnowledgeId: scene.povStoryKnowledgeId }),
+    ...(scene.backdrop === undefined ? {} : { backdrop: { ...scene.backdrop } }),
+    ...(scene.music === undefined ? {} : { music: { ...scene.music } }),
+    ...(scene.imageRefs === undefined
+      ? {}
+      : { imageRefs: scene.imageRefs.map((ref) => ({ ...ref })) }),
+    ...(scene.archivedAt === undefined ? {} : { archivedAt: scene.archivedAt })
+  });
+
   return {
     id: BELLWETHER_FIXTURE_NAVIGATOR.id,
     title: BELLWETHER_FIXTURE_NAVIGATOR.title,
+    version: BELLWETHER_FIXTURE_NAVIGATOR.version,
+    ...(BELLWETHER_FIXTURE_NAVIGATOR.archivedAt === undefined
+      ? {}
+      : { archivedAt: BELLWETHER_FIXTURE_NAVIGATOR.archivedAt }),
     books: BELLWETHER_FIXTURE_NAVIGATOR.books.map((book) => ({
       id: book.id,
       title: book.title,
@@ -79,15 +143,30 @@ function projectNavigatorOutput(): z.infer<typeof projectNavigatorOutputSchema> 
         chapters: part.chapters.map((chapter) => ({
           id: chapter.id,
           title: chapter.title,
-          scenes: chapter.scenes.map((scene) => ({ ...scene }))
+          ...(chapter.summary === undefined ? {} : { summary: chapter.summary }),
+          scenes: chapter.scenes.map(mapScene)
         }))
       })),
-      unassignedScenes: book.unassignedScenes.map((scene) => ({ ...scene })),
+      unassignedScenes: book.unassignedScenes.map(mapScene),
+      ...(book.archivedAt === undefined ? {} : { archivedAt: book.archivedAt }),
       editions: book.editions.map((edition) => ({ ...edition })),
       sceneCount: book.sceneCount
     })),
     storyKnowledge: BELLWETHER_FIXTURE_NAVIGATOR.storyKnowledge.map((knowledge) => ({
-      ...knowledge
+      id: knowledge.id,
+      label: knowledge.label,
+      kind: knowledge.kind,
+      authority: knowledge.authority,
+      linkedSceneIds: [...knowledge.linkedSceneIds],
+      linkedSceneCount: knowledge.linkedSceneCount,
+      linkedKnowledge: knowledge.linkedKnowledge.map((link) => ({ ...link })),
+      ...(knowledge.notes === undefined ? {} : { notes: knowledge.notes }),
+      ...(knowledge.aliases === undefined
+        ? {}
+        : { aliases: [...knowledge.aliases] }),
+      ...(knowledge.archivedAt === undefined
+        ? {}
+        : { archivedAt: knowledge.archivedAt })
     })),
     totals: { ...BELLWETHER_FIXTURE_NAVIGATOR.totals }
   };

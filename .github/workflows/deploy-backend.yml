@@ -56,6 +56,18 @@ jobs:
         if: env.HAS_SECRETS == 'true'
         uses: superfly/flyctl-actions/setup-flyctl@master
 
+      - name: Verify backend runtime secrets
+        if: env.HAS_SECRETS == 'true'
+        run: |
+          configured="$(flyctl secrets list --app ghostwriter-backend --json)"
+          for required in DATABRICKS_CLIENT_SECRET BETTER_AUTH_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; do
+            if ! jq -e --arg name "$required" 'any(.[]; .name == $name)' \
+              <<<"$configured" >/dev/null; then
+              echo "Missing Fly runtime secret: $required" >&2
+              exit 1
+            fi
+          done
+
       - name: Deploy to Fly.io
         if: env.HAS_SECRETS == 'true'
         # Build context is the repo root (the Dockerfile copies workspace manifests + core/storage).

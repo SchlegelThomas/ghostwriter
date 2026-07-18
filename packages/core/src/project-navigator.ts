@@ -7,11 +7,15 @@ import {
   type ProjectId,
   type ProjectRecords,
   type Scene,
+  type SceneBackdrop,
   type SceneId,
+  type SceneImageRef,
+  type SceneMusic,
   type SceneStatus,
   type StoryKnowledgeAuthority,
   type StoryKnowledgeId,
   type StoryKnowledgeKind,
+  type StoryKnowledgeLink,
   validateProjectRecords
 } from "./domain.js";
 
@@ -21,11 +25,16 @@ export type ProjectNavigatorScene = Readonly<{
   status: SceneStatus;
   summary?: string;
   povStoryKnowledgeId?: StoryKnowledgeId;
+  backdrop?: SceneBackdrop;
+  music?: SceneMusic;
+  imageRefs?: readonly SceneImageRef[];
+  archivedAt?: string;
 }>;
 
 export type ProjectNavigatorChapter = Readonly<{
   id: ChapterId;
   title: string;
+  summary?: string;
   scenes: readonly ProjectNavigatorScene[];
 }>;
 
@@ -50,6 +59,7 @@ export type ProjectNavigatorBook = Readonly<{
   unassignedScenes: readonly ProjectNavigatorScene[];
   editions: readonly ProjectNavigatorEdition[];
   sceneCount: number;
+  archivedAt?: string;
 }>;
 
 export type ProjectNavigatorKnowledge = Readonly<{
@@ -57,12 +67,19 @@ export type ProjectNavigatorKnowledge = Readonly<{
   label: string;
   kind: StoryKnowledgeKind;
   authority: StoryKnowledgeAuthority;
+  linkedSceneIds: readonly SceneId[];
   linkedSceneCount: number;
+  linkedKnowledge: readonly StoryKnowledgeLink[];
+  notes?: string;
+  aliases?: readonly string[];
+  archivedAt?: string;
 }>;
 
 export type ProjectNavigator = Readonly<{
   id: ProjectId;
   title: string;
+  version: number;
+  archivedAt?: string;
   books: readonly ProjectNavigatorBook[];
   storyKnowledge: readonly ProjectNavigatorKnowledge[];
   totals: Readonly<{
@@ -97,7 +114,11 @@ function requireScene(
     ...(scene.summary === undefined ? {} : { summary: scene.summary }),
     ...(scene.povStoryKnowledgeId === undefined
       ? {}
-      : { povStoryKnowledgeId: scene.povStoryKnowledgeId })
+      : { povStoryKnowledgeId: scene.povStoryKnowledgeId }),
+    ...(scene.backdrop === undefined ? {} : { backdrop: scene.backdrop }),
+    ...(scene.music === undefined ? {} : { music: scene.music }),
+    ...(scene.imageRefs === undefined ? {} : { imageRefs: scene.imageRefs }),
+    ...(scene.archivedAt === undefined ? {} : { archivedAt: scene.archivedAt })
   });
 }
 
@@ -125,6 +146,7 @@ export function projectNavigatorFromRecords(records: ProjectRecords): ProjectNav
             Object.freeze({
               id: chapter.id,
               title: chapter.title,
+              ...(chapter.summary === undefined ? {} : { summary: chapter.summary }),
               scenes: freezeList(
                 chapter.sceneIds.map((sceneId) => requireScene(sceneById, sceneId))
               )
@@ -155,7 +177,8 @@ export function projectNavigatorFromRecords(records: ProjectRecords): ProjectNav
         )
       ),
       editions: freezeList(editions),
-      sceneCount: records.scenes.filter((scene) => scene.bookId === book.id).length
+      sceneCount: records.scenes.filter((scene) => scene.bookId === book.id).length,
+      ...(book.archivedAt === undefined ? {} : { archivedAt: book.archivedAt })
     });
   });
   const storyKnowledge = [...records.storyKnowledge]
@@ -166,13 +189,26 @@ export function projectNavigatorFromRecords(records: ProjectRecords): ProjectNav
         label: knowledge.label,
         kind: knowledge.kind,
         authority: knowledge.authority,
-        linkedSceneCount: knowledge.linkedSceneIds.length
+        linkedSceneIds: freezeList(knowledge.linkedSceneIds),
+        linkedSceneCount: knowledge.linkedSceneIds.length,
+        linkedKnowledge: freezeList(knowledge.linkedKnowledge),
+        ...(knowledge.notes === undefined ? {} : { notes: knowledge.notes }),
+        ...(knowledge.aliases === undefined
+          ? {}
+          : { aliases: freezeList(knowledge.aliases) }),
+        ...(knowledge.archivedAt === undefined
+          ? {}
+          : { archivedAt: knowledge.archivedAt })
       })
     );
 
   return Object.freeze({
     id: records.project.id,
     title: records.project.title,
+    version: records.project.version,
+    ...(records.project.archivedAt === undefined
+      ? {}
+      : { archivedAt: records.project.archivedAt }),
     books: freezeList(books),
     storyKnowledge: freezeList(storyKnowledge),
     totals: Object.freeze({

@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Authenticated project CRUD — record log</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter record log</p>
+      <h1>Authenticated project creation and core CRUD</h1>
+      <p class="meta"><a href="plan.html">Return to delivery plan</a> · <strong>Branch:</strong> <code>feat/authenticated-project-crud</code></p>
+    </header>
+
+    <article>
+      <h2>2026-07-11 17:46 — Major epic opened from current main</h2>
+      <p>The founder directed one major epic: first make Google authentication and real account/profile creation work end to end, then replace the fixture-only product with the complete set of safe mutations needed by the current multi-book domain kernel. The work must follow the repository planning harness.</p>
+      <p>The previous working branch was clean. Local <code>main</code> was switched to and fast-forwarded by two commits to <code>origin/main</code>, then <code>feat/authenticated-project-crud</code> was created. No push, pull request, deployment, cloud configuration, or commit was performed.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 17:58 — Existing seams and scope boundary reviewed</h2>
+      <p>The current product is still a read-only Bellwether fixture in the Expo client and local MCP process. The deployed Hono backend exposes only health and a public project-navigator read; core has <code>createStoryProject</code> plus the navigator query; and both memory and Postgres repositories are insert-oriented. The database already stores normalized projects, books, manuscript parts/chapters, scene metadata, story knowledge, and edition references, but has no account, profile, owner membership, archive, or concurrency records.</p>
+      <p>The epic will use domain commands rather than generic CRUD. Its proposed mutation boundary is the currently implemented project/book/manuscript-structure/scene-metadata/story-knowledge kernel. Tiptap prose, revisions, mutable editions, collaboration, real-time sync, Story Canvas, AI, remote MCP authorization, export/account exit, and permanent purge remain out of scope.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 18:06 — Living design and identity constraints reviewed</h2>
+      <p>The living Story Canvas 2.0 source and the plan-scoped 1.0 screens were reviewed before product planning. They establish the warm chrome, explicit ownership language, project home, and account-gated save intent. The living artifact also contains older “No account required” and “Saved locally” labels that conflict with accepted ADR 0002. The implementation will not copy those labels or edit the founder-authored design; the founder will confirm whether any temporary pre-auth spark is part of a later onboarding slice.</p>
+      <p>Current official guidance supports a self-hosted Better Auth integration with Hono, Drizzle/Postgres, Google, and Expo. Its session guidance also confirms that the current <code>pages.dev</code> frontend and <code>fly.dev</code> backend cannot safely depend on third-party cookies, especially in Safari. A same-origin Cloudflare Pages proxy or an owned shared parent domain is required for a production-quality browser session.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 18:12 — Founder decisions queued before implementation</h2>
+      <p>The proposed plan recommends Better Auth with Google only; a first-party <code>/api</code> proxy from Cloudflare Pages to Fly unless a shared custom domain is available; sign-in before canonical project creation; archive/restore instead of irreversible authored-content deletion; and explicit MCP mutation exceptions until scoped agent authorization exists.</p>
+      <p>These are security, product, data-loss, and operational choices, so implementation is paused until the founder confirms or revises them. A service credential also appears to have been entered directly in local shell history; its value was not copied. Rotation is required before production auth work.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 18:20 — Identity, entry, deletion, and epic scope accepted</h2>
+      <p>The founder accepted self-hosted Better Auth with Google on Hono/Lakebase, a same-origin Cloudflare Pages <code>/api</code> proxy to Fly, authentication before every product or onboarding surface, and archive/restore instead of permanent authored-content purge. Google and Cloudflare configuration should be driven through CLI where possible, pausing for approval or console-only work.</p>
+      <p>The implementation scope is the current kernel: projects, books, manuscript parts/chapters, scene metadata, and story knowledge. Tiptap prose plus revision history and the Story Canvas remain follow-ups. Their dependency, intent, acceptance, decision, verification, and non-goal outlines are now preserved in <a href="follow-ups.html">follow-ups.html</a> without activating extra plans or branches.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 18:28 — ADR 0005 accepted and canonical docs updated</h2>
+      <p><a href="../../../docs/adr/0005-authenticated-accounts-and-project-access.md">ADR 0005</a> records Google-only Better Auth, opaque database sessions, the same-origin Pages proxy, provider-neutral accounts/profiles, owner memberships, core authorization, auth-first entry, archive/restore, exact callback registration, and the production-inert test identity boundary.</p>
+      <p><code>docs/PRODUCT.md</code> now records the auth-first product boundary and <code>docs/ARCHITECTURE.md</code> records the accepted identity/access topology. Implementation may now begin inside the accepted plan.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 18:42 — Authentication and profile foundation complete</h2>
+      <p>Installed Better Auth 1.6 with the official Drizzle adapter. The Hono runtime now mounts the auth handler, validates exact auth origins/configuration, uses encrypted provider-token storage, disables implicit email linking, keeps database-backed seven-day sessions without a cookie cache, and exposes protected session/profile bootstrap through a transport-neutral gateway. The web client uses the same-origin HTTP contract; native auth dependencies remain deferred until a native surface is shipped.</p>
+      <p>Added provider-neutral account/profile core services with idempotent first-login creation and version-checked profile updates; matching memory and Postgres adapters; Better Auth user/account/session/verification tables; writer profiles; initial owner-membership storage; project version/archive columns; and forward-only migrations 0001–0002. OAuth initiation persists state in migrated PGlite, protected routes reject missing sessions, and the targeted core/storage/backend suites pass (10 tests) with all workspace typechecks green.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 18:55 — Project ownership enforced across core and storage</h2>
+      <p>Added provider-neutral <code>AccountId</code>, owner memberships, shared owner policy, non-disclosing access errors, account-scoped project listing, and project version/archive fields. Project creation now writes the project, first book, and owner membership atomically; navigator reads require the server-resolved owner account.</p>
+      <p>Memory and Postgres adapters implement the same membership queries and account-scoped project list. The backend maps unauthorized and unknown project reads to the same not-found response. Targeted core/storage/backend ownership tests pass (22 tests), including cross-account isolation, and all workspace typechecks remain green.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 19:18 — Current-kernel command surface complete</h2>
+      <p>Implemented 22 typed domain commands for project rename/archive, book create/update/reorder/archive, part and chapter create/rename/reorder/safe empty removal, scene create/update/move/archive, and story-knowledge create/update/link/archive. Every command rechecks owner scope and expected project version, validates the complete normalized project, increments exactly once, and applies atomically. Last-active-book removal, nonempty structure removal, archived POV assignment, POV knowledge archival, stale writes, bad order, and unsafe cross-book edition movement fail without partial effects.</p>
+      <p>Memory and Postgres now share an expected-version aggregate replacement contract for metadata commands. Postgres updates the project version conditionally, rebuilds normalized child rows inside one transaction, preserves memberships, and reload-validates the result. Archive columns are migration 0003. Core and Postgres command suites pass, and the capability registry records all 22 web-bound canonical commands with explicit MCP security exceptions rather than exposing unauthenticated direct writes.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 19:34 — Authenticated HTTP API and first-party proxy complete</h2>
+      <p>The Hono API now exposes account/profile bootstrap and versioned profile update, account-scoped project list/create, owner-scoped navigator reads, and a schema-validated typed command endpoint. Mutations require an exact trusted Origin; request bodies are bounded and validated; authorization, validation, unsafe-removal, not-found, and stale-version failures map to stable non-content-bearing status codes. Backend tests cover profile creation/update, create/list, command/stale behavior, untrusted origins, missing sessions, and cross-account non-disclosure.</p>
+      <p>Added a typed Cloudflare Pages Function under the client shell that streams only <code>/api/*</code> to the fixed HTTPS Fly origin, removes hop-by-hop headers, sets forwarding metadata, preserves separate <code>Set-Cookie</code> values, disables caching, and returns content-free upstream failures. Wrangler 4.110 is pinned for the client, generated binding/runtime types are checked during typecheck, build scripts are explicitly approved, and local/CI deploy commands now execute from <code>apps/client</code> so Pages detects the Function. API and proxy suites pass.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 20:03 — Auth-first responsive product and browser journey complete</h2>
+      <p>Replaced the Bellwether fixture bootstrap with an auth-first client state machine and live API adapter. Signed-out writers see only the branded Google gate. Signed-in writers can update their profile, list active or archived projects, create/open projects, and execute the full accepted command surface through shared responsive React Native screens. Save state changes to <em>Saved to project</em> only after acknowledgement; stale writes reload the latest project and ask the writer to review.</p>
+      <p>The live workspace exposes project and book lifecycle, series order, part/chapter structure and safe removal, scene metadata/POV/placement/archive, story-knowledge authority/link/archive, and a truthful read-only editions notice. Expo's web output is now a deployable single-page export rather than a directory without an index. A production-inert PGlite E2E server and Playwright suite exercise sign-in, profile creation/update, project/hierarchy/story mutation, reopen durability, archive/restore, sign-out, and a 390 × 844 narrow-web check. Both Chromium journeys pass and CI now installs Chromium and runs them.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-11 20:12 — Live OAuth ownership and credential risk clarified</h2>
+      <p>Cloudflare reports the existing public Pages host as <code>https://ghostwriter-di2.pages.dev</code>; the production Google callback is therefore <code>https://ghostwriter-di2.pages.dev/api/auth/callback/google</code>. The founder chose a new dedicated Google Cloud project owned by the currently configured <code>thomas@move-ai.io</code> account rather than reusing the unrelated active <code>buddy-shopper</code> project.</p>
+      <p>Google CLI credentials required reauthentication, so the standard browser login was started before project creation. The founder explicitly chose not to rotate the pre-existing Databricks secret in this epic and will rotate it later. The plan and operations docs record that residual risk; all new Better Auth and Google secrets must still enter Fly through stdin/secret storage rather than command arguments.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 12:51 — Dedicated Google Cloud project created</h2>
+      <p>The founder authorized <code>tas9117@gmail.com</code> to own the Google Auth project instead of requiring the expired <code>thomas@move-ai.io</code> CLI session. The account was authenticated and the dedicated <code>ghostwriter-app-2026</code> project was created with the display name <em>Ghostwriter</em>; the unrelated <code>buddy-shopper</code> project remains untouched.</p>
+      <p>Google's supported consumer Sign in with Google setup still requires the Google Auth Platform console. The project-specific Auth overview was opened for branding, external audience, test-user, and web-client configuration. Client credentials remain pending and must not be copied into the repository or record log.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 12:56 — OAuth credentials staged without exposing secrets</h2>
+      <p>The founder created the Ghostwriter web client and downloaded its credential JSON. The file shape was validated without printing values, a fresh Better Auth secret was generated, and <code>BETTER_AUTH_SECRET</code>, <code>GOOGLE_CLIENT_ID</code>, and <code>GOOGLE_CLIENT_SECRET</code> were imported to Fly as staged secrets. They are not active on a VM and no deployment was triggered.</p>
+      <p>The downloaded credential file was deleted after import, and root-level Google client-download patterns were added to <code>.gitignore</code>. Google's supported consumer OAuth tooling does not expose web-client origin or redirect mutation through <code>gcloud</code>; the exact local and production URI allowlists still require the opened Auth Platform console before deployment and smoke verification.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 13:04 — Real Google flow exposed and fixed a sign-out request defect</h2>
+      <p>The configured local Google flow completed against a one-day <code>oauth-smoke-20260712</code> Lakebase branch: provider consent, durable account/profile creation, project creation, and reload succeeded. The first sign-out attempt failed and left its database session active, so the provider smoke is not yet marked complete.</p>
+      <p>The failure was reproduced independently: the client sent an <code>application/json</code> content type with no body, which Better Auth correctly rejected as <code>400 BAD_REQUEST</code>; a valid empty JSON object returns <code>200</code>. The client now sends <code>{}</code>, with a regression test. The targeted client/auth tests and client typecheck pass; a live sign-out retry remains.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 13:06 — Local acceptance complete and temporary resources removed</h2>
+      <p>The founder repeated sign-out successfully after the request fix. Lakebase then reported zero active session rows, proving server-side revocation rather than a client-only state change. The full local writer outcome now passes: real Google consent, one durable account/profile, project creation, reload, and sign-out.</p>
+      <p><code>pnpm verify</code> passes all workspace typechecks, ESLint, and 44 Vitest tests. Both wide and narrow Chromium journeys pass. The one-day OAuth smoke database branch and both downloaded credential JSON copies were deleted; only non-secret callback/project metadata remains in documentation. The three Fly auth secrets remain staged for the normal feature release, with no manual production deployment.</p>
+      <p>Implementation and local acceptance are complete. The plan remains active until an approved push and pull request exercise the real PR database branch and CI, followed by the normal merge-driven production release and post-release smoke.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 13:18 — Authenticated kernel checkpoint committed and pushed</h2>
+      <p>At founder direction, the verified Phase 1 implementation was committed as <code>a73d532</code> (<em>feat: add authenticated project CRUD</em>) and pushed to <code>origin/feat/authenticated-project-crud</code>. No pull request was opened. This preserves a recoverable green boundary before further product expansion.</p>
+      <p>A separate core/API and UI audit confirmed all 22 accepted metadata commands exist through core, memory/Postgres, HTTP, capability registry, and responsive controls. It also found honest pre-PR closure work: arbitrary scene ordering/placement, archive/refusal guidance and confirmation, profile conflict recovery, archive/scoping clarity, and broader browser coverage.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 13:24 — Founder expanded the epic to the complete writing loop</h2>
+      <p>The founder explicitly chose a large iterative scope before this branch's pull request: include prose bodies, revisions and history, and Story Canvas state management from the living Ghostwriter Mockups 2.0 source. The founder prefers autonomous bounded loops and visual check-ins only when review is genuinely needed. This supersedes the earlier plan boundary that kept the editor and Canvas as later candidates; <a href="follow-ups.html">follow-ups.html</a> is promoted into the active epic.</p>
+      <p>The architecture audit found three required concurrency domains: existing project metadata versioning, per-scene revision heads for prose, and a dedicated Canvas board version. The current Postgres metadata adapter deletes/rebuilds child records, so it must become surgical before immutable prose rows can safely reference scenes. Proposed ADR 0006 will settle ProseMirror schema, stable block IDs, working heads, immutable revisions, owner leases, hashing, compare/restore, and minimal recovery. Proposed ADR 0007 will settle project-board ownership, spatial objects and links, authority state, manuscript-derived spine behavior, and the accessible ordered alternative.</p>
+      <p>Real-time subscriptions, invitations/editors, comments/suggestions, AI and image generation, import/export, account exit, permanent purge, full offline replication, and native freeform Canvas remain outside this expanded epic. The plan, handoff, and candidate specifications are being reconciled before implementation resumes.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 13:30 — ADR 0006 and ADR 0007 accepted</h2>
+      <p>The founder accepted the recommended writing architecture and directed autonomous delivery until the first working Draft/Canvas visual milestone. <a href="../../../docs/adr/0006-scene-documents-revisions-and-recovery.md">ADR 0006</a> now governs schema-versioned ProseMirror JSON, stable block IDs, separate scene working versions, meaningful immutable checkpoints and variants, owner-session leases, compare/restore, and bounded encrypted IndexedDB recovery. <a href="../../../docs/adr/0007-story-canvas-spatial-state.md">ADR 0007</a> now governs one project Canvas board, dedicated board versioning, canonical ID references, per-writer viewport preferences, manuscript-derived spine/drift, and an ordered accessible alternative.</p>
+      <p>Implementation may proceed inside-out and in tested milestones. Product copy and code must keep real-time subscriptions, collaborator workflows, AI/image generation, import/export, permanent purge, and full offline projects outside the delivered claim.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 13:33 — Current-kernel CRUD closure complete</h2>
+      <p>The audited UI gaps are closed before editor work: scenes are scoped to the selected book and can move to any chapter/unassigned target or reorder within their current placement; books, scenes, and story knowledge expose active/archived filters; project/book/scene/story archive and empty-structure removal use explicit confirmation; last-active-book and POV-in-use refusals are explained before a request; and profile conflicts reload the latest account state.</p>
+      <p>Core now refuses new story links to archived scenes while allowing existing links to be removed. Browser acceptance expanded from two representative journeys to four: the main hierarchy exercises book/part/chapter/scene/story operations and confirmations, narrow web performs workspace mutations, and two-tab project/profile conflicts prove reload behavior. Targeted typechecks and 15 core/backend tests pass; all four Chromium journeys pass.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 13:38 — Metadata persistence now preserves canonical scene rows</h2>
+      <p>The Postgres replacement path no longer deletes every edition, story-knowledge record, book, and cascaded scene on each metadata command. It conditionally advances the project version, updates or inserts canonical rows by stable ID, rebuilds only ordering/link joins, removes genuinely absent empty structure child-to-parent, and reload-validates the aggregate in the same transaction.</p>
+      <p>A PGlite regression attaches a separate restrictive-FK sentinel row to a scene, then renames the project, updates and moves the scene between books, and removes its now-empty chapter and part. The dependent row and scene survive, proving future document/revision foreign keys are compatible with metadata changes. Six storage repository tests, storage typecheck, ESLint, and diff hygiene pass.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 13:52 — First durable Draft writing slice complete</h2>
+      <p>Added <code>@ghostwriter/editor</code> with strict schema-v1 ProseMirror JSON, stable block IDs, canonical serialization and SHA-256 hashing, schema migration/normalization, block-aware comparison, and an SSR-safe Tiptap web component with accessible formatting controls. Seven editor tests cover empty documents, ID assignment/stability, invalid schema/IDs, hash stability, and block changes.</p>
+      <p>Core now defines scene document heads, genesis revisions, owner-session leases, repository contracts, a memory adapter, and owner-authorized writing services. Migration 0004 adds stable scene-document, append-only revision, and lease tables; the Postgres adapter atomically initializes, leases, conditionally saves by working version, and refuses stale/wrong/expired writers. Hono exposes authenticated workspace, lease, and body routes with a separate 2 MiB document bound and stable conflict codes.</p>
+      <p>The responsive workspace now mounts a focused Tiptap Draft for the selected scene. A serialized 900 ms queue prevents overlapping saves from losing newer edits, <em>Saved to project</em> appears only after acknowledgement, leases renew automatically, navigation flushes/releases best-effort, and revision conflicts preserve the local tab document while offering explicit server/local choices without auto-merge. The new browser journey writes prose, waits for acknowledgement, reopens, reloads, and proves the body persists. <code>pnpm verify</code> passes 70 tests and all five Chromium journeys pass.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 14:08 — Personal history and encrypted recovery complete</h2>
+      <p>Core, memory, and Postgres now support metadata-only revision lists, manual checkpoint deduplication with single-parent chains, unique named variant heads, block-aware comparison, and restore as a new attributable immutable revision. Migration 0005 adds scene variants and replaces the scene/hash uniqueness constraint so a restore can truthfully preserve a new history event even when prose matches an older checkpoint. Hono exposes owner-scoped history, checkpoint, variant, compare, and restore routes with lease/working-version guards and content-free error diagnostics.</p>
+      <p>The Draft History surface uses writer language, flushes acknowledged prose before creating a boundary, shows actor/reason/time, creates named variants, compares added/removed/changed/moved blocks with accessible excerpts, and requires confirmation before restore. Restore installs the returned document as a new head without rewriting earlier history.</p>
+      <p>A seven-day recovery service now stores only the latest unacknowledged scene document per account/project/scene in IndexedDB, encrypted with AES-GCM and a non-exportable origin-private key. The implementation explicitly documents that this limits casual at-rest disclosure rather than same-origin script compromise. Recovery is captured before network scheduling, cleared after matching acknowledgement or successful sign-out, falls back truthfully to tab-only memory if browser storage is unavailable, and always asks the writer to recover or discard when local and server Drafts differ. <code>pnpm verify</code> passes 87 tests and all seven Chromium journeys—including checkpoint/compare/restore and an interrupted-save recovery—pass.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 14:32 — First complete Draft/Canvas visual milestone ready</h2>
+      <p>Canvas now has its own platform-neutral domain, expected board version, content-addressed snapshot history, reading-order spine, viewport preferences, owner policy, memory/Postgres adapters, and forward migration 0006. Relational current state preserves scene/story references, links, regions, authority, archive/dismissal, and personal viewport selection. A dedicated unit-of-work makes storyboard-first scene creation atomic across project metadata, genesis scene prose, and Canvas placement; stale project or board versions apply nothing.</p>
+      <p>The authenticated API exposes board commands, history/restore/undo, personal preferences, and atomic scene handoff. Core/PGlite tests cover reference integrity, conflicts and rollback, viewport isolation, spine drift without manuscript reorder, 500+ object projection, snapshot restore, and cross-account denial. The client now offers Draft, Canvas, Split, and Project setup modes with one shared scene selection.</p>
+      <p>The wide Canvas includes spatial drag plus keyboard movement, zoom/pan preference, inspector, notes, regions, story-knowledge cards, image metadata, scene cards, typed confirmed/provisional links, remembered deterministic ghost review, layer/region controls, stale canonical references, snapshot History, Undo, and a manuscript-derived spine with explicit aligned/earlier/later/no-hint states. Storyboard-first creation requires explicit manuscript placement and initial geometry. Narrow web defaults to the ordered keyboard/screen-reader path and does not claim freeform editing.</p>
+      <p>Pre-review closure added note/image metadata editing, story-knowledge placement, story-order hint controls and drift proof, preference-driven scene restoration, on-card provisional review/dismissal, Canvas snapshot restore, and two-tab Canvas conflict recovery. <code>pnpm verify</code> passes 121 tests and all 13 Chromium journeys pass. This is the founder's requested first working Draft/Canvas review gate; real-time collaboration, AI/image generation, binary assets, timeline, marketplace, and manuscript reorder from Canvas remain outside scope.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 18:05 — Founder rejected the card/form shell and requested a tree + DAG proposal</h2>
+      <p>The founder's milestone screenshots expose the central UX issue: part, chapter, scene, status, POV, order, and placement operations are presented as large independent form cards with explicit Save buttons and button grids. The behavior is correct, but the interaction model does not feel like navigating and shaping a story. The founder requested a filesystem-like hierarchy combined with a relationship DAG, action-level save confirmation, real Canvas workflows, and animated chapter/scene drill navigation that feels like moving deeper into or back out of a story layer.</p>
+      <p>Implementation is paused at the visual gate. The existing persistence, command, Draft/history/recovery, and Canvas foundations remain valid; this is a shell and workflow redesign rather than a new canonical data model. The proposed mental model is: <strong>tree equals manuscript structure and reading order; graph equals relationships and interpretation</strong>. Project, book, part, chapter, and scene form the expandable tree. Scene/story/note/image/region nodes and directed confirmed/provisional links form the DAG.</p>
+      <p>The founder explicitly authorized an additive proposal inside the living <a href="../../designs/Ghostwriter%20Mockups%202.0.html#ux-proposal-fs-dag">Ghostwriter Mockups 2.0</a> source. Existing bundled mockups remain unchanged. The appended interactive section demonstrates the persistent four-region shell, manuscript tree, chapter and scene camera layers, breadcrumb/Back/Escape behavior, workflow lenses, save/conflict/recovery toasts, narrow ordered posture, and required states. The associated delivery contract is <a href="ux-proposal-filesystem-dag-nav.html">Story tree + relationship graph navigation</a>.</p>
+      <p>Automated design validation confirms that the bundled artifact still renders its existing Canvas and state sections, the new index anchor resolves, chapter drill and workflow controls update state, and acknowledgement toasts function. No production UI code was changed in this proposal step.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 18:23 — Tree + DAG accepted; autonomous delivery skill adopted</h2>
+      <p>The founder accepted the filesystem + relationship-DAG UX and expanded implementation scope to include the Book Reader, coherent Split views, and all scene handoffs. Documentation, domain/design review, cumulative coherence checks, and iterative harness improvement are explicit parts of every feature. The founder authorized autonomous action and logical checkpoint commits on the current branch; push, PR, merge, and deployment remain separate gates.</p>
+      <p>Created the project skill <code>.cursor/skills/ghostwriter-autonomous-delivery/SKILL.md</code> plus a reusable feature checklist and validator. It requires one observable vertical checkpoint at a time, an inside-out domain/storage/API/UI loop, cumulative review of all prior features, immediate plan/record/docs updates, the verification ladder, and checkpoint commits. Validation passed at 163 lines with one direct reference; commit <code>81f1fc2</code> preserves the first harness version.</p>
+      <p>Three read-only audits mapped the accepted shell, Reader, and Split/handoff work. The existing domain/API foundations are sufficient for tree, inspector, toasts, workflow lenses, and drill state; those are primarily client bindings. Reader needs a new read-only book projection, batch scene-head reads, authenticated endpoint, capability record, and wide-bound/narrow-scroll UI. Scene-level linked context is safe now; inline passage marks require a later stable block-pin decision and will not be faked with text matching. Resizable Split needs a personal ratio preference and focus/lease coordination but no new canonical content store.</p>
+      <p><a href="feature-delivery-checkpoints.html">Tree, workflows, reader, split, and handoffs</a> records accepted feature maps, tests, cumulative coherence gates, and commit sequence. Implementation begins with the writer-visible tree + inspector + acknowledgement toast checkpoint.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 18:36 — Checkpoint A map and evidence contract recorded</h2>
+      <p><strong>Outcome:</strong> the observable checkpoint replaces Project setup and horizontal scene chips with a persistent, controlled Project → Book → Part → Chapter → Scene/Unassigned tree, one selection inspector, and server-acknowledged action toasts. Drill/workflow lenses, Reader, and resizable Split are explicit non-goals. Refusals remain the existing last-active-book, nonempty structure, archived target, stale project/Canvas version, lease, revision, and recovery states.</p>
+      <p><strong>Domain map:</strong> <code>ProjectNavigator</code>, stable canonical IDs, the 22 existing <code>ProjectCommand</code> variants, <code>project.version</code>, scene working versions/leases, and Canvas board versions remain authoritative. Metadata Undo is one client-held inverse command for 30 seconds and always executes against the latest installed project version; it adds no record, migration, persisted history, or ADR. Canvas keeps snapshot Undo and Draft keeps History. Canvas coordinates and story-order hints never reorder the tree.</p>
+      <p><strong>Design and binding map:</strong> the accepted living-design tree + DAG supplement governs the wide four-region shell, medium toggles, narrow ordered drawer/stack, ARIA tree keyboard model, blur/choice inspector commits, aggregate idle status, polite success announcements, and sticky alert problems. Reusable <code>ManuscriptTree</code>, <code>SelectionInspector</code>, and toast host components belong in <code>packages/ui</code>; client coordination remains in <code>apps/client</code>. Core/storage/API stay unchanged unless binding reveals a genuine defect. Capability UI names will be updated while existing MCP authorization exceptions remain unchanged.</p>
+      <p><strong>Tests and documentation:</strong> pure acknowledgement/inverse and toast reducer/timing tests precede browser coverage for keyboard tree navigation, inline rename, post-ack toast, safe Undo, sticky conflict, editor focus, and narrow overflow. All 13 existing Draft/Canvas/auth journeys remain represented. The verification ladder is focused tests/typechecks, <code>pnpm verify</code>, full Playwright, diagnostics, <code>git diff --check</code>, then a cumulative review of order/spine drift, shared scene selection, versions, leases/recovery, capabilities/MCP, and wide/narrow accessibility. Product, architecture, this plan/supplement, record, and handoff will be reconciled with exact evidence before the checkpoint is marked complete.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 19:20 — Accepted tree shell, drill/workflows, Reader, and Split handoffs</h2>
+      <p><strong>Checkpoint A:</strong> replaced the card/form Project setup shell with <code>ManuscriptTree</code>, <code>SelectionInspector</code>, acknowledgement toast coordinator, and the four-region authenticated workspace. Metadata commands dispatch action-specific toasts with bounded Undo/Restore; Draft keeps quiet status plus post-idle acknowledgement.</p>
+      <p><strong>Checkpoint B:</strong> added client-only drill stack (<code>project</code> → <code>chapter</code> → <code>scene</code>), <code>CanvasDrillBar</code> breadcrumbs/Back/Escape, workflow lenses (Outline, Relationships, Continuity fixture, Plan → Draft, Review), and 450&nbsp;ms camera transitions with reduced-motion fallback. Lenses filter projections only; manuscript order stays on the tree.</p>
+      <p><strong>Checkpoint C:</strong> Book Reader projection, batch scene-head reads, <code>GET /api/projects/{projectId}/books/{bookId}/reader</code>, <code>BookReaderPanel</code>, and <code>book.reader.read</code> capability (see prior log entry).</p>
+      <p><strong>Checkpoint D:</strong> resizable Split panes with per-account/project local ratio persistence; cross-surface scene selection, atomic storyboard handoff, Reader round-trip, and shared Draft lease/caret behavior preserved.</p>
+      <p><strong>Evidence:</strong> <code>pnpm verify</code> green — 150 unit/integration tests. Playwright: 9/13 journeys pass after tree-shell selector migration; 4 journeys remain under triage (hierarchy toast interception, Canvas label aria refresh, preference restore inspector visibility, outline workflow button disambiguation).</p>
+      <p><strong>Next:</strong> close remaining Playwright gaps, cumulative coherence review, expanded milestone commit/push, PR Lakebase/CI, merge-driven release.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 07:30 — H1a selected: Story Trail, Quick Build, and Scene Launchpad</h2>
+      <p><strong>Writer-visible outcome:</strong> selecting project/book/part/chapter/Unassigned/story knowledge produces a useful structural center surface instead of leaving Draft on an unrelated scene. One persistent Quick Build entry offers only valid contextual creates, opens the existing inline title commit, and returns to acknowledged structure. Story Trail exposes the selected hierarchy and lets the writer move back to an ancestor. Scene selection continues to open the canonical Draft. Initial H1a non-goals are cross-part chapter moves, new domain commands, persisted panel sizes, and the Canvas/Draft visual redesigns in H2/H3.</p>
+      <p><strong>Domain/binding map:</strong> <code>ProjectNavigator</code>, <code>ManuscriptSelection</code>, stable IDs, and the existing project command/version boundary remain authoritative. No core, repository, migration, API, capability, or MCP change is expected. UI work is confined to pure selection/trail/Quick Build projections plus <code>ManuscriptTree</code> and <code>AuthenticatedProjectWorkspace</code>. Structure selection never mutates prose or Canvas and never changes manuscript order without an acknowledged existing command.</p>
+      <p><strong>Design map:</strong> accepted UX 2.1 Story Trail, Quick Build, and Scene Launchpad govern wide/medium/narrow behavior. Keyboard: tree roving focus remains; Ctrl/Cmd+Enter opens Quick Build; Enter selects an option; Escape cancels; focus returns to the relevant tree row after acknowledged creation. Empty chapter actions are Create scene, Move existing (when available), and Storyboard on Canvas. Save/conflict/refusal behavior stays on the acknowledgement coordinator.</p>
+      <p><strong>Tests:</strong> <code>GHOSTWRITER_TEST_ROUTING=routine</code> through <code>routine-tests</code> / Composer 2.5 fast. Add pure projection coverage plus one focused Playwright hierarchy journey; run that journey before any full suite. Composer attempts: 0/2. Hard escalation: none. Parent reviews domain truth and runs focused checks, <code>pnpm verify</code>, then full Playwright only after focused green.</p>
+      <p><strong>Coherence gate:</strong> no duplicate selection authority; structural selection and active Draft are visually unambiguous; tree order and Canvas spine remain unchanged; current Draft is flushed/released only when its component actually leaves; keyboard/narrow paths remain available; prior auth/prose/Canvas/Reader journeys remain valid.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 07:14 — UX 2.1 accepted; deterministic test-model routing required</h2>
+      <p><strong>Founder decision:</strong> the complete Build · Map · Write UX 2.1 direction is accepted and checkpoints H1–H5 are authorized. Living design, supplement, parent plan, and handoff now record acceptance. H1 is Story Trail + Quick Build.</p>
+      <p><strong>Harness requirement:</strong> avoid expensive parent-model test work and unbounded Playwright loops. Routine Vitest/integration/Playwright authoring, repair, and focused stabilization must route to a named Composer 2.5 subagent. Grok 4.5 is an explicit hard-test escalation only for concurrency/lease/version races, migration/parity, accessibility-critical cross-surface behavior, or two evidence-backed Composer attempts that fail. Each Playwright loop must begin with one focused journey, permit at most two Composer repair attempts plus one recorded Grok escalation, and never repeat the full suite until the focused journey passes.</p>
+      <p><strong>Enforcement decision:</strong> add version-controlled custom subagents with pinned models, an always-applied operating rule in the delivery skill/AGENTS, and a project <code>subagentStart</code> hook that denies test-writing/repair tasks resolved to the wrong model. Cursor cannot auto-switch the parent model mid-session; the deterministic boundary is the selected subagent model. Hook denial instructs the parent to retry with the correct route rather than silently falling back.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-17 21:05 — Detailed UX 2.1 design set ready for founder review</h2>
+      <p><strong>Cross-audit conclusion:</strong> hierarchy, Canvas, and Draft audits agree that the domain/backend foundation is substantially present; the product deficit is composition, discoverability, and selection/focus coherence. Specific gaps promoted into the proposal are structural selection drifting from <code>selectedSceneId</code>, selection-gated tree micro-actions, an empty chapter’s dead center, medium tree/inspector either-or behavior, a form-driven Canvas with dual inspectors, missing derived Chapter Aggregate and Scene Focus Stage presentations, always-expanded Draft History, technical lease copy, and incomplete caret/drill-stack return preservation.</p>
+      <p><strong>Design delivered:</strong> appended <a href="../../designs/Ghostwriter%20Mockups%202.0.html#ux-proposal-workspace-2-1">Build · Map · Write UX 2.1</a> without altering founder-authored 2.0 screens or the accepted tree + DAG section. The interactive wide prototype switches among Build hierarchy, Map on Canvas, and Write in Draft; toggles Quick Build, Focus Halo, and conflict truth; and includes medium/narrow posture, progressive-disclosure contracts, scope choreography, and required-state matrices. The companion <a href="ux-proposal-workspace-2-1.html">plan supplement</a> records acceptance, checkpoints H1–H5, test routing, non-goals, ADR thresholds, and the visual review gate.</p>
+      <p><strong>Validation:</strong> Chromium loaded the bundled living design, mounted <code>#ux-proposal-workspace-2-1</code>, exercised Build/Map/Write, Quick Build, Focus Halo, and conflict controls, and captured all three detailed work surfaces. A Draft flex-direction defect found in visual validation was corrected; the final Build, Canvas Workbench, and Manuscript Page frames render at 1440 × 1000. Parent plan and handoff now point to founder review as the next step. Product code remains unchanged by this design checkpoint.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-17 21:00 — Live Cognition review opens Build · Map · Write visual gate</h2>
+      <p><strong>Founder feedback:</strong> the real authenticated project confirms the hierarchy can be created, but the workflow is clunky; Canvas capabilities are not discoverable as tools; and Draft reads as a set of technical panes rather than a finished writing environment. The screenshot shows the concrete failure mode: tiny row actions, a selected empty chapter with a mostly blank center, and an inspector that gives metadata more visual weight than the next writer action.</p>
+      <p><strong>Design decision under review:</strong> preserve the implemented canonical commands and accepted tree + DAG architecture, but reorganize them into three legible workflows. <em>Build</em> uses Story Trail, Quick Build, and Scene Launchpad. <em>Map</em> uses Canvas Workbench and Thread Trace. <em>Write</em> uses Draft Desk, Context Dock, and Focus Halo. The design keeps manuscript order authoritative, Canvas versioned separately, Draft server-acknowledged under one direct-edit lease, and recovery bounded/noncanonical.</p>
+      <p><strong>Plan:</strong> added <a href="ux-proposal-workspace-2-1.html">Build, Map, Write — UX 2.1</a> as a proposed supplement to this epic. The next deliverable is an additive interactive section in the living design with detailed wide, medium, narrow, empty, selected, conflict, and handoff states. Implementation checkpoints H1–H5 remain blocked on founder visual acceptance.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-17 20:40 — Release-readiness diagnosis → targeted repairs</h2>
+      <p>Three diagnosis subagents closed the failure map: tree reorder was a non-retrying order assertion after async <code>scene.move</code>; Canvas storyboard spatial miss was viewport culling after placement/nudge; dismissed Outline rows were already projected but needed product + harness alignment; narrow overflow was CSS (tree help / shell); Canvas-after-reload was an <code>openWorkspaceMode</code>/<code>openProject</code> race (mode helper already wide.or(narrow); openProject now waits for workspace).</p>
+      <p><strong>Product:</strong> keep the selected Canvas object mounted even when culled; constrain manuscript tree keyboard help; clip workspace shell overflow and relax topbar/heading <code>minWidth</code>. <strong>Tests (Composer 2.5):</strong> retrying tree order under the manuscript tree; wait for save ack before Storm signal nudge; <code>openProject</code> waits for <code>← Projects</code>.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-17 20:35 — Test authorship routes through Composer / Grok subagents</h2>
+      <p>Founder directed an operating-model update: when the autonomous harness needs new or rewritten tests, the parent agent must delegate test authorship to Task subagents — default <code>composer-2.5-fast</code>, and <code>cursor-grok-4.5-high-fast</code> for very difficult cases (cross-surface flaky journeys, concurrency/lease races, migration/parity, accessibility-critical paths, or repeated Composer failure). The parent keeps outcome framing, domain-truth review, and the verification ladder.</p>
+      <p>Updated <code>.cursor/skills/ghostwriter-autonomous-delivery/SKILL.md</code>, <code>FEATURE-CHECKLIST.md</code>, and <code>AGENTS.md</code>. Skill validation re-run after the edit.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-17 20:05 — Autonomous pickup reopens release-readiness verification</h2>
+      <p><strong>Selected outcome:</strong> make the accumulated owner-only writing product release-ready before starting another roadmap feature. The writer must be able to reorder the manuscript, use wide and narrow Draft/Canvas, recover a preferred Canvas selection, and review dismissed Canvas fixtures with every existing journey green. New collaboration, import/export, and AI behavior remain non-goals for this repair checkpoint.</p>
+      <p><strong>Verification discovery:</strong> the clean branch is four commits ahead of its remote, but the handoff’s green claim is stale. A fresh full run produced 8/13 passing browser journeys. Failures cover asynchronous scene-order assertion, narrow topbar overflow, newly created Canvas objects landing outside the visible spatial viewport, an eager wide/narrow test selector after project reload, and dismissed Canvas objects disappearing from the ordered “Every object” view. The 157-test Vitest run also exceeded the default five-second timeout in four PGlite-heavy first tests, so the verification concurrency budget is being rechecked separately rather than reported as a product failure.</p>
+      <p><strong>Checkpoint map:</strong> canonical IDs, project/scene/Canvas version domains, persistence, API contracts, and MCP exceptions remain unchanged. Repairs are limited to responsive shell layout, viewport-aware Canvas presentation, ordered review visibility, deterministic browser synchronization, and reliable local verification settings. Exact evidence and any reusable harness learning will be recorded after the complete ladder passes.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 08:03 — Browser-first verification replaces checkpoint-by-checkpoint Playwright</h2>
+      <p><strong>Founder decision:</strong> implementation loops were spending too much time authoring and repairing Playwright before the product had been reviewed as a whole. H1–H5 now use targeted unit/contract/integration checks, <code>pnpm verify</code>, and direct real-browser walkthroughs as work proceeds. The founder verifies the complete planned outcome before any further Playwright authoring, repair, or full-suite loop begins.</p>
+      <p><strong>Enforcement:</strong> the delivery skill, feature checklist, repository instructions, and test subagents now require <code>GHOSTWRITER_PLAYWRIGHT_GATE=user-verified</code> for Playwright mutation tasks. The fail-closed <code>subagentStart</code> hook rejects premature Playwright work while preserving Composer/Grok routing for other tests. After the gate, the agent audits existing journeys first and adds only the smallest high-value acceptance coverage instead of one spec per implementation checkpoint.</p>
+      <p><strong>Current H1a evidence:</strong> Story Trail, Quick Build projections, structural Scene Launchpads, explicit scene opening, and no silent Draft auto-open are implemented. Fourteen focused projection tests pass and <code>pnpm verify</code> passes 173 tests. The newly authored checkpoint-specific Playwright spec was removed under the new decision; browser walkthrough and founder review are now the remaining H1a product evidence before continuing H2. The pre-existing pointer-drag Playwright failure is deferred to the post-verification acceptance audit rather than consuming another implementation loop.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 08:14 — H1a passes the real-browser walkthrough</h2>
+      <p><strong>Wide walkthrough:</strong> a hermetic writer created a project, used context-filtered Quick Build to add a sibling book, part, chapter, and scene, opened the populated chapter launch list, explicitly entered the canonical Draft, followed Story Trail back to the book, and retained acknowledged tree order. Structural selection showed Scene Launchpad rather than silently opening an unrelated Draft. Wide screenshots confirmed the tree, trail, launchpad, Quick Build, and inspector remain legible together.</p>
+      <p><strong>Narrow defect and repair:</strong> the first 390 × 844 walkthrough exposed the manuscript panel collapsing to a one-pixel flex basis, allowing its heading to overlap Story Trail. Replacing <code>flex: 0</code> with explicit non-growing/non-shrinking behavior preserves a 340-pixel scrollable tree region. The repeated browser measurement showed tree bottom 525 px, Story Trail top 535 px, no overlap, and no horizontal overflow. Quick Build and ancestor navigation remained visible.</p>
+      <p><strong>Evidence:</strong> 10 successful writer-visible checks across create, launch, trail, and responsive behavior; direct visual review at 1440 × 960 and 390 × 844; UI typecheck and focused lint green; prior <code>pnpm verify</code> remains green at 173 tests. H1a is ready to hand off into H2 Draft Desk. Playwright remains deferred until founder verification of the complete H1–H5 outcome.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 08:18 — H2 selected: Draft Desk without editor remounts</h2>
+      <p><strong>Writer-visible outcome:</strong> an explicitly opened scene becomes a centered manuscript page with one compact scene ribbon, writer-language formatting, save truth, a dismissible Context Dock, closed-by-default History drawer, and Focus Halo. Previous/next scene, status, POV, word count, Context, History, and focus controls stay close to the page; technical lease detail escalates only when attention is needed.</p>
+      <p><strong>State and authority map:</strong> canonical prose, working version, lease, recovery, immutable revisions, variants, compare, and restore remain inside the existing <code>DraftPanel</code> and API contracts. Workspace-local booleans/tabs control only shell composition: Context Dock visibility, active dock tab, History drawer visibility, and Focus Halo. They create no persistence, migration, capability, or MCP change. The existing <code>DraftPanel</code> instance must remain at the same React identity while these controls toggle so its Tiptap editor, caret, save queue, recovery coordinator, and lease effects do not restart.</p>
+      <p><strong>Bindings and refusal states:</strong> <code>AuthenticatedProjectWorkspace</code> owns shell hiding and Context Dock composition; <code>App</code> supplies adjacent canonical scene IDs and metadata; <code>DraftPanel</code> composes the ribbon/page/drawer over its existing save/history functions. Read-only archive, lease conflict/expiry, revision conflict, recovery offer, loading, saving, and retryable failure retain current semantics and remain visible above the manuscript page.</p>
+      <p><strong>Verification:</strong> add focused non-Playwright presentation coverage through <code>routine-tests</code>, run changed-package checks and <code>pnpm verify</code>, then walk wide page composition, Context/History toggles, Focus Halo entry/exit, text/caret preservation, save acknowledgement, previous/next scene, and narrow posture in the browser. Playwright remains behind the founder verification gate.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 08:29 — H2 Draft Desk passes browser and automated verification</h2>
+      <p><strong>Delivered:</strong> Draft now composes a centered Manuscript Page beneath a compact scene ribbon with canonical previous/next handoff, scene position, status, POV, client-derived word count, working version, and writer-language save truth. The existing formatting controls are sticky and remain keyboard-operable. Lease detail stays quiet while healthy and reappears for loading/read-only/problem states.</p>
+      <p><strong>Context and History:</strong> the Draft Context Dock defaults to Brief and exposes Story, Canvas, and History tabs. Brief reuses acknowledged scene metadata; Story lists linked active story records; Canvas hands off to the same scene in Canvas/Split; History opens the existing timeline/variant/compare/restore surface as a closed-by-default drawer. The accepted supplement's <em>Canvas</em> tab governs over the interactive mockup's older <em>Links</em> label. Scene summary remains the accepted brief field, word count is a noncanonical client projection, and dock/History/focus state remains session-only, so no ADR or persistence change is needed.</p>
+      <p><strong>Editor stability:</strong> Context dismissal, all four dock tabs, History open/close, Focus Halo, and Escape exit preserved the same live editor DOM identity in the browser. Focus Halo hides tree, Context Dock, Story Trail, and workspace headings while retaining the ribbon, save truth, editor, and visible Exit focus action. No shell toggle calls <code>flushAndRelease</code>, changes <code>draftMountVersion</code>, or releases the scene lease.</p>
+      <p><strong>Responsive repair:</strong> opening Draft or crossing below 760 px now makes prose primary by closing tree and Context Dock drawers; explicit Show manuscript tree and Show Context Dock actions restore them. The 390 × 844 walkthrough showed the continuous manuscript page, no horizontal overflow, and no panel overlap.</p>
+      <p><strong>Evidence:</strong> four focused <code>draft-desk</code> tests cover canonical scene sequencing, neighbors/position, POV projection, missing-scene fallback, and Unicode/nested prose word count. <code>pnpm verify</code> passes 27 files / 177 tests plus 12 hook-policy checks. Browser walkthroughs at 1440 × 960 and 390 × 844 passed History default/close, Context tabs/dismiss, same-editor identity, Focus Halo/escape, save acknowledgement, word count, previous/next canonical handoff, and responsive overflow checks. Playwright remains deferred until founder verification after H5.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 09:14 — H3 selected: Canvas Workbench over existing commands</h2>
+      <p><strong>Writer-visible outcome:</strong> Canvas opens as a legible workbench: a labeled tool dock separates Select/Hand from Scene/Note/Story/Image/Region/Connect creation; a utility bar exposes search, zoom, fit, history, and Spatial/Outline; active tools announce one-line instruction; selected objects expose common actions without forcing the full inspector; project and scene scope provide Chapter Aggregate and Scene Focus Stage projections.</p>
+      <p><strong>Authority map:</strong> existing board/object/link/snapshot records, dedicated board version, manuscript-derived spine, scope placements, drill stack, workflow lenses, and command APIs remain authoritative. Tools are transient client intent; Chapter Aggregates and Scene Focus Stage are derived projections. No multi-select/grouping, automatic manuscript reorder, new object kind, migration, or canonical timeline is introduced.</p>
+      <p><strong>Implementation boundary:</strong> reorganize <code>StoryCanvasPanel</code> around its existing create/place/update/archive/link/viewport/history functions, add pure presentation helpers in <code>canvas-model</code>, and expose explicit Draft/Split handoffs through existing selected scene IDs. Detailed geometry and metadata remain in the progressive-disclosure inspector.</p>
+      <p><strong>Verification:</strong> focused helper coverage through <code>routine-tests</code>, changed-package checks, <code>pnpm verify</code>, then direct wide and narrow browser walkthroughs for keyboard tools, staged create/cancel/success, search/fit, selection actions, aggregates, scene focus, ordered parity, and proof that manuscript order is unchanged. Playwright remains deferred.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 09:28 — H4 selected: preserve work across responsive handoffs</h2>
+      <p><strong>Writer-visible outcome:</strong> Draft, Canvas, Split, Reader, and narrow Project mode preserve the same canonical scene and recover the writer's shell posture. Narrow Draft/Canvas make the work primary with explicit Project and Context drawers. Reader round-trips restore Canvas drill/selection and Draft caret; Focus Halo and drawer toggles preserve mounted state.</p>
+      <p><strong>State map:</strong> App-owned scene/mode/drill/Canvas selection remains the handoff authority. Manuscript tree expansion and editor selection are bounded session-only presentation recovery, not canonical project state. They may use <code>sessionStorage</code> without changing ADRs because failure only returns to safe default expansion/caret and cannot change prose or order.</p>
+      <p><strong>Implementation:</strong> keep tree/inspector mounted behind <code>display: none</code> instead of destroying them; add narrow Project/Draft/Canvas top-level controls; close secondary drawers when entering work on narrow; persist tree expanded keys per project session; persist Tiptap from/to selection per account/project/scene session and clamp it to the acknowledged document on remount.</p>
+      <p><strong>Verification:</strong> focused pure/editor helper coverage where practical, <code>pnpm verify</code>, then browser walkthroughs for wide→narrow posture, tree expansion, Draft caret and save, Canvas drill/selection, Reader return, Focus Halo, reduced motion, drawer visibility/focus, and no horizontal overflow. Playwright remains deferred.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 10:05 — H3 complete: Canvas Workbench browser-verified</h2>
+      <p><strong>Delivered:</strong> labeled tool dock (Select/Hand/Scene/Note/Story/Image/Region/Connect with keyboard shortcuts), utility bar (Spatial/Outline, search/jump, Fit board/selection, history, Details), staged creation instructions, contextual selection actions, Chapter Aggregates at project scope, Scene Focus Stage after scene-lens drill with Open Draft / Open Split / History, and a simple board overview. Pure helpers live in <code>apps/client/src/canvas-model.ts</code>.</p>
+      <p><strong>Authority preserved:</strong> manuscript tree order remains canonical; Canvas version domain stays separate; aggregates and focus stage are derived projections only. No multi-select grouping, automatic reorder, or new object kinds.</p>
+      <p><strong>Evidence:</strong> focused Canvas helper coverage is green (including <code>image-reference</code> search and tool instructions). Wide browser walkthrough confirmed tool dock, aggregates, fit/search, note-tool instruction, and Scene Focus Stage after “Enter scene lens for Step One.” Narrow Canvas keeps ordered workbench chrome. Playwright remains deferred until founder verification after H5.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 10:06 — H4 complete: handoffs, narrow modes, Draft caret restore</h2>
+      <p><strong>Delivered:</strong> tree/inspector stay mounted via <code>regionHidden</code>; narrow Project / Draft / Canvas modes; session tree expansion; session Draft caret recovery in <code>SceneEditor</code> through <code>clampEditorSelection</code> + <code>sessionStorage</code>.</p>
+      <p><strong>Caret fix:</strong> Reader unmounts Draft while the scene lease is reacquired. Restore now waits until the editor is editable, re-applies after <code>setContent</code>, suppresses unfocused selection writes, and focuses the restored caret on first remount so Exit reader lands on the prior position (verified: stored <code>from:28</code> and DOM offset <code>27</code> stable across the round-trip).</p>
+      <p><strong>Evidence:</strong> editor selection helper tests green; wide Reader→Draft caret restore green; narrow Project shows the manuscript tree while Draft hides it. Reduced-motion drill fallback remains the earlier client camera path. Playwright remains deferred.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 10:08 — Late audit follow-ups applied without reopening H3</h2>
+      <p>Stale H3/H4 exploration notes from earlier subagents arrived after Workbench/handoffs landed. Applied the still-valid H4 residues: Reader return now restores <code>drillStack</code> and <code>workflowLens</code>; medium Show tree / Show Context Dock are mutually exclusive; Canvas compact/ordered posture uses the same 760&nbsp;px breakpoint as the workspace shell. Known non-blockers for founder review remain Thread Trace naming polish, narrow Quick Build as a true bottom sheet, and a bottom formatting tray.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 10:07 — H5 selected and polish pass: founder verification gate</h2>
+      <p><strong>Writer-visible outcome:</strong> H1–H5 read as one coherent Build · Map · Write workspace. Quiet loading/conflict copy uses writer language; empty Draft guidance points at Launchpad/tree; Canvas scope transitions say “Opening this scope…”; lease attention copy avoids jargon unless a conflict needs truth.</p>
+      <p><strong>Verification:</strong> <code>pnpm verify</code> passes 28 files / 189 tests plus 12 hook-policy checks after H3/H4/H5 polish. Cumulative browser evidence covers Story Trail/Quick Build/Launchpad, Draft Desk/Context/History/Focus, Canvas Workbench/aggregates/scene focus, Reader caret return, and narrow Project/Draft/Canvas modes. No new ADR: session-only shell/caret prefs remain noncanonical.</p>
+      <p><strong>Stop for founder:</strong> present the complete H1–H5 outcome for product verification. After explicit go-ahead, audit existing Playwright journeys (including known Canvas pointer-drag flake) and add only the smallest high-value acceptance coverage under <code>GHOSTWRITER_PLAYWRIGHT_GATE=user-verified</code>. Do not push, open a PR, merge, or deploy without separate authorization.</p>
+    </article>
+  </main>
+</body>
+</html>

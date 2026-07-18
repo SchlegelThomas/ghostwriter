@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ghostwriter UX proposal — Build, Map, Write</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Accepted UX 2.1 direction</p>
+      <h1>Build, Map, Write</h1>
+      <p class="meta"><strong>Status:</strong> accepted 2026-07-18 — implementation authorized<br>
+        <strong>Branch:</strong> <code>feat/authenticated-project-crud</code><br>
+        <strong>Parent plan:</strong> <a href="plan.html">Authenticated writing workspace, revisions, and Story Canvas</a></p>
+      <p>This supplement responds to the 2026-07-17 live review of the real authenticated Cognition project. It continues the active epic rather than opening another branch. The founder accepted the complete hierarchy, Canvas, Draft, handoff, responsive, and accessibility direction on 2026-07-18. The interactive visual source is appended to <a href="../../designs/Ghostwriter%20Mockups%202.0.html#ux-proposal-workspace-2-1">Ghostwriter Mockups 2.0</a>.</p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Turn Ghostwriter’s implemented hierarchy, Canvas, and scene-writing capabilities into three legible writer workflows: <strong>Build</strong> the manuscript without wrestling a tree, <strong>Map</strong> the story with visible Canvas tools, and <strong>Write</strong> on a calm manuscript page. The design keeps structure and metadata available without allowing either to dominate the prose.</p>
+      <p>The current screenshot proves the shell and canonical commands work, but it also exposes the main experience defect: a selected empty chapter leaves a mostly blank center while hierarchy actions hide in tiny row buttons and metadata fills the inspector. Canvas similarly has a large capability set below the fold, but no obvious tool model. Draft renders editor, recovery, lease, and history correctly, yet stacks them into one long technical panel instead of a writing desk.</p>
+      <p><strong>Out of scope:</strong> collaboration presence, comments or tracked suggestions, AI generation, binary image upload, timeline simulation, native freeform Canvas, new canonical storage, automatic manuscript reorder from Canvas, and changing accepted version/lease/recovery semantics.</p>
+    </section>
+
+    <section>
+      <h2>Proposed concepts</h2>
+      <ul>
+        <li><strong>Story Trail:</strong> a persistent project → book → part → chapter → scene breadcrumb that doubles as a scope switcher. One coherent selection drives tree, center, and Context Dock; it preserves expanded tree state, Canvas scope, Draft caret, and Reader return context instead of leaving Draft pointed at an unrelated scene.</li>
+        <li><strong>Quick Build:</strong> one context-aware <em>Add</em> action beside the tree and in empty states. It proposes the valid next records for the current selection, asks only for a title, applies a sensible placement, then keeps focus in the new inline title. Advanced placement remains available but never blocks the first action.</li>
+        <li><strong>Scene Launchpad:</strong> when a chapter or Unassigned bucket has no selected scene, the center becomes useful: create a scene, move an existing unassigned scene here, storyboard on Canvas, or open the next scene. It never displays a dead “choose or create” card.</li>
+        <li><strong>Canvas Workbench:</strong> a visible tool dock for Select, Hand, Scene, Note, Story record, Image reference, Region, and Connect; a utility bar for search, zoom, fit, arrange, history, and Spatial/Outline; and a contextual selection bar for common card/link actions. Project scope uses derived Chapter Aggregate cards; scene depth becomes a Scene Focus Stage with excerpt, links, and Draft/Split actions.</li>
+        <li><strong>Thread Trace:</strong> choosing a link or relationship lens highlights one directed path, dims unrelated cards, labels direction and authority, and exposes an ordered text equivalent. It changes projection only.</li>
+        <li><strong>Draft Desk:</strong> a centered Manuscript Page with a compact scene ribbon, contextual Whisper Toolbar, writer-language Save Truth strip, and a collapsible Context Dock. Draft History becomes an explicit drawer rather than permanent content below the editor.</li>
+        <li><strong>Context Dock:</strong> one secondary panel with tabs appropriate to the current work: Brief, Story, Canvas, and History in Draft; Details, Links, and History in Canvas. The dock opens for a task and can be dismissed to give the work surface room.</li>
+        <li><strong>Focus Halo:</strong> a reversible writing posture that hides the tree and Context Dock while preserving the scene ribbon, save truth, and an obvious exit. It never releases the scene lease or remounts the editor.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <h3>Build — manuscript hierarchy</h3>
+      <ul>
+        <li>The tree remains the canonical order navigator, but row chrome is quiet until hover, focus, selection, or touch action. Selection is visually distinct from edit mode and drag state.</li>
+        <li>Selecting a project, book, part, or chapter updates the center and Context Dock together. Draft never silently auto-opens a scene outside the selected branch; opening or creating a scene is an explicit writer action.</li>
+        <li>A single <strong>＋ Add</strong> control opens a context menu containing only valid actions for the selection: Book, Part, Chapter, Scene, or Story record. Keyboard shortcut <kbd>⌘/Ctrl</kbd> + <kbd>Enter</kbd> opens the same menu.</li>
+        <li>Quick Build creates one record with a title and contextual parent. Enter commits; Escape cancels; acknowledgement returns focus to the new row. “More options” opens placement/status fields without making them mandatory.</li>
+        <li>Chapter and Unassigned empty states provide prominent <strong>Create scene</strong>, <strong>Move existing scene</strong>, and <strong>Storyboard on Canvas</strong> actions. Selecting a populated chapter shows a scene launch list rather than blank space.</li>
+        <li>Drag-and-drop communicates destination and before/after position. A searchable Move menu and Alt/Option + Arrow remain equivalent. Invalid destinations explain why nothing changed.</li>
+        <li>Rename is inline. Archive/remove is grouped under an overflow menu with explicit confirmation and refusal copy. Archived records appear through one filter, never mixed silently with active work.</li>
+      </ul>
+
+      <h3>Map — Story Canvas</h3>
+      <ul>
+        <li>Canvas opens with its tool dock and utility bar visible above the work surface; creation controls are not buried in stacked forms.</li>
+        <li>Select (<kbd>V</kbd>) and Hand (<kbd>H</kbd>/<kbd>Space</kbd>) are distinct. Scene (<kbd>S</kbd>), Note (<kbd>N</kbd>), Story record (<kbd>K</kbd>), Image reference (<kbd>I</kbd>), Region (<kbd>R</kbd>), and Connect (<kbd>L</kbd>) have labels, tooltips, pressed state, and screen-reader names.</li>
+        <li>Choosing a creation tool updates the cursor and provides one-line instruction. Clicking the board creates or opens the smallest required popover; Escape cancels without mutation.</li>
+        <li>Scene creation asks for title and explicit manuscript placement, then atomically creates the canonical scene, genesis Draft, and Canvas card. Coordinate, size, z-index, and story-order hint are automatic defaults; advanced geometry stays in Details.</li>
+        <li>Connect mode chooses source, target, link kind, authority, and optional label in a short staged flow. Direction is visible on the board and written in the ordered equivalent.</li>
+        <li>Selected objects expose a compact floating bar: Open Draft, Link, Duplicate note metadata where safe, Bring forward/back, Archive, and More. Detailed metadata stays in Context Dock.</li>
+        <li>Search/Jump, Fit selection, Fit board, zoom, minimap, alignment/arrange, snapshot history, and Spatial/Outline are visible utilities. Unsupported multi-select/grouping is not implied until implemented.</li>
+        <li>Workflow lenses remain Outline, Relationships, Continuity fixtures, Plan → Draft, and Review. The tool dock controls actions; lenses control projection and emphasis. Neither becomes a second canonical store.</li>
+        <li>Project lens renders derived Chapter Aggregate cards with scene/link counts and explicit dive affordances; these are projections over the tree/board, not new canonical object kinds.</li>
+        <li>Scene lens renders a Scene Focus Stage with acknowledged prose excerpt, inbound/outbound context, and Open Draft/Open Split/History actions using the same scene ID.</li>
+        <li>The reading-order spine remains derived from Draft. Drift can be reviewed, but applying a manuscript reorder requires an explicit structure command and confirmation.</li>
+      </ul>
+
+      <h3>Write — Draft Desk</h3>
+      <ul>
+        <li>Selecting a scene places focus in one centered manuscript page with comfortable line length. The screen title is the scene title, not “Shape the manuscript.”</li>
+        <li>The scene ribbon shows Story Trail, scene title, status/POV summary, previous/next scene, word count, and quiet Saving/Saved/Read-only state. Lease detail moves behind status unless attention is required.</li>
+        <li>The formatting toolbar is compact, sticky, keyboard-operable, and contextual. It uses writer-facing controls for paragraph, headings, emphasis, quotation, scene break, undo, and redo without exposing editor internals.</li>
+        <li>Context Dock defaults to Brief and can switch among Story, Canvas, and History. Metadata commits are acknowledged, but prose remains wider and visually primary.</li>
+        <li>Draft History is closed by default and opens as a drawer with Timeline, Named variants, and Compare. Opening it preserves editor mount, caret, scroll, lease, and unsaved recovery. Checkpoint, variant, compare, and restore retain current server-authoritative semantics.</li>
+        <li>Focus Halo hides tree and dock without remounting Draft. Escape or the visible <strong>Exit focus</strong> action restores the exact prior shell state.</li>
+        <li>Draft → Canvas, Canvas → Split, Draft → Reader, and Reader return preserve canonical scene ID, caret/selection where applicable, tree expansion, Canvas drill stack/selection, and focus target. Selecting a non-scene Canvas object in Split never remounts Draft or releases its lease.</li>
+      </ul>
+
+      <h3>Responsive and accessible</h3>
+      <ul>
+        <li><strong>Wide ≥1240 px:</strong> rail + resizable tree + work surface + dismissible Context Dock. Draft page is centered independently of panel widths.</li>
+        <li><strong>Medium 760–1239 px:</strong> center remains primary; tree and Context Dock are mutually exclusive drawers, never two hidden regions the writer must toggle blindly. Split intentionally becomes one primary pane with a quick switch.</li>
+        <li><strong>Narrow &lt;760 px:</strong> Project, Draft, Canvas outline, and Reader are top-level modes. Quick Build uses a bottom sheet; Canvas is ordered, not freeform; Draft is a single continuous page with a bottom formatting tray.</li>
+        <li>Every pointer interaction has a keyboard and screen-reader path. Focus returns to the initiating control after sheets/drawers close. Hierarchy depth, relationship direction, authority, save state, and invalid destinations are expressed in text.</li>
+        <li>Reduced motion removes camera/zoom transitions and panel slides while preserving scope/focus changes.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Required states</h2>
+      <ul>
+        <li><strong>Structure:</strong> empty project, empty part, empty chapter, populated chapter, Unassigned, filtered search, inline create/rename, dragging, invalid drop, busy, conflict, archived filter, safe-removal refusal.</li>
+        <li><strong>Canvas:</strong> first-open guidance, empty scope, populated board, active tool, selected card/link/region, connect source/target, provisional, dismissed, archived, stale canonical reference, viewport culling, large board, save failure, board conflict, history restore confirmation.</li>
+        <li><strong>Draft:</strong> no scene, loading, editable lease, read-only archived, lease conflict/expiry, saving, acknowledged, retryable failure, revision conflict, recovery offer, empty history, comparison, restore confirmation, Focus Halo.</li>
+        <li><strong>Handoffs:</strong> pending Draft flush, successful mode switch, failed flush with recovery retained, Reader return, medium-pane swap, narrow back navigation.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Implementation sequence after founder acceptance</h2>
+      <ol>
+        <li><strong>Checkpoint H1 — Story Trail + Quick Build:</strong> coherent structural/scene selection, context-aware create menu, inline title flow, useful chapter/Unassigned launch states, clear row affordances, destination menu, and medium tree/Context drawers while retaining canonical commands.</li>
+        <li><strong>Checkpoint H2 — Draft Desk:</strong> Manuscript Page composition, scene ribbon, Whisper Toolbar, Save Truth strip, Context Dock, Draft History drawer, and Focus Halo without remounting Tiptap or releasing the lease.</li>
+        <li><strong>Checkpoint H3 — Canvas Workbench:</strong> visible tool/utility bars, staged creation/link flows, contextual selection bar, fit/search/minimap, Chapter Aggregates, Scene Focus Stage, and progressive-disclosure inspector over existing Canvas commands.</li>
+        <li><strong>Checkpoint H4 — Handoffs + responsive posture:</strong> exact state/focus preservation across Draft/Canvas/Split/Reader, medium drawers, narrow bottom sheets/ordered Canvas, reduced motion, and keyboard parity.</li>
+        <li><strong>Checkpoint H5 — Coherence and polish:</strong> visual rhythm, loading/empty/error/conflict states, acknowledgement copy, full browser regression, docs, and handoff.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li>New or materially rewritten unit, contract, integration, and post-acceptance Playwright tests route through <code>routine-tests</code> (Composer 2.5 fast). Use <code>hard-tests</code> (Grok 4.5) only for a recorded hard case or after two evidence-backed Composer attempts.</li>
+        <li><strong>Quick Build:</strong> valid action matrix per selection, inline commit/cancel, acknowledged focus handoff, invalid destination, conflict/refusal, and exact canonical order.</li>
+        <li><strong>Draft Desk:</strong> editor mount identity, caret/scroll preservation, Focus Halo, History drawer, save/lease/recovery truth, toolbar keyboard operation, and large-scene behavior.</li>
+        <li><strong>Canvas Workbench:</strong> keyboard tools, staged create/link cancel/success, coordinate defaults, no implicit manuscript reorder, ordered parity, viewport utilities, selection visibility, and snapshot recovery.</li>
+        <li><strong>Responsive:</strong> wide/medium/narrow visual and interaction journeys, no horizontal overflow, drawer/sheet focus containment and return, reduced motion, and screen-reader labels.</li>
+        <li>During H1–H5, run focused automated checks, affected package typechecks, <code>pnpm verify</code>, direct wide/medium/narrow browser walkthroughs, web export, and changed-document link/structure checks. After the founder verifies the complete outcome, audit and update the smallest high-value Playwright acceptance set, run focused green first, then one full <code>pnpm test:e2e</code>.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p>This is a UX composition and binding iteration over accepted domain boundaries. Update the parent plan, record log, living design, product experience notes, README/handoff, and browser acceptance as checkpoints land. No ADR is required for the proposed shell itself.</p>
+      <p>An ADR or explicit founder decision is required before adding canonical grouping/multi-select semantics, persisted UI layout beyond existing personal preferences, automatic Canvas-to-manuscript reorder, a new timeline domain, or inline passage pins. This design does not assume those decisions.</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li><strong>Progressive disclosure:</strong> hiding advanced controls must not remove discoverability. Primary tools remain visible; More/Details houses low-frequency geometry, media metadata, history, and destructive actions.</li>
+        <li><strong>Editor stability:</strong> drawers, Focus Halo, Split changes, Context Dock tabs, Reader round-trips, and non-scene Canvas selection must not remount Tiptap, lose caret, or churn the direct-edit lease.</li>
+        <li><strong>Canvas scope:</strong> multi-select, grouping, snapping, and arrangement are useful but require precise command/history semantics. The visual design marks unsupported items as later instead of faking them.</li>
+        <li><strong>Hierarchy speed:</strong> context-aware defaults reduce steps, but every resulting parent and manuscript position must be visible before acknowledgement.</li>
+        <li><strong>Review gate:</strong> these concepts remain proposed until the founder accepts the visual pass. Product implementation does not begin merely because the design file renders.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked disabled> Founder screenshot and live feedback reviewed</li>
+        <li><input type="checkbox" checked disabled> Existing design, implementation, product, ADR, and active-plan constraints audited</li>
+        <li><input type="checkbox" checked disabled> Detailed interactive Build · Map · Write proposal appended to Ghostwriter Mockups 2.0</li>
+        <li><input type="checkbox" checked disabled> Parent plan, record log, and handoff link the UX 2.1 review gate</li>
+        <li><input type="checkbox" checked disabled> Founder accepts Story Trail + Quick Build</li>
+        <li><input type="checkbox" checked disabled> Founder accepts Canvas Workbench + Thread Trace</li>
+        <li><input type="checkbox" checked disabled> Founder accepts Draft Desk + Context Dock + Focus Halo</li>
+        <li><input type="checkbox" checked disabled> Accepted checkpoints promoted into implementation</li>
+        <li><input type="checkbox" disabled> Verification and documentation complete</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

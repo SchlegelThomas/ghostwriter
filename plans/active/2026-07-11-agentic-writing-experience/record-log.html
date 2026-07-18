@@ -100,6 +100,41 @@
       <p>The founder moved <code>Ghostwriter Mockups 2.0.html</code> to <code>plans/designs/</code> and designated it as a long-running visual and interaction source that will evolve outside individual delivery plans.</p>
       <p>Updated <code>AGENTS.md</code>, the planning-system guide, active plan, and handoff so future agents read the living design before product, UX, editor, Story Canvas, imagery, linking, or workflow changes. The self-contained user-authored design artifact is preserved as supplied and will not be archived, flattened, moved, or regenerated without explicit direction.</p>
     </article>
+
+    <article>
+      <h2>2026-07-11 20:25 — Identity and current-kernel mutation direction promoted</h2>
+      <p>The authenticated-project CRUD epic accepted <a href="../../../docs/adr/0005-authenticated-accounts-and-project-access.md">ADR 0005</a>: Google-only Better Auth, first-party Pages-proxied sessions, provider-neutral writer profiles, owner memberships, auth-first entry, and archive/restore. The responsive web client now binds owner-authorized, expected-version commands for the existing project/book/manuscript-structure/scene-metadata/story-knowledge kernel.</p>
+      <p>Updated the technical blueprint and roadmap to distinguish that delivered identity/access foundation from the still-open Phase 1.2 work: invitations, editor roles, real-time subscriptions, scene leases, reconnect/recovery, permanent deletion, and account exit. Tiptap prose/revision history and Story Canvas remain explicitly documented follow-up candidates rather than being folded into the CRUD epic.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 13:06 — Initial identity spine accepted with the real provider</h2>
+      <p>The authenticated-project CRUD epic completed local real-Google acceptance against an isolated migrated Lakebase branch: consent, durable account/profile bootstrap, owner-scoped project creation and reload, and server-side session revocation all passed. A sign-out request-shape defect found by the smoke was fixed and covered before acceptance.</p>
+      <p>This validates the ADR 0005 identity/access foundation without expanding Phase 1.2. Invitations, editor roles, subscriptions, presence, scene leases, reconnect/recovery, permanent deletion, account exit, and remote MCP authorization remain later delivery decisions.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 13:24 — Founder promoted Draft, history, and Canvas into the active epic</h2>
+      <p>Before opening the authenticated branch's pull request, the founder expanded it into one large iterative delivery for scene prose bodies, personal revision history/recovery, and Story Canvas state management from the living Mockups 2.0 source. The green ADR 0005 kernel remains preserved at pushed checkpoint <code>a73d532</code>.</p>
+      <p>Proposed ADR 0006 now concretizes the queued editor/revision boundary; proposed ADR 0007 concretizes the project-board spatial boundary. Collaboration subscriptions/presence, editor invitations, comments/suggestions, AI/image generation, import/export, purge, and marketplace work remain outside the expansion. The technical blueprint now links both proposals without treating them as accepted or implemented.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 13:30 — Editor/history and Story Canvas architecture accepted</h2>
+      <p>The founder accepted ADR 0006 and ADR 0007. Scene prose now has a durable architecture boundary separate from project metadata, and Story Canvas now has a project-board boundary that references canonical scene/story IDs without becoming manuscript order. The active epic may proceed autonomously until the first working Draft/Canvas visual review.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 14:32 — Owner-only Draft/history/Canvas foundation implemented</h2>
+      <p>The expanded authenticated epic now has a working vertical implementation of roadmap 1.3, the personal-history subset of 1.4, and the Story Canvas foundation in 1.6. Tiptap prose, leases, server acknowledgements, checkpoints/variants/compare/restore, encrypted crash recovery, relational Canvas state/history, atomic storyboard handoff, split selection, typed confirmed/provisional links, reading-order drift, and the narrow ordered alternative are green locally.</p>
+      <p>The milestone preserves roadmap boundaries: editor invitations, comments/suggestions, review requests, combine, real-time subscriptions/presence, AI/image generation, import/export, editions, account exit, and marketplace work remain future outcomes. All 121 unit/integration tests and 13 Chromium journeys pass; founder visual review is the current gate.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-12 18:05 — Story navigation direction shifts from forms to tree + DAG</h2>
+      <p>The founder rejected the milestone's large card/form Project setup as the primary UX despite accepting the underlying behaviors. The new direction combines a persistent filesystem-like Project → Book → Part → Chapter → Scene tree with a directed relationship graph over canonical scene/story IDs. Chapter and scene nodes become animated drill layers with breadcrumbs and explicit movement back up; Canvas becomes workflow-driven for outline, relationships, continuity fixtures, plan-to-Draft, and review.</p>
+      <p>An additive, visibly noncanonical interactive proposal was appended to the living Ghostwriter Mockups 2.0 artifact without changing existing founder screens. The active delivery plan and its UX supplement define save-confirmation toasts, keyboard/screen-reader parity, narrow ordered behavior, manuscript-order authority, and the acceptance gate before implementation changes.</p>
+    </article>
   </main>
 </body>
 </html>

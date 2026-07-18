@@ -8,6 +8,10 @@ export type SceneId = BrandedId<"SceneId">;
 export type StoryKnowledgeId = BrandedId<"StoryKnowledgeId">;
 export type EditionId = BrandedId<"EditionId">;
 export type RevisionId = BrandedId<"RevisionId">;
+export type SceneVariantId = BrandedId<"SceneVariantId">;
+export type CanvasObjectId = BrandedId<"CanvasObjectId">;
+export type CanvasLinkId = BrandedId<"CanvasLinkId">;
+export type CanvasRevisionId = BrandedId<"CanvasRevisionId">;
 
 export type DomainValidationCode =
   | "EMPTY_VALUE"
@@ -16,7 +20,9 @@ export type DomainValidationCode =
   | "UNKNOWN_REFERENCE"
   | "CROSS_PROJECT_REFERENCE"
   | "CROSS_BOOK_REFERENCE"
-  | "INCOMPLETE_MANUSCRIPT";
+  | "INCOMPLETE_MANUSCRIPT"
+  | "INVALID_VERSION"
+  | "INVALID_URL";
 
 export class DomainValidationError extends Error {
   readonly code: DomainValidationCode;
@@ -35,6 +41,26 @@ function requireText(value: string, field: string): string {
     throw new DomainValidationError("EMPTY_VALUE", `${field} must not be empty.`);
   }
 
+  return normalized;
+}
+
+function requireHttpUrl(value: string, field: string): string {
+  const normalized = requireText(value, field);
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new DomainValidationError(
+      "INVALID_URL",
+      `${field} must be an absolute http(s) URL.`
+    );
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new DomainValidationError(
+      "INVALID_URL",
+      `${field} must be an absolute http(s) URL.`
+    );
+  }
   return normalized;
 }
 
@@ -74,6 +100,22 @@ export function revisionId(value: string): RevisionId {
   return createId(value, "RevisionId");
 }
 
+export function sceneVariantId(value: string): SceneVariantId {
+  return createId(value, "SceneVariantId");
+}
+
+export function canvasObjectId(value: string): CanvasObjectId {
+  return createId(value, "CanvasObjectId");
+}
+
+export function canvasLinkId(value: string): CanvasLinkId {
+  return createId(value, "CanvasLinkId");
+}
+
+export function canvasRevisionId(value: string): CanvasRevisionId {
+  return createId(value, "CanvasRevisionId");
+}
+
 function freezeList<Value>(values: readonly Value[]): readonly Value[] {
   return Object.freeze([...values]);
 }
@@ -98,9 +140,16 @@ export type Project = Readonly<{
   title: string;
   bookIds: readonly BookId[];
   createdAt: string;
+  version: number;
+  archivedAt?: string;
 }>;
 
-export function createProject(input: Project): Project {
+export type ProjectInput = Omit<Project, "version"> &
+  Readonly<{
+    version?: number;
+  }>;
+
+export function createProject(input: ProjectInput): Project {
   if (input.bookIds.length === 0) {
     throw new DomainValidationError(
       "INCOMPLETE_MANUSCRIPT",
@@ -109,12 +158,25 @@ export function createProject(input: Project): Project {
   }
 
   assertUniqueReferences(input.bookIds, "Project books");
+  const version = input.version ?? 1;
+  if (!Number.isSafeInteger(version) || version < 1) {
+    throw new DomainValidationError(
+      "INVALID_VERSION",
+      "Project version must be a positive integer."
+    );
+  }
+  const archivedAt =
+    input.archivedAt === undefined
+      ? undefined
+      : requireText(input.archivedAt, "Project archive time");
 
   return Object.freeze({
     id: input.id,
     title: requireText(input.title, "Project title"),
     bookIds: freezeList(input.bookIds),
-    createdAt: requireText(input.createdAt, "Project creation time")
+    createdAt: requireText(input.createdAt, "Project creation time"),
+    version,
+    ...(archivedAt === undefined ? {} : { archivedAt })
   });
 }
 
@@ -124,15 +186,21 @@ export type ManuscriptChapter = Readonly<{
   id: ChapterId;
   title: string;
   sceneIds: readonly SceneId[];
+  summary?: string;
 }>;
 
 export function createManuscriptChapter(input: ManuscriptChapter): ManuscriptChapter {
   assertUniqueReferences(input.sceneIds, `Chapter "${input.id}" scenes`);
+  const summary =
+    input.summary === undefined
+      ? undefined
+      : requireText(input.summary, "Chapter summary");
 
   return Object.freeze({
     id: input.id,
     title: requireText(input.title, "Chapter title"),
-    sceneIds: freezeList(input.sceneIds)
+    sceneIds: freezeList(input.sceneIds),
+    ...(summary === undefined ? {} : { summary })
   });
 }
 
@@ -180,20 +248,42 @@ export type Book = Readonly<{
   status: BookStatus;
   manuscript: ManuscriptStructure;
   createdAt: string;
+  archivedAt?: string;
 }>;
 
 export function createBook(input: Book): Book {
+  const archivedAt =
+    input.archivedAt === undefined
+      ? undefined
+      : requireText(input.archivedAt, "Book archive time");
   return Object.freeze({
     id: input.id,
     projectId: input.projectId,
     title: requireText(input.title, "Book title"),
     status: input.status,
     manuscript: createManuscriptStructure(input.manuscript),
-    createdAt: requireText(input.createdAt, "Book creation time")
+    createdAt: requireText(input.createdAt, "Book creation time"),
+    ...(archivedAt === undefined ? {} : { archivedAt })
   });
 }
 
 export type SceneStatus = "planned" | "drafting" | "revising" | "complete";
+
+export type SceneBackdrop = Readonly<{
+  url: string;
+  caption?: string;
+}>;
+
+export type SceneMusic = Readonly<{
+  url: string;
+  label?: string;
+}>;
+
+export type SceneImageRef = Readonly<{
+  url: string;
+  alt: string;
+  caption?: string;
+}>;
 
 export type Scene = Readonly<{
   id: SceneId;
@@ -203,11 +293,58 @@ export type Scene = Readonly<{
   status: SceneStatus;
   summary?: string;
   povStoryKnowledgeId?: StoryKnowledgeId;
+  backdrop?: SceneBackdrop;
+  music?: SceneMusic;
+  imageRefs?: readonly SceneImageRef[];
+  archivedAt?: string;
 }>;
+
+function createSceneBackdrop(input: SceneBackdrop): SceneBackdrop {
+  const caption =
+    input.caption === undefined
+      ? undefined
+      : requireText(input.caption, "Scene backdrop caption");
+  return Object.freeze({
+    url: requireHttpUrl(input.url, "Scene backdrop URL"),
+    ...(caption === undefined ? {} : { caption })
+  });
+}
+
+function createSceneMusic(input: SceneMusic): SceneMusic {
+  const label =
+    input.label === undefined ? undefined : requireText(input.label, "Scene music label");
+  return Object.freeze({
+    url: requireHttpUrl(input.url, "Scene music URL"),
+    ...(label === undefined ? {} : { label })
+  });
+}
+
+function createSceneImageRef(input: SceneImageRef): SceneImageRef {
+  const caption =
+    input.caption === undefined
+      ? undefined
+      : requireText(input.caption, "Scene image caption");
+  return Object.freeze({
+    url: requireHttpUrl(input.url, "Scene image URL"),
+    alt: requireText(input.alt, "Scene image alt text"),
+    ...(caption === undefined ? {} : { caption })
+  });
+}
 
 export function createScene(input: Scene): Scene {
   const summary =
     input.summary === undefined ? undefined : requireText(input.summary, "Scene summary");
+  const archivedAt =
+    input.archivedAt === undefined
+      ? undefined
+      : requireText(input.archivedAt, "Scene archive time");
+  const backdrop =
+    input.backdrop === undefined ? undefined : createSceneBackdrop(input.backdrop);
+  const music = input.music === undefined ? undefined : createSceneMusic(input.music);
+  const imageRefs =
+    input.imageRefs === undefined
+      ? undefined
+      : freezeList(input.imageRefs.map(createSceneImageRef));
 
   return Object.freeze({
     id: input.id,
@@ -218,7 +355,11 @@ export function createScene(input: Scene): Scene {
     ...(summary === undefined ? {} : { summary }),
     ...(input.povStoryKnowledgeId === undefined
       ? {}
-      : { povStoryKnowledgeId: input.povStoryKnowledgeId })
+      : { povStoryKnowledgeId: input.povStoryKnowledgeId }),
+    ...(backdrop === undefined ? {} : { backdrop }),
+    ...(music === undefined ? {} : { music }),
+    ...(imageRefs === undefined ? {} : { imageRefs }),
+    ...(archivedAt === undefined ? {} : { archivedAt })
   });
 }
 
@@ -231,6 +372,18 @@ export type StoryKnowledgeKind =
 
 export type StoryKnowledgeAuthority = "planned" | "confirmed" | "inferred" | "disputed";
 
+export type StoryKnowledgeLinkKind =
+  | "cast"
+  | "theme"
+  | "development-cycle"
+  | "breadcrumb"
+  | "related";
+
+export type StoryKnowledgeLink = Readonly<{
+  toId: StoryKnowledgeId;
+  kind: StoryKnowledgeLinkKind;
+}>;
+
 export type StoryKnowledge = Readonly<{
   id: StoryKnowledgeId;
   projectId: ProjectId;
@@ -238,10 +391,42 @@ export type StoryKnowledge = Readonly<{
   kind: StoryKnowledgeKind;
   authority: StoryKnowledgeAuthority;
   linkedSceneIds: readonly SceneId[];
+  linkedKnowledge: readonly StoryKnowledgeLink[];
+  notes?: string;
+  aliases?: readonly string[];
+  archivedAt?: string;
 }>;
+
+function createStoryKnowledgeLink(input: StoryKnowledgeLink): StoryKnowledgeLink {
+  return Object.freeze({
+    toId: input.toId,
+    kind: input.kind
+  });
+}
 
 export function createStoryKnowledge(input: StoryKnowledge): StoryKnowledge {
   assertUniqueReferences(input.linkedSceneIds, `Story knowledge "${input.id}" linked scenes`);
+  assertUniqueReferences(
+    input.linkedKnowledge.map((link) => `${link.kind}:${link.toId}`),
+    `Story knowledge "${input.id}" linked knowledge`
+  );
+  const notes =
+    input.notes === undefined
+      ? undefined
+      : requireText(input.notes, "Story knowledge notes");
+  const aliases =
+    input.aliases === undefined
+      ? undefined
+      : freezeList(
+          input.aliases.map((alias) => requireText(alias, "Story knowledge alias"))
+        );
+  if (aliases !== undefined) {
+    assertUniqueReferences(aliases, `Story knowledge "${input.id}" aliases`);
+  }
+  const archivedAt =
+    input.archivedAt === undefined
+      ? undefined
+      : requireText(input.archivedAt, "Story knowledge archive time");
 
   return Object.freeze({
     id: input.id,
@@ -249,7 +434,11 @@ export function createStoryKnowledge(input: StoryKnowledge): StoryKnowledge {
     label: requireText(input.label, "Story knowledge label"),
     kind: input.kind,
     authority: input.authority,
-    linkedSceneIds: freezeList(input.linkedSceneIds)
+    linkedSceneIds: freezeList(input.linkedSceneIds),
+    linkedKnowledge: freezeList(input.linkedKnowledge.map(createStoryKnowledgeLink)),
+    ...(notes === undefined ? {} : { notes }),
+    ...(aliases === undefined ? {} : { aliases }),
+    ...(archivedAt === undefined ? {} : { archivedAt })
   });
 }
 
@@ -306,6 +495,9 @@ export type ProjectRecords = Readonly<{
   storyKnowledge: readonly StoryKnowledge[];
   editions: readonly BookEdition[];
 }>;
+
+export type ProjectRecordsInput = Omit<ProjectRecords, "project"> &
+  Readonly<{ project: ProjectInput }>;
 
 function assertUniqueIds(records: ProjectRecords): void {
   const entries: Array<readonly [string, string]> = [
@@ -443,6 +635,21 @@ export function validateProjectRecords(records: ProjectRecords): void {
         );
       }
     }
+
+    for (const link of knowledge.linkedKnowledge) {
+      if (link.toId === knowledge.id) {
+        throw new DomainValidationError(
+          "UNKNOWN_REFERENCE",
+          `Story knowledge "${knowledge.id}" cannot link to itself.`
+        );
+      }
+      if (!knowledgeById.has(link.toId)) {
+        throw new DomainValidationError(
+          "UNKNOWN_REFERENCE",
+          `Story knowledge "${knowledge.id}" references unknown knowledge "${link.toId}".`
+        );
+      }
+    }
   }
 
   for (const edition of records.editions) {
@@ -477,7 +684,7 @@ export function validateProjectRecords(records: ProjectRecords): void {
   }
 }
 
-export function defineProjectRecords(input: ProjectRecords): ProjectRecords {
+export function defineProjectRecords(input: ProjectRecordsInput): ProjectRecords {
   const records = Object.freeze({
     project: createProject(input.project),
     books: freezeList(input.books.map(createBook)),

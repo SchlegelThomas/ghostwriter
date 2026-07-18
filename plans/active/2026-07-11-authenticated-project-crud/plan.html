@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Authenticated writing workspace, revisions, and Story Canvas</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter major delivery epic</p>
+      <h1>Authenticated writing workspace, revisions, and Story Canvas</h1>
+      <p class="meta"><strong>Status:</strong> UX 2.1 H1–H5 implemented and browser-verified — awaiting founder product verification before Playwright audit<br>
+        <strong>Branch:</strong> <code>feat/authenticated-project-crud</code><br>
+        <strong>Owner:</strong> founder + agent</p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Replace the public Bellwether fixture with Ghostwriter's first real writer-owned loop: sign in with Google, create a durable account and profile, see only projects the account may access, create a project with its first book, and manage the currently implemented project hierarchy and story-knowledge records through the responsive web client, core use cases, Hono service, and Lakebase persistence.</p>
+      <p>This is one major epic and one branch, delivered as small vertical checkpoints. “CRUD” means explicit writer-domain commands with validation, authorization, conflict handling, and safe removal semantics—not arbitrary table endpoints, JSON Patch, hidden cascades, or transport logic that bypasses <code>packages/core</code>.</p>
+      <p><strong>Founder-directed expansion (2026-07-12):</strong> checkpoint <code>a73d532</code> preserves the locally accepted identity and metadata kernel. Before opening its pull request, this same branch now also delivers the real writing loop from the living design: safe current-kernel CRUD closure, schema-versioned Tiptap scene bodies, server-acknowledged autosave, immutable checkpoints and variants, compare/restore history, minimal unacknowledged-work recovery, and Story Canvas state management over the same canonical scene and story IDs. Work proceeds in bounded vertical milestones with tests and truthful plan records after each slice.</p>
+      <p><strong>Founder UX review (2026-07-12):</strong> the working milestone validates behavior but its form/card-heavy Project setup and scene metadata surfaces are rejected as the primary interaction model. The replacement proposal uses a persistent filesystem-like manuscript tree plus a directed relationship graph, layered chapter/scene drill navigation, Canvas workflow lenses, inspector-based edits, and per-action server-acknowledgement toasts. The interactive proposal and its delivery contract live in <a href="ux-proposal-filesystem-dag-nav.html">Story tree + relationship graph navigation</a>.</p>
+      <p><strong>Founder live review (2026-07-17 → accepted 2026-07-18):</strong> the accepted tree + DAG foundation is functional but still exposes capabilities as dense controls instead of coherent writer workflows. The <a href="ux-proposal-workspace-2-1.html">Build, Map, Write UX 2.1 supplement</a> and additive living-design section define Story Trail, Quick Build, Scene Launchpad, Canvas Workbench, Thread Trace, Draft Desk, Context Dock, and Focus Halo. The founder accepted the complete direction and authorized checkpoints H1–H5 on 2026-07-18.</p>
+      <p><strong>Out of scope:</strong> passwords and additional identity providers; subscriptions; invitations and editor roles; comments, tracked suggestions, review requests, and real-time subscriptions/presence; same-scene multi-cursor editing and complete offline project replicas; AI/model calls and image generation; remote MCP canonical writes; import/export and account exit; irreversible authored-content purge; native freeform Canvas editing; and marketplace, publishing, rights, or studio systems. A minimal owner-only scene lease is in scope because ADR 0002 requires direct-edit protection.</p>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ul>
+        <li>A new writer can choose <strong>Continue with Google</strong>, complete Google's real OAuth flow, return to Ghostwriter, and receive exactly one durable account/profile; repeating the flow resumes the same account without duplicate rows.</li>
+        <li>The browser resumes and revokes an opaque server-side session correctly, signs out cleanly, and never stores a Google token, provider secret, or durable session bearer in browser JavaScript storage.</li>
+        <li>OAuth callback URLs, trusted origins, CORS, cookies, CSRF/state handling, and production secrets are explicit and environment-specific. The primary web flow proxies <code>/api</code> through Cloudflare Pages to Fly so the browser uses first-party cookies rather than third-party cookies between <code>pages.dev</code> and <code>fly.dev</code>.</li>
+        <li>Authentication is required before every product and onboarding surface in this epic. No signed-out Spark, fixture workspace, or locally saved project state is exposed.</li>
+        <li>Signed-out requests receive <code>401</code>; authenticated writers receive <code>404</code> or <code>403</code> without leaking another account's project metadata; every project query and mutation enforces project access in shared policy before storage changes.</li>
+        <li>An authenticated writer sees a real project library, can create a project and first book, reload the browser, and reopen the same server-acknowledged Lakebase state with no fixture fallback.</li>
+        <li>A project owner can rename, archive, and restore a project. Archived projects leave the normal library and remain recoverable; permanent purge is unavailable in this epic.</li>
+        <li>A project owner can create, rename, change status, and reorder books while the domain continues to require at least one book and refuses unsafe or ambiguous removal.</li>
+        <li>A project owner can create, rename, reorder, and safely remove empty manuscript parts and chapters; create, edit metadata, move, reorder, archive, and restore scenes; and preserve one canonical manuscript order.</li>
+        <li>A project owner can create, edit, link, unlink, archive, and restore the kernel's story-knowledge records without creating cross-project, dangling POV, or dangling scene references.</li>
+        <li>Named editions remain read-only until immutable scene/project revisions exist; the UI and API do not imply that edition history is implemented.</li>
+        <li>Every mutation accepts an expected project version (or equivalent explicit precondition), applies atomically, and returns a stable conflict response without partial effects when the client's base is stale.</li>
+        <li>The web client shows <em>Saving</em>, <em>Saved</em>, validation, authorization, conflict, retryable failure, empty, and archived states truthfully. <em>Saved</em> appears only after durable backend acknowledgement.</li>
+        <li>Wide and narrow web layouts support the account gate, project library, creation flow, navigation, and core editing controls with keyboard operation, visible focus, semantic labels, and no hover-only action.</li>
+        <li>The capability registry identifies each new core use case and its web/backend binding. MCP read parity uses real core queries where authorization is available; canonical MCP mutations remain an explicit exception until the agent-authority and remote-authorization ADRs are accepted.</li>
+        <li>Hermetic browser and integration tests cover account bootstrap, session gating, project creation, representative update/archive/restore flows, stale writes, sign-out, and cross-account isolation. A manual acceptance run covers the real Google provider because CI does not automate a personal Google login.</li>
+        <li>Forward-only Drizzle migrations reproduce identity, profile, ownership, archive, and concurrency schema from empty in PGlite and on the PR's Lakebase branch. <code>pnpm verify</code>, the web export, and the selected end-to-end suite pass before handoff.</li>
+        <li>The current-kernel UI exposes truthful scene ordering/placement, proactive archive and safe-removal refusals, confirmation for destructive-looking actions, profile conflict recovery, and representative wide/narrow browser coverage.</li>
+        <li>Each scene owns one schema-versioned ProseMirror JSON document with stable top-level block IDs. Core remains free of DOM, React, and Tiptap types; metadata and manuscript order remain separate canonical records.</li>
+        <li>Scene-body writes use a dedicated expected scene revision rather than the coarse project version. A visible owner lease guards direct editing; stale or expired writes apply nothing and open recovery/compare instead of silently overwriting prose.</li>
+        <li>The Draft workspace debounces prose saves, shows <em>Saving</em> during an in-flight write, shows <em>Saved to project</em> only after durable acknowledgement, and reopens the last acknowledged document unchanged.</li>
+        <li>A minimal browser recovery buffer preserves only unacknowledged scene text across refresh or tab failure, is clearly not offline project storage, and clears after acknowledgement or sign-out.</li>
+        <li>Immutable scene revisions record schema version, content hash, parent, actor, origin, reason, and timestamp. Writers can create a checkpoint and named variant, compare two revisions, and restore prior work as a new attributable revision without rewriting history.</li>
+        <li>Story Canvas boards, objects, regions, typed links, notes, and imagery metadata reference canonical scene/story IDs and never copy prose. Writer-created links are confirmed; deterministic ghost objects remain provisional until confirmed or dismissed.</li>
+        <li>Canvas-created scenes require explicit manuscript placement. The reading-order spine derives from canonical manuscript order, exposes spatial drift, and never silently reorders Draft.</li>
+        <li>Wide web supports Draft, Canvas, and split view with shared scene selection. Narrow web provides keyboard-accessible reading, review, capture, and ordered Canvas actions rather than a compressed freeform board.</li>
+        <li>Scene-body, history, lease, and Canvas capabilities are owner-authorized, use dedicated optimistic preconditions, persist through memory and Postgres contracts, and are registered with explicit MCP mutation exceptions until agent authorization exists.</li>
+        <li>Migration fixtures, editor schema/IME/paste/keyboard checks, large-scene and 500-object Canvas smoke tests, and wide/narrow Playwright journeys cover write → checkpoint → compare/restore → Canvas handoff before PR handoff.</li>
+        <li>Wide Draft/Canvas/Split use a persistent manuscript tree rather than horizontal scene chips or standalone card/form setup. Project → Book → Part → Chapter → Scene remains visible, searchable, keyboard-navigable, and authoritative for manuscript order.</li>
+        <li>Canvas combines the structure tree with a directed relationship graph and workflow lenses for Outline, Relationships, Continuity fixtures, Plan → Draft, and Review. Lenses change projection and emphasis rather than creating new canonical stores.</li>
+        <li>Chapter and scene nodes support layered drill-in/drill-out with breadcrumbs, Back/Escape, focus management, retained selection/viewport, a 400–500 ms camera transition, and an instant reduced-motion fallback.</li>
+        <li>Metadata edits move to inline tree rows or the selection inspector. Primary flows do not require separate “Save part/chapter/scene” forms; destructive actions keep explicit confirmation.</li>
+        <li>Every structure, metadata, Canvas, archive/restore, checkpoint, conflict, and recovery action receives truthful acknowledgement UI. Success toasts appear only after durable server acknowledgement and expose Undo/Restore only when safe.</li>
+        <li>Narrow web uses book tabs, an ordered structure/relationship view, one focused Draft scene, and decision-first review actions. It does not compress freeform spatial drag into a phone layout.</li>
+        <li>Book Reader is a read-only projection over canonical manuscript order and acknowledged scene documents. Wide web provides bound spreads and chapter/page navigation; narrow web provides continuous chapter landmarks. Reader takes no editing lease and creates no prose copy.</li>
+        <li>Reader opens from tree, Draft, Canvas, Split, or a scene lens at the same canonical scene ID and returns to the exact prior mode, scene, tree expansion, drill scope, Canvas selection, and focus target.</li>
+        <li>Reader exposes scene-linked story/Canvas context through an optional rail. Inline passage links remain unavailable until a stable block-pin model is separately accepted; the UI does not fake anchors by text matching.</li>
+        <li>Wide Split panes are resizable and preserve Draft mount, caret, and lease while both panes remain visible. Medium layout collapses the tree/inspector deliberately; narrow layout uses mode switching rather than split.</li>
+        <li>Storyboard-first creation, write-first Canvas placement, tree scene move/reorder, plan-to-Draft, scene-to-Reader, and Reader return all preserve one scene ID, explicit manuscript authority, version preconditions, and acknowledged state.</li>
+        <li>Quick Build exposes one context-aware Add entry for valid book/part/chapter/scene/story-record actions, requires only a title for the common path, and returns focus to the acknowledged new tree row.</li>
+        <li>Empty chapters and Unassigned become Scene Launchpads with create, move-existing, storyboard, and next-scene actions instead of a blank work surface.</li>
+        <li>Canvas exposes a visible writer-facing tool dock, utility bar, staged creation/link flows, contextual selection actions, and an ordered equivalent. Geometry defaults are automatic; the manuscript spine remains canonical.</li>
+        <li>Draft presents a centered manuscript page, compact scene ribbon, contextual formatting toolbar, dismissible Context Dock, explicit History drawer, and Focus Halo without remounting Tiptap or releasing the editing lease.</li>
+        <li>Story Trail and every Draft/Canvas/Split/Reader handoff preserve canonical scene ID plus applicable tree expansion, drill scope, Canvas selection, editor caret/scroll, and return focus across wide, medium, narrow, and reduced-motion postures.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks</h2>
+      <ol>
+        <li>Record the accepted Better Auth + Google identity library, same-origin Pages proxy, auth-first entry boundary, archive/restore posture, and current-kernel CRUD boundary in ADR 0005 and a concise threat model.</li>
+        <li>Add provider-neutral actor/account/profile and project-access contracts to core. Keep Google, Better Auth, cookies, HTTP, and database types outside the domain and make owner authorization testable without a transport.</li>
+        <li>Integrate the selected Google OAuth implementation with Hono and Drizzle/Postgres, including user/account/session/verification records, idempotent writer-profile bootstrap, session lookup/revocation, strict configuration, and content-free errors/logging.</li>
+        <li>Give every project an explicit owner membership and migrate existing unowned fixture/seed behavior without granting production data globally. Add account-scoped project listing and ownership-aware project loading.</li>
+        <li>Implement the chosen same-origin or shared-parent-domain web path for <code>/api</code>, preserving secure <code>HttpOnly</code> cookies and redirects while keeping the Fly service as the canonical backend. Document local, preview, and production callback behavior.</li>
+        <li>Replace the fixture client bootstrap with session loading, signed-out, first-profile, project-library, create-project, authenticated workspace, sign-out, and failure states. Reuse the accepted product typography, chrome, and ownership language.</li>
+        <li>Expand core with task-oriented project, book, manuscript-structure, scene-metadata, and story-knowledge commands plus account-scoped queries, archive/restore rules, expected-version conflicts, and stable domain errors.</li>
+        <li>Upgrade memory and Postgres repository contracts to support those commands atomically. Add archive/version/ownership/profile schema, forward-only migrations, and contract parity across memory and PGlite.</li>
+        <li>Expose validated Hono endpoints that map authenticated requests to core use cases, stable HTTP statuses, exact version-precondition behavior for canonical mutations, and normalized response models. No route may mutate Drizzle tables directly.</li>
+        <li>Add responsive project-library and domain editing interactions for the accepted commands, including safe confirmation and refusal states. Do not add a fake prose editor or mutable edition controls.</li>
+        <li>Update the capability registry, backend bindings, and MCP read path or record a narrowly justified security exception for each mutation that cannot safely be exposed before MCP authorization.</li>
+        <li>Add core unit/property tests, repository contracts, auth/backend integration tests, client behavior tests, and a hermetic browser end-to-end journey with a test identity boundary. Add a separately documented real-Google smoke run.</li>
+        <li>Configure Google, Fly, and Cloudflare environments through CLI where possible, pausing for founder approval or console-only interaction; keep all new credentials out of command arguments/history; deploy a branch preview only with founder approval; and record callback, migration, and live-flow evidence without writing secrets to logs or plans. The founder explicitly deferred the pre-existing Databricks credential rotation outside this epic.</li>
+        <li>Update product/architecture/operations/API documentation, reconcile the active blueprint's identity decision, run full verification, update the handoff, and archive this plan only when the observable writer journey is complete.</li>
+        <li>Record the founder-directed scope expansion and accept ADR 0006 for scene documents, stable block IDs, revision heads, leases, history, hashing, and recovery plus ADR 0007 for Canvas ownership, spatial state, typed links, authority, spine behavior, and accessible alternatives.</li>
+        <li>Close the audited metadata CRUD gaps: arbitrary scene reorder/placement controls, safe confirmations and guided refusal states, profile conflict recovery, archived-item visibility, scene/book scoping, and broader HTTP/browser command coverage.</li>
+        <li>Replace Postgres metadata delete-and-rebuild behavior with surgical updates before prose revision rows reference scenes; preserve aggregate validation and expected-project-version atomicity.</li>
+        <li>Create <code>packages/editor</code> with the ProseMirror schema v1, stable block-ID rules, canonical JSON validation/migration/hashing, and a web Tiptap component behind a platform-neutral interface.</li>
+        <li>Add scene head, immutable revision, variant, and lease repository ports plus memory/Postgres adapters and forward-only migrations. Seed an empty document/revision atomically for existing and newly created scenes.</li>
+        <li>Expose owner-authorized scene workspace, save, lease, revision-list, checkpoint, variant, compare, and restore endpoints with bounded payloads and stable revision/lease conflict errors.</li>
+        <li>Build the responsive Draft workspace with manuscript navigation, Tiptap prose editing, scene context, truthful save/lease/conflict states, history, compare, restore, and narrow read/review posture.</li>
+        <li>Implement the minimal unacknowledged-prose recovery buffer selected in ADR 0006, including recovery detection, explicit restore/discard, acknowledgement cleanup, sign-out cleanup, and expiry.</li>
+        <li>Add Canvas board/object/link domain records, dedicated board versioning, repository contracts, migrations, commands, projections, API bindings, and capability entries without routing spatial writes through the scene-body or project-metadata version.</li>
+        <li>Build wide spatial Canvas, accessible ordered alternative, reading-order spine and drift state, provisional/confirmed link language, Draft/Canvas selection handoff, explicit scene placement, split view, and narrow read/review/capture behavior from the living design.</li>
+        <li>Extend core, storage, backend, client, editor, accessibility, performance, and browser acceptance suites after every vertical slice; update docs, ADRs, handoff, and record log immediately rather than deferring reconciliation to the end.</li>
+        <li>Preserve existing founder-authored living-design screens and append the clearly labeled interactive filesystem + DAG proposal, including structure tree, chapter/scene zoom layers, workflow lenses, toast matrix, narrow posture, and required-state matrix.</li>
+        <li>After founder visual acceptance, replace the authenticated card/form shell with the shared manuscript tree, selection inspector, workflow-aware Canvas projection, drill-stack/camera behavior, and acknowledgement-toast coordinator specified in <a href="ux-proposal-filesystem-dag-nav.html">the UX plan supplement</a>.</li>
+        <li>Use and iteratively improve <code>.cursor/skills/ghostwriter-autonomous-delivery/SKILL.md</code>; after every feature checkpoint run the cross-domain/design map, cumulative coherence review, documentation loop, verification ladder, and authorized checkpoint commit.</li>
+        <li>Add a core Book Reader projection and batch scene-head repository reads, expose one bounded owner-authorized book-reader endpoint, register capability/MCP exception, and build bound-wide/continuous-narrow reader UI with exact scene handoff.</li>
+        <li>Replace the fixed 50/50 Split with focus-preserving adjustable panes and an account/project ratio preference; complete storyboard-first, write-first, tree-move, plan-to-Draft, and Reader handoffs without changing canonical order implicitly.</li>
+        <li>Append the detailed, interactive <a href="ux-proposal-workspace-2-1.html">Build, Map, Write</a> proposal to the living design, including hierarchy creation, Canvas tools, Draft composition, responsive postures, required states, and review controls.</li>
+        <li>Deliver the accepted UX 2.1 direction as bounded checkpoints: H1 Story Trail + Quick Build; H2 Draft Desk; H3 Canvas Workbench; H4 handoffs + responsive/accessibility; H5 coherence and visual polish.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li><strong>Core:</strong> account/profile bootstrap idempotency; owner access matrix; project/book/part/chapter/scene/story-knowledge invariants; archive/restore; safe-removal refusals; cross-project references; expected-version conflicts; atomic rollback.</li>
+        <li><strong>Repository contracts:</strong> run the same mutation/query suite against memory and migrated PGlite, including ownership indexes, cascade boundaries, transaction rollback, ordering, and concurrent stale writes.</li>
+        <li><strong>Auth/backend integration:</strong> mount the real auth handler against PGlite where practical; exercise session middleware, logout/revocation, malformed input, trusted origins, unauthenticated and cross-account requests, callback errors, and content-free diagnostics.</li>
+        <li><strong>Browser end to end:</strong> start a hermetic backend and web app; sign in through a test-only identity adapter that cannot activate in production; bootstrap a profile; create, reopen, mutate, archive, restore, conflict, and sign out. Keep provider-dependent Google behavior out of required CI.</li>
+        <li><strong>Real provider smoke:</strong> with registered local/preview callback URLs and founder-managed credentials, complete Google consent, first account/profile creation, session resume, project creation, reload, and sign-out. Record outcomes, never tokens or personal provider payloads.</li>
+        <li><strong>Security/privacy:</strong> verify secure cookie attributes, CSRF/state validation, exact redirect allowlists, no open redirect, no third-party-cookie dependency, no project ID leakage, no secret/token/client payload logging, and immediate session rejection after sign-out.</li>
+        <li><strong>Migration:</strong> migrate from an empty database and the current production-shaped schema; confirm existing fixture data does not become publicly accessible; exercise the PR Lakebase branch before merge.</li>
+        <li><strong>Accessibility/responsiveness:</strong> keyboard and screen-reader smoke checks at approximately 1440 × 960 and 390 × 844 for sign-in, library, create, edit, conflict, archive, empty, loading, and error states.</li>
+        <li><strong>Commands:</strong> targeted Vitest suites while iterating, then <code>pnpm verify</code>, production web export, Playwright (if accepted), migration checks, and changed-document link/structure validation before handoff.</li>
+        <li><strong>Browser-first acceptance sequence:</strong> H1–H5 use direct real-browser walkthroughs plus targeted automated checks while implementation is changing. Playwright authoring, repair, and the full suite wait until the founder verifies the complete planned product outcome; post-gate work audits existing journeys first and adds only the smallest durable acceptance coverage.</li>
+        <li><strong>Editor schema:</strong> canonical JSON round trips, duplicate/missing block IDs, schema migration fixtures, split/join ID stability, paste sanitization, IME composition, selection, keyboard navigation, and representative large-scene performance.</li>
+        <li><strong>Scene concurrency:</strong> owner authorization, acquire/renew/release/expiry, expected-head conflicts, two-tab refusal, acknowledgement ordering, no-op hash deduplication, and no partial revision effects.</li>
+        <li><strong>History and recovery:</strong> immutable parent chains, attributable checkpoints, named variant heads, compare determinism, restore-as-new, crash recovery, acknowledgement cleanup, sign-out cleanup, expiry, and no offline-project claims.</li>
+        <li><strong>Canvas:</strong> object/link reference integrity, board-version conflicts, scene placement transaction, archived/stale links, provisional confirmation/dismissal, spine derivation and drift, 500+ object projection, and proof that Canvas mutations never reorder manuscript scenes.</li>
+        <li><strong>Integrated browser journeys:</strong> wide auth → project → Draft prose → reload → checkpoint → edit → compare/restore → Canvas link → split-view handoff, plus narrow Draft/Canvas read-review-capture and keyboard-only ordered Canvas actions.</li>
+        <li><strong>Structure-tree UX:</strong> expand/collapse, inline rename, add/move/reorder, destination refusal, archive/restore, one canonical manuscript order, and pointer/keyboard parity.</li>
+        <li><strong>Drill navigation:</strong> project → chapter → scene → parent, breadcrumb and Escape, focus transfer, viewport retention, stale selected-node recovery, and reduced-motion behavior.</li>
+        <li><strong>Acknowledgement toasts:</strong> no pre-ack success, action-specific copy, stacking/timeout, Undo/Restore expiration, conflict persistence, recovery actions, screen-reader announcements, and no editor-focus theft.</li>
+        <li><strong>Book Reader:</strong> canonical multi-part/chapter/unassigned order, archived exclusion, batch working-head parity, authorization/non-disclosure, empty/oversized states, wide spread navigation, narrow chapter scroll, reduced motion, link toggle, and exact selection return.</li>
+        <li><strong>Split and handoffs:</strong> ratio persistence, medium/narrow posture, dirty Draft flush/recovery, lease/revision conflicts, Canvas/project conflict rollback, storyboard atomicity, tree move/spine drift, Reader round-trip, and focus/caret preservation.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p>Create <code>docs/adr/0005-authenticated-accounts-and-project-access.md</code> for the accepted identity provider integration, session transport, profile ownership, project membership, and authorization boundaries. Maintain <code>docs/API.md</code> for the authenticated transport, typed commands, version/removal semantics, errors, and MCP exceptions. Update <code>docs/ARCHITECTURE.md</code> with identity/access and task-oriented mutation flow; <code>docs/OPERATIONS.md</code> with Google callbacks, environment variables, secret rotation, first-party proxy behavior, and live verification; <code>docs/PRODUCT.md</code> with the accepted auth-first boundary; and <code>README.md</code> plus <code>plans/WHERE-I-LEFT-OFF.html</code> with truthful status.</p>
+      <p>The scene editor/revision-history and Story Canvas specifications in <a href="follow-ups.html">follow-ups.html</a> are promoted into this active epic by founder direction. Create <code>docs/adr/0006-scene-documents-revisions-and-recovery.md</code> and <code>docs/adr/0007-story-canvas-spatial-state.md</code>; update ADR 0002/0004 references without rewriting their accepted decisions. Maintain <code>docs/API.md</code>, <code>docs/ARCHITECTURE.md</code>, <code>docs/PRODUCT.md</code>, operations, README, the active blueprint/roadmap, and the handoff as each milestone lands.</p>
+      <p><strong>Autonomous feature sequence:</strong> <a href="feature-delivery-checkpoints.html">Tree, workflows, reader, split, and handoffs</a> records the skill-driven domain/design/binding/test maps, cumulative coherence gates, and authorized commit checkpoints.</p>
+      <p><strong>Living design source:</strong> <a href="../../designs/Ghostwriter%20Mockups%202.0.html">Ghostwriter Mockups 2.0</a> remains the visual and interaction source for Draft, history, Canvas, split view, links, ghosts, imagery metadata, and the reading-order spine. The founder explicitly authorized an additive in-file proposal; existing screens and bundled assets remain unchanged, and the proposal is visibly marked noncanonical until accepted. Its legacy “No account required” and “Saved locally” labels still conflict with ADR 0002/0005 and must not enter production.</p>
+      <p><strong>UX 2.1 review source:</strong> <a href="ux-proposal-workspace-2-1.html">Build, Map, Write</a> translates the 2026-07-17 live project review into detailed visual and interaction requirements. It is a binding proposal only after founder acceptance. No new ADR is expected unless implementation adds canonical grouping, automatic Canvas-to-manuscript reorder, persisted layout beyond existing personal preferences, a timeline domain, or stable passage pins.</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li><strong>Accepted identity stack:</strong> self-host Better Auth on the existing Hono backend, use its Drizzle/Postgres adapter and Google provider, and keep Google as the only login method in this epic. Managed auth adds a new data processor/cost boundary; custom OAuth/session code adds avoidable security risk.</li>
+        <li><strong>Accepted web session topology:</strong> proxy <code>/api</code> through the Cloudflare Pages origin to Fly. Direct credentialed cookies between <code>pages.dev</code> and <code>fly.dev</code> are third-party and fail in privacy-restrictive browsers.</li>
+        <li><strong>Accepted entry boundary:</strong> require Google sign-in before entering any product or onboarding surface. A temporary pre-auth Spark is not part of this epic.</li>
+        <li><strong>Accepted deletion posture:</strong> archive/restore authored records and refuse ambiguous structural deletion. Permanent project/account purge waits for export, retention, backup, and account-exit policy so this epic does not violate writer ownership.</li>
+        <li><strong>Expanded scope boundary:</strong> by founder direction, the current branch now includes safe metadata CRUD closure, prose bodies, owner leases, personal revision history/recovery, and Story Canvas state management before PR. Editions publishing, comments, collaborators, real-time subscriptions, AI, import/export, and purge remain later outcomes.</li>
+        <li><strong>Accepted concurrency split:</strong> keep project metadata on <code>project.version</code>, prose on a per-scene working version, and spatial state on a Canvas board version. Mixing debounced prose, Canvas drag, and low-frequency structure edits behind one project counter would create false conflicts and oversized aggregate writes.</li>
+        <li><strong>Required persistence refactor:</strong> the current Postgres command adapter deletes and rebuilds child rows. Prose/history foreign keys make that unsafe, so metadata persistence must become surgical before revisions attach to scenes.</li>
+        <li><strong>Accepted revision model (ADR 0006):</strong> store canonical versioned ProseMirror JSON with stable top-level block IDs, mutable acknowledged working state plus append-only content-addressed revisions, single-parent checkpoints in this epic, restore as a new revision, block-aware comparison, and no keystroke event sourcing or auto-merge.</li>
+        <li><strong>Accepted recovery model (ADR 0006):</strong> use a bounded origin-private IndexedDB buffer only for unacknowledged prose, explicitly disclose its local-at-rest limits, expire it, and clear it after acknowledgement/sign-out. It is not a second canonical store or offline mode.</li>
+        <li><strong>Accepted Canvas model (ADR 0007):</strong> one project board stores versioned object placement and typed links referencing canonical IDs; manuscript order alone drives the spine, and an accessible ordered projection exposes every canonical action without drag.</li>
+        <li><strong>Transport boundary:</strong> owner-only HTTP leases and optimistic revision checks are in scope. Live subscriptions, presence, invitations, and reconnect transport remain open; product copy must not imply they ship in this epic.</li>
+        <li><strong>MCP:</strong> exposing direct canonical author CRUD to an unauthenticated local fixture server would violate the accepted agent authority direction. Read bindings may advance; mutation parity is documented as a temporary security exception until scoped grants and remote/local authorization are accepted.</li>
+        <li><strong>OAuth environments:</strong> Google requires exact callback URLs and does not support wildcard branch previews. Local, one stable acceptance environment, and production need deliberate registration; required CI uses a deterministic test identity boundary.</li>
+        <li><strong>Accepted credential-rotation deferral:</strong> an existing backend service credential was entered directly in local shell history. Its value was not copied. The founder chose to rotate it later; this accepted residual risk is recorded rather than silently treated as resolved. All new auth secrets use stdin/secret stores.</li>
+        <li><strong>Epic size:</strong> the founder explicitly prefers one large pre-PR branch and iterative autonomous delivery. Preserve reviewability through milestone commits, additive migrations, bounded modules, immediate records, and green verification at every checkpoint. Stop only for a genuine product, architecture, security, cost, data-loss, visual-review, push/PR, or deployment gate.</li>
+        <li><strong>UX direction under review:</strong> tree structure remains canonical, DAG relationships remain interpretive, drill depth remains view state, and toasts remain acknowledgement UI. Persisted metadata undo or canonical drill scope would require a later architecture decision; this proposal does neither.</li>
+        <li><strong>Accepted UX direction:</strong> on 2026-07-12 the founder accepted the persistent tree + DAG, layered drill, workflow-lens, narrow, and toast proposal and authorized implementation.</li>
+        <li><strong>Reader boundary:</strong> v1 Reader uses acknowledged working heads and scene-level linked context. Stable inline passage pins and edition/project snapshot pinning require their own accepted model and must not be simulated with text matching.</li>
+        <li><strong>Accepted UX 2.1:</strong> Story Trail, Quick Build, Scene Launchpad, Canvas Workbench, Thread Trace, Draft Desk, Context Dock, and Focus Halo are approved for implementation. Progressive disclosure must improve usability without hiding save truth, authority, recovery, or keyboard parity.</li>
+        <li><strong>Accepted verification posture:</strong> direct browser walkthroughs are the implementation-loop product check. Playwright is a post-founder-verification acceptance layer, not a test-writing requirement for every checkpoint; the harness rejects premature Playwright mutation tasks.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked disabled> Founder confirmed identity stack, session topology, entry boundary, deletion semantics, and current-kernel CRUD scope</li>
+        <li><input type="checkbox" checked disabled> Feature branch created from up-to-date <code>main</code></li>
+        <li><input type="checkbox" checked disabled> Current handoff, active blueprint, ADRs, operations, code seams, and living design reviewed</li>
+        <li><input type="checkbox" checked disabled> Plan accepted and ADR 0005 recorded</li>
+        <li><input type="checkbox" checked disabled> Google account/profile creation works end to end</li>
+        <li><input type="checkbox" checked disabled> Project ownership and authorization enforced end to end</li>
+        <li><input type="checkbox" checked disabled> Project library and create/open/archive/restore journey complete</li>
+        <li><input type="checkbox" checked disabled> Accepted book/manuscript/scene/story-knowledge commands complete</li>
+        <li><input type="checkbox" checked disabled> Memory and Postgres adapters plus migrations complete</li>
+        <li><input type="checkbox" checked disabled> Backend and responsive web bindings complete</li>
+        <li><input type="checkbox" checked disabled> Capability/MCP parity audit complete</li>
+        <li><input type="checkbox" checked disabled> Automated and real-provider acceptance verification complete</li>
+        <li><input type="checkbox" checked disabled> Google/Fly auth environment configured; pre-existing Databricks rotation recorded as separately deferred</li>
+        <li><input type="checkbox" checked disabled> Phase 1 docs, handoff, and active blueprint decisions updated</li>
+        <li><input type="checkbox" checked disabled> Phase 1 checkpoint <code>a73d532</code> committed and pushed before scope expansion</li>
+        <li><input type="checkbox" checked disabled> Founder expanded this branch to prose, revision history, and Story Canvas before PR</li>
+        <li><input type="checkbox" checked disabled> ADR 0006 scene document/revision/lease/recovery architecture accepted</li>
+        <li><input type="checkbox" checked disabled> Current-kernel CRUD UI and browser coverage gaps closed</li>
+        <li><input type="checkbox" checked disabled> Metadata persistence refactored for durable scene references</li>
+        <li><input type="checkbox" checked disabled> Editor package, schema v1, stable block IDs, and migration tests complete</li>
+        <li><input type="checkbox" checked disabled> Scene body repositories, migrations, lease, API, and conflict tests complete</li>
+        <li><input type="checkbox" checked disabled> Responsive Draft/Tiptap writing and truthful save states complete</li>
+        <li><input type="checkbox" checked disabled> Checkpoints, variants, compare, restore, and recovery complete</li>
+        <li><input type="checkbox" checked disabled> ADR 0007 Story Canvas spatial architecture accepted</li>
+        <li><input type="checkbox" checked disabled> Canvas domain, persistence, commands, API, and spine complete</li>
+        <li><input type="checkbox" checked disabled> Technical Canvas/Split/narrow foundation complete; original card/form shell rejected for UX redesign</li>
+        <li><input type="checkbox" checked disabled> Expanded automated, performance, accessibility, and browser acceptance complete</li>
+        <li><input type="checkbox" checked disabled> Founder UX feedback and screenshot defects recorded</li>
+        <li><input type="checkbox" checked disabled> Interactive filesystem + DAG proposal and associated plan supplement complete</li>
+        <li><input type="checkbox" checked disabled> Founder accepts structure tree, drill navigation, Canvas workflows, and toast contract</li>
+        <li><input type="checkbox" checked disabled> Autonomous delivery skill created, validated, committed, and adopted</li>
+        <li><input type="checkbox" checked disabled> Domain/design/binding/test audits complete for tree, Reader, Split, and scene handoffs</li>
+        <li><input type="checkbox" disabled> Accepted UX replaces primary card/form setup and horizontal scene navigation</li>
+        <li><input type="checkbox" disabled> Layered chapter/scene drill and five Canvas workflow lenses complete</li>
+        <li><input type="checkbox" disabled> Bound-wide/continuous-narrow Book Reader and exact return handoff complete</li>
+        <li><input type="checkbox" disabled> Resizable focus-preserving Split and all scene handoffs complete</li>
+        <li><input type="checkbox" disabled> Tree, drill, workflow, toast, and narrow browser journeys pass</li>
+        <li><input type="checkbox" checked disabled> Detailed Build · Map · Write UX 2.1 visual proposal complete and linked</li>
+        <li><input type="checkbox" checked disabled> Founder accepts hierarchy, Canvas toolset, and Draft Desk concepts</li>
+        <li><input type="checkbox" checked disabled> Accepted UX 2.1 checkpoints H1–H5 implemented and browser-verified (founder product verification + Playwright audit still open)</li>
+        <li><input type="checkbox" disabled> Expanded docs, handoff, blueprint, and release evidence complete</li>
+        <li><input type="checkbox" disabled> Plan archived after the full writer outcome passes</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

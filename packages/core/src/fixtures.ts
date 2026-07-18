@@ -158,7 +158,8 @@ export const BELLWETHER_FIXTURE = defineProjectRecords({
         falseRescueSceneId,
         darkHarborSceneId,
         secondSignalSceneId
-      ]
+      ],
+      linkedKnowledge: []
     },
     {
       id: bellwetherId,
@@ -166,7 +167,8 @@ export const BELLWETHER_FIXTURE = defineProjectRecords({
       label: "Bellwether Island",
       kind: "location",
       authority: "confirmed",
-      linkedSceneIds: [arrivalSceneId, deadFrequencySceneId, darkHarborSceneId]
+      linkedSceneIds: [arrivalSceneId, deadFrequencySceneId, darkHarborSceneId],
+      linkedKnowledge: []
     },
     {
       id: channelNineId,
@@ -174,7 +176,8 @@ export const BELLWETHER_FIXTURE = defineProjectRecords({
       label: "Channel 9 warning rule",
       kind: "world-rule",
       authority: "planned",
-      linkedSceneIds: [deadFrequencySceneId, futureCallSceneId, secondSignalSceneId]
+      linkedSceneIds: [deadFrequencySceneId, futureCallSceneId, secondSignalSceneId],
+      linkedKnowledge: []
     },
     {
       id: callerThreadId,
@@ -182,7 +185,8 @@ export const BELLWETHER_FIXTURE = defineProjectRecords({
       label: "Who sends the calls?",
       kind: "thread",
       authority: "disputed",
-      linkedSceneIds: [deadFrequencySceneId, futureCallSceneId, secondSignalSceneId]
+      linkedSceneIds: [deadFrequencySceneId, futureCallSceneId, secondSignalSceneId],
+      linkedKnowledge: []
     }
   ],
   editions: [

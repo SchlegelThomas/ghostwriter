@@ -88,7 +88,15 @@ This repo is git- and CLI-driven. Agents are expected to drive git, not avoid it
 - **Pushing, opening PRs, and merging require the user's go-ahead.** Local commits on a
   feature branch don't.
 - **Tests ship with the feature.** Anything in `packages/*` with logic gets Vitest coverage
-  in the same branch — not as a follow-up.
+  in the same branch — not as a follow-up. During implementation, verify writer-visible work
+  directly in a real browser and record the walkthrough; do not author, repair, or repeatedly run
+  Playwright before the user has verified the complete planned outcome. After that explicit gate,
+  audit existing journeys and add only the smallest high-value acceptance coverage. Route all new
+  or rewritten tests through the model-pinned project subagents in `.cursor/agents/`, per
+  `.cursor/skills/ghostwriter-autonomous-delivery/SKILL.md`: `routine-tests` (Composer 2.5 fast)
+  first, and `hard-tests` (Grok 4.5) only for recorded hard escalation. Post-gate Playwright prompts
+  must include `GHOSTWRITER_PLAYWRIGHT_GATE=user-verified`; `.cursor/hooks.json` enforces the gate
+  and model routing.
 - Keep branches short-lived; prefer finishing and merging over stacking work.
 
 ## Deployments (CLI-driven — see `docs/OPERATIONS.md`)

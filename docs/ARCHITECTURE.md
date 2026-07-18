@@ -11,7 +11,7 @@ ghostwriter/
     client/       # Expo universal app; responsive real-time web is the primary product
     desktop/      # Optional Electron shell adding filesystem and credential conveniences
     mcp/          # MCP server exposing Ghostwriter to external agents
-    backend/      # Required shared-project identity/sync shell; runtime is still open
+    backend/      # Node/Hono shared-project identity and application shell
   packages/
     core/         # domain model + logic: multi-book projects, scenes, revisions, policy
     ui/           # shared React Native components (render on web via react-native-web)
@@ -74,7 +74,7 @@ Phase 1.1 replaces the scaffold manuscript object with the first shared product 
   structured output against the core fixture, and closes it cleanly.
 
 See [ADR 0003](adr/0003-multi-book-domain-boundaries.md). Tiptap scene bodies, the revision graph,
-identity, real-time sync, recovery, and Story Canvas mutation remain later plans.
+real-time sync, recovery, and Story Canvas mutation remain later plans.
 
 ## Implemented backend and persistence (2026-07-11)
 
@@ -92,8 +92,81 @@ ADR 0004 makes the server-authoritative store concrete:
 - The database is **Databricks Lakebase** (serverless Postgres). CI branches the database per pull
   request (copy-on-write) via `scripts/lakebase.sh`; production deploys migrate and ship the backend.
 
-See [ADR 0004](adr/0004-lakebase-backend-and-cicd.md). Identity/auth, profiles, subscriptions,
-real-time transport, and browser recovery remain later plans on top of this backend.
+See [ADR 0004](adr/0004-lakebase-backend-and-cicd.md). Subscriptions, real-time transport, and
+browser recovery remain later plans on top of this backend.
+
+## Implemented identity, project access, and kernel mutations (2026-07-11)
+
+ADR 0005 establishes the identity spine used by all real project access:
+
+- **Better Auth** runs inside the Node/Hono backend with its Drizzle/Postgres adapter and Google as
+  the only initial login provider. Auth/session/provider types remain outside `packages/core`.
+- The browser uses opaque database-backed sessions in secure HttpOnly cookies. Cloudflare Pages
+  proxies its same-origin `/api/*` path to Fly; the product does not depend on third-party cookies
+  between `pages.dev` and `fly.dev` or durable browser bearer tokens.
+- Core owns provider-neutral account/profile, project-membership, and authorization contracts.
+  Every query and command receives a server-resolved actor and enforces project scope before
+  storage effects. Client-supplied account IDs never grant access.
+- First login idempotently creates one writer profile. Creating a project atomically creates its
+  owner membership; account-scoped project listing follows membership rather than global project
+  enumeration.
+- Authentication precedes every product/onboarding surface. Authored records archive and restore;
+  permanent purge waits for export, backup, retention, and account-exit policy.
+- Google requires exact callback registration. Required CI uses a production-inert test identity
+  boundary. A live-provider acceptance run passed locally on 2026-07-12 for consent, durable
+  account/profile bootstrap, project creation/reload, and server-side sign-out revocation;
+  production still receives its own post-release smoke.
+- Core exposes 22 typed, owner-authorized, expected-version commands for project/book/manuscript
+  structure/scene metadata/story knowledge. Memory and Postgres share one transaction contract;
+  Postgres conditionally advances the project version and atomically replaces normalized metadata
+  children while preserving memberships. This aggregate replacement is for low-frequency metadata,
+  not the future scene-body editor write path.
+- Hono exposes validated account/profile, account-scoped project, navigator, and typed-command
+  endpoints with stable error codes and strict mutation origins. The responsive client binds all 22
+  commands and shows <em>Saved</em> only after the returned server version is installed.
+- Authored kernel records archive/restore; empty parts/chapters may be safely removed. Named editions
+  remain read-only until immutable scene/project revisions exist.
+- Canonical MCP command bindings are explicit security exceptions, not omissions: direct external
+  writes wait for scoped grants and the agent-authority/remote-authorization ADR. Fixture MCP reads
+  continue to exercise the shared navigator projection.
+
+See [ADR 0005](adr/0005-authenticated-accounts-and-project-access.md).
+
+## Implemented writing, revision, and Canvas foundation (2026-07-12)
+
+The founder expanded the active pre-PR epic from authenticated metadata CRUD into the complete
+single-owner writing loop from the living design. Two accepted ADRs now have working vertical
+implementations:
+
+- [ADR 0006](adr/0006-scene-documents-revisions-and-recovery.md) selects canonical versioned
+  ProseMirror JSON with stable block IDs, a dedicated scene working version, append-only meaningful
+  checkpoints and variant heads, owner-session leases, block-aware compare/restore, and a bounded
+  IndexedDB recovery buffer for unacknowledged prose.
+- [ADR 0007](adr/0007-story-canvas-spatial-state.md) selects one project-owned Canvas board with
+  dedicated versioning, relational objects/links referencing canonical scene/story IDs, separate
+  per-writer viewport preferences, manuscript-derived spine/drift, and an accessible ordered view.
+
+The concurrency boundary is intentionally split: project metadata keeps `project.version`, scene
+prose uses a per-scene working version, and Canvas spatial state uses a board version. Postgres
+metadata persistence now updates stable canonical rows rather than deleting/rebuilding scenes.
+
+- `packages/editor` owns strict schema-v1 ProseMirror JSON, stable block IDs, canonical hashing and
+  block-aware comparison plus the SSR-safe web Tiptap component. Core imports only its DOM-free
+  document contract.
+- Scene document/revision/variant/lease tables and repository contracts support acknowledged
+  working saves, meaningful immutable checkpoints, named variants, compare, restore-as-new, and
+  owner-session lease conflicts. Errors and diagnostics remain prose-free.
+- The browser save queue serializes debounced writes. A seven-day AES-GCM IndexedDB buffer stores
+  only unacknowledged scene text, asks before recovery, and clears after matching acknowledgement
+  or sign-out; it is not an offline project replica.
+- Canvas uses relational current-state boards/objects/links, immutable snapshots, personal viewport
+  preferences, a manuscript-derived spine, and a separate board version. The combined unit of work
+  atomically creates a manuscript scene, genesis document, and Canvas card.
+- The responsive client exposes Draft, Canvas, Split, and Project setup. Wide web supports spatial
+  editing and inspectors; narrow web defaults to an ordered keyboard/screen-reader representation.
+  Canvas position and story-order hints expose drift but never reorder the manuscript.
+- Canonical MCP writes, real-time subscriptions/presence, editor invitations, comments/suggestions,
+  image generation, and full offline access remain explicit later decisions.
 
 ## Accepted product requirements (2026-07-11)
 
@@ -153,8 +226,9 @@ plan's record-log plus update this section.
 | Decision | Options on the table | Notes |
 |---|---|---|
 | Real-time transport | subscriptions over the shared DB, actor/room model, CRDT coordination service | Database chosen (Lakebase, ADR 0004); live-update transport, presence, and reconnect semantics still open |
-| Content history | content-addressed checkpoint/variant graph, event sourcing, literal Git repository | Recommend immutable prose-aware version graph; do not expose Git mechanics or event-source keystrokes |
-| Browser recovery | IndexedDB, OPFS, simpler encrypted draft buffer | Store only unacknowledged recovery data; clear safely after server acknowledgement |
+| Content history | content-addressed checkpoint/variant graph, event sourcing, literal Git repository | Implemented foundation under ADR 0006: acknowledged working state plus immutable meaningful checkpoints |
+| Browser recovery | IndexedDB, OPFS, simpler encrypted draft buffer | Implemented under ADR 0006: bounded encrypted IndexedDB for unacknowledged prose only |
+| Story Canvas state | relational board objects/links, aggregate JSON board, scene-only placement fields | Implemented foundation under ADR 0007: project board with dedicated version, canonical ID references, manuscript-derived spine, and accessible ordered projection |
 | Build tooling | pnpm native workspace orchestration; revisit Turborepo only when measured need appears | Resolved for scaffold |
 | AI providers | Anthropic, OpenAI, local models via Ollama | `packages/ai` should abstract this from day one |
 

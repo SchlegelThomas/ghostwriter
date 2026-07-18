@@ -8,6 +8,62 @@
       "when": 1783795826798,
       "tag": "0000_previous_sentinels",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783810870698,
+      "tag": "0001_lying_the_liberteens",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783811025066,
+      "tag": "0002_solid_the_hunter",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783811421553,
+      "tag": "0003_sad_speedball",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783882753632,
+      "tag": "0004_productive_rogue",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1783884362519,
+      "tag": "0005_tense_lady_deathstrike",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783886344138,
+      "tag": "0006_bumpy_black_cat",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1783905062836,
+      "tag": "0007_romantic_klaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783905558808,
+      "tag": "0008_burly_black_bolt",
+      "breakpoints": true
     }
   ]
 }

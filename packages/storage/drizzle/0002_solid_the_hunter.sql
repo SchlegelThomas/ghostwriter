@@ -1,0 +1,1 @@
+ALTER TABLE "writer_profiles" ADD COLUMN "version" integer DEFAULT 1 NOT NULL;

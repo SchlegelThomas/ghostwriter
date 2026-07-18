@@ -122,19 +122,19 @@
           <span class="sequence">1.2 · feat/shared-web-projects</span>
           <h3>Identity, shared persistence, sync, and recovery</h3>
           <p>Implement ADR 0002: server-authoritative projects, invitations, author/editor roles, live subscriptions, scene leases, minimal browser recovery for unacknowledged work, shared authorization, migrations, reconnect, and account exit.</p>
-          <footer>Exit: acknowledged edits survive crash/reconnect; revoked access takes effect; failed migration restores the prior project.</footer>
+          <footer>Partial delivery is green locally: ADR 0005 accounts/ownership plus ADR 0006 owner scene leases and encrypted unacknowledged-prose recovery. Invitations, editor roles, live subscriptions, presence, reconnect transport, export, and account exit remain.</footer>
         </article>
         <article class="candidate-plan">
           <span class="sequence">1.3 · feat/scene-editor-workspace</span>
           <h3>Scene-granular writing studio</h3>
           <p>Add versioned ProseMirror schema, stable block IDs, Tiptap editing, manuscript tree, scene metadata, focus mode, keyboard navigation, save status, and a narrow editor bridge.</p>
-          <footer>Exit: create, reorder, edit, close, reopen, reconnect, and undo scenes with valid schema round trips and truthful server-acknowledged save state.</footer>
+          <footer>Implemented locally in the expanded epic: create, reorder, edit, close, reopen, recover, and undo scenes with valid schema round trips and truthful server-acknowledged save state.</footer>
         </article>
         <article class="candidate-plan">
           <span class="sequence">1.4 · feat/revisions-and-proposals</span>
           <h3>History, variants, editorial review, and apply</h3>
           <p>Add immutable checkpoints, prose-aware revision graph, named variants, compare/combine, comments, tracked human suggestions, review requests, provenance, stale detection, transactional apply, restore, and undo—using deterministic fixture proposals only.</p>
-          <footer>Exit: stale changes apply nothing; every human or fixture suggestion is attributed, revision-linked, and reversible.</footer>
+          <footer>Personal checkpoints, named variants, block-aware compare, and restore-as-new are implemented locally. Comments, tracked suggestions, review requests, combine, and agent proposals remain a later collaborative slice.</footer>
         </article>
         <article class="candidate-plan">
           <span class="sequence">1.5 · feat/import-export-portability</span>
@@ -146,7 +146,7 @@
           <span class="sequence">1.6 · feat/story-canvas-foundation</span>
           <h3>One spatial story model beside the page</h3>
           <p>Replace Plan with a zoomable Story Canvas for scenes, notes, characters, imagery, threads, regions, outline, and timeline views. Add write-first/storyboard-first entry, stable pins, split view, the reading-order spine, and provisional ghost objects.</p>
-          <footer>Exit: Canvas and Draft reference the same scenes; no derivation or placement silently changes manuscript order or confirmed story truth.</footer>
+          <footer>Implemented locally under ADR 0007: Canvas and Draft share scene/story IDs, storyboard handoff is atomic, the spine exposes drift without reordering Draft, and narrow web has an ordered accessible alternative. Timeline and AI derivation remain later.</footer>
         </article>
       </div>
       <h3>Phase gate: a collaborative web product with AI turned off</h3>

@@ -3,12 +3,19 @@ import {
   BELLWETHER_FIXTURE,
   BELLWETHER_FIXTURE_NAVIGATOR,
   bookId,
+  BOOK_READER_CAPABILITY,
+  CANVAS_MUTATION_CAPABILITIES,
+  CANVAS_READ_CAPABILITIES,
   createProject,
   defineProjectRecords,
   DomainValidationError,
   GHOSTWRITER_CAPABILITIES,
   projectId,
+  PROJECT_COMMAND_CAPABILITIES,
   PROJECT_NAVIGATOR_CAPABILITY,
+  SCENE_HISTORY_CAPABILITIES,
+  SCENE_WORKSPACE_CAPABILITY,
+  SCENE_WRITING_MUTATION_CAPABILITIES,
   sceneId,
   type BookId
 } from "./index.js";
@@ -149,9 +156,68 @@ describe("capability parity registry", () => {
       access: "read",
       coreUseCase: "getProjectNavigator",
       bindings: {
-        ui: "ProjectNavigatorScreen",
+        ui: "ManuscriptTree",
         mcp: "ghostwriter_project_navigator"
       }
     });
+  });
+
+  it("records an explicit MCP security exception for every canonical command", () => {
+    expect(PROJECT_COMMAND_CAPABILITIES).toHaveLength(24);
+    for (const capability of PROJECT_COMMAND_CAPABILITIES) {
+      expect(capability.access).toBe("apply");
+      expect(capability.bindings.ui).toBe(
+        "ManuscriptTree + SelectionInspector"
+      );
+      expect(capability.bindings.mcp).toBeUndefined();
+      expect(capability.bindings.mcpException).toContain("scoped agent grants");
+    }
+  });
+
+  it("registers authenticated scene web bindings without enabling MCP writes", () => {
+    expect(GHOSTWRITER_CAPABILITIES).toContain(SCENE_WORKSPACE_CAPABILITY);
+    expect(SCENE_WORKSPACE_CAPABILITY.bindings.web).toContain("/workspace");
+    expect("mcp" in SCENE_WORKSPACE_CAPABILITY.bindings).toBe(false);
+    for (const capability of SCENE_HISTORY_CAPABILITIES) {
+      expect(capability.bindings.web).toContain("/api/projects/");
+      expect(capability.bindings.mcp).toBeUndefined();
+      expect(capability.bindings.mcpException).toContain(
+        "authenticated project authority"
+      );
+    }
+    for (const capability of SCENE_WRITING_MUTATION_CAPABILITIES) {
+      expect(capability.bindings.web).toContain("/api/projects/");
+      expect(capability.bindings.mcp).toBeUndefined();
+      expect(capability.bindings.mcpException).toContain("scoped agent grants");
+    }
+  });
+
+  it("registers Canvas backend bindings with explicit MCP exceptions", () => {
+    for (const capability of [
+      ...CANVAS_READ_CAPABILITIES,
+      ...CANVAS_MUTATION_CAPABILITIES
+    ]) {
+      expect(GHOSTWRITER_CAPABILITIES).toContain(capability);
+      expect(capability.bindings.web).toContain("/api/projects/");
+      expect(capability.bindings.mcp).toBeUndefined();
+      expect(capability.bindings.mcpException).toBeTruthy();
+    }
+  });
+
+  it("registers the authenticated book reader with an explicit MCP prose exception", () => {
+    expect(GHOSTWRITER_CAPABILITIES).toContain(BOOK_READER_CAPABILITY);
+    expect(BOOK_READER_CAPABILITY).toMatchObject({
+      access: "read",
+      scope: "book",
+      coreUseCase: "getBookReader",
+      bindings: {
+        ui: "BookReaderPanel",
+        web: "GET /api/projects/{projectId}/books/{bookId}/reader"
+      }
+    });
+    expect(BOOK_READER_CAPABILITY.bindings.mcpException).toContain(
+      "authenticated project authority"
+    );
+    expect("mcp" in BOOK_READER_CAPABILITY.bindings).toBe(false);
   });
 });
