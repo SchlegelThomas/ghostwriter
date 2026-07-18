@@ -1,12 +1,14 @@
 import type {
   BookId,
   CanvasBoard,
+  CanvasLink,
   CanvasObject,
   CanvasObjectId,
   CanvasReadingOrderSpine,
   CanvasRevisionMetadata,
   CanvasSpineDrift,
   ChapterId,
+  PartId,
   ProjectNavigator,
   ProjectNavigatorKnowledge,
   SceneId
@@ -48,6 +50,35 @@ export type CanvasCanonicalReferenceState = Readonly<{
   label?: string;
 }>;
 
+export type CanvasTool =
+  | "select"
+  | "hand"
+  | "scene"
+  | "note"
+  | "story"
+  | "image"
+  | "region"
+  | "connect";
+
+export type CanvasChapterAggregate = Readonly<{
+  bookId: BookId;
+  partId: PartId;
+  chapterId: ChapterId;
+  title: string;
+  sceneCount: number;
+  placedSceneCount: number;
+  linkCount: number;
+}>;
+
+export type CanvasSceneFocus = Readonly<{
+  sceneId: SceneId;
+  title: string;
+  summary?: string;
+  placed: boolean;
+  inboundLinks: number;
+  outboundLinks: number;
+}>;
+
 export type CanvasHandoffPlacement =
   | Readonly<{
       kind: "chapter";
@@ -63,6 +94,150 @@ export type CanvasHandoffPlacement =
 
 export function clampCanvasZoom(zoom: number): number {
   return Math.min(2.5, Math.max(0.35, zoom));
+}
+
+export function canvasToolInstruction(tool: CanvasTool): string {
+  switch (tool) {
+    case "select":
+      return "Select a card, link, or region to reveal its common actions.";
+    case "hand":
+      return "Pan the board with the visible direction controls or Space.";
+    case "scene":
+      return "Choose manuscript placement, then create one scene in Canvas and Draft.";
+    case "note":
+      return "Place a writer note at the next visible board position.";
+    case "story":
+      return "Choose one active story record to place as a confirmed card.";
+    case "image":
+      return "Place an image reference, then add alt text and caption in Details.";
+    case "region":
+      return "Place a region behind cards to name a story area.";
+    case "connect":
+      return "Choose a source card, target, relationship kind, authority, and label.";
+  }
+}
+
+export function fitCanvasObjects(
+  objects: readonly Pick<CanvasObject, "x" | "y" | "width" | "height">[],
+  size: CanvasViewportSize,
+  padding = 48
+): CanvasViewport {
+  if (objects.length === 0 || size.width <= 0 || size.height <= 0) {
+    return { x: 0, y: 0, zoom: 1 };
+  }
+  const left = Math.min(...objects.map((object) => object.x));
+  const top = Math.min(...objects.map((object) => object.y));
+  const right = Math.max(...objects.map((object) => object.x + object.width));
+  const bottom = Math.max(...objects.map((object) => object.y + object.height));
+  const width = Math.max(1, right - left);
+  const height = Math.max(1, bottom - top);
+  const zoom = clampCanvasZoom(
+    Math.min(
+      Math.max(1, size.width - padding * 2) / width,
+      Math.max(1, size.height - padding * 2) / height
+    )
+  );
+  return {
+    x: Math.round(left - padding / zoom),
+    y: Math.round(top - padding / zoom),
+    zoom
+  };
+}
+
+export function searchCanvasObjects(
+  objects: readonly CanvasObject[],
+  query: string
+): readonly CanvasObject[] {
+  const normalized = query.trim().toLocaleLowerCase();
+  if (normalized.length === 0) return [];
+  return objects.filter((object) =>
+    [object.label, object.note?.body, object.image?.caption, object.image?.altText]
+      .filter((value): value is string => value !== undefined)
+      .some((value) => value.toLocaleLowerCase().includes(normalized))
+  );
+}
+
+export function canvasChapterAggregates(
+  project: ProjectNavigator,
+  board: CanvasBoard
+): readonly CanvasChapterAggregate[] {
+  const activeObjects = board.objects.filter(
+    (object) => object.archivedAt === undefined && object.dismissedAt === undefined
+  );
+  return project.books.flatMap((book) =>
+    book.parts.flatMap((part) =>
+      part.chapters.map((chapter) => {
+        const sceneIds = new Set(
+          chapter.scenes
+            .filter((scene) => scene.archivedAt === undefined)
+            .map((scene) => scene.id)
+        );
+        const objectIds = new Set(
+          activeObjects
+            .filter(
+              (object) =>
+                object.kind === "scene-card" &&
+                object.sceneId !== undefined &&
+                sceneIds.has(object.sceneId)
+            )
+            .map((object) => object.id)
+        );
+        return {
+          bookId: book.id,
+          partId: part.id,
+          chapterId: chapter.id,
+          title: chapter.title,
+          sceneCount: sceneIds.size,
+          placedSceneCount: objectIds.size,
+          linkCount: board.links.filter(
+            (link) =>
+              link.archivedAt === undefined &&
+              (objectIds.has(link.fromObjectId) || objectIds.has(link.toObjectId))
+          ).length
+        };
+      })
+    )
+  );
+}
+
+export function canvasSceneFocus(
+  project: ProjectNavigator,
+  board: CanvasBoard,
+  sceneId: SceneId
+): CanvasSceneFocus | undefined {
+  const scene = project.books
+    .flatMap((book) => [
+      ...book.parts.flatMap((part) =>
+        part.chapters.flatMap((chapter) => chapter.scenes)
+      ),
+      ...book.unassignedScenes
+    ])
+    .find((candidate) => candidate.id === sceneId);
+  if (scene === undefined) return undefined;
+  const object = board.objects.find(
+    (candidate) =>
+      candidate.kind === "scene-card" &&
+      candidate.sceneId === sceneId &&
+      candidate.archivedAt === undefined
+  );
+  const links: readonly CanvasLink[] =
+    object === undefined
+      ? []
+      : board.links.filter((link) => link.archivedAt === undefined);
+  return {
+    sceneId,
+    title: scene.title,
+    ...(scene.summary === undefined ? {} : { summary: scene.summary }),
+    placed: object !== undefined,
+    inboundLinks:
+      object === undefined
+        ? 0
+        : links.filter((link) => link.toObjectId === object.id).length,
+    outboundLinks:
+      object === undefined
+        ? 0
+        : links.filter((link) => link.fromObjectId === object.id).length
+  };
 }
 
 export function canvasScreenFrame(
@@ -107,6 +282,44 @@ export function visibleCanvasObjects(
       object.x <= worldRight &&
       object.y <= worldBottom
   );
+}
+
+export function canvasCapturePosition(
+  objectIndex: number,
+  viewport: CanvasViewport,
+  size: CanvasViewportSize
+): Readonly<{ x: number; y: number }> {
+  const zoom = clampCanvasZoom(viewport.zoom);
+  const worldWidth = Math.max(1, size.width / zoom);
+  const worldHeight = Math.max(1, size.height / zoom);
+  const columnSpacing = 290;
+  const rowSpacing = 190;
+  const originX = 48;
+  const originY = 52;
+  const columns = Math.max(
+    1,
+    Math.floor(Math.max(0, worldWidth - originX * 2) / columnSpacing) + 1
+  );
+  const rows = Math.max(
+    1,
+    Math.floor(Math.max(0, worldHeight - originY * 2) / rowSpacing) + 1
+  );
+  const normalizedIndex = Math.max(0, Math.floor(objectIndex));
+  const capacity = columns * rows;
+  const slot = normalizedIndex % capacity;
+  const cascade = (Math.floor(normalizedIndex / capacity) % 4) * 24;
+
+  return {
+    x: Math.round(
+      viewport.x + originX + (slot % columns) * columnSpacing + cascade
+    ),
+    y: Math.round(
+      viewport.y +
+        originY +
+        Math.floor(slot / columns) * rowSpacing +
+        cascade
+    )
+  };
 }
 
 export function canvasDriftLabel(drift: CanvasSpineDrift): string {

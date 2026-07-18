@@ -21,10 +21,13 @@ import {
   generateBlockId,
   validateSceneDocumentV1,
 } from "./document.js";
+import { clampEditorSelection } from "./selection.js";
 import {
   SCENE_DOCUMENT_SCHEMA_VERSION,
   type SceneDocumentV1,
 } from "./types.js";
+
+export { clampEditorSelection } from "./selection.js";
 
 export const SCENE_EDITOR_CLASS_NAMES = {
   root: "ghostwriter-scene-editor",
@@ -52,6 +55,8 @@ export interface SceneEditorProps {
   readonly editorClassName?: string;
   /** Optional root style override, useful for Expo web hosts. */
   readonly style?: CSSProperties;
+  /** Session-only caret/selection recovery across Reader and shell remounts. */
+  readonly selectionStorageKey?: string;
 }
 
 interface ToolbarButtonProps {
@@ -78,6 +83,9 @@ const TOOLBAR_STYLE: CSSProperties = {
   flexWrap: "wrap",
   gap: 4,
   padding: 6,
+  position: "sticky",
+  top: 0,
+  zIndex: 2,
 };
 
 const TOOLBAR_BUTTON_STYLE: CSSProperties = {
@@ -182,6 +190,47 @@ function createSceneEditorExtensions() {
   ];
 }
 
+function readStoredSelection(
+  key: string | undefined,
+  maximumPosition: number,
+): Readonly<{ from: number; to: number }> | undefined {
+  if (key === undefined || typeof sessionStorage === "undefined") return undefined;
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(key) ?? "null") as {
+      from?: unknown;
+      to?: unknown;
+    } | null;
+    if (
+      parsed === null ||
+      !Number.isSafeInteger(parsed.from) ||
+      !Number.isSafeInteger(parsed.to)
+    ) {
+      return undefined;
+    }
+    return clampEditorSelection(
+      { from: Number(parsed.from), to: Number(parsed.to) },
+      maximumPosition,
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+function writeStoredSelection(
+  key: string | undefined,
+  selection: Readonly<{ from: number; to: number }>,
+): void {
+  if (key === undefined || typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(
+      key,
+      JSON.stringify({ from: selection.from, to: selection.to }),
+    );
+  } catch {
+    // Session-only presentation state may fail without affecting canonical prose.
+  }
+}
+
 function ToolbarButton({
   label,
   children,
@@ -229,6 +278,7 @@ export function SceneEditor({
   toolbarClassName,
   editorClassName,
   style,
+  selectionStorageKey,
 }: SceneEditorProps) {
   const normalizedValue = useMemo(
     () => validateSceneDocumentV1(value),
@@ -239,12 +289,79 @@ export function SceneEditor({
     [normalizedValue],
   );
   const onChangeRef = useRef(onChange);
+  const selectionStorageKeyRef = useRef(selectionStorageKey);
+  const suppressSelectionWriteRef = useRef(false);
+  const hasRestoredSelectionRef = useRef(false);
+  const focusOnNextRestoreRef = useRef(true);
   const isEditable = editable && !disabled;
   const extensions = useMemo(createSceneEditorExtensions, []);
 
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  useEffect(() => {
+    selectionStorageKeyRef.current = selectionStorageKey;
+    hasRestoredSelectionRef.current = false;
+    focusOnNextRestoreRef.current = true;
+  }, [selectionStorageKey]);
+
+  function restoreStoredSelection(
+    targetEditor: {
+      isDestroyed: boolean;
+      isEditable: boolean;
+      state: { doc: { content: { size: number } }; selection: { from: number; to: number } };
+      commands: {
+        setTextSelection(selection: { from: number; to: number }): boolean;
+      };
+      chain(): {
+        focus(): { setTextSelection(selection: { from: number; to: number }): { run(): boolean } };
+        setTextSelection(selection: { from: number; to: number }): { run(): boolean };
+      };
+    },
+  ): void {
+    if (hasRestoredSelectionRef.current || targetEditor.isDestroyed) {
+      return;
+    }
+    // Draft mounts read-only until the scene lease is held. Restoring (and
+    // especially focusing) while contenteditable=false cannot stick.
+    if (!targetEditor.isEditable) {
+      return;
+    }
+    const stored = readStoredSelection(
+      selectionStorageKeyRef.current,
+      targetEditor.state.doc.content.size,
+    );
+    hasRestoredSelectionRef.current = true;
+    if (stored === undefined) {
+      focusOnNextRestoreRef.current = false;
+      return;
+    }
+    suppressSelectionWriteRef.current = true;
+    const shouldFocus = focusOnNextRestoreRef.current;
+    focusOnNextRestoreRef.current = false;
+    if (shouldFocus) {
+      // First restore after mount/scene change: return keyboard focus with the
+      // caret so Reader/shell remounts do not land at offset 0.
+      targetEditor.chain().focus().setTextSelection(stored).run();
+    } else {
+      targetEditor.commands.setTextSelection(stored);
+    }
+    const finish = () => {
+      suppressSelectionWriteRef.current = false;
+      if (!targetEditor.isDestroyed) {
+        writeStoredSelection(
+          selectionStorageKeyRef.current,
+          targetEditor.state.selection,
+        );
+      }
+    };
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(finish);
+    } else {
+      queueMicrotask(finish);
+    }
+  }
 
   const editor = useEditor({
     content: toEditorContent(normalizedValue),
@@ -259,6 +376,38 @@ export function SceneEditor({
     },
     extensions,
     immediatelyRender: false,
+    onCreate: ({ editor: createdEditor }) => {
+      // Content sync may still run after create; restore again there.
+      const restore = () => restoreStoredSelection(createdEditor);
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(restore);
+      } else {
+        queueMicrotask(restore);
+      }
+    },
+    onSelectionUpdate: ({ editor: updatedEditor }) => {
+      // Persist only focused writer carets so remount/blur churn cannot
+      // overwrite the session caret before restore runs.
+      if (
+        suppressSelectionWriteRef.current ||
+        !updatedEditor.isFocused
+      ) {
+        return;
+      }
+      writeStoredSelection(
+        selectionStorageKeyRef.current,
+        updatedEditor.state.selection,
+      );
+    },
+    onBlur: ({ editor: blurredEditor }) => {
+      if (suppressSelectionWriteRef.current) {
+        return;
+      }
+      writeStoredSelection(
+        selectionStorageKeyRef.current,
+        blurredEditor.state.selection,
+      );
+    },
     onUpdate: ({ editor: updatedEditor }) => {
       const nextValue = validateSceneDocumentV1({
         schemaVersion: SCENE_DOCUMENT_SCHEMA_VERSION,
@@ -304,6 +453,9 @@ export function SceneEditor({
         ),
       },
     });
+    if (isEditable) {
+      restoreStoredSelection(editor);
+    }
   }, [ariaLabel, disabled, editor, editorClassName, isEditable]);
 
   useEffect(() => {
@@ -317,12 +469,18 @@ export function SceneEditor({
     });
 
     if (serializeCanonicalSceneDocument(editorValue) !== canonicalValue) {
+      // setContent resets the caret; keep the session restore pending so we
+      // can re-apply after the canonical document lands.
+      hasRestoredSelectionRef.current = false;
       editor.commands.setContent(toEditorContent(normalizedValue), {
         emitUpdate: false,
         errorOnInvalidContent: true,
       });
+      restoreStoredSelection(editor);
+    } else if (!hasRestoredSelectionRef.current) {
+      restoreStoredSelection(editor);
     }
-  }, [canonicalValue, editor, normalizedValue]);
+  }, [canonicalValue, editor, isEditable, normalizedValue]);
 
   if (ariaLabel.trim().length === 0) {
     throw new Error("SceneEditor requires a non-empty ariaLabel.");

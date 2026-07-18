@@ -40,16 +40,23 @@ export function WorkspaceChatPanel({
 
   if (!open) return null;
 
-  async function send(): Promise<void> {
-    const text = draft.trim();
+  async function sendMessage(
+    message: string,
+    clearComposer: boolean
+  ): Promise<void> {
+    const text = message.trim();
     if (text.length === 0 || sending || busy) return;
     setSending(true);
     try {
       await onSend(text);
-      setDraft("");
+      if (clearComposer) setDraft("");
     } finally {
       setSending(false);
     }
+  }
+
+  async function send(): Promise<void> {
+    await sendMessage(draft, true);
   }
 
   return (
@@ -76,13 +83,32 @@ export function WorkspaceChatPanel({
         showsHorizontalScrollIndicator={false}
         style={styles.capabilityScroll}
       >
-        {capabilities.slice(0, 24).map((capability) => (
-          <View key={capability.id} style={styles.capabilityChip}>
-            <Text numberOfLines={1} style={styles.capabilityText}>
-              {capability.title}
-            </Text>
-          </View>
-        ))}
+        {capabilities.slice(0, 24).map((capability) =>
+          capability.access === "read" ? (
+            <Pressable
+              accessibilityLabel={`Run ${capability.title}`}
+              accessibilityRole="button"
+              disabled={busy || sending}
+              key={capability.id}
+              onPress={() => void sendMessage(capability.id, false)}
+              style={({ pressed }) => [
+                styles.capabilityChip,
+                pressed && styles.pressed,
+                (busy || sending) && styles.disabled
+              ]}
+            >
+              <Text numberOfLines={1} style={styles.capabilityText}>
+                {capability.title}
+              </Text>
+            </Pressable>
+          ) : (
+            <View key={capability.id} style={styles.capabilityChip}>
+              <Text numberOfLines={1} style={styles.capabilityText}>
+                {capability.title}
+              </Text>
+            </View>
+          )
+        )}
       </ScrollView>
       <ScrollView
         contentContainerStyle={styles.messages}

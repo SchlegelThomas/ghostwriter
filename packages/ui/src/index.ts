@@ -10,5 +10,6 @@ export * from "./ProjectLibraryScreen.js";
 export * from "./SelectionInspector.js";
 export * from "./manuscript-selection.js";
 export * from "./split-layout.js";
+export * from "./workspace-structure.js";
 export * from "./theme.js";
 export * from "./WorkspaceChatPanel.js";

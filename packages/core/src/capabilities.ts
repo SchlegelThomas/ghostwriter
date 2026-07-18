@@ -20,6 +20,7 @@ export const PROJECT_NAVIGATOR_CAPABILITY = Object.freeze({
   coreUseCase: "getProjectNavigator",
   bindings: Object.freeze({
     ui: "ManuscriptTree",
+    web: "GET /api/projects/{projectId}/navigator + POST /api/workspace/chat",
     mcp: "ghostwriter_project_navigator"
   })
 }) satisfies GhostwriterCapability;

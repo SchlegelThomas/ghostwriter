@@ -11,7 +11,7 @@
     <header>
       <p class="eyebrow">Ghostwriter major delivery epic</p>
       <h1>Authenticated writing workspace, revisions, and Story Canvas</h1>
-      <p class="meta"><strong>Status:</strong> tree + DAG UX accepted — autonomous feature implementation active<br>
+      <p class="meta"><strong>Status:</strong> UX 2.1 H1–H5 implemented and browser-verified — awaiting founder product verification before Playwright audit<br>
         <strong>Branch:</strong> <code>feat/authenticated-project-crud</code><br>
         <strong>Owner:</strong> founder + agent</p>
     </header>
@@ -22,6 +22,7 @@
       <p>This is one major epic and one branch, delivered as small vertical checkpoints. “CRUD” means explicit writer-domain commands with validation, authorization, conflict handling, and safe removal semantics—not arbitrary table endpoints, JSON Patch, hidden cascades, or transport logic that bypasses <code>packages/core</code>.</p>
       <p><strong>Founder-directed expansion (2026-07-12):</strong> checkpoint <code>a73d532</code> preserves the locally accepted identity and metadata kernel. Before opening its pull request, this same branch now also delivers the real writing loop from the living design: safe current-kernel CRUD closure, schema-versioned Tiptap scene bodies, server-acknowledged autosave, immutable checkpoints and variants, compare/restore history, minimal unacknowledged-work recovery, and Story Canvas state management over the same canonical scene and story IDs. Work proceeds in bounded vertical milestones with tests and truthful plan records after each slice.</p>
       <p><strong>Founder UX review (2026-07-12):</strong> the working milestone validates behavior but its form/card-heavy Project setup and scene metadata surfaces are rejected as the primary interaction model. The replacement proposal uses a persistent filesystem-like manuscript tree plus a directed relationship graph, layered chapter/scene drill navigation, Canvas workflow lenses, inspector-based edits, and per-action server-acknowledgement toasts. The interactive proposal and its delivery contract live in <a href="ux-proposal-filesystem-dag-nav.html">Story tree + relationship graph navigation</a>.</p>
+      <p><strong>Founder live review (2026-07-17 → accepted 2026-07-18):</strong> the accepted tree + DAG foundation is functional but still exposes capabilities as dense controls instead of coherent writer workflows. The <a href="ux-proposal-workspace-2-1.html">Build, Map, Write UX 2.1 supplement</a> and additive living-design section define Story Trail, Quick Build, Scene Launchpad, Canvas Workbench, Thread Trace, Draft Desk, Context Dock, and Focus Halo. The founder accepted the complete direction and authorized checkpoints H1–H5 on 2026-07-18.</p>
       <p><strong>Out of scope:</strong> passwords and additional identity providers; subscriptions; invitations and editor roles; comments, tracked suggestions, review requests, and real-time subscriptions/presence; same-scene multi-cursor editing and complete offline project replicas; AI/model calls and image generation; remote MCP canonical writes; import/export and account exit; irreversible authored-content purge; native freeform Canvas editing; and marketplace, publishing, rights, or studio systems. A minimal owner-only scene lease is in scope because ADR 0002 requires direct-edit protection.</p>
     </section>
 
@@ -67,6 +68,11 @@
         <li>Reader exposes scene-linked story/Canvas context through an optional rail. Inline passage links remain unavailable until a stable block-pin model is separately accepted; the UI does not fake anchors by text matching.</li>
         <li>Wide Split panes are resizable and preserve Draft mount, caret, and lease while both panes remain visible. Medium layout collapses the tree/inspector deliberately; narrow layout uses mode switching rather than split.</li>
         <li>Storyboard-first creation, write-first Canvas placement, tree scene move/reorder, plan-to-Draft, scene-to-Reader, and Reader return all preserve one scene ID, explicit manuscript authority, version preconditions, and acknowledged state.</li>
+        <li>Quick Build exposes one context-aware Add entry for valid book/part/chapter/scene/story-record actions, requires only a title for the common path, and returns focus to the acknowledged new tree row.</li>
+        <li>Empty chapters and Unassigned become Scene Launchpads with create, move-existing, storyboard, and next-scene actions instead of a blank work surface.</li>
+        <li>Canvas exposes a visible writer-facing tool dock, utility bar, staged creation/link flows, contextual selection actions, and an ordered equivalent. Geometry defaults are automatic; the manuscript spine remains canonical.</li>
+        <li>Draft presents a centered manuscript page, compact scene ribbon, contextual formatting toolbar, dismissible Context Dock, explicit History drawer, and Focus Halo without remounting Tiptap or releasing the editing lease.</li>
+        <li>Story Trail and every Draft/Canvas/Split/Reader handoff preserve canonical scene ID plus applicable tree expansion, drill scope, Canvas selection, editor caret/scroll, and return focus across wide, medium, narrow, and reduced-motion postures.</li>
       </ul>
     </section>
 
@@ -103,6 +109,8 @@
         <li>Use and iteratively improve <code>.cursor/skills/ghostwriter-autonomous-delivery/SKILL.md</code>; after every feature checkpoint run the cross-domain/design map, cumulative coherence review, documentation loop, verification ladder, and authorized checkpoint commit.</li>
         <li>Add a core Book Reader projection and batch scene-head repository reads, expose one bounded owner-authorized book-reader endpoint, register capability/MCP exception, and build bound-wide/continuous-narrow reader UI with exact scene handoff.</li>
         <li>Replace the fixed 50/50 Split with focus-preserving adjustable panes and an account/project ratio preference; complete storyboard-first, write-first, tree-move, plan-to-Draft, and Reader handoffs without changing canonical order implicitly.</li>
+        <li>Append the detailed, interactive <a href="ux-proposal-workspace-2-1.html">Build, Map, Write</a> proposal to the living design, including hierarchy creation, Canvas tools, Draft composition, responsive postures, required states, and review controls.</li>
+        <li>Deliver the accepted UX 2.1 direction as bounded checkpoints: H1 Story Trail + Quick Build; H2 Draft Desk; H3 Canvas Workbench; H4 handoffs + responsive/accessibility; H5 coherence and visual polish.</li>
       </ol>
     </section>
 
@@ -118,6 +126,7 @@
         <li><strong>Migration:</strong> migrate from an empty database and the current production-shaped schema; confirm existing fixture data does not become publicly accessible; exercise the PR Lakebase branch before merge.</li>
         <li><strong>Accessibility/responsiveness:</strong> keyboard and screen-reader smoke checks at approximately 1440 × 960 and 390 × 844 for sign-in, library, create, edit, conflict, archive, empty, loading, and error states.</li>
         <li><strong>Commands:</strong> targeted Vitest suites while iterating, then <code>pnpm verify</code>, production web export, Playwright (if accepted), migration checks, and changed-document link/structure validation before handoff.</li>
+        <li><strong>Browser-first acceptance sequence:</strong> H1–H5 use direct real-browser walkthroughs plus targeted automated checks while implementation is changing. Playwright authoring, repair, and the full suite wait until the founder verifies the complete planned product outcome; post-gate work audits existing journeys first and adds only the smallest durable acceptance coverage.</li>
         <li><strong>Editor schema:</strong> canonical JSON round trips, duplicate/missing block IDs, schema migration fixtures, split/join ID stability, paste sanitization, IME composition, selection, keyboard navigation, and representative large-scene performance.</li>
         <li><strong>Scene concurrency:</strong> owner authorization, acquire/renew/release/expiry, expected-head conflicts, two-tab refusal, acknowledgement ordering, no-op hash deduplication, and no partial revision effects.</li>
         <li><strong>History and recovery:</strong> immutable parent chains, attributable checkpoints, named variant heads, compare determinism, restore-as-new, crash recovery, acknowledgement cleanup, sign-out cleanup, expiry, and no offline-project claims.</li>
@@ -137,6 +146,7 @@
       <p>The scene editor/revision-history and Story Canvas specifications in <a href="follow-ups.html">follow-ups.html</a> are promoted into this active epic by founder direction. Create <code>docs/adr/0006-scene-documents-revisions-and-recovery.md</code> and <code>docs/adr/0007-story-canvas-spatial-state.md</code>; update ADR 0002/0004 references without rewriting their accepted decisions. Maintain <code>docs/API.md</code>, <code>docs/ARCHITECTURE.md</code>, <code>docs/PRODUCT.md</code>, operations, README, the active blueprint/roadmap, and the handoff as each milestone lands.</p>
       <p><strong>Autonomous feature sequence:</strong> <a href="feature-delivery-checkpoints.html">Tree, workflows, reader, split, and handoffs</a> records the skill-driven domain/design/binding/test maps, cumulative coherence gates, and authorized commit checkpoints.</p>
       <p><strong>Living design source:</strong> <a href="../../designs/Ghostwriter%20Mockups%202.0.html">Ghostwriter Mockups 2.0</a> remains the visual and interaction source for Draft, history, Canvas, split view, links, ghosts, imagery metadata, and the reading-order spine. The founder explicitly authorized an additive in-file proposal; existing screens and bundled assets remain unchanged, and the proposal is visibly marked noncanonical until accepted. Its legacy “No account required” and “Saved locally” labels still conflict with ADR 0002/0005 and must not enter production.</p>
+      <p><strong>UX 2.1 review source:</strong> <a href="ux-proposal-workspace-2-1.html">Build, Map, Write</a> translates the 2026-07-17 live project review into detailed visual and interaction requirements. It is a binding proposal only after founder acceptance. No new ADR is expected unless implementation adds canonical grouping, automatic Canvas-to-manuscript reorder, persisted layout beyond existing personal preferences, a timeline domain, or stable passage pins.</p>
     </section>
 
     <section>
@@ -160,6 +170,8 @@
         <li><strong>UX direction under review:</strong> tree structure remains canonical, DAG relationships remain interpretive, drill depth remains view state, and toasts remain acknowledgement UI. Persisted metadata undo or canonical drill scope would require a later architecture decision; this proposal does neither.</li>
         <li><strong>Accepted UX direction:</strong> on 2026-07-12 the founder accepted the persistent tree + DAG, layered drill, workflow-lens, narrow, and toast proposal and authorized implementation.</li>
         <li><strong>Reader boundary:</strong> v1 Reader uses acknowledged working heads and scene-level linked context. Stable inline passage pins and edition/project snapshot pinning require their own accepted model and must not be simulated with text matching.</li>
+        <li><strong>Accepted UX 2.1:</strong> Story Trail, Quick Build, Scene Launchpad, Canvas Workbench, Thread Trace, Draft Desk, Context Dock, and Focus Halo are approved for implementation. Progressive disclosure must improve usability without hiding save truth, authority, recovery, or keyboard parity.</li>
+        <li><strong>Accepted verification posture:</strong> direct browser walkthroughs are the implementation-loop product check. Playwright is a post-founder-verification acceptance layer, not a test-writing requirement for every checkpoint; the harness rejects premature Playwright mutation tasks.</li>
       </ul>
     </section>
 
@@ -203,6 +215,9 @@
         <li><input type="checkbox" disabled> Bound-wide/continuous-narrow Book Reader and exact return handoff complete</li>
         <li><input type="checkbox" disabled> Resizable focus-preserving Split and all scene handoffs complete</li>
         <li><input type="checkbox" disabled> Tree, drill, workflow, toast, and narrow browser journeys pass</li>
+        <li><input type="checkbox" checked disabled> Detailed Build · Map · Write UX 2.1 visual proposal complete and linked</li>
+        <li><input type="checkbox" checked disabled> Founder accepts hierarchy, Canvas toolset, and Draft Desk concepts</li>
+        <li><input type="checkbox" checked disabled> Accepted UX 2.1 checkpoints H1–H5 implemented and browser-verified (founder product verification + Playwright audit still open)</li>
         <li><input type="checkbox" disabled> Expanded docs, handoff, blueprint, and release evidence complete</li>
         <li><input type="checkbox" disabled> Plan archived after the full writer outcome passes</li>
       </ul>

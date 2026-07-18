@@ -2,13 +2,16 @@ import {
   accountId,
   bookId,
   canvasContentHash,
+  canvasLinkId,
   canvasObjectId,
   canvasRevisionId,
   chapterId,
+  partId,
   projectId,
   sceneId,
   storyKnowledgeId,
   type CanvasBoard,
+  type CanvasLink,
   type CanvasObject,
   type CanvasReadingOrderSpine,
   type CanvasRevisionMetadata,
@@ -18,14 +21,21 @@ import { describe, expect, it } from "vitest";
 import {
   availableCanvasStoryKnowledge,
   canonicalIndexForCanvasHandoff,
+  canvasCapturePosition,
   canvasCanonicalReferenceState,
+  canvasChapterAggregates,
   canvasFailureDisposition,
   canvasHistoryLabel,
   canvasPositionAfterDrag,
+  canvasSceneFocus,
   canvasScreenFrame,
+  canvasToolInstruction,
+  fitCanvasObjects,
   preferredCanvasSceneId,
   projectCanvasOutline,
-  visibleCanvasObjects
+  searchCanvasObjects,
+  visibleCanvasObjects,
+  type CanvasTool
 } from "./canvas-model.js";
 
 const project = projectId("project-canvas-model");
@@ -142,6 +152,40 @@ describe("Canvas presentation helpers", () => {
         100
       ).map((candidate) => candidate.id)
     ).toEqual([near.id, edge.id]);
+  });
+
+  it("places new captures in visible slots for wide and narrow Canvas panes", () => {
+    const viewport = { x: 100, y: 50, zoom: 1 };
+
+    expect(
+      [0, 1, 2, 3].map((index) =>
+        canvasCapturePosition(index, viewport, { width: 900, height: 580 })
+      )
+    ).toEqual([
+      { x: 148, y: 102 },
+      { x: 438, y: 102 },
+      { x: 728, y: 102 },
+      { x: 148, y: 292 }
+    ]);
+
+    const compactPosition = canvasCapturePosition(2, viewport, {
+      width: 230,
+      height: 580
+    });
+    const cascadedPosition = canvasCapturePosition(3, viewport, {
+      width: 230,
+      height: 580
+    });
+    expect(compactPosition).toEqual({ x: 148, y: 482 });
+    expect(cascadedPosition).toEqual({ x: 172, y: 126 });
+    expect(
+      visibleCanvasObjects(
+        [object("canvas-object-capture", compactPosition)],
+        viewport,
+        { width: 230, height: 580 },
+        0
+      )
+    ).toHaveLength(1);
   });
 
   it("projects scene cards in canonical Draft order with explicit states", () => {
@@ -302,5 +346,306 @@ describe("Canvas presentation helpers", () => {
     expect(canvasHistoryLabel({ ...revision, reason: "restore", commandType: undefined })).toBe(
       "Earlier snapshot restored"
     );
+  });
+
+  it("returns distinct writer-facing instructions for every Canvas tool", () => {
+    const tools: CanvasTool[] = [
+      "select",
+      "hand",
+      "scene",
+      "note",
+      "story",
+      "image",
+      "region",
+      "connect"
+    ];
+    const instructions = tools.map(canvasToolInstruction);
+
+    expect(new Set(instructions).size).toBe(tools.length);
+    expect(canvasToolInstruction("select")).toBe(
+      "Select a card, link, or region to reveal its common actions."
+    );
+    expect(canvasToolInstruction("connect")).toBe(
+      "Choose a source card, target, relationship kind, authority, and label."
+    );
+  });
+
+  it("fits visible objects with padding and clamps zoom, resetting on empty or invalid size", () => {
+    expect(fitCanvasObjects([], { width: 800, height: 600 })).toEqual({
+      x: 0,
+      y: 0,
+      zoom: 1
+    });
+    expect(fitCanvasObjects([{ x: 10, y: 20, width: 100, height: 80 }], { width: 0, height: 600 })).toEqual({
+      x: 0,
+      y: 0,
+      zoom: 1
+    });
+    expect(
+      fitCanvasObjects([{ x: 10, y: 20, width: 100, height: 80 }], { width: 800, height: -1 })
+    ).toEqual({ x: 0, y: 0, zoom: 1 });
+
+    expect(
+      fitCanvasObjects(
+        [
+          { x: 100, y: 100, width: 200, height: 100 },
+          { x: 400, y: 300, width: 100, height: 50 }
+        ],
+        { width: 800, height: 600 },
+        48
+      )
+    ).toEqual({ x: 73, y: 73, zoom: 1.76 });
+
+    expect(
+      fitCanvasObjects([{ x: 0, y: 0, width: 10_000, height: 10_000 }], { width: 800, height: 600 })
+    ).toEqual({ x: -137, y: -137, zoom: 0.35 });
+  });
+
+  it("searches active objects case-insensitively across label, note, and image text", () => {
+    const harborNote = object("canvas-object-search-note", {
+      label: "Dockside memo",
+      note: { body: "The harbor lights stay on after midnight." }
+    });
+    const coverImage = object("canvas-object-search-image", {
+      kind: "image-reference",
+      note: undefined,
+      label: "Cover reference",
+      image: {
+        altText: "Storm over the MARINA",
+        caption: "Chapter opener illustration"
+      }
+    });
+    const unrelated = object("canvas-object-search-unrelated", {
+      label: "Beat grid",
+      note: { body: "No match here" }
+    });
+    const objects = [harborNote, coverImage, unrelated];
+
+    expect(searchCanvasObjects(objects, "   ")).toEqual([]);
+    expect(searchCanvasObjects(objects, "marina").map((candidate) => candidate.id)).toEqual([
+      coverImage.id
+    ]);
+    expect(searchCanvasObjects(objects, "HARBOR").map((candidate) => candidate.id)).toEqual([
+      harborNote.id
+    ]);
+    expect(searchCanvasObjects(objects, "chapter opener").map((candidate) => candidate.id)).toEqual([
+      coverImage.id
+    ]);
+  });
+
+  it("aggregates chapters in canonical order and excludes archived or dismissed canvas state", () => {
+    const secondChapter = chapterId("chapter-canvas-model-second");
+    const thirdScene = sceneId("scene-canvas-model-third");
+    const aggregateProject: ProjectNavigator = {
+      ...navigator,
+      books: [
+        {
+          ...navigator.books[0]!,
+          parts: [
+            {
+              ...navigator.books[0]!.parts[0]!,
+              chapters: [
+                navigator.books[0]!.parts[0]!.chapters[0]!,
+                {
+                  id: secondChapter,
+                  title: "Crossing",
+                  scenes: [{ id: thirdScene, title: "River scene", status: "planned" }]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    };
+    const placedSceneCard = object("canvas-object-aggregate-scene", {
+      kind: "scene-card",
+      note: undefined,
+      sceneId: scene,
+      x: 40,
+      y: 60
+    });
+    const dismissedSceneCard = object("canvas-object-aggregate-dismissed", {
+      kind: "scene-card",
+      note: undefined,
+      sceneId: thirdScene,
+      dismissedAt: "2026-07-12T20:01:00.000Z"
+    });
+    const archivedSceneCard = object("canvas-object-aggregate-archived", {
+      kind: "scene-card",
+      note: undefined,
+      sceneId: thirdScene,
+      archivedAt: "2026-07-12T20:02:00.000Z"
+    });
+    const noteObject = object("canvas-object-aggregate-note", { x: 200, y: 80 });
+    const outboundTarget = object("canvas-object-aggregate-target", { x: 320, y: 80 });
+    const activeLink: CanvasLink = {
+      id: canvasLinkId("link-aggregate-active"),
+      projectId: project,
+      kind: "reference",
+      fromObjectId: placedSceneCard.id,
+      toObjectId: outboundTarget.id,
+      authority: "confirmed"
+    };
+    const archivedLink: CanvasLink = {
+      id: canvasLinkId("link-aggregate-archived"),
+      projectId: project,
+      kind: "beat",
+      fromObjectId: placedSceneCard.id,
+      toObjectId: noteObject.id,
+      authority: "confirmed",
+      archivedAt: "2026-07-12T20:03:00.000Z"
+    };
+    const board: CanvasBoard = {
+      projectId: project,
+      version: 5,
+      objects: [
+        placedSceneCard,
+        dismissedSceneCard,
+        archivedSceneCard,
+        noteObject,
+        outboundTarget
+      ],
+      links: [activeLink, archivedLink],
+      scopePlacements: [],
+      createdAt: "2026-07-12T19:00:00.000Z",
+      updatedAt: "2026-07-12T20:03:00.000Z"
+    };
+
+    expect(canvasChapterAggregates(aggregateProject, board)).toEqual([
+      {
+        bookId: book,
+        partId: partId("part-canvas-model"),
+        chapterId: chapter,
+        title: "Opening",
+        sceneCount: 1,
+        placedSceneCount: 1,
+        linkCount: 1
+      },
+      {
+        bookId: book,
+        partId: partId("part-canvas-model"),
+        chapterId: secondChapter,
+        title: "Crossing",
+        sceneCount: 1,
+        placedSceneCount: 0,
+        linkCount: 0
+      }
+    ]);
+  });
+
+  it("focuses an active scene card with link counts and omits missing scenes", () => {
+    const missingScene = sceneId("scene-canvas-model-missing");
+    const summaryScene = sceneId("scene-canvas-model-summary");
+    const focusProject: ProjectNavigator = {
+      ...navigator,
+      books: [
+        {
+          ...navigator.books[0]!,
+          unassignedScenes: [
+            {
+              id: summaryScene,
+              title: "Unassigned beat",
+              summary: "Bridge confrontation",
+              status: "drafting"
+            }
+          ]
+        }
+      ]
+    };
+    const placedCard = object("canvas-object-focus-placed", {
+      kind: "scene-card",
+      note: undefined,
+      sceneId: summaryScene,
+      x: 120,
+      y: 140
+    });
+    const inboundSource = object("canvas-object-focus-inbound", { x: 40, y: 140 });
+    const outboundTarget = object("canvas-object-focus-outbound", { x: 260, y: 140 });
+    const inboundLink: CanvasLink = {
+      id: canvasLinkId("link-focus-inbound"),
+      projectId: project,
+      kind: "dependency",
+      fromObjectId: inboundSource.id,
+      toObjectId: placedCard.id,
+      authority: "confirmed"
+    };
+    const outboundLink: CanvasLink = {
+      id: canvasLinkId("link-focus-outbound"),
+      projectId: project,
+      kind: "reference",
+      fromObjectId: placedCard.id,
+      toObjectId: outboundTarget.id,
+      authority: "confirmed"
+    };
+    const archivedInboundLink: CanvasLink = {
+      id: canvasLinkId("link-focus-archived"),
+      projectId: project,
+      kind: "beat",
+      fromObjectId: inboundSource.id,
+      toObjectId: placedCard.id,
+      authority: "confirmed",
+      archivedAt: "2026-07-12T20:04:00.000Z"
+    };
+    const board: CanvasBoard = {
+      projectId: project,
+      version: 6,
+      objects: [placedCard, inboundSource, outboundTarget],
+      links: [inboundLink, outboundLink, archivedInboundLink],
+      scopePlacements: [],
+      createdAt: "2026-07-12T19:00:00.000Z",
+      updatedAt: "2026-07-12T20:04:00.000Z"
+    };
+
+    expect(canvasSceneFocus(focusProject, board, missingScene)).toBeUndefined();
+    expect(canvasSceneFocus(focusProject, board, scene)).toEqual({
+      sceneId: scene,
+      title: "First scene",
+      placed: false,
+      inboundLinks: 0,
+      outboundLinks: 0
+    });
+    expect(canvasSceneFocus(focusProject, board, summaryScene)).toEqual({
+      sceneId: summaryScene,
+      title: "Unassigned beat",
+      summary: "Bridge confrontation",
+      placed: true,
+      inboundLinks: 1,
+      outboundLinks: 1
+    });
+  });
+
+  it("leaves manuscript order and board arrays untouched while deriving aggregates and focus", () => {
+    const aggregateBoard: CanvasBoard = {
+      projectId: project,
+      version: 7,
+      objects: [
+        object("canvas-object-immutable-scene", {
+          kind: "scene-card",
+          note: undefined,
+          sceneId: scene
+        })
+      ],
+      links: [],
+      scopePlacements: [],
+      createdAt: "2026-07-12T19:00:00.000Z",
+      updatedAt: "2026-07-12T20:05:00.000Z"
+    };
+    const booksBefore = structuredClone(navigator.books);
+    const objectsRef = aggregateBoard.objects;
+    const linksRef = aggregateBoard.links;
+    const objectsBefore = [...aggregateBoard.objects];
+    const linksBefore = [...aggregateBoard.links];
+
+    canvasChapterAggregates(navigator, aggregateBoard);
+    canvasSceneFocus(navigator, aggregateBoard, scene);
+    searchCanvasObjects(aggregateBoard.objects, "scene");
+    fitCanvasObjects(aggregateBoard.objects, { width: 800, height: 600 });
+    canvasToolInstruction("select");
+
+    expect(navigator.books).toEqual(booksBefore);
+    expect(aggregateBoard.objects).toBe(objectsRef);
+    expect(aggregateBoard.links).toBe(linksRef);
+    expect(aggregateBoard.objects).toEqual(objectsBefore);
+    expect(aggregateBoard.links).toEqual(linksBefore);
   });
 });

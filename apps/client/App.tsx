@@ -44,6 +44,10 @@ import {
   type DraftProblemEvent
 } from "./src/DraftPanel.js";
 import {
+  draftDeskSceneContext,
+  projectScenes
+} from "./src/draft-desk.js";
+import {
   StoryCanvasPanel,
   type CanvasPanelMessage
 } from "./src/StoryCanvasPanel.js";
@@ -98,6 +102,8 @@ type ReaderReturnState = Readonly<{
   workspaceMode: ProjectWorkspaceMode;
   selectedSceneId?: SceneId;
   selectedCanvasObjectId?: CanvasObjectId;
+  drillStack: CanvasDrillStack;
+  workflowLens: CanvasWorkflowLens;
 }>;
 
 function bookIdForScene(
@@ -124,18 +130,7 @@ function returnUrl(): string {
 }
 
 function projectSceneIds(project: ProjectNavigator): readonly SceneId[] {
-  return project.books.flatMap((book) => [
-    ...book.parts.flatMap((part) =>
-      part.chapters.flatMap((chapter) =>
-        chapter.scenes.map((scene) => scene.id)
-      )
-    ),
-    ...book.unassignedScenes.map((scene) => scene.id)
-  ]);
-}
-
-function firstProjectSceneId(project: ProjectNavigator): SceneId | undefined {
-  return projectSceneIds(project)[0];
+  return projectScenes(project).map((scene) => scene.id);
 }
 
 export default function App() {
@@ -189,6 +184,7 @@ export default function App() {
   const [readerProjection, setReaderProjection] = useState<BookReaderResponse>();
   const [readerLoading, setReaderLoading] = useState(false);
   const [readerError, setReaderError] = useState<string>();
+  const [readerVoiceError, setReaderVoiceError] = useState<string>();
   const [readerVoicePack, setReaderVoicePack] =
     useState<ReaderVoicePack>("default");
   const [readerSpeaking, setReaderSpeaking] = useState(false);
@@ -397,7 +393,7 @@ export default function App() {
       clearAcknowledgements();
       setSelectedProject(opened);
       selectedProjectRef.current = opened;
-      setSelectedSceneId(firstProjectSceneId(opened));
+      setSelectedSceneId(undefined);
       setWorkspaceMode("draft");
       setDrillStack(initialDrillStack());
       setWorkflowLens("outline");
@@ -431,7 +427,7 @@ export default function App() {
       setSelectedSceneId((current) =>
         current !== undefined && sceneIds.includes(current)
           ? current
-          : sceneIds[0]
+          : undefined
       );
       if (draftIsVisible) {
         setDraftMountVersion((version) => version + 1);
@@ -461,7 +457,7 @@ export default function App() {
       clearAcknowledgements();
       setSelectedProject(created);
       selectedProjectRef.current = created;
-      setSelectedSceneId(firstProjectSceneId(created));
+      setSelectedSceneId(undefined);
       setWorkspaceMode("draft");
       setDrillStack(initialDrillStack());
       setWorkflowLens("outline");
@@ -780,6 +776,7 @@ export default function App() {
     await prepareCurrentDraftForExit();
     setReaderProjection(undefined);
     setReaderError(undefined);
+    setReaderVoiceError(undefined);
     setReaderLoading(false);
     readerReturnStateRef.current = undefined;
     setSelectedSceneId(undefined);
@@ -991,9 +988,12 @@ export default function App() {
     readerReturnStateRef.current = {
       workspaceMode,
       selectedSceneId,
-      selectedCanvasObjectId
+      selectedCanvasObjectId,
+      drillStack,
+      workflowLens
     };
     setReaderError(undefined);
+    setReaderVoiceError(undefined);
     setReaderLoading(true);
     try {
       const projection = await getBookReader({
@@ -1021,11 +1021,14 @@ export default function App() {
     setReaderSpeaking(false);
     setReaderProjection(undefined);
     setReaderError(undefined);
+    setReaderVoiceError(undefined);
     setReaderLoading(false);
     if (restore === undefined) return;
     setWorkspaceMode(restore.workspaceMode);
     setSelectedSceneId(restore.selectedSceneId);
     setSelectedCanvasObjectId(restore.selectedCanvasObjectId);
+    setDrillStack(restore.drillStack);
+    setWorkflowLens(restore.workflowLens);
     readerReturnStateRef.current = undefined;
   }
 
@@ -1036,6 +1039,7 @@ export default function App() {
     readerAudioRef.current?.pause();
     readerAudioRef.current = null;
     setReaderSpeaking(true);
+    setReaderVoiceError(undefined);
     try {
       const speech = await synthesizeReaderSpeech({ text, voice: voicePack });
       if (typeof Audio === "undefined") {
@@ -1053,7 +1057,7 @@ export default function App() {
       await audio.play();
     } catch (cause) {
       setReaderSpeaking(false);
-      setReaderError(
+      setReaderVoiceError(
         cause instanceof GhostwriterApiError
           ? cause.message
           : "Ghostwriter could not speak this passage."
@@ -1537,6 +1541,7 @@ export default function App() {
           onVoicePackChange={setReaderVoicePack}
           projection={readerProjection}
           speaking={readerSpeaking}
+          voiceError={readerVoiceError}
           voicePack={readerVoicePack}
         />
       );
@@ -1610,6 +1615,18 @@ export default function App() {
             }
             onRestoreRevision={restoreCanvasSnapshot}
             onSelectObject={setSelectedCanvasObjectId}
+            onOpenDraft={(sceneId) => {
+              void (async () => {
+                await selectWorkspaceScene(sceneId);
+                await changeWorkspaceMode("draft");
+              })();
+            }}
+            onOpenSplit={(sceneId) => {
+              void (async () => {
+                await selectWorkspaceScene(sceneId);
+                await changeWorkspaceMode("split");
+              })();
+            }}
             onSelectScene={(sceneId) => void selectWorkspaceScene(sceneId)}
             onUndo={undoLatestCanvasCommand}
             preference={canvasPreference}
@@ -1621,23 +1638,49 @@ export default function App() {
             workspace={canvasWorkspace}
           />
         }
-        renderDraft={(scene) =>
-          scene === undefined ? null : (
+        renderDraft={(scene, presentation) => {
+          if (scene === undefined) return null;
+          const context = draftDeskSceneContext(selectedProject, scene.id);
+          const nextSceneId = context.nextScene?.id;
+          const previousSceneId = context.previousScene?.id;
+          return (
             <DraftPanel
               accountId={writer.account.id}
+              contextDockOpen={presentation.contextDockOpen}
+              focusHalo={presentation.focusHalo}
+              historyOpen={presentation.historyOpen}
               key={`${scene.id}:${draftMountVersion}`}
+              nextSceneTitle={context.nextScene?.title}
               onAcknowledgement={handleDraftAcknowledgement}
               onActivityChange={setDraftActivity}
+              onContextDockOpenChange={presentation.onContextDockOpenChange}
+              onFocusHaloChange={presentation.onFocusHaloChange}
+              onHistoryOpenChange={presentation.onHistoryOpenChange}
+              onNextScene={
+                nextSceneId === undefined
+                  ? undefined
+                  : () => void selectWorkspaceScene(nextSceneId)
+              }
+              onPreviousScene={
+                previousSceneId === undefined
+                  ? undefined
+                  : () => void selectWorkspaceScene(previousSceneId)
+              }
               onProblem={handleDraftProblem}
               onProblemResolved={dismissToast}
+              povLabel={context.povLabel}
+              previousSceneTitle={context.previousScene?.title}
               projectId={selectedProject.id}
               readOnly={scene.archivedAt !== undefined}
               ref={draftPanelRef}
               sceneId={scene.id}
+              scenePosition={context.positionLabel}
+              sceneStatus={scene.status}
+              sceneSummary={scene.summary}
               sceneTitle={scene.title}
             />
-          )
-        }
+          );
+        }}
         selectedSceneId={selectedSceneId}
         toasts={toasts}
         workflowLens={workflowLens}

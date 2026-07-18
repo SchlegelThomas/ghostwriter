@@ -56,15 +56,22 @@ import type {
 } from "./api.js";
 import {
   availableCanvasStoryKnowledge,
+  canvasChapterAggregates,
   canonicalIndexForCanvasHandoff,
+  canvasCapturePosition,
   canvasCanonicalReferenceState,
   canvasDriftLabel,
   canvasHistoryLabel,
   canvasPositionAfterDrag,
+  canvasSceneFocus,
   canvasScreenFrame,
+  canvasToolInstruction,
   clampCanvasZoom,
+  fitCanvasObjects,
   projectCanvasOutline,
+  searchCanvasObjects,
   visibleCanvasObjects,
+  type CanvasTool,
   type CanvasViewport,
   type CanvasViewportSize
 } from "./canvas-model.js";
@@ -135,6 +142,8 @@ export type StoryCanvasPanelProps = Readonly<{
   onRestoreRevision(revisionId: CanvasRevisionId): Promise<boolean>;
   onSelectObject(objectId: CanvasObjectId | undefined): void;
   onSelectScene(sceneId: SceneId): void;
+  onOpenDraft?(sceneId: SceneId): void;
+  onOpenSplit?(sceneId: SceneId): void;
   onUndo(): Promise<void>;
   drillStack?: CanvasDrillStack;
   workflowLens?: CanvasWorkflowLens;
@@ -652,13 +661,16 @@ export function StoryCanvasPanel({
   onRestoreRevision,
   onSelectObject,
   onSelectScene,
+  onOpenDraft = () => undefined,
+  onOpenSplit = () => undefined,
   onUndo,
   drillStack = [{ kind: "project" }],
   workflowLens = "outline",
   onDrillIntoChapter = () => undefined,
   onDrillIntoScene = () => undefined
 }: StoryCanvasPanelProps) {
-  const compact = useWindowDimensions().width < 720;
+  // Match workspace narrow breakpoint so ordered Canvas and shell modes agree.
+  const compact = useWindowDimensions().width < 760;
   const [view, setView] = useState<CanvasView>(compact ? "outline" : "spatial");
   const [viewport, setViewport] = useState<CanvasViewport>({
     x: 0,
@@ -670,6 +682,8 @@ export function StoryCanvasPanel({
     height: 560
   });
   const [showInspector, setShowInspector] = useState(!compact);
+  const [activeTool, setActiveTool] = useState<CanvasTool>("select");
+  const [searchQuery, setSearchQuery] = useState("");
   const [showSceneForm, setShowSceneForm] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [objectLabel, setObjectLabel] = useState("");
@@ -753,12 +767,40 @@ export function StoryCanvasPanel({
     board === undefined || workspace === undefined
       ? []
       : projectCanvasOutline(board, workspace.spine);
-  const visibleObjects =
+  const projectedObjectIds = new Set(
+    projectedObjects.map((object) => object.id)
+  );
+  const orderedOutline = outline.filter(
+    (item) =>
+      projectedObjectIds.has(item.object.id) ||
+      (drillScope.kind === "project" && item.object.archivedAt !== undefined)
+  );
+  const searchResults =
+    board === undefined ? [] : searchCanvasObjects(board.objects, searchQuery);
+  const chapterAggregates =
+    board === undefined || drillScope.kind !== "project"
+      ? []
+      : canvasChapterAggregates(project, board);
+  const sceneFocus =
+    board === undefined || drillScope.kind !== "scene"
+      ? undefined
+      : canvasSceneFocus(project, board, drillScope.sceneId);
+  const culledVisibleObjects =
     board === undefined
       ? []
-      : [...visibleCanvasObjects(projectedObjects, viewport, surfaceSize)].sort(
-          (left, right) => left.z - right.z
-        );
+      : visibleCanvasObjects(projectedObjects, viewport, surfaceSize);
+  const selectedVisibleObject =
+    selectedObjectDisplay !== undefined &&
+    projectedObjects.some((object) => object.id === selectedObjectDisplay.id) &&
+    !culledVisibleObjects.some(
+      (object) => object.id === selectedObjectDisplay.id
+    )
+      ? selectedObjectDisplay
+      : undefined;
+  const visibleObjects = [
+    ...culledVisibleObjects,
+    ...(selectedVisibleObject === undefined ? [] : [selectedVisibleObject])
+  ].sort((left, right) => left.z - right.z);
   const chapterOverlays =
     board === undefined || drillScope.kind !== "project"
       ? []
@@ -811,6 +853,44 @@ export function StoryCanvasPanel({
       setShowInspector(false);
     }
   }, [compact]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const chooseTool = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      ) {
+        return;
+      }
+      const toolByKey: Readonly<Record<string, CanvasTool | undefined>> = {
+        v: "select",
+        h: "hand",
+        s: "scene",
+        n: "note",
+        k: "story",
+        i: "image",
+        r: "region",
+        l: "connect"
+      };
+      if (event.key === "Escape") {
+        setActiveTool("select");
+        setShowSceneForm(false);
+        return;
+      }
+      const tool = toolByKey[event.key.toLocaleLowerCase()];
+      if (tool === undefined) return;
+      event.preventDefault();
+      activateTool(tool);
+    };
+    document.addEventListener("keydown", chooseTool);
+    return () => document.removeEventListener("keydown", chooseTool);
+  });
 
   useEffect(() => {
     if (workflowLens === "review") {
@@ -936,11 +1016,11 @@ export function StoryCanvasPanel({
   }, [priorCanvasSnapshots, selectedHistoryRevisionId]);
 
   function defaultPosition(offset = 0): Readonly<{ x: number; y: number }> {
-    const index = activeObjects.length + offset;
-    return {
-      x: Math.round(viewport.x + 48 + (index % 3) * 290),
-      y: Math.round(viewport.y + 52 + (Math.floor(index / 3) % 4) * 190)
-    };
+    return canvasCapturePosition(
+      activeObjects.length + offset,
+      viewport,
+      surfaceSize
+    );
   }
 
   async function sendCommand(command: CanvasCommand): Promise<void> {
@@ -1004,6 +1084,41 @@ export function StoryCanvasPanel({
         ? { selectedObjectId: null }
         : { selectedObjectId })
     });
+  }
+
+  function activateTool(tool: CanvasTool): void {
+    setActiveTool(tool);
+    if (tool !== "scene") setShowSceneForm(false);
+    switch (tool) {
+      case "scene":
+        setShowSceneForm(true);
+        break;
+      case "note":
+        createNote();
+        break;
+      case "story":
+        break;
+      case "image":
+        createImagePlaceholder();
+        break;
+      case "region":
+        createRegion();
+        break;
+      case "connect":
+        setShowInspector(true);
+        break;
+      case "select":
+      case "hand":
+        break;
+    }
+  }
+
+  function jumpToObject(object: CanvasObject): void {
+    selectObject(object);
+    setView(compact ? "outline" : "spatial");
+    changeViewport(
+      fitCanvasObjects([withResolvedGeometry(object, scopePlacements, drillScope)], surfaceSize)
+    );
   }
 
   function createNote(): void {
@@ -1967,8 +2082,33 @@ export function StoryCanvasPanel({
         </View>
       )}
 
-      <View style={styles.toolbar}>
-        <View style={styles.toolbarGroup}>
+      <View accessibilityLabel="Canvas Workbench" style={styles.workbench}>
+        <View accessibilityLabel="Canvas tool dock" style={styles.toolDock}>
+          {(
+            [
+              ["select", "Select", "V"],
+              ["hand", "Hand", "H"],
+              ["scene", "Scene", "S"],
+              ["note", "Note", "N"],
+              ["story", "Story record", "K"],
+              ["image", "Image reference", "I"],
+              ["region", "Region", "R"],
+              ["connect", "Connect", "L"]
+            ] as const
+          ).map(([tool, label, shortcut]) => (
+            <CanvasButton
+              disabled={busy || (compact && (tool === "hand" || tool === "region"))}
+              key={tool}
+              label={`${label} (${shortcut})`}
+              onPress={() => activateTool(tool)}
+              selected={activeTool === tool}
+            />
+          ))}
+        </View>
+        <Text accessibilityLiveRegion="polite" style={styles.toolInstruction}>
+          {canvasToolInstruction(activeTool)}
+        </Text>
+        <View accessibilityLabel="Canvas utility bar" style={styles.utilityBar}>
           {!compact ? (
             <>
               <CanvasButton
@@ -1981,21 +2121,51 @@ export function StoryCanvasPanel({
                 onPress={() => setView("outline")}
                 selected={view === "outline"}
               />
-              <CanvasButton
-                disabled={busy || selectedObject === undefined}
-                label="Link objects"
-                onPress={() => {
-                  if (selectedObject === undefined) return;
-                  setShowInspector(true);
-                }}
-                primary={selectedObject !== undefined}
-              />
             </>
           ) : (
             <Text style={styles.narrowPosture}>
               Ordered review mode · freeform drag stays on wide web
             </Text>
           )}
+          <View style={styles.searchBox}>
+            <TextInput
+              accessibilityLabel="Search or jump on Canvas"
+              onChangeText={setSearchQuery}
+              placeholder="Search or jump"
+              placeholderTextColor={colors.muted}
+              style={styles.searchInput}
+              value={searchQuery}
+            />
+            {searchResults.length === 0 ? null : (
+              <View accessibilityLabel="Canvas search results" style={styles.searchResults}>
+                {searchResults.slice(0, 8).map((object) => (
+                  <CanvasButton
+                    key={object.id}
+                    label={`Jump to ${object.label}`}
+                    onPress={() => jumpToObject(object)}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+          <CanvasButton
+            disabled={projectedObjects.length === 0}
+            label="Fit board"
+            onPress={() =>
+              changeViewport(fitCanvasObjects(projectedObjects, surfaceSize))
+            }
+          />
+          <CanvasButton
+            disabled={selectedObjectDisplay === undefined}
+            label="Fit selection"
+            onPress={() => {
+              if (selectedObjectDisplay !== undefined) {
+                changeViewport(
+                  fitCanvasObjects([selectedObjectDisplay], surfaceSize)
+                );
+              }
+            }}
+          />
           <CanvasButton
             disabled={busy || board === undefined || board.version <= 1}
             label="Undo Canvas command"
@@ -2011,49 +2181,75 @@ export function StoryCanvasPanel({
             selected={showHistory}
           />
           <CanvasButton
-            label={showInspector ? "Hide inspector" : "Show inspector"}
+            label={showInspector ? "Hide Details" : "Show Details"}
             onPress={() => setShowInspector(!showInspector)}
-          />
-        </View>
-        <View style={styles.toolbarGroup}>
-          <CanvasButton
-            disabled={
-              busy || selectedScene === undefined || activeSceneCard !== undefined
-            }
-            label={
-              activeSceneCard === undefined
-                ? "Place selected Draft scene"
-                : "Selected scene is placed"
-            }
-            onPress={placeSelectedScene}
-          />
-          <CanvasButton disabled={busy} label="Create note" onPress={createNote} />
-          <CanvasButton
-            disabled={busy}
-            label="Create region"
-            onPress={createRegion}
-          />
-          <CanvasButton
-            disabled={busy}
-            label="Add image metadata"
-            onPress={createImagePlaceholder}
           />
           <CanvasButton
             disabled={busy || hasProvisionalBeat}
             label={
               hasProvisionalBeat
-                ? "Provisional beat fixture reviewed"
-                : "Add provisional beat fixture"
+                ? "Review fixture added"
+                : "Add provisional review fixture"
             }
             onPress={createProvisionalBeat}
           />
-          <CanvasButton
-            label={showSceneForm ? "Close scene handoff" : "Storyboard a scene"}
-            onPress={() => setShowSceneForm(!showSceneForm)}
-            primary
-          />
         </View>
       </View>
+
+      {selectedObject === undefined ? null : (
+        <View
+          accessibilityLabel="Canvas selection actions"
+          style={styles.selectionBar}
+        >
+          <Text numberOfLines={1} style={styles.selectionBarTitle}>
+            {selectedObject.label}
+          </Text>
+          {selectedObject.sceneId === undefined ? null : (
+            <CanvasButton
+              label="Open Draft"
+              onPress={() => {
+                if (selectedObject.sceneId !== undefined) {
+                  onOpenDraft(selectedObject.sceneId);
+                }
+              }}
+              primary
+            />
+          )}
+          <CanvasButton
+            label="Link"
+            onPress={() => {
+              setActiveTool("connect");
+              setShowInspector(true);
+            }}
+          />
+          <CanvasButton
+            disabled={busy || selectedObject.archivedAt !== undefined}
+            label="Bring forward"
+            onPress={() =>
+              void sendCommand({
+                type: "canvas.object.update",
+                objectId: selectedObject.id,
+                changes: { z: maxZ + 1 }
+              })
+            }
+          />
+          <CanvasButton
+            disabled={busy || selectedObject.archivedAt !== undefined}
+            label="Send backward"
+            onPress={() =>
+              void sendCommand({
+                type: "canvas.object.update",
+                objectId: selectedObject.id,
+                changes: { z: minZ - 1 }
+              })
+            }
+          />
+          <CanvasButton
+            label="Details"
+            onPress={() => setShowInspector(true)}
+          />
+        </View>
+      )}
 
       {showHistory ? (
         <View accessibilityLabel="Canvas history" style={styles.historyPanel}>
@@ -2142,10 +2338,11 @@ export function StoryCanvasPanel({
         </View>
       ) : null}
 
-      <View
-        accessibilityLabel="Story knowledge placement"
-        style={styles.knowledgePlacement}
-      >
+      {activeTool === "story" ? (
+        <View
+          accessibilityLabel="Story knowledge placement"
+          style={styles.knowledgePlacement}
+        >
         <View style={styles.knowledgePlacementHeading}>
           <View style={styles.headingCopy}>
             <Text style={styles.knowledgePlacementEyebrow}>Canonical story knowledge</Text>
@@ -2188,7 +2385,8 @@ export function StoryCanvasPanel({
             />
           </>
         )}
-      </View>
+        </View>
+      ) : null}
 
       {showSceneForm ? (
         <View accessibilityLabel="Storyboard scene handoff" style={styles.sceneForm}>
@@ -2202,6 +2400,26 @@ export function StoryCanvasPanel({
             <Text style={styles.sceneFormRule}>
               One acknowledged transaction; no partial scene card.
             </Text>
+          </View>
+          <View style={styles.actionRow}>
+            <CanvasButton
+              disabled={
+                busy || selectedScene === undefined || activeSceneCard !== undefined
+              }
+              label={
+                activeSceneCard === undefined
+                  ? "Place selected Draft scene"
+                  : "Selected scene is placed"
+              }
+              onPress={placeSelectedScene}
+            />
+            <CanvasButton
+              label="Cancel scene tool"
+              onPress={() => {
+                setShowSceneForm(false);
+                setActiveTool("select");
+              }}
+            />
           </View>
           <Field
             disabled={busy}
@@ -2294,6 +2512,78 @@ export function StoryCanvasPanel({
           />
         </View>
       ) : null}
+
+      {chapterAggregates.length === 0 ? null : (
+        <View
+          accessibilityLabel="Canvas Chapter Aggregates"
+          style={styles.aggregateGrid}
+        >
+          {chapterAggregates.map((aggregate) => (
+            <Pressable
+              accessibilityLabel={`Enter chapter aggregate ${aggregate.title}`}
+              accessibilityRole="button"
+              key={aggregate.chapterId}
+              onPress={() =>
+                onDrillIntoChapter({
+                  kind: "chapter",
+                  bookId: aggregate.bookId,
+                  partId: aggregate.partId,
+                  chapterId: aggregate.chapterId
+                })
+              }
+              style={({ pressed }) => [
+                styles.aggregateCard,
+                pressed && styles.pressed
+              ]}
+            >
+              <Text style={styles.aggregateEyebrow}>Chapter aggregate</Text>
+              <Text style={styles.aggregateTitle}>{aggregate.title}</Text>
+              <Text style={styles.aggregateMeta}>
+                {aggregate.sceneCount} scenes · {aggregate.placedSceneCount} placed
+                · {aggregate.linkCount} links
+              </Text>
+              <Text style={styles.aggregateAction}>Dive into chapter →</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
+      {sceneFocus === undefined ? null : (
+        <View accessibilityLabel="Canvas Scene Focus Stage" style={styles.focusStage}>
+          <View style={styles.headingCopy}>
+            <Text style={styles.focusStageEyebrow}>Scene Focus Stage</Text>
+            <Text style={styles.focusStageTitle}>{sceneFocus.title}</Text>
+            <Text style={styles.focusStageSummary}>
+              {sceneFocus.summary ??
+                "No scene brief yet. Open Draft to shape the acknowledged prose."}
+            </Text>
+            <Text style={styles.focusStageMeta}>
+              {sceneFocus.placed ? "Placed on Canvas" : "Not placed"} ·{" "}
+              {sceneFocus.inboundLinks} inbound · {sceneFocus.outboundLinks} outbound
+            </Text>
+          </View>
+          <View style={styles.actionRow}>
+            <CanvasButton
+              label="Open Draft"
+              onPress={() => onOpenDraft(sceneFocus.sceneId)}
+              primary
+            />
+            {!compact ? (
+              <CanvasButton
+                label="Open Split"
+                onPress={() => onOpenSplit(sceneFocus.sceneId)}
+              />
+            ) : null}
+            <CanvasButton
+              label="Open Canvas History"
+              onPress={() => {
+                setShowHistory(true);
+                void onLoadHistory();
+              }}
+            />
+          </View>
+        </View>
+      )}
 
       {board !== undefined && board.objects.length >= 500 ? (
         <View style={styles.largeBoardNotice}>
@@ -2392,8 +2682,32 @@ export function StoryCanvasPanel({
                     </View>
                     <Text style={styles.viewportSummary}>
                       {cameraTransitioning
-                        ? "Moving into scope…"
+                        ? "Opening this scope…"
                         : `Showing ${visibleObjects.length} of ${projectedObjects.length} scoped objects`}
+                    </Text>
+                  </View>
+                  <View accessibilityLabel="Canvas minimap" style={styles.minimap}>
+                    <Text style={styles.minimapLabel}>Board overview</Text>
+                    <View style={styles.minimapTrack}>
+                      <View
+                        style={[
+                          styles.minimapViewport,
+                          {
+                            width: `${Math.max(
+                              16,
+                              Math.min(
+                                100,
+                                (visibleObjects.length /
+                                  Math.max(1, projectedObjects.length)) *
+                                  100
+                              )
+                            )}%`
+                          }
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.minimapMeta}>
+                      {projectedObjects.length} scoped objects
                     </Text>
                   </View>
                   <View
@@ -2516,11 +2830,7 @@ export function StoryCanvasPanel({
                       resize, link, archive, confirm, or dismiss it.
                     </Text>
                   </View>
-                  {outline.filter((item) =>
-                    projectedObjects.some(
-                      (object) => object.id === item.object.id
-                    )
-                  ).length === 0 ? (
+                  {orderedOutline.length === 0 ? (
                     <View style={styles.outlineEmpty}>
                       <Text style={styles.emptyTitle}>Nothing placed yet</Text>
                       <Text style={styles.emptyText}>
@@ -2530,13 +2840,7 @@ export function StoryCanvasPanel({
                     </View>
                   ) : (
                     <View style={styles.outlineList}>
-                      {outline
-                        .filter((item) =>
-                          projectedObjects.some(
-                            (object) => object.id === item.object.id
-                          )
-                        )
-                        .map((item, index) => {
+                      {orderedOutline.map((item, index) => {
                         const canonicalState = canvasCanonicalReferenceState(
                           item.object,
                           project
@@ -2725,6 +3029,86 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6
+  },
+  workbench: {
+    backgroundColor: colors.topbar,
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+    gap: 7,
+    padding: 9
+  },
+  toolDock: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 5
+  },
+  toolInstruction: {
+    color: colors.accent,
+    fontFamily: fonts.uiMedium,
+    fontSize: 8,
+    lineHeight: 13
+  },
+  utilityBar: {
+    alignItems: "center",
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 5,
+    paddingTop: 7
+  },
+  searchBox: {
+    minWidth: 180,
+    position: "relative",
+    zIndex: 20
+  },
+  searchInput: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 6,
+    borderWidth: 1,
+    color: colors.ink,
+    fontFamily: fonts.ui,
+    fontSize: 9,
+    minHeight: 34,
+    paddingHorizontal: 9,
+    paddingVertical: 6
+  },
+  searchResults: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 7,
+    borderWidth: 1,
+    elevation: 5,
+    gap: 3,
+    left: 0,
+    minWidth: 220,
+    padding: 5,
+    position: "absolute",
+    shadowColor: "#1d150f",
+    shadowOffset: { height: 5, width: 0 },
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    top: 38,
+    zIndex: 30
+  },
+  selectionBar: {
+    alignItems: "center",
+    backgroundColor: colors.accentSoft,
+    borderBottomColor: colors.accent,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 5,
+    padding: 8
+  },
+  selectionBarTitle: {
+    color: colors.ink,
+    flexGrow: 1,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 9,
+    minWidth: 120
   },
   button: {
     alignItems: "center",
@@ -2976,6 +3360,87 @@ const styles = StyleSheet.create({
     gap: 8,
     minWidth: 0
   },
+  aggregateGrid: {
+    backgroundColor: colors.wash,
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    padding: 10
+  },
+  aggregateCard: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 9,
+    borderWidth: 1,
+    flexGrow: 1,
+    minWidth: 190,
+    padding: 10
+  },
+  aggregateEyebrow: {
+    color: colors.kicker,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 7,
+    letterSpacing: 1.1,
+    textTransform: "uppercase"
+  },
+  aggregateTitle: {
+    color: colors.ink,
+    fontFamily: fonts.story,
+    fontSize: 19,
+    marginTop: 2
+  },
+  aggregateMeta: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 8,
+    marginTop: 3
+  },
+  aggregateAction: {
+    color: colors.accent,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 8,
+    marginTop: 7
+  },
+  focusStage: {
+    alignItems: "flex-start",
+    backgroundColor: colors.paper,
+    borderBottomColor: colors.accent,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    justifyContent: "space-between",
+    padding: 13
+  },
+  focusStageEyebrow: {
+    color: colors.kicker,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 7,
+    letterSpacing: 1.2,
+    textTransform: "uppercase"
+  },
+  focusStageTitle: {
+    color: colors.ink,
+    fontFamily: fonts.story,
+    fontSize: 24,
+    marginTop: 2
+  },
+  focusStageSummary: {
+    color: colors.muted,
+    fontFamily: fonts.storyItalic,
+    fontSize: 10,
+    lineHeight: 15,
+    marginTop: 3,
+    maxWidth: 560
+  },
+  focusStageMeta: {
+    color: colors.accent,
+    fontFamily: fonts.uiMedium,
+    fontSize: 8,
+    marginTop: 5
+  },
   largeBoardNotice: {
     backgroundColor: colors.blueSoft,
     borderBottomColor: colors.blue,
@@ -3040,6 +3505,39 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontFamily: fonts.ui,
     fontSize: 8
+  },
+  minimap: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: 7,
+    paddingHorizontal: 9,
+    paddingVertical: 5
+  },
+  minimapLabel: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 7
+  },
+  minimapTrack: {
+    backgroundColor: colors.line,
+    borderRadius: 99,
+    flex: 1,
+    height: 5,
+    maxWidth: 180,
+    overflow: "hidden"
+  },
+  minimapViewport: {
+    backgroundColor: colors.accent,
+    borderRadius: 99,
+    height: 5
+  },
+  minimapMeta: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 7
   },
   surface: {
     backgroundColor: "#eee8df",

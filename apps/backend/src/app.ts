@@ -468,10 +468,63 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
         parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
       );
     }
-    const capabilities = GHOSTWRITER_CAPABILITIES.filter((capability) =>
-      capability.title
-        .toLocaleLowerCase()
-        .includes(parsed.data.message.toLocaleLowerCase().slice(0, 24))
+    const normalizedMessage = parsed.data.message.toLocaleLowerCase();
+    const requestedCapability = GHOSTWRITER_CAPABILITIES.find(
+      (capability) =>
+        capability.id.toLocaleLowerCase() === normalizedMessage ||
+        capability.title.toLocaleLowerCase() === normalizedMessage
+    );
+
+    if (requestedCapability?.id === "project.navigator.read") {
+      if (parsed.data.projectId === undefined) {
+        return context.json({
+          reply:
+            "Open a project before running the manuscript hierarchy capability."
+        });
+      }
+      const authSession = context.get("authSession");
+      let navigator;
+      try {
+        navigator = await dependencies.services.getProjectNavigator(
+          accountId(authSession.account.id),
+          projectId(parsed.data.projectId)
+        );
+      } catch (error) {
+        if (
+          error instanceof DomainValidationError ||
+          error instanceof ProjectAccessDeniedError
+        ) {
+          return context.json(
+            { error: "Project not found.", code: "PROJECT_NOT_FOUND" },
+            404
+          );
+        }
+        throw error;
+      }
+      if (navigator === undefined) {
+        return context.json(
+          { error: "Project not found.", code: "PROJECT_NOT_FOUND" },
+          404
+        );
+      }
+      return context.json({
+        reply: [
+          `Ran ${requestedCapability.title}.`,
+          `${navigator.title} · project version ${navigator.version}`,
+          `${navigator.totals.books} books · ${navigator.totals.scenes} scenes · ${navigator.totals.storyKnowledge} story records`,
+          `Books: ${navigator.books.map((book) => book.title).join(", ")}`
+        ].join("\n")
+      });
+    }
+
+    const capabilities = (
+      requestedCapability === undefined
+        ? GHOSTWRITER_CAPABILITIES.filter((capability) =>
+            capability.title
+              .toLocaleLowerCase()
+              .includes(normalizedMessage.slice(0, 24))
+          )
+        : [requestedCapability]
     ).slice(0, 5);
     const listed =
       capabilities.length > 0

@@ -987,6 +987,1475 @@
         </div>
       </div>
     </section>
+
+    <style id="gwux-2-1-styles">
+      .gw21 {
+        --gw21-ink: #27211d;
+        --gw21-muted: #776c63;
+        --gw21-faint: #a3978d;
+        --gw21-line: #d9d0c5;
+        --gw21-paper: #fffefb;
+        --gw21-shell: #f1ece4;
+        --gw21-panel: #f8f4ed;
+        --gw21-deep: #292521;
+        --gw21-brand: #75483b;
+        --gw21-brand-soft: #f3e4de;
+        --gw21-green: #42624d;
+        --gw21-green-soft: #e8efe8;
+        --gw21-blue: #476475;
+        --gw21-blue-soft: #e7eef2;
+        --gw21-amber: #825f2e;
+        --gw21-amber-soft: #f6ead8;
+        --gw21-red: #8a4d49;
+        --gw21-red-soft: #f5e4e2;
+        background:
+          radial-gradient(circle at 12% 8%, rgba(255,255,255,.86), transparent 24%),
+          linear-gradient(180deg, #eee7de 0, #f6f2ec 520px, #f1ece4 100%);
+        color: var(--gw21-ink);
+        font-family: Jost, ui-sans-serif, system-ui, sans-serif;
+        max-width: 100vw;
+        overflow-x: hidden;
+        padding: 72px 28px 96px;
+        position: relative;
+        width: 100%;
+        z-index: 101;
+      }
+      .gw21 * { box-sizing: border-box; }
+      .gw21 button,
+      .gw21 input { font: inherit; }
+      .gw21 button:focus-visible,
+      .gw21 [tabindex]:focus-visible {
+        outline: 3px solid #aa6551;
+        outline-offset: 3px;
+      }
+      .gw21__inner { margin: 0 auto; max-width: 1320px; }
+      .gw21__flag {
+        align-items: center;
+        background: var(--gw21-amber-soft);
+        border: 1px solid #d8bd8e;
+        border-radius: 999px;
+        color: #66481f;
+        display: inline-flex;
+        font-size: 10px;
+        font-weight: 800;
+        gap: 8px;
+        letter-spacing: .11em;
+        padding: 8px 13px;
+        text-transform: uppercase;
+      }
+      .gw21__flag::before {
+        background: #d68a5d;
+        border-radius: 50%;
+        content: "";
+        height: 8px;
+        width: 8px;
+      }
+      .gw21__kicker,
+      .gw21-section__kicker {
+        color: var(--gw21-brand);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: .14em;
+        margin-top: 20px;
+        text-transform: uppercase;
+      }
+      .gw21 h2 {
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-size: clamp(42px, 6vw, 72px);
+        font-weight: 500;
+        letter-spacing: -.045em;
+        line-height: .92;
+        margin: 8px 0 18px;
+      }
+      .gw21__lede {
+        color: #5f554e;
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-size: clamp(20px, 2.5vw, 27px);
+        line-height: 1.36;
+        max-width: 970px;
+      }
+      .gw21__review {
+        background: rgba(255,255,255,.64);
+        border: 1px solid var(--gw21-line);
+        border-left: 4px solid #c17c63;
+        border-radius: 12px;
+        color: #5d524a;
+        font-size: 12px;
+        line-height: 1.65;
+        margin: 26px 0 32px;
+        max-width: 1040px;
+        padding: 14px 17px;
+      }
+      .gw21-concepts {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin: 30px 0 46px;
+      }
+      .gw21-concept {
+        background: rgba(255,255,255,.67);
+        border: 1px solid var(--gw21-line);
+        border-radius: 13px;
+        min-height: 134px;
+        padding: 15px;
+      }
+      .gw21-concept__number {
+        color: var(--gw21-brand);
+        display: block;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: .14em;
+        margin-bottom: 9px;
+        text-transform: uppercase;
+      }
+      .gw21-concept strong {
+        display: block;
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-size: 22px;
+        line-height: 1;
+        margin-bottom: 7px;
+      }
+      .gw21-concept p {
+        color: var(--gw21-muted);
+        font-size: 10px;
+        line-height: 1.55;
+      }
+      .gw21-switcher {
+        align-items: center;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin: 12px 0;
+      }
+      .gw21-switcher strong {
+        font-size: 10px;
+        letter-spacing: .08em;
+        margin-right: 5px;
+        text-transform: uppercase;
+      }
+      .gw21-switcher button,
+      .gw21-demo-actions button {
+        background: #fff;
+        border: 1px solid var(--gw21-line);
+        border-radius: 999px;
+        color: var(--gw21-ink);
+        cursor: pointer;
+        font-size: 10px;
+        font-weight: 750;
+        padding: 8px 12px;
+      }
+      .gw21-switcher button[aria-pressed="true"],
+      .gw21-demo-actions button[aria-pressed="true"] {
+        background: var(--gw21-deep);
+        border-color: var(--gw21-deep);
+        color: #fff;
+      }
+      .gw21-mockup {
+        border: 1px solid #cfc4b8;
+        border-radius: 18px;
+        box-shadow: 0 24px 70px rgba(48, 38, 30, .16);
+        margin: 14px 0 14px;
+        overflow-x: auto;
+      }
+      .gw21-app {
+        background: var(--gw21-shell);
+        display: grid;
+        grid-template-columns: 58px 268px minmax(620px, 1fr) 294px;
+        height: 780px;
+        min-width: 1240px;
+        overflow: hidden;
+        position: relative;
+        transition: grid-template-columns .25s ease;
+      }
+      .gw21-app[data-focus="true"] {
+        grid-template-columns: 58px 0 minmax(920px, 1fr) 0;
+      }
+      .gw21-app[data-focus="true"] .gw21-tree,
+      .gw21-app[data-focus="true"] .gw21-dock {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .gw21-rail {
+        align-items: center;
+        background: var(--gw21-deep);
+        color: #fff;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 13px 7px;
+        z-index: 8;
+      }
+      .gw21-rail__mark {
+        align-items: center;
+        border: 1px solid rgba(255,255,255,.32);
+        border-radius: 50%;
+        display: flex;
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-size: 17px;
+        height: 35px;
+        justify-content: center;
+        margin-bottom: 12px;
+        width: 35px;
+      }
+      .gw21-rail button {
+        background: transparent;
+        border: 0;
+        border-radius: 8px;
+        color: #bdb4ac;
+        cursor: pointer;
+        font-size: 8px;
+        font-weight: 800;
+        height: 43px;
+        line-height: 1.35;
+        padding: 4px;
+        width: 43px;
+      }
+      .gw21-app[data-mode="build"] .gw21-rail [data-gw21-rail="build"],
+      .gw21-app[data-mode="map"] .gw21-rail [data-gw21-rail="map"],
+      .gw21-app[data-mode="write"] .gw21-rail [data-gw21-rail="write"] {
+        background: #f6eee6;
+        color: #4f352d;
+      }
+      .gw21-tree {
+        background: #f9f6f0;
+        border-right: 1px solid var(--gw21-line);
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        opacity: 1;
+        overflow: hidden;
+        transition: opacity .2s ease;
+      }
+      .gw21-tree__head {
+        border-bottom: 1px solid var(--gw21-line);
+        padding: 15px 13px 12px;
+        position: relative;
+      }
+      .gw21-tree__eyebrow {
+        color: var(--gw21-brand);
+        font-size: 8px;
+        font-weight: 800;
+        letter-spacing: .14em;
+        text-transform: uppercase;
+      }
+      .gw21-tree__title {
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-size: 22px;
+        margin-top: 2px;
+      }
+      .gw21-tree__actions {
+        display: grid;
+        gap: 6px;
+        grid-template-columns: 1fr auto;
+        margin-top: 10px;
+      }
+      .gw21-primary,
+      .gw21-secondary,
+      .gw21-icon-button {
+        align-items: center;
+        border-radius: 7px;
+        cursor: pointer;
+        display: inline-flex;
+        font-size: 9px;
+        font-weight: 800;
+        justify-content: center;
+        min-height: 31px;
+        padding: 7px 10px;
+      }
+      .gw21-primary {
+        background: var(--gw21-brand);
+        border: 1px solid var(--gw21-brand);
+        color: #fff;
+      }
+      .gw21-secondary,
+      .gw21-icon-button {
+        background: #fff;
+        border: 1px solid var(--gw21-line);
+        color: var(--gw21-ink);
+      }
+      .gw21-icon-button { min-width: 31px; padding: 6px; }
+      .gw21-search {
+        background: #fff;
+        border: 1px solid var(--gw21-line);
+        border-radius: 7px;
+        color: var(--gw21-muted);
+        font-size: 9px;
+        margin: 10px 10px 5px;
+        padding: 8px 9px;
+      }
+      .gw21-tree__meta {
+        color: var(--gw21-muted);
+        display: flex;
+        font-size: 7px;
+        justify-content: space-between;
+        padding: 4px 12px 7px;
+      }
+      .gw21-tree__rows {
+        flex: 1;
+        overflow: auto;
+        padding: 2px 6px 18px;
+      }
+      .gw21-row {
+        align-items: center;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 7px;
+        color: var(--gw21-ink);
+        cursor: pointer;
+        display: grid;
+        font-size: 9px;
+        gap: 5px;
+        grid-template-columns: 13px 14px minmax(0, 1fr) auto;
+        margin: 1px 0;
+        min-height: 30px;
+        padding: 5px 6px;
+        text-align: left;
+        width: 100%;
+      }
+      .gw21-row:hover,
+      .gw21-row:focus-visible { background: #fff; border-color: #e2d9cf; }
+      .gw21-row[aria-current="true"] {
+        background: var(--gw21-brand-soft);
+        border-color: #c99b8d;
+      }
+      .gw21-row__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .gw21-row__meta { color: var(--gw21-muted); font-size: 7px; white-space: nowrap; }
+      .gw21-row__more {
+        align-items: center;
+        background: #fff;
+        border: 1px solid var(--gw21-line);
+        border-radius: 5px;
+        display: inline-flex;
+        font-size: 9px;
+        height: 21px;
+        justify-content: center;
+        width: 21px;
+      }
+      .gw21-row--book { font-weight: 800; margin-top: 3px; }
+      .gw21-row--part { padding-left: 17px; }
+      .gw21-row--chapter { padding-left: 29px; }
+      .gw21-row--scene { padding-left: 42px; }
+      .gw21-row--unassigned { color: var(--gw21-muted); font-style: italic; padding-left: 29px; }
+      .gw21-quickbuild {
+        background: var(--gw21-paper);
+        border: 1px solid #cdbfb3;
+        border-radius: 11px;
+        box-shadow: 0 16px 42px rgba(47,38,31,.2);
+        display: none;
+        left: 12px;
+        padding: 11px;
+        position: absolute;
+        top: 104px;
+        width: 244px;
+        z-index: 20;
+      }
+      .gw21-app[data-quickbuild="true"] .gw21-quickbuild { display: block; }
+      .gw21-quickbuild__title {
+        display: flex;
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-size: 18px;
+        justify-content: space-between;
+      }
+      .gw21-quickbuild__context {
+        color: var(--gw21-muted);
+        font-size: 8px;
+        line-height: 1.45;
+        margin: 4px 0 9px;
+      }
+      .gw21-quickbuild__option {
+        align-items: center;
+        background: #fff;
+        border: 1px solid var(--gw21-line);
+        border-radius: 7px;
+        color: var(--gw21-ink);
+        cursor: pointer;
+        display: grid;
+        font-size: 9px;
+        gap: 7px;
+        grid-template-columns: 22px 1fr auto;
+        margin-top: 5px;
+        padding: 8px;
+        text-align: left;
+        width: 100%;
+      }
+      .gw21-quickbuild__option b {
+        align-items: center;
+        background: var(--gw21-brand-soft);
+        border-radius: 5px;
+        display: flex;
+        height: 22px;
+        justify-content: center;
+      }
+      .gw21-quickbuild__option small { color: var(--gw21-muted); font-size: 7px; }
+      .gw21-center {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        overflow: hidden;
+        position: relative;
+      }
+      .gw21-topbar {
+        align-items: center;
+        background: rgba(255,254,251,.9);
+        border-bottom: 1px solid var(--gw21-line);
+        display: flex;
+        gap: 12px;
+        justify-content: space-between;
+        min-height: 54px;
+        padding: 8px 14px;
+        z-index: 7;
+      }
+      .gw21-trail {
+        align-items: center;
+        display: flex;
+        flex-wrap: wrap;
+        font-size: 9px;
+        gap: 5px;
+        min-width: 0;
+      }
+      .gw21-trail button {
+        background: transparent;
+        border: 0;
+        color: var(--gw21-muted);
+        cursor: pointer;
+        padding: 3px;
+      }
+      .gw21-trail button:last-of-type { color: var(--gw21-ink); font-weight: 800; }
+      .gw21-status {
+        align-items: center;
+        color: var(--gw21-green);
+        display: inline-flex;
+        font-size: 8px;
+        font-weight: 800;
+        gap: 5px;
+        white-space: nowrap;
+      }
+      .gw21-status::before {
+        background: currentColor;
+        border-radius: 50%;
+        content: "";
+        height: 6px;
+        width: 6px;
+      }
+      .gw21-app[data-problem="true"] .gw21-status { color: var(--gw21-red); }
+      .gw21-view { display: none; flex: 1; min-height: 0; min-width: 0; }
+      .gw21-app[data-mode="build"] .gw21-view--build,
+      .gw21-app[data-mode="map"] .gw21-view--map,
+      .gw21-app[data-mode="write"] .gw21-view--write { display: flex; }
+      .gw21-build {
+        align-items: center;
+        background:
+          radial-gradient(circle at 50% 35%, rgba(255,255,255,.8), transparent 42%),
+          var(--gw21-shell);
+        justify-content: center;
+        padding: 28px;
+      }
+      .gw21-launchpad {
+        background: rgba(255,254,251,.9);
+        border: 1px solid var(--gw21-line);
+        border-radius: 16px;
+        box-shadow: 0 12px 34px rgba(52,43,36,.08);
+        max-width: 650px;
+        padding: 32px;
+        width: 100%;
+      }
+      .gw21-launchpad__eyebrow {
+        color: var(--gw21-brand);
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: .13em;
+        text-transform: uppercase;
+      }
+      .gw21-launchpad h3 {
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-size: 36px;
+        font-weight: 500;
+        line-height: 1;
+        margin: 7px 0 9px;
+      }
+      .gw21-launchpad__copy {
+        color: var(--gw21-muted);
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-size: 17px;
+        line-height: 1.5;
+        max-width: 530px;
+      }
+      .gw21-launchpad__actions {
+        display: grid;
+        gap: 9px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-top: 24px;
+      }
+      .gw21-launch-action {
+        background: #fff;
+        border: 1px solid var(--gw21-line);
+        border-radius: 11px;
+        color: var(--gw21-ink);
+        cursor: pointer;
+        min-height: 102px;
+        padding: 13px;
+        text-align: left;
+      }
+      .gw21-launch-action:first-child {
+        background: var(--gw21-brand);
+        border-color: var(--gw21-brand);
+        color: #fff;
+      }
+      .gw21-launch-action b {
+        display: block;
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-size: 18px;
+        margin-bottom: 5px;
+      }
+      .gw21-launch-action span { display: block; font-size: 8px; line-height: 1.5; opacity: .76; }
+      .gw21-launchpad__recent {
+        border-top: 1px solid var(--gw21-line);
+        color: var(--gw21-muted);
+        display: flex;
+        font-size: 8px;
+        justify-content: space-between;
+        margin-top: 20px;
+        padding-top: 12px;
+      }
+      .gw21-map {
+        background-color: #ede7de;
+        background-image:
+          linear-gradient(rgba(103,86,72,.07) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(103,86,72,.07) 1px, transparent 1px);
+        background-size: 22px 22px;
+        overflow: hidden;
+        position: relative;
+      }
+      .gw21-tools {
+        background: rgba(255,254,251,.96);
+        border: 1px solid var(--gw21-line);
+        border-radius: 11px;
+        box-shadow: 0 10px 25px rgba(53,43,35,.12);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        left: 12px;
+        padding: 6px;
+        position: absolute;
+        top: 12px;
+        z-index: 6;
+      }
+      .gw21-tool {
+        align-items: center;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 7px;
+        color: var(--gw21-ink);
+        cursor: pointer;
+        display: flex;
+        font-size: 7px;
+        font-weight: 750;
+        gap: 6px;
+        min-height: 30px;
+        padding: 5px 7px;
+        text-align: left;
+      }
+      .gw21-tool b {
+        align-items: center;
+        display: flex;
+        font-size: 12px;
+        height: 18px;
+        justify-content: center;
+        width: 18px;
+      }
+      .gw21-tool[aria-pressed="true"] {
+        background: var(--gw21-brand-soft);
+        border-color: #d5ac9f;
+        color: var(--gw21-brand);
+      }
+      .gw21-utilities {
+        align-items: center;
+        background: rgba(255,254,251,.95);
+        border: 1px solid var(--gw21-line);
+        border-radius: 10px;
+        box-shadow: 0 9px 22px rgba(53,43,35,.1);
+        display: flex;
+        gap: 4px;
+        left: 142px;
+        padding: 5px;
+        position: absolute;
+        right: 12px;
+        top: 12px;
+        z-index: 5;
+      }
+      .gw21-utilities button {
+        background: transparent;
+        border: 0;
+        border-radius: 6px;
+        color: var(--gw21-muted);
+        cursor: pointer;
+        font-size: 8px;
+        padding: 6px 8px;
+      }
+      .gw21-utilities button:first-child {
+        background: var(--gw21-brand-soft);
+        color: var(--gw21-brand);
+        font-weight: 800;
+      }
+      .gw21-utilities__spacer { flex: 1; }
+      .gw21-map__scope {
+        color: var(--gw21-muted);
+        font-size: 8px;
+        left: 145px;
+        position: absolute;
+        top: 60px;
+      }
+      .gw21-node {
+        background: rgba(255,254,251,.97);
+        border: 1px solid #cfc2b6;
+        border-radius: 12px;
+        box-shadow: 0 8px 20px rgba(50,41,34,.1);
+        color: var(--gw21-ink);
+        cursor: pointer;
+        padding: 12px;
+        position: absolute;
+        text-align: left;
+        width: 200px;
+        z-index: 3;
+      }
+      .gw21-node[aria-current="true"] {
+        border: 2px solid #9e5e4d;
+        box-shadow: 0 0 0 4px rgba(158,94,77,.14), 0 10px 24px rgba(50,41,34,.14);
+      }
+      .gw21-node__type {
+        color: var(--gw21-brand);
+        display: block;
+        font-size: 7px;
+        font-weight: 800;
+        letter-spacing: .1em;
+        text-transform: uppercase;
+      }
+      .gw21-node__title {
+        display: block;
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-size: 18px;
+        line-height: 1.05;
+        margin: 5px 0;
+      }
+      .gw21-node__meta { color: var(--gw21-muted); display: block; font-size: 8px; line-height: 1.45; }
+      .gw21-node__chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+      .gw21-chip {
+        background: var(--gw21-blue-soft);
+        border-radius: 999px;
+        color: var(--gw21-blue);
+        font-size: 6px;
+        font-weight: 800;
+        padding: 3px 5px;
+        text-transform: uppercase;
+      }
+      .gw21-node--scene-a { left: 165px; top: 118px; }
+      .gw21-node--scene-b { left: 455px; top: 130px; }
+      .gw21-node--knowledge { left: 325px; top: 355px; }
+      .gw21-node--note {
+        background: #fff7dc;
+        left: 600px;
+        top: 330px;
+        transform: rotate(-1.4deg);
+        width: 170px;
+      }
+      .gw21-region {
+        border: 1px dashed #b8977f;
+        border-radius: 18px;
+        height: 236px;
+        left: 130px;
+        position: absolute;
+        top: 87px;
+        width: 570px;
+      }
+      .gw21-region span {
+        background: #ede7de;
+        color: var(--gw21-muted);
+        font-size: 7px;
+        left: 16px;
+        padding: 0 4px;
+        position: absolute;
+        top: -6px;
+      }
+      .gw21-edge {
+        background: #866657;
+        height: 2px;
+        position: absolute;
+        transform-origin: left center;
+        z-index: 1;
+      }
+      .gw21-edge::after {
+        border-bottom: 4px solid transparent;
+        border-left: 7px solid #866657;
+        border-top: 4px solid transparent;
+        content: "";
+        position: absolute;
+        right: -2px;
+        top: -3px;
+      }
+      .gw21-edge--a { left: 350px; top: 190px; transform: rotate(2deg); width: 108px; }
+      .gw21-edge--b { left: 360px; top: 225px; transform: rotate(64deg); width: 150px; }
+      .gw21-edge--c { left: 485px; top: 392px; transform: rotate(-9deg); width: 122px; }
+      .gw21-edge__label {
+        background: #f8f3ed;
+        border: 1px solid var(--gw21-line);
+        border-radius: 999px;
+        color: var(--gw21-muted);
+        font-size: 6px;
+        left: 50%;
+        padding: 3px 5px;
+        position: absolute;
+        top: -13px;
+        transform: translateX(-50%);
+        white-space: nowrap;
+      }
+      .gw21-selectionbar {
+        align-items: center;
+        background: var(--gw21-deep);
+        border-radius: 10px;
+        bottom: 23px;
+        box-shadow: 0 10px 28px rgba(39,33,29,.26);
+        color: #fff;
+        display: flex;
+        gap: 4px;
+        left: 50%;
+        padding: 5px 6px 5px 11px;
+        position: absolute;
+        transform: translateX(-50%);
+        z-index: 6;
+      }
+      .gw21-selectionbar strong { font-size: 8px; margin-right: 4px; white-space: nowrap; }
+      .gw21-selectionbar button {
+        background: rgba(255,255,255,.1);
+        border: 0;
+        border-radius: 6px;
+        color: #fff;
+        cursor: pointer;
+        font-size: 7px;
+        padding: 6px 7px;
+      }
+      .gw21-minimap {
+        background: rgba(255,254,251,.92);
+        border: 1px solid var(--gw21-line);
+        border-radius: 9px;
+        bottom: 14px;
+        height: 84px;
+        position: absolute;
+        right: 14px;
+        width: 126px;
+      }
+      .gw21-minimap::after {
+        border: 1px solid #a76a56;
+        content: "";
+        inset: 16px 22px;
+        position: absolute;
+      }
+      .gw21-write {
+        background: #ece6de;
+        flex-direction: column;
+        overflow: auto;
+        padding: 0 24px 60px;
+      }
+      .gw21-scene-ribbon {
+        align-items: center;
+        background: rgba(248,244,237,.95);
+        border-bottom: 1px solid var(--gw21-line);
+        display: flex;
+        gap: 9px;
+        justify-content: space-between;
+        margin: 0 -24px;
+        min-height: 52px;
+        padding: 8px 16px;
+        position: sticky;
+        top: 0;
+        z-index: 5;
+      }
+      .gw21-scene-ribbon__copy { min-width: 0; }
+      .gw21-scene-ribbon__eyebrow {
+        color: var(--gw21-muted);
+        font-size: 7px;
+        font-weight: 800;
+        letter-spacing: .11em;
+        text-transform: uppercase;
+      }
+      .gw21-scene-ribbon__title {
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-size: 20px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .gw21-scene-ribbon__meta {
+        align-items: center;
+        color: var(--gw21-muted);
+        display: flex;
+        font-size: 7px;
+        gap: 7px;
+      }
+      .gw21-scene-ribbon__nav { display: flex; gap: 5px; }
+      .gw21-formatbar {
+        align-items: center;
+        background: rgba(255,254,251,.96);
+        border: 1px solid var(--gw21-line);
+        border-radius: 10px;
+        box-shadow: 0 8px 24px rgba(52,43,35,.08);
+        display: flex;
+        gap: 3px;
+        margin: 16px auto 0;
+        max-width: 720px;
+        padding: 5px;
+        position: sticky;
+        top: 62px;
+        z-index: 4;
+      }
+      .gw21-formatbar button {
+        background: transparent;
+        border: 0;
+        border-radius: 6px;
+        color: var(--gw21-muted);
+        cursor: pointer;
+        font-family: Georgia, serif;
+        font-size: 10px;
+        min-width: 28px;
+        padding: 6px;
+      }
+      .gw21-formatbar button:first-child {
+        background: var(--gw21-brand-soft);
+        color: var(--gw21-brand);
+        font-family: Jost, sans-serif;
+        font-weight: 800;
+        min-width: 70px;
+      }
+      .gw21-formatbar__spacer { flex: 1; }
+      .gw21-page {
+        background: var(--gw21-paper);
+        box-shadow: 0 16px 48px rgba(52,43,35,.13);
+        margin: 14px auto 0;
+        max-width: 720px;
+        min-height: 800px;
+        padding: 64px 78px 92px;
+      }
+      .gw21-page__chapter {
+        color: var(--gw21-muted);
+        font-size: 8px;
+        letter-spacing: .18em;
+        text-align: center;
+        text-transform: uppercase;
+      }
+      .gw21-page h3 {
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-size: 34px;
+        font-weight: 500;
+        line-height: 1;
+        margin: 12px 0 34px;
+        text-align: center;
+      }
+      .gw21-page p {
+        color: #29231f;
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-size: 18px;
+        line-height: 1.72;
+        margin: 0 0 20px;
+      }
+      .gw21-page p:first-of-type::first-letter {
+        color: var(--gw21-brand);
+        float: left;
+        font-size: 58px;
+        line-height: .78;
+        margin: 10px 8px 0 0;
+      }
+      .gw21-caret {
+        border-left: 2px solid var(--gw21-brand);
+        display: inline-block;
+        height: 19px;
+        margin-left: 1px;
+        vertical-align: -3px;
+      }
+      .gw21-dock {
+        background: #f9f6f0;
+        border-left: 1px solid var(--gw21-line);
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        opacity: 1;
+        overflow: hidden;
+        transition: opacity .2s ease;
+      }
+      .gw21-dock__head {
+        border-bottom: 1px solid var(--gw21-line);
+        padding: 15px 14px 10px;
+      }
+      .gw21-dock__eyebrow {
+        color: var(--gw21-brand);
+        font-size: 8px;
+        font-weight: 800;
+        letter-spacing: .14em;
+        text-transform: uppercase;
+      }
+      .gw21-dock__title {
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-size: 23px;
+        line-height: 1;
+        margin-top: 4px;
+      }
+      .gw21-dock__tabs {
+        display: flex;
+        gap: 3px;
+        margin-top: 12px;
+        overflow-x: auto;
+      }
+      .gw21-dock__tabs button {
+        background: transparent;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        color: var(--gw21-muted);
+        cursor: pointer;
+        font-size: 8px;
+        font-weight: 800;
+        padding: 5px 6px;
+        white-space: nowrap;
+      }
+      .gw21-dock__tabs button[aria-pressed="true"] {
+        border-bottom-color: var(--gw21-brand);
+        color: var(--gw21-brand);
+      }
+      .gw21-dock__body { flex: 1; overflow: auto; padding: 12px 13px 28px; }
+      .gw21-dock-panel { display: none; }
+      .gw21-app[data-mode="build"] .gw21-dock-panel--build,
+      .gw21-app[data-mode="map"] .gw21-dock-panel--map,
+      .gw21-app[data-mode="write"] .gw21-dock-panel--write { display: block; }
+      .gw21-field { margin-bottom: 12px; }
+      .gw21-field label {
+        color: var(--gw21-muted);
+        display: block;
+        font-size: 7px;
+        font-weight: 800;
+        letter-spacing: .06em;
+        margin-bottom: 4px;
+        text-transform: uppercase;
+      }
+      .gw21-field input,
+      .gw21-field__textarea {
+        background: #fff;
+        border: 1px solid var(--gw21-line);
+        border-radius: 7px;
+        color: var(--gw21-ink);
+        font-size: 9px;
+        min-height: 34px;
+        padding: 8px;
+        width: 100%;
+      }
+      .gw21-field__textarea { line-height: 1.5; min-height: 76px; }
+      .gw21-dock-card {
+        background: #fff;
+        border: 1px solid var(--gw21-line);
+        border-radius: 9px;
+        margin-bottom: 8px;
+        padding: 10px;
+      }
+      .gw21-dock-card strong {
+        display: block;
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-size: 16px;
+      }
+      .gw21-dock-card p {
+        color: var(--gw21-muted);
+        font-size: 8px;
+        line-height: 1.5;
+        margin-top: 4px;
+      }
+      .gw21-dock-row {
+        align-items: center;
+        border-bottom: 1px solid #e8e0d7;
+        display: flex;
+        font-size: 8px;
+        justify-content: space-between;
+        padding: 8px 0;
+      }
+      .gw21-dock-row span { color: var(--gw21-muted); }
+      .gw21-dock__actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+      .gw21-problem-toast {
+        background: var(--gw21-red-soft);
+        border: 1px solid #bd7d78;
+        border-radius: 11px;
+        bottom: 18px;
+        box-shadow: 0 12px 30px rgba(54,40,35,.18);
+        display: none;
+        max-width: 360px;
+        padding: 12px 14px;
+        position: absolute;
+        right: 18px;
+        z-index: 30;
+      }
+      .gw21-app[data-problem="true"] .gw21-problem-toast { display: block; }
+      .gw21-problem-toast strong { color: var(--gw21-red); display: block; font-size: 10px; }
+      .gw21-problem-toast span { color: #684d49; display: block; font-size: 8px; line-height: 1.45; margin-top: 4px; }
+      .gw21-problem-toast button {
+        background: var(--gw21-red);
+        border: 0;
+        border-radius: 6px;
+        color: #fff;
+        cursor: pointer;
+        font-size: 8px;
+        font-weight: 800;
+        margin-top: 8px;
+        padding: 6px 9px;
+      }
+      .gw21-demo-actions {
+        align-items: center;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin: 13px 0 50px;
+      }
+      .gw21-demo-actions strong {
+        font-size: 9px;
+        letter-spacing: .1em;
+        margin-right: 4px;
+        text-transform: uppercase;
+      }
+      .gw21-section { margin-top: 58px; }
+      .gw21-section h3 {
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-size: 36px;
+        font-weight: 500;
+        line-height: 1;
+        margin: 6px 0 10px;
+      }
+      .gw21-section > p {
+        color: var(--gw21-muted);
+        font-size: 12px;
+        line-height: 1.6;
+        max-width: 820px;
+      }
+      .gw21-detail-grid {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-top: 20px;
+      }
+      .gw21-detail {
+        background: rgba(255,255,255,.66);
+        border: 1px solid var(--gw21-line);
+        border-radius: 12px;
+        padding: 15px;
+      }
+      .gw21-detail strong {
+        display: block;
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-size: 20px;
+        margin-bottom: 7px;
+      }
+      .gw21-detail p,
+      .gw21-detail li {
+        color: var(--gw21-muted);
+        font-size: 9px;
+        line-height: 1.55;
+      }
+      .gw21-detail ul { margin: 8px 0 0 16px; }
+      .gw21-responsive {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: minmax(0, 1fr) 330px;
+        margin-top: 20px;
+      }
+      .gw21-medium {
+        background: var(--gw21-shell);
+        border: 1px solid var(--gw21-line);
+        border-radius: 15px;
+        min-height: 390px;
+        overflow: hidden;
+        position: relative;
+      }
+      .gw21-medium__top {
+        align-items: center;
+        background: var(--gw21-paper);
+        border-bottom: 1px solid var(--gw21-line);
+        display: flex;
+        font-size: 9px;
+        justify-content: space-between;
+        padding: 11px;
+      }
+      .gw21-medium__body { display: grid; grid-template-columns: 52px 1fr; min-height: 345px; }
+      .gw21-medium__rail { background: var(--gw21-deep); color: #fff; font-size: 8px; padding: 13px 8px; }
+      .gw21-medium__page { background: #fffefb; margin: 22px auto; max-width: 480px; padding: 36px 50px; }
+      .gw21-medium__page h4 { font-family: "Cormorant Garamond", Georgia, serif; font-size: 25px; text-align: center; }
+      .gw21-medium__page p { font-family: "Cormorant Garamond", Georgia, serif; font-size: 14px; line-height: 1.65; margin-top: 18px; }
+      .gw21-medium__drawer {
+        background: #f9f6f0;
+        border-left: 1px solid var(--gw21-line);
+        bottom: 0;
+        box-shadow: -12px 0 28px rgba(46,38,32,.12);
+        padding: 14px;
+        position: absolute;
+        right: 0;
+        top: 42px;
+        width: 250px;
+      }
+      .gw21-medium__drawer strong { font-family: "Cormorant Garamond", Georgia, serif; font-size: 20px; }
+      .gw21-medium__drawer p { color: var(--gw21-muted); font-size: 8px; line-height: 1.5; margin-top: 6px; }
+      .gw21-phone {
+        background: #f7f2eb;
+        border: 7px solid var(--gw21-deep);
+        border-radius: 30px;
+        box-shadow: 0 15px 44px rgba(45,36,30,.17);
+        height: 620px;
+        margin: 0 auto;
+        max-width: 330px;
+        overflow: hidden;
+        position: relative;
+      }
+      .gw21-phone__top { background: #fff; border-bottom: 1px solid var(--gw21-line); padding: 15px 14px 10px; }
+      .gw21-phone__title { font-family: "Cormorant Garamond", Georgia, serif; font-size: 21px; }
+      .gw21-phone__trail { color: var(--gw21-muted); font-size: 7px; margin-top: 3px; }
+      .gw21-phone__tabs { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 10px; }
+      .gw21-phone__tabs span { border-bottom: 2px solid transparent; color: var(--gw21-muted); font-size: 7px; padding: 6px 2px; text-align: center; }
+      .gw21-phone__tabs span:nth-child(2) { border-color: var(--gw21-brand); color: var(--gw21-brand); font-weight: 800; }
+      .gw21-phone__body { padding: 14px; }
+      .gw21-phone__launch {
+        background: #fff;
+        border: 1px solid var(--gw21-line);
+        border-radius: 12px;
+        padding: 14px;
+      }
+      .gw21-phone__launch h4 { font-family: "Cormorant Garamond", Georgia, serif; font-size: 23px; }
+      .gw21-phone__launch p { color: var(--gw21-muted); font-size: 8px; line-height: 1.5; margin-top: 5px; }
+      .gw21-phone__row {
+        align-items: center;
+        background: #fff;
+        border: 1px solid var(--gw21-line);
+        border-radius: 9px;
+        display: flex;
+        font-size: 9px;
+        justify-content: space-between;
+        margin-top: 8px;
+        padding: 10px;
+      }
+      .gw21-phone__sheet {
+        background: #fffefb;
+        border-radius: 18px 18px 0 0;
+        bottom: 0;
+        box-shadow: 0 -12px 30px rgba(45,36,30,.16);
+        left: 0;
+        padding: 15px;
+        position: absolute;
+        right: 0;
+      }
+      .gw21-phone__sheet::before {
+        background: #cfc5ba;
+        border-radius: 999px;
+        content: "";
+        display: block;
+        height: 3px;
+        margin: 0 auto 12px;
+        width: 36px;
+      }
+      .gw21-phone__sheet strong { font-family: "Cormorant Garamond", Georgia, serif; font-size: 20px; }
+      .gw21-phone__sheet button { margin-top: 9px; width: 100%; }
+      .gw21-state-grid {
+        display: grid;
+        gap: 9px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin-top: 18px;
+      }
+      .gw21-state {
+        background: rgba(255,255,255,.66);
+        border: 1px solid var(--gw21-line);
+        border-radius: 10px;
+        padding: 12px;
+      }
+      .gw21-state strong { display: block; font-family: "Cormorant Garamond", Georgia, serif; font-size: 17px; }
+      .gw21-state span { color: var(--gw21-muted); display: block; font-size: 8px; line-height: 1.5; margin-top: 4px; }
+      @media (prefers-reduced-motion: reduce) {
+        .gw21-app,
+        .gw21-tree,
+        .gw21-dock { transition: none !important; }
+      }
+      @media (max-width: 900px) {
+        .gw21 { padding: 50px 14px 72px; }
+        .gw21-concepts,
+        .gw21-detail-grid,
+        .gw21-state-grid { grid-template-columns: 1fr 1fr; }
+        .gw21-responsive { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 560px) {
+        .gw21-concepts,
+        .gw21-detail-grid,
+        .gw21-state-grid { grid-template-columns: 1fr; }
+      }
+    </style>
+
+    <section class="gw21" id="ux-proposal-workspace-2-1" aria-labelledby="gw21-title">
+      <div class="gw21__inner">
+        <span class="gw21__flag">Accepted UX 2.1 · implementation approved 2026-07-18</span>
+        <p class="gw21__kicker">Build · Map · Write</p>
+        <h2 id="gw21-title">Make the next story action<br>feel inevitable.</h2>
+        <p class="gw21__lede">The product already knows how to create structure, place story objects, preserve history, and save prose safely. This pass turns those capabilities into a manuscript builder, a visible Canvas workbench, and a writing desk where the page—not the machinery—holds attention.</p>
+        <div class="gw21__review"><strong>Accepted additive direction:</strong> the live Cognition project exposed a usability gap, not a missing domain. Tiny tree-row controls hide hierarchy creation, an empty chapter produces a dead center pane, Canvas actions read as stacked forms instead of tools, and Draft gives history and lease mechanics the same visual weight as prose. The founder accepted the complete Build · Map · Write direction on 2026-07-18. It now governs checkpoints H1–H5 while preserving server acknowledgement, canonical manuscript order, dedicated Canvas versioning, one direct scene lease, and bounded recovery.</div>
+
+        <div class="gw21-concepts">
+          <article class="gw21-concept"><span class="gw21-concept__number">Build · 01</span><strong>Story Trail</strong><p>A persistent hierarchy breadcrumb and scope switcher. It carries selection through tree, Canvas, Draft, Split, and Reader.</p></article>
+          <article class="gw21-concept"><span class="gw21-concept__number">Build · 02</span><strong>Quick Build</strong><p>One contextual Add action proposes only valid children, asks for the minimum, and keeps the writer in the tree.</p></article>
+          <article class="gw21-concept"><span class="gw21-concept__number">Build · 03</span><strong>Scene Launchpad</strong><p>An empty chapter becomes a useful choice: create, move, storyboard, or continue—not a blank instruction card.</p></article>
+          <article class="gw21-concept"><span class="gw21-concept__number">Map · 04</span><strong>Canvas Workbench</strong><p>A visible creation dock, utility bar, selection bar, minimap, and Context Dock make spatial capabilities discoverable.</p></article>
+          <article class="gw21-concept"><span class="gw21-concept__number">Map · 05</span><strong>Thread Trace</strong><p>Trace one directed relationship through the story while unrelated cards dim and the ordered equivalent stays available.</p></article>
+          <article class="gw21-concept"><span class="gw21-concept__number">Map · 06</span><strong>Chapter Aggregate</strong><p>A derived project-lens card summarizes scenes, links, drift, and unresolved setups without creating a new canonical object.</p></article>
+          <article class="gw21-concept"><span class="gw21-concept__number">Map · 07</span><strong>Scene Focus Stage</strong><p>Scene depth becomes an excerpt, inbound/outbound context, and direct Draft, Split, and History handoffs.</p></article>
+          <article class="gw21-concept"><span class="gw21-concept__number">Write · 08</span><strong>Draft Desk</strong><p>A centered Manuscript Page, scene ribbon, Whisper Toolbar, and writer-language Save Truth strip put prose first.</p></article>
+          <article class="gw21-concept"><span class="gw21-concept__number">Write · 09</span><strong>Context Dock</strong><p>Brief, Story, Canvas, and Draft History appear when needed in one dismissible secondary surface.</p></article>
+          <article class="gw21-concept"><span class="gw21-concept__number">Write · 10</span><strong>Focus Halo</strong><p>Hide tree and dock without remounting Tiptap, moving the caret, releasing the lease, or hiding save state.</p></article>
+        </div>
+
+        <p class="gw21-section__kicker">Interactive wide concept</p>
+        <div class="gw21-switcher" aria-label="Build Map Write concept switcher">
+          <strong>Explore</strong>
+          <button type="button" data-gw21-mode="build" aria-pressed="true">Build hierarchy</button>
+          <button type="button" data-gw21-mode="map" aria-pressed="false">Map on Canvas</button>
+          <button type="button" data-gw21-mode="write" aria-pressed="false">Write in Draft</button>
+        </div>
+
+        <div class="gw21-mockup">
+          <div class="gw21-app" data-gw21-app data-mode="build" data-quickbuild="false" data-focus="false" data-problem="false">
+            <aside class="gw21-rail" aria-label="Proposed project areas">
+              <div class="gw21-rail__mark">gw</div>
+              <button type="button" data-gw21-rail="build">B<br>Build</button>
+              <button type="button" data-gw21-rail="map">M<br>Map</button>
+              <button type="button" data-gw21-rail="write">W<br>Write</button>
+              <button type="button">R<br>Read</button>
+              <button type="button">H<br>History</button>
+              <button type="button">C<br>Chat</button>
+            </aside>
+
+            <aside class="gw21-tree" aria-label="Proposed manuscript navigator">
+              <div class="gw21-tree__head">
+                <p class="gw21-tree__eyebrow">Manuscript</p>
+                <div class="gw21-tree__title">Cognition</div>
+                <div class="gw21-tree__actions">
+                  <button class="gw21-primary" type="button" data-gw21-quickbuild>＋ Quick Build</button>
+                  <button class="gw21-icon-button" type="button" aria-label="More manuscript actions">•••</button>
+                </div>
+                <div class="gw21-quickbuild" aria-label="Quick Build menu">
+                  <div class="gw21-quickbuild__title"><span>Add to Ray Ray</span><span>⌘↵</span></div>
+                  <p class="gw21-quickbuild__context">Only valid next actions for the selected empty chapter. Title first; placement is already known.</p>
+                  <button class="gw21-quickbuild__option" type="button"><b>◇</b><span><strong>Scene</strong><br><small>At the end of Ray Ray</small></span><span>↵</span></button>
+                  <button class="gw21-quickbuild__option" type="button"><b>◫</b><span><strong>Chapter</strong><br><small>After Ray Ray in Intro</small></span><span></span></button>
+                  <button class="gw21-quickbuild__option" type="button"><b>▾</b><span><strong>Part</strong><br><small>After Intro in Cognition</small></span><span></span></button>
+                  <button class="gw21-quickbuild__option" type="button"><b>✦</b><span><strong>Story record</strong><br><small>Character, place, rule, or thread</small></span><span></span></button>
+                </div>
+              </div>
+              <div class="gw21-search">⌕ Find a scene, chapter, or story record</div>
+              <div class="gw21-tree__meta"><span>2 books · 2 parts · 3 chapters</span><span>Active ▾</span></div>
+              <div class="gw21-tree__rows" role="tree" aria-label="Proposed project manuscript">
+                <button class="gw21-row gw21-row--book" type="button" role="treeitem" aria-level="1" aria-expanded="true"><span>⌄</span><span>▣</span><span class="gw21-row__name">Cognition</span><span class="gw21-row__meta">1 scene</span></button>
+                <button class="gw21-row gw21-row--part" type="button" role="treeitem" aria-level="2" aria-expanded="true"><span>⌄</span><span>▾</span><span class="gw21-row__name">Intro</span><span class="gw21-row__meta">2 chapters</span></button>
+                <button class="gw21-row gw21-row--chapter" type="button" role="treeitem" aria-level="3" aria-expanded="true"><span>⌄</span><span>◫</span><span class="gw21-row__name">Eevee</span><span class="gw21-row__meta">1 scene</span></button>
+                <button class="gw21-row gw21-row--scene" type="button" role="treeitem" aria-level="4"><span></span><span>◇</span><span class="gw21-row__name">Recognition</span><span class="gw21-row__meta">Drafting</span></button>
+                <button class="gw21-row gw21-row--chapter" type="button" role="treeitem" aria-level="3" aria-current="true"><span>›</span><span>◫</span><span class="gw21-row__name">Ray Ray</span><span class="gw21-row__more">•••</span></button>
+                <button class="gw21-row gw21-row--unassigned" type="button" role="treeitem" aria-level="2"><span></span><span>＋</span><span class="gw21-row__name">Unassigned scenes</span><span class="gw21-row__meta">0</span></button>
+                <button class="gw21-row gw21-row--book" type="button" role="treeitem" aria-level="1" aria-expanded="true"><span>⌄</span><span>▣</span><span class="gw21-row__name">Meta</span><span class="gw21-row__meta">0 scenes</span></button>
+                <button class="gw21-row gw21-row--unassigned" type="button" role="treeitem" aria-level="2"><span></span><span>＋</span><span class="gw21-row__name">Unassigned scenes</span><span class="gw21-row__meta">0</span></button>
+                <button class="gw21-row gw21-row--book" type="button" role="treeitem" aria-level="1"><span>›</span><span>✦</span><span class="gw21-row__name">Story knowledge</span><span class="gw21-row__meta">0 records</span></button>
+              </div>
+            </aside>
+
+            <main class="gw21-center">
+              <header class="gw21-topbar">
+                <nav class="gw21-trail" aria-label="Story Trail">
+                  <button type="button">Cognition</button><span>›</span>
+                  <button type="button">Book · Cognition</button><span>›</span>
+                  <button type="button">Intro</button><span>›</span>
+                  <button type="button">Ray Ray</button>
+                </nav>
+                <span class="gw21-status" data-gw21-status>All changes saved</span>
+              </header>
+
+              <section class="gw21-view gw21-view--build gw21-build" aria-label="Scene Launchpad concept">
+                <article class="gw21-launchpad">
+                  <span class="gw21-launchpad__eyebrow">Empty chapter · ready to shape</span>
+                  <h3>What happens in Ray Ray?</h3>
+                  <p class="gw21-launchpad__copy">Start with prose, pull in an unassigned idea, or storyboard the chapter spatially. Whichever path you choose creates or opens the same canonical scene.</p>
+                  <div class="gw21-launchpad__actions">
+                    <button class="gw21-launch-action" type="button"><b>Create a scene</b><span>Name it here, then begin writing immediately.</span></button>
+                    <button class="gw21-launch-action" type="button"><b>Move an existing scene</b><span>Search Unassigned and other chapters with destination preview.</span></button>
+                    <button class="gw21-launch-action" type="button"><b>Storyboard on Canvas</b><span>Enter Ray Ray’s chapter lens and place the first scene.</span></button>
+                  </div>
+                  <div class="gw21-launchpad__recent"><span>Chapter objective: not set</span><span>Shortcut: ⌘/Ctrl + Enter</span></div>
+                </article>
+              </section>
+
+              <section class="gw21-view gw21-view--map gw21-map" aria-label="Canvas Workbench concept">
+                <div class="gw21-tools" role="toolbar" aria-label="Canvas creation tools">
+                  <button class="gw21-tool" type="button" aria-pressed="true"><b>↖</b><span>Select<br>V</span></button>
+                  <button class="gw21-tool" type="button" aria-pressed="false"><b>✋</b><span>Hand<br>H</span></button>
+                  <button class="gw21-tool" type="button" aria-pressed="false"><b>◇</b><span>Scene<br>S</span></button>
+                  <button class="gw21-tool" type="button" aria-pressed="false"><b>▱</b><span>Note<br>N</span></button>
+                  <button class="gw21-tool" type="button" aria-pressed="false"><b>✦</b><span>Story<br>K</span></button>
+                  <button class="gw21-tool" type="button" aria-pressed="false"><b>▧</b><span>Image<br>I</span></button>
+                  <button class="gw21-tool" type="button" aria-pressed="false"><b>▢</b><span>Region<br>R</span></button>
+                  <button class="gw21-tool" type="button" aria-pressed="false"><b>↗</b><span>Connect<br>L</span></button>
+                </div>
+                <div class="gw21-utilities" role="toolbar" aria-label="Canvas utilities">
+                  <button type="button">Outline lens</button>
+                  <button type="button">Relationships</button>
+                  <button type="button">Plan → Draft</button>
+                  <span class="gw21-utilities__spacer"></span>
+                  <button type="button">⌕ Jump</button>
+                  <button type="button">Fit board</button>
+                  <button type="button">− 100% ＋</button>
+                  <button type="button">History</button>
+                  <button type="button">Outline view</button>
+                </div>
+                <span class="gw21-map__scope">Ray Ray chapter lens · Draft order remains canonical</span>
+                <div class="gw21-region"><span>Opening movement · Region</span></div>
+                <button class="gw21-node gw21-node--scene-a" type="button" aria-current="true">
+                  <span class="gw21-node__type">Scene · Drafting</span>
+                  <span class="gw21-node__title">The mirror answers</span>
+                  <span class="gw21-node__meta">Ray recognizes the thought before it becomes language.</span>
+                  <span class="gw21-node__chips"><span class="gw21-chip">Draft order 2</span><span class="gw21-chip">814 words</span></span>
+                </button>
+                <button class="gw21-node gw21-node--scene-b" type="button">
+                  <span class="gw21-node__type">Scene · Planned</span>
+                  <span class="gw21-node__title">A name in the static</span>
+                  <span class="gw21-node__meta">The chapter’s question returns in another voice.</span>
+                  <span class="gw21-node__chips"><span class="gw21-chip">Draft order 3</span></span>
+                </button>
+                <button class="gw21-node gw21-node--knowledge" type="button">
+                  <span class="gw21-node__type">World rule · Confirmed</span>
+                  <span class="gw21-node__title">Recognition precedes memory</span>
+                  <span class="gw21-node__meta">Referenced by 2 scenes · one outbound thread</span>
+                </button>
+                <button class="gw21-node gw21-node--note" type="button">
+                  <span class="gw21-node__type">Writer note</span>
+                  <span class="gw21-node__title">Hold the explanation</span>
+                  <span class="gw21-node__meta">Let the repetition carry the reveal.</span>
+                </button>
+                <span class="gw21-edge gw21-edge--a"><span class="gw21-edge__label">beat →</span></span>
+                <span class="gw21-edge gw21-edge--b"><span class="gw21-edge__label">references →</span></span>
+                <span class="gw21-edge gw21-edge--c"><span class="gw21-edge__label">pins →</span></span>
+                <div class="gw21-selectionbar" role="toolbar" aria-label="Selected scene actions"><strong>The mirror answers</strong><button type="button">Open Draft</button><button type="button">Link</button><button type="button">Forward</button><button type="button">Archive</button><button type="button">More</button></div>
+                <div class="gw21-minimap" aria-label="Canvas minimap"></div>
+              </section>
+
+              <section class="gw21-view gw21-view--write gw21-write" aria-label="Draft Desk concept">
+                <div class="gw21-scene-ribbon">
+                  <div class="gw21-scene-ribbon__nav"><button class="gw21-icon-button" type="button" aria-label="Previous scene">←</button><button class="gw21-icon-button" type="button" aria-label="Next scene">→</button></div>
+                  <div class="gw21-scene-ribbon__copy">
+                    <div class="gw21-scene-ribbon__eyebrow">Ray Ray · Scene 1 of 2</div>
+                    <div class="gw21-scene-ribbon__title">The mirror answers</div>
+                  </div>
+                  <div class="gw21-scene-ribbon__meta"><span>Drafting</span><span>POV · Ray</span><span>814 words</span><span class="gw21-status">Saved</span></div>
+                </div>
+                <div class="gw21-formatbar" role="toolbar" aria-label="Draft formatting tools">
+                  <button type="button">Paragraph⌄</button><button type="button"><b>B</b></button><button type="button"><i>I</i></button><button type="button"><u>U</u></button><button type="button">“ ”</button><button type="button">⁂</button><span class="gw21-formatbar__spacer"></span><button type="button">↶</button><button type="button">↷</button><button type="button">⌘K</button>
+                </div>
+                <article class="gw21-page">
+                  <div class="gw21-page__chapter">Chapter · Ray Ray</div>
+                  <h3>The mirror answers</h3>
+                  <p>The first thought arrived without words. Ray knew it by pressure alone—the quiet certainty that the room had recognized him before he recognized himself.</p>
+                  <p>Across the desk, the black screen held his reflection a fraction too long. Then the cursor appeared beneath his own face and began to move.<span class="gw21-caret"></span></p>
+                  <p><em>Do you remember me?</em></p>
+                </article>
+              </section>
+            </main>
+
+            <aside class="gw21-dock" aria-label="Proposed Context Dock">
+              <div class="gw21-dock__head">
+                <p class="gw21-dock__eyebrow">Context Dock</p>
+                <div class="gw21-dock__title" data-gw21-dock-title>Ray Ray</div>
+                <div class="gw21-dock__tabs" data-gw21-dock-tabs>
+                  <button type="button" aria-pressed="true">Brief</button>
+                  <button type="button" aria-pressed="false">Story</button>
+                  <button type="button" aria-pressed="false">Links</button>
+                  <button type="button" aria-pressed="false">History</button>
+                </div>
+              </div>
+              <div class="gw21-dock__body">
+                <div class="gw21-dock-panel gw21-dock-panel--build">
+                  <div class="gw21-field"><label>Chapter title · acknowledged</label><input value="Ray Ray" aria-label="Proposed chapter title"></div>
+                  <div class="gw21-field"><label>Objective and cast notes</label><div class="gw21-field__textarea">Establish recognition as a felt event before cognition can explain it.</div></div>
+                  <div class="gw21-dock-row"><span>Scenes</span><strong>0</strong></div>
+                  <div class="gw21-dock-row"><span>Draft order</span><strong>2 of 2 chapters</strong></div>
+                  <div class="gw21-dock__actions"><button class="gw21-primary" type="button">Create first scene</button><button class="gw21-secondary" type="button">More chapter actions</button></div>
+                </div>
+                <div class="gw21-dock-panel gw21-dock-panel--map">
+                  <div class="gw21-dock-card"><strong>The mirror answers</strong><p>Scene card · Confirmed · Ray Ray · x 164, y 118. Common actions stay on the floating bar; detailed geometry lives here.</p></div>
+                  <div class="gw21-dock-row"><span>Draft status</span><strong>Drafting</strong></div>
+                  <div class="gw21-dock-row"><span>Reading order</span><strong>2 · Aligned</strong></div>
+                  <div class="gw21-dock-row"><span>Inbound / outbound</span><strong>1 / 2</strong></div>
+                  <div class="gw21-dock-row"><span>Canvas authority</span><strong>Confirmed</strong></div>
+                  <div class="gw21-dock__actions"><button class="gw21-primary" type="button">Open Draft</button><button class="gw21-secondary" type="button">Start link</button><button class="gw21-secondary" type="button">Details</button></div>
+                </div>
+                <div class="gw21-dock-panel gw21-dock-panel--write">
+                  <div class="gw21-dock-card"><strong>Scene brief</strong><p>Ray encounters a response that seems to precede his question. Keep the explanation withheld; let recognition arrive through repetition.</p></div>
+                  <div class="gw21-dock-row"><span>Status</span><strong>Drafting</strong></div>
+                  <div class="gw21-dock-row"><span>POV</span><strong>Ray</strong></div>
+                  <div class="gw21-dock-row"><span>Canvas context</span><strong>4 linked items</strong></div>
+                  <div class="gw21-dock-row"><span>Current checkpoint</span><strong>12 minutes ago</strong></div>
+                  <div class="gw21-dock__actions"><button class="gw21-primary" type="button">Create checkpoint</button><button class="gw21-secondary" type="button">Open History</button><button class="gw21-secondary" type="button">Open Split</button></div>
+                </div>
+              </div>
+            </aside>
+
+            <div class="gw21-problem-toast" role="alert"><strong>Canvas changed elsewhere</strong><span>Your command changed nothing. The latest board is ready; Draft and manuscript order were untouched.</span><button type="button" data-gw21-clear-problem>Review latest Canvas</button></div>
+          </div>
+        </div>
+
+        <div class="gw21-demo-actions" aria-label="UX 2.1 demo controls">
+          <strong>Try details</strong>
+          <button type="button" data-gw21-quickbuild aria-pressed="false">Toggle Quick Build</button>
+          <button type="button" data-gw21-focus aria-pressed="false">Toggle Focus Halo</button>
+          <button type="button" data-gw21-problem aria-pressed="false">Show conflict truth</button>
+        </div>
+
+        <section class="gw21-section">
+          <p class="gw21-section__kicker">Interaction contracts</p>
+          <h3>Progressive disclosure without hidden power.</h3>
+          <p>Primary actions live where the writer’s attention already is. Low-frequency metadata and destructive actions move into Details or overflow; save truth, authority, recovery, and keyboard paths never disappear.</p>
+          <div class="gw21-detail-grid">
+            <article class="gw21-detail"><strong>Quick Build contract</strong><ul><li>One Add action, filtered by selection.</li><li>Title is the only common-path field.</li><li>Parent and position are previewed before commit.</li><li>Enter commits; Escape cancels.</li><li>Focus returns to the acknowledged new row.</li></ul></article>
+            <article class="gw21-detail"><strong>Canvas tool contract</strong><ul><li>Tools act; lenses filter and emphasize.</li><li>Escape always returns to Select.</li><li>Scene placement remains atomic with Draft.</li><li>Connect is a visible source → target flow.</li><li>Outline mirrors every canonical action.</li></ul></article>
+            <article class="gw21-detail"><strong>Draft Desk contract</strong><ul><li>Page owns the visual center.</li><li>History and metadata are drawers, not a wall.</li><li>Focus Halo never remounts Tiptap.</li><li>Save/lease detail escalates only when needed.</li><li>Handoffs preserve scene, caret, and return focus.</li></ul></article>
+          </div>
+          <div class="gw21-detail-grid">
+            <article class="gw21-detail"><strong>Project · Chapter Aggregates</strong><p>Each chapter is a derived overview card with scene count, relationship count, Draft index, drift, and unresolved setup. Enter dives into the same board at chapter scope.</p></article>
+            <article class="gw21-detail"><strong>Chapter · Canvas Workbench</strong><p>Scene beats, story records, notes, regions, and directed links become primary. Sibling context recedes; the tool dock creates within the current scope.</p></article>
+            <article class="gw21-detail"><strong>Scene · Focus Stage</strong><p>An acknowledged excerpt anchors the scene with inbound/outbound link cards and explicit Open Draft, Open Split, and Draft History actions using one scene ID.</p></article>
+          </div>
+        </section>
+
+        <section class="gw21-section">
+          <p class="gw21-section__kicker">Responsive concept</p>
+          <h3>Room for the work at every width.</h3>
+          <p>Medium layouts use one drawer at a time. Narrow layouts replace spatial manipulation with ordered actions and bottom sheets, while keeping the same canonical scene and commands.</p>
+          <div class="gw21-responsive">
+            <div class="gw21-medium" role="img" aria-label="Medium Draft with Context Dock drawer">
+              <div class="gw21-medium__top"><span>☰ Story Trail · Ray Ray · The mirror answers</span><span>Saved · Context ×</span></div>
+              <div class="gw21-medium__body"><div class="gw21-medium__rail">W<br><br>M<br><br>B<br><br>R</div><article class="gw21-medium__page"><h4>The mirror answers</h4><p>The first thought arrived without words. Ray knew it by pressure alone—the certainty that the room had recognized him.</p></article></div>
+              <aside class="gw21-medium__drawer"><strong>Context · Brief</strong><p>The drawer overlays the secondary edge and closes back to the exact editor caret. Opening the tree replaces this drawer rather than crushing the page.</p><div class="gw21-dock-row"><span>Canvas links</span><b>4</b></div><div class="gw21-dock-row"><span>Checkpoint</span><b>12 min</b></div></aside>
+            </div>
+            <div class="gw21-phone" role="img" aria-label="Narrow Project mode with Quick Build bottom sheet">
+              <div class="gw21-phone__top"><div class="gw21-phone__title">Cognition</div><div class="gw21-phone__trail">Book · Cognition › Intro › Ray Ray</div><div class="gw21-phone__tabs"><span>Project</span><span>Draft</span><span>Canvas</span><span>Read</span></div></div>
+              <div class="gw21-phone__body"><article class="gw21-phone__launch"><h4>Ray Ray</h4><p>Empty chapter · create, move, or storyboard the first scene.</p></article><div class="gw21-phone__row"><span>◇ Create scene</span><b>›</b></div><div class="gw21-phone__row"><span>↳ Move existing scene</span><b>›</b></div><div class="gw21-phone__row"><span>▦ Open ordered Canvas</span><b>›</b></div></div>
+              <div class="gw21-phone__sheet"><strong>Quick Build</strong><div class="gw21-phone__row"><span>Scene in Ray Ray</span><b>↵</b></div><button class="gw21-primary" type="button">Name the scene</button></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="gw21-section">
+          <p class="gw21-section__kicker">Required design states</p>
+          <h3>The polished path is not enough.</h3>
+          <div class="gw21-state-grid">
+            <article class="gw21-state"><strong>Build</strong><span>Empty/populated parent, Quick Build, inline rename, move preview, drag target, invalid destination, archived filter, safe-removal refusal.</span></article>
+            <article class="gw21-state"><strong>Map</strong><span>First-open guidance, active tool, selected card/link/region, connect stages, provisional/dismissed/archived/stale, large board, culling.</span></article>
+            <article class="gw21-state"><strong>Write</strong><span>No scene, loading, editable/read-only, save failure, lease/revision conflict, recovery, history/compare/restore, Focus Halo.</span></article>
+            <article class="gw21-state"><strong>Handoffs</strong><span>Pending flush, successful switch, failed flush with recovery, Reader return, medium drawer swap, narrow Back.</span></article>
+            <article class="gw21-state"><strong>Acknowledgement</strong><span>Saving, acknowledged, action toast, Undo/Restore expiry, sticky problem, no pre-ack success, no editor focus theft.</span></article>
+            <article class="gw21-state"><strong>Authority</strong><span>Tree order canonical; Canvas projection interpretive; provisional explicit; archived/stale visible; conflicts apply nothing.</span></article>
+            <article class="gw21-state"><strong>Accessibility</strong><span>Tool shortcuts and names, ordered Canvas parity, ARIA tree, focus return, text direction/authority, screen-reader announcements.</span></article>
+            <article class="gw21-state"><strong>Responsive</strong><span>Wide four-region, medium single drawer, narrow modes/bottom sheets, no freeform claim, no horizontal overflow, reduced motion.</span></article>
+          </div>
+        </section>
+      </div>
+    </section>
   </template>
 
   <script>
@@ -1305,6 +2774,112 @@ document.addEventListener('DOMContentLoaded', async function() {
           nav.appendChild(link);
         };
         addIndexLink(0);
+
+        const workspaceProposal = document.getElementById('ux-proposal-workspace-2-1');
+        const workspaceApp = workspaceProposal && workspaceProposal.querySelector('[data-gw21-app]');
+        const workspaceStatus = workspaceProposal && workspaceProposal.querySelector('[data-gw21-status]');
+        const workspaceDockTitle = workspaceProposal && workspaceProposal.querySelector('[data-gw21-dock-title]');
+        const workspaceModeCopy = {
+          build: { title: 'Ray Ray', status: 'All changes saved' },
+          map: { title: 'The mirror answers', status: 'Canvas saved · version 18' },
+          write: { title: 'The mirror answers', status: 'Draft saved · version 7' }
+        };
+
+        function setWorkspaceMode(mode) {
+          if (!workspaceApp || !workspaceModeCopy[mode]) return;
+          workspaceApp.dataset.mode = mode;
+          workspaceProposal.querySelectorAll('[data-gw21-mode]').forEach(function(control) {
+            control.setAttribute('aria-pressed', String(control.getAttribute('data-gw21-mode') === mode));
+          });
+          if (workspaceDockTitle) workspaceDockTitle.textContent = workspaceModeCopy[mode].title;
+          if (workspaceStatus && workspaceApp.dataset.problem !== 'true') {
+            workspaceStatus.textContent = workspaceModeCopy[mode].status;
+          }
+        }
+
+        if (workspaceProposal && workspaceApp) {
+          workspaceProposal.querySelectorAll('[data-gw21-mode]').forEach(function(control) {
+            control.addEventListener('click', function() {
+              setWorkspaceMode(control.getAttribute('data-gw21-mode'));
+            });
+          });
+          workspaceProposal.querySelectorAll('[data-gw21-rail]').forEach(function(control) {
+            control.addEventListener('click', function() {
+              setWorkspaceMode(control.getAttribute('data-gw21-rail'));
+            });
+          });
+          workspaceProposal.querySelectorAll('[data-gw21-quickbuild]').forEach(function(control) {
+            control.addEventListener('click', function() {
+              const open = workspaceApp.dataset.quickbuild !== 'true';
+              workspaceApp.dataset.quickbuild = String(open);
+              workspaceProposal.querySelectorAll('[data-gw21-quickbuild]').forEach(function(candidate) {
+                candidate.setAttribute('aria-pressed', String(open));
+              });
+              if (open) setWorkspaceMode('build');
+            });
+          });
+          workspaceProposal.querySelectorAll('[data-gw21-focus]').forEach(function(control) {
+            control.addEventListener('click', function() {
+              const focused = workspaceApp.dataset.focus !== 'true';
+              workspaceApp.dataset.focus = String(focused);
+              control.setAttribute('aria-pressed', String(focused));
+              if (focused) setWorkspaceMode('write');
+              control.textContent = focused ? 'Exit Focus Halo' : 'Toggle Focus Halo';
+            });
+          });
+          workspaceProposal.querySelectorAll('[data-gw21-problem]').forEach(function(control) {
+            control.addEventListener('click', function() {
+              const visible = workspaceApp.dataset.problem !== 'true';
+              workspaceApp.dataset.problem = String(visible);
+              control.setAttribute('aria-pressed', String(visible));
+              if (visible) {
+                setWorkspaceMode('map');
+                if (workspaceStatus) workspaceStatus.textContent = 'Canvas conflict · nothing changed';
+              } else if (workspaceStatus) {
+                workspaceStatus.textContent = workspaceModeCopy[workspaceApp.dataset.mode].status;
+              }
+            });
+          });
+          workspaceProposal.querySelectorAll('[data-gw21-clear-problem]').forEach(function(control) {
+            control.addEventListener('click', function() {
+              workspaceApp.dataset.problem = 'false';
+              workspaceProposal.querySelectorAll('[data-gw21-problem]').forEach(function(candidate) {
+                candidate.setAttribute('aria-pressed', 'false');
+              });
+              if (workspaceStatus) workspaceStatus.textContent = workspaceModeCopy[workspaceApp.dataset.mode].status;
+            });
+          });
+          workspaceProposal.querySelectorAll('.gw21-tool').forEach(function(control) {
+            control.addEventListener('click', function() {
+              workspaceProposal.querySelectorAll('.gw21-tool').forEach(function(candidate) {
+                candidate.setAttribute('aria-pressed', String(candidate === control));
+              });
+            });
+          });
+          workspaceProposal.querySelectorAll('[data-gw21-dock-tabs] button').forEach(function(control) {
+            control.addEventListener('click', function() {
+              workspaceProposal.querySelectorAll('[data-gw21-dock-tabs] button').forEach(function(candidate) {
+                candidate.setAttribute('aria-pressed', String(candidate === control));
+              });
+            });
+          });
+        }
+
+        const addWorkspaceIndexLink = function(indexAttempt) {
+          const nav = document.querySelector('nav[aria-label="Mockup index"]');
+          if (!nav) {
+            if (indexAttempt < 20) setTimeout(function() { addWorkspaceIndexLink(indexAttempt + 1); }, 100);
+            return;
+          }
+          nav.style.zIndex = '1000';
+          if (nav.querySelector('a[href="#ux-proposal-workspace-2-1"]')) return;
+          const link = document.createElement('a');
+          link.href = '#ux-proposal-workspace-2-1';
+          link.textContent = 'Proposed · Build Map Write';
+          link.style.cssText = 'background:#75483b;border:1px solid #75483b;border-radius:999px;color:#fff;font-size:12px;font-weight:800;padding:7px 11px;text-decoration:none;white-space:nowrap';
+          nav.appendChild(link);
+        };
+        addWorkspaceIndexLink(0);
       };
       setTimeout(function() { mountProposal(0); }, 80);
     }

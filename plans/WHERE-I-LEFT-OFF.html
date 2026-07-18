@@ -11,13 +11,13 @@
     <header>
       <p class="eyebrow">Session handoff</p>
       <h1>Where we left off</h1>
-      <p><strong>Last updated:</strong> 2026-07-12 · <strong>Current branch:</strong> <code>feat/authenticated-project-crud</code></p>
+      <p><strong>Last updated:</strong> 2026-07-18 · <strong>Current branch:</strong> <code>feat/authenticated-project-crud</code></p>
     </header>
 
     <section>
       <h2>Current state</h2>
-      <p>PR #4 is merged to <code>main</code>. On <code>feat/authenticated-project-crud</code>, the tree + DAG shell plus the writer-workspace-depth expansion (ADRs 0008/0009) are implemented locally: chapter folder objectives, tree DnD, scene URL ambience, deeper story knowledge and K↔K links, Canvas scope placements, book-like Reader with ElevenLabs TTS route, and MCP chat dock. <code>pnpm verify</code> passes 157 tests. Active plan: <a href="active/2026-07-12-writer-workspace-depth/plan.html">Writer workspace depth</a>. Next: live visual review, set <code>ELEVENLABS_API_KEY</code> when ready for voice, OpenAI key later for chat completion, then PR/CI.</p>
-      <p><strong>Live:</strong> backend at <code>https://ghostwriter-backend.fly.dev</code> (<code>/health</code> ok; DB-backed route authenticates to Lakebase via the CI/app service principal). Lakebase project <code>projects/ghostwriter</code> (branch <code>production</code>, endpoint <code>primary</code>, AWS <code>us-east-2</code>, PG 17) is provisioned and migrated.</p>
+      <p>PR #4 is merged to <code>main</code>. On <code>feat/authenticated-project-crud</code>, the owner-only writing foundation, tree + DAG shell, and writer-workspace-depth expansion (ADRs 0005–0009) are implemented locally: durable hierarchy/prose/history/recovery, Canvas boards/links/scope placements, Reader/TTS route, and MCP chat dock. A 2026-07-17 review of the real Cognition project found that the capabilities remain too form-driven and difficult to discover. The founder accepted <a href="designs/Ghostwriter%20Mockups%202.0.html#ux-proposal-workspace-2-1">Build · Map · Write UX 2.1</a> on 2026-07-18, authorizing Story Trail, Quick Build, Scene Launchpad, Canvas Workbench, Thread Trace, Chapter Aggregates, Scene Focus Stage, Draft Desk, Context Dock, Draft History drawer, and Focus Halo for checkpoints H1–H5.</p>
+      <p><strong>Verification:</strong> UX 2.1 checkpoints H1–H5 are implemented and browser-verified on the feature branch: Story Trail/Quick Build/Launchpad, Draft Desk/Context/History/Focus Halo, Canvas Workbench (tool dock, aggregates, Scene Focus Stage), handoffs/narrow modes, and Reader→Draft caret restore. <code>pnpm verify</code> passes 28 files / 189 tests plus 12 hook-policy checks. Playwright authoring/repair waits on explicit founder verification of this complete outcome (<code>GHOSTWRITER_PLAYWRIGHT_GATE=user-verified</code>). The separate pointer Canvas-card drag journey remains a known post-verification acceptance-audit item. <strong>Live:</strong> backend at <code>https://ghostwriter-backend.fly.dev</code> (<code>/health</code> ok); Lakebase <code>production</code> is migrated through the current checked-in schema.</p>
     </section>
 
     <section>
@@ -52,17 +52,17 @@
     <section>
       <h2>Active plans</h2>
       <ul>
-        <li><a href="active/2026-07-11-authenticated-project-crud/plan.html">Authenticated writing workspace, revisions, and Story Canvas</a> is active on <code>feat/authenticated-project-crud</code>. Phase 1 is pushed; the expanded technical milestone is green locally; the tree + DAG visual gate is accepted. Current checkpoint: replace the card/form shell with the persistent tree, inspector, and acknowledgement coordinator before drill/workflows, Reader, Split/handoffs, final commit/push, PR CI, and release.</li>
+        <li><a href="active/2026-07-11-authenticated-project-crud/plan.html">Authenticated writing workspace, revisions, and Story Canvas</a> is active on <code>feat/authenticated-project-crud</code>. Phase 1 is pushed; the expanded technical milestone, accepted tree + DAG shell, and UX 2.1 H1–H5 are green locally and waiting on founder product verification before the deferred Playwright acceptance audit, push, and PR.</li>
         <li>The long-running product/architecture blueprint remains at <a href="active/2026-07-11-agentic-writing-experience/plan.html">agentic writing experience</a>, retaining the experience, technical, agent, roadmap, and visual artifacts plus later platform decisions.</li>
       </ul>
       <p><strong>Living design source:</strong> <a href="designs/Ghostwriter%20Mockups%202.0.html">Ghostwriter Mockups 2.0</a> (never archived).</p>
     </section>
 
     <section>
-      <h2>Incomplete and awaiting founder review</h2>
+      <h2>Incomplete and next delivery</h2>
       <p>The product direction is substantially accepted and the backend topology is now decided and deployed. These material decisions remain open:</p>
       <ol>
-        <li>Identity/authentication, safe CRUD, prose/history/recovery, and Canvas state are implemented locally under ADRs 0005–0007. Remaining: accepted tree/inspector/toasts; drill/workflow lenses; Reader; resizable Split and handoffs; cumulative coherence/docs/tests and checkpoint commits; expanded milestone push; PR Lakebase migration/CI; merge-driven release and post-release smoke; then archive.</li>
+        <li>Identity/authentication, safe CRUD, prose/history/recovery, Canvas state, tree/inspector/toasts, drill/workflow lenses, Reader, Split, depth features, and UX 2.1 H1–H5 are implemented locally under ADRs 0005–0009. Remaining work is founder verification of the complete outcome, the deferred Playwright acceptance audit (including pointer Canvas-card drag), any verification follow-ups, expanded milestone commit/push, PR Lakebase/CI, merge-driven release and post-release smoke, then archive.</li>
         <li>Subscription/billing management.</li>
         <li>Real-time transport, presence, scene leases, backup/retention/deletion, and remote MCP authorization (backend/database selected in ADR 0004; live-update layer still open).</li>
         <li>Initial import/export formats; browser access is the accepted primary portability experience.</li>
@@ -73,7 +73,7 @@
 
     <section>
       <h2>Recommended next step</h2>
-      <p>Continue autonomously through <a href="active/2026-07-11-authenticated-project-crud/feature-delivery-checkpoints.html">the accepted feature checkpoints</a>. After each feature, review all accumulated domain/state/storage/API/UX/capability/docs behavior, run the verification ladder, record evidence, refine reusable harness guidance, and create the authorized local checkpoint commit. Do not push, open a PR, merge, or deploy without a separate go-ahead. The founder deferred the pre-existing Databricks credential rotation and keeps collaboration, real AI/image generation, import/export, purge, native freeform Canvas, and marketplace work outside this epic.</p>
+      <p>Review the complete Build · Map · Write UX 2.1 outcome on <code>feat/authenticated-project-crud</code> (H1–H5). After founder verification, authorize the deferred Playwright acceptance audit with <code>GHOSTWRITER_PLAYWRIGHT_GATE=user-verified</code>, then commit/push/PR when ready. Do not push, open a PR, merge, or deploy without separate go-ahead.</p>
     </section>
 
     <section>

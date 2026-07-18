@@ -19,6 +19,7 @@ export async function createProject(
 
 export async function openProject(page: Page, title: string): Promise<void> {
   await page.getByLabel(`Project ${title}`).click();
+  await expect(page.getByRole("button", { name: "← Projects" })).toBeVisible();
 }
 
 export async function selectTree(page: Page, label: string): Promise<void> {
@@ -154,7 +155,7 @@ export async function addStoryKnowledge(
   await page
     .getByRole("button", { name: "Add story record to Story knowledge" })
     .click();
-  await page.getByRole("textbox").last().fill(label);
+  await page.getByPlaceholder("New story record title").fill(label);
   await page
     .getByRole("button", { name: "Add story record", exact: true })
     .click();
@@ -183,15 +184,15 @@ export async function openWorkspaceMode(
     Split: "S Split",
     Reader: "R Reader"
   } as const;
-  const wideButton = page.getByRole("button", { name: wideLabels[mode] });
-  if (await wideButton.count()) {
-    await wideButton.click();
-    return;
-  }
-  await page
-    .locator('[aria-label="Writing workspace modes"]')
-    .getByRole("button", { name: mode, exact: true })
-    .click();
+  const wideButton = page
+    .getByLabel("Project areas")
+    .getByRole("button", { name: wideLabels[mode] });
+  const narrowButton = page
+    .getByLabel("Writing workspace modes")
+    .getByRole("button", { name: mode, exact: true });
+  const modeButton = wideButton.or(narrowButton).first();
+  await expect(modeButton).toBeVisible();
+  await modeButton.click();
 }
 
 export async function showInspectorIfHidden(page: Page): Promise<void> {

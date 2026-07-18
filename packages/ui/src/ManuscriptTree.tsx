@@ -3,9 +3,11 @@ import {
   useMemo,
   useRef,
   useState,
-  type ComponentType
+  type ComponentType,
+  type ReactNode
 } from "react";
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -46,22 +48,6 @@ type WebTreeItemProps = PressableProps &
     "aria-selected": boolean;
     "aria-expanded"?: boolean;
     "data-tree-key": string;
-    draggable?: boolean;
-    onDragStart?(event: {
-      dataTransfer?: {
-        setData(type: string, value: string): void;
-        effectAllowed: string;
-      };
-      preventDefault(): void;
-    }): void;
-    onDragOver?(event: { preventDefault(): void }): void;
-    onDragEnter?(event: { preventDefault(): void }): void;
-    onDragLeave?(): void;
-    onDrop?(event: {
-      preventDefault(): void;
-      dataTransfer?: { getData(type: string): string };
-    }): void;
-    onDragEnd?(): void;
     onKeyDown(event: TreeKeyEvent): void;
   }>;
 
@@ -73,6 +59,38 @@ type WebTreeProps = ViewProps &
 
 const TreeItemPressable = Pressable as unknown as ComponentType<WebTreeItemProps>;
 const TreeView = View as unknown as ComponentType<WebTreeProps>;
+
+type TreeDragDataTransfer = {
+  getData(type: string): string;
+  setData(type: string, value: string): void;
+  effectAllowed: string;
+};
+
+type TreeDragEvent = Readonly<{
+  dataTransfer?: TreeDragDataTransfer;
+  nativeEvent?: { dataTransfer?: TreeDragDataTransfer };
+  preventDefault(): void;
+}>;
+
+type TreeDragContainerProps = Readonly<{
+  children: ReactNode;
+  draggable: boolean;
+  onDragStart(event: TreeDragEvent): void;
+  onDragOver(event: TreeDragEvent): void;
+  onDragEnter(event: TreeDragEvent): void;
+  onDragLeave(): void;
+  onDrop(event: TreeDragEvent): void;
+  onDragEnd(): void;
+}>;
+
+const WebTreeDragContainer = "div" as unknown as ComponentType<TreeDragContainerProps>;
+
+function TreeDragContainer(props: TreeDragContainerProps) {
+  if (Platform.OS === "web") {
+    return <WebTreeDragContainer {...props} />;
+  }
+  return <View>{props.children}</View>;
+}
 
 type TreeNode = Readonly<{
   key: string;
@@ -91,10 +109,16 @@ type TreeNode = Readonly<{
   reorderCount?: number;
 }>;
 
+export type ManuscriptTreeAddRequest = Readonly<{
+  selectionKey: string;
+  requestId: number;
+}>;
+
 export type ManuscriptTreeProps = Readonly<{
   project: ProjectNavigator;
   selection: ManuscriptSelection;
   busy?: boolean;
+  addRequest?: ManuscriptTreeAddRequest;
   onSelectionChange(selection: ManuscriptSelection): void;
   onOpenScene?(selection: Extract<ManuscriptSelection, { kind: "scene" }>): void;
   onEnterChapter?(
@@ -352,6 +376,18 @@ function flattenTree(
   return nodes;
 }
 
+function findNodePath(
+  node: TreeNode,
+  key: string
+): readonly TreeNode[] | undefined {
+  if (node.key === key) return [node];
+  for (const child of node.children) {
+    const path = findNodePath(child, key);
+    if (path !== undefined) return [node, ...path];
+  }
+  return undefined;
+}
+
 function initialExpandedKeys(project: ProjectNavigator): Set<string> {
   const keys = new Set<string>(["project", "story-knowledge"]);
   for (const book of project.books) {
@@ -365,6 +401,39 @@ function initialExpandedKeys(project: ProjectNavigator): Set<string> {
     }
   }
   return keys;
+}
+
+function expandedStorageKey(project: ProjectNavigator): string {
+  return `ghostwriter:manuscript-tree:${project.id}:expanded`;
+}
+
+function readExpandedKeys(project: ProjectNavigator): Set<string> {
+  if (typeof sessionStorage === "undefined") return initialExpandedKeys(project);
+  try {
+    const stored = JSON.parse(
+      sessionStorage.getItem(expandedStorageKey(project)) ?? "null"
+    ) as unknown;
+    return Array.isArray(stored) && stored.every((value) => typeof value === "string")
+      ? new Set(stored)
+      : initialExpandedKeys(project);
+  } catch {
+    return initialExpandedKeys(project);
+  }
+}
+
+function writeExpandedKeys(
+  project: ProjectNavigator,
+  expandedKeys: ReadonlySet<string>
+): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(
+      expandedStorageKey(project),
+      JSON.stringify([...expandedKeys])
+    );
+  } catch {
+    // Session-only UI state may fail closed without affecting canonical structure.
+  }
 }
 
 function Action({
@@ -411,6 +480,7 @@ export function ManuscriptTree({
   project,
   selection,
   busy = false,
+  addRequest,
   onSelectionChange,
   onOpenScene,
   onEnterChapter,
@@ -422,7 +492,7 @@ export function ManuscriptTree({
   const [showArchived, setShowArchived] = useState(false);
   const [query, setQuery] = useState("");
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() =>
-    initialExpandedKeys(project)
+    readExpandedKeys(project)
   );
   const [activeKey, setActiveKey] = useState(() =>
     manuscriptSelectionKey(selection)
@@ -437,6 +507,7 @@ export function ManuscriptTree({
   const [draggingKey, setDraggingKey] = useState<string>();
   const renameInFlight = useRef(false);
   const addInFlight = useRef(false);
+  const skipExpandedWrite = useRef(false);
 
   const root = useMemo(
     () => buildTree(project, showArchived),
@@ -455,11 +526,20 @@ export function ManuscriptTree({
   const selectedKey = manuscriptSelectionKey(selection);
 
   useEffect(() => {
-    setExpandedKeys(initialExpandedKeys(project));
+    skipExpandedWrite.current = true;
+    setExpandedKeys(readExpandedKeys(project));
     setActiveKey("project");
     setRenameKey(undefined);
     setAddParentKey(undefined);
   }, [project.id]);
+
+  useEffect(() => {
+    if (skipExpandedWrite.current) {
+      skipExpandedWrite.current = false;
+      return;
+    }
+    writeExpandedKeys(project, expandedKeys);
+  }, [expandedKeys, project]);
 
   useEffect(() => {
     if (visibleNodes.some((node) => node.key === selectedKey)) {
@@ -539,6 +619,26 @@ export function ManuscriptTree({
     setAddValue("");
     setRenameKey(undefined);
   }
+
+  const handledAddRequestId = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (
+      addRequest === undefined ||
+      addRequest.requestId === handledAddRequestId.current
+    ) {
+      return;
+    }
+    handledAddRequestId.current = addRequest.requestId;
+    const path = findNodePath(root, addRequest.selectionKey);
+    const node = path?.[path.length - 1];
+    if (path === undefined || node?.addLabel === undefined) return;
+    setExpandedKeys((current) => {
+      const next = new Set(current);
+      for (const ancestor of path) next.add(ancestor.key);
+      return next;
+    });
+    beginAdd(node);
+  }, [addRequest, root]);
 
   async function commitAdd(node: TreeNode): Promise<void> {
     if (addInFlight.current || addParentKey !== node.key) return;
@@ -747,7 +847,55 @@ export function ManuscriptTree({
             const sceneDraggable =
               node.selection.kind === "scene" && onMoveScene !== undefined;
             return (
-              <View key={node.key}>
+              <TreeDragContainer
+                draggable={sceneDraggable}
+                key={node.key}
+                onDragEnd={() => {
+                  setDraggingKey(undefined);
+                  setDropTargetKey(undefined);
+                }}
+                onDragEnter={(event) => {
+                  if (!canAcceptSceneDrop(node)) return;
+                  event.preventDefault();
+                  setDropTargetKey(node.key);
+                }}
+                onDragLeave={() => {
+                  setDropTargetKey((current) =>
+                    current === node.key ? undefined : current
+                  );
+                }}
+                onDragOver={(event) => {
+                  if (!canAcceptSceneDrop(node)) return;
+                  event.preventDefault();
+                }}
+                onDragStart={(event) => {
+                  if (node.selection.kind !== "scene") return;
+                  const dataTransfer =
+                    event.dataTransfer ?? event.nativeEvent?.dataTransfer;
+                  setDraggingKey(node.key);
+                  dataTransfer?.setData(
+                    "application/x-ghostwriter-scene",
+                    JSON.stringify(node.selection)
+                  );
+                  dataTransfer?.setData(
+                    "text/plain",
+                    manuscriptSelectionKey(node.selection)
+                  );
+                  if (dataTransfer !== undefined) {
+                    dataTransfer.effectAllowed = "move";
+                  }
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const dataTransfer =
+                    event.dataTransfer ?? event.nativeEvent?.dataTransfer;
+                  const payload =
+                    dataTransfer?.getData("application/x-ghostwriter-scene") ??
+                    dataTransfer?.getData("text/plain") ??
+                    "";
+                  void handleDrop(node, payload);
+                }}
+              >
                 <TreeItemPressable
                   aria-label={node.ariaLabel}
                   aria-expanded={expanded}
@@ -755,51 +903,7 @@ export function ManuscriptTree({
                   aria-selected={selected}
                   data-tree-key={node.key}
                   disabled={busy || inlineBusy}
-                  draggable={sceneDraggable}
                   onBlur={() => setFocusedKey(undefined)}
-                  onDragEnd={() => {
-                    setDraggingKey(undefined);
-                    setDropTargetKey(undefined);
-                  }}
-                  onDragEnter={(event) => {
-                    if (!canAcceptSceneDrop(node)) return;
-                    event.preventDefault();
-                    setDropTargetKey(node.key);
-                  }}
-                  onDragLeave={() => {
-                    setDropTargetKey((current) =>
-                      current === node.key ? undefined : current
-                    );
-                  }}
-                  onDragOver={(event) => {
-                    if (!canAcceptSceneDrop(node)) return;
-                    event.preventDefault();
-                  }}
-                  onDragStart={(event) => {
-                    if (node.selection.kind !== "scene") return;
-                    setDraggingKey(node.key);
-                    event.dataTransfer?.setData(
-                      "application/x-ghostwriter-scene",
-                      JSON.stringify(node.selection)
-                    );
-                    event.dataTransfer?.setData(
-                      "text/plain",
-                      manuscriptSelectionKey(node.selection)
-                    );
-                    if (event.dataTransfer !== undefined) {
-                      event.dataTransfer.effectAllowed = "move";
-                    }
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    const payload =
-                      event.dataTransfer?.getData(
-                        "application/x-ghostwriter-scene"
-                      ) ??
-                      event.dataTransfer?.getData("text/plain") ??
-                      "";
-                    void handleDrop(node, payload);
-                  }}
                   onFocus={() => {
                     setActiveKey(node.key);
                     setFocusedKey(node.key);
@@ -959,7 +1063,7 @@ export function ManuscriptTree({
                     />
                   </View>
                 ) : null}
-              </View>
+              </TreeDragContainer>
             );
           })}
         </TreeView>
@@ -1046,10 +1150,12 @@ const styles = StyleSheet.create({
   },
   keyboardHelp: {
     color: colors.muted,
+    flexShrink: 1,
     fontFamily: fonts.ui,
     fontSize: 7,
     lineHeight: 11,
-    marginTop: 7
+    marginTop: 7,
+    maxWidth: "100%"
   },
   treeScroll: {
     flex: 1,

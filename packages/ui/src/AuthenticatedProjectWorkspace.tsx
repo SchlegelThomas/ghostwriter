@@ -27,8 +27,13 @@ import {
   type CanvasWorkflowLens
 } from "./canvas-drill.js";
 import { CanvasDrillBar } from "./CanvasDrillBar.js";
-import { ManuscriptTree, type SceneMoveDestination } from "./ManuscriptTree.js";
 import {
+  ManuscriptTree,
+  type ManuscriptTreeAddRequest,
+  type SceneMoveDestination
+} from "./ManuscriptTree.js";
+import {
+  manuscriptSelectionKey,
   resolveManuscriptSelection,
   sceneSelection,
   type ManuscriptSelection
@@ -42,11 +47,27 @@ import {
 } from "./split-layout.js";
 import { ghostwriterTheme } from "./theme.js";
 import {
+  quickBuildOptions,
+  storyTrail,
+  structureLaunchpad,
+  type QuickBuildOption
+} from "./workspace-structure.js";
+import {
   WorkspaceChatPanel,
   type WorkspaceChatMessage
 } from "./WorkspaceChatPanel.js";
 
 export type ProjectWorkspaceMode = "draft" | "canvas" | "split";
+
+export type DraftWorkspacePresentation = Readonly<{
+  contextDockOpen: boolean;
+  focusHalo: boolean;
+  historyOpen: boolean;
+  narrow: boolean;
+  onContextDockOpenChange(open: boolean): void;
+  onFocusHaloChange(focused: boolean): void;
+  onHistoryOpenChange(open: boolean): void;
+}>;
 
 export type AuthenticatedProjectWorkspaceProps = Readonly<{
   project: ProjectNavigator;
@@ -78,7 +99,10 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   onWorkflowLensChange?(lens: CanvasWorkflowLens): void;
   storageAccountId?: string;
   renderCanvas?: ReactNode;
-  renderDraft?(scene: ProjectNavigatorScene | undefined): ReactNode;
+  renderDraft?(
+    scene: ProjectNavigatorScene | undefined,
+    presentation: DraftWorkspacePresentation
+  ): ReactNode;
   chatCapabilities?: readonly GhostwriterCapability[];
   chatMessages?: readonly WorkspaceChatMessage[];
   onChatSend?(message: string): Promise<void> | void;
@@ -86,7 +110,7 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
 
 const { colors, fonts, shell } = ghostwriterTheme;
 
-type CollapsedPanel = "tree" | "inspector";
+type CollapsedPanel = "tree" | "inspector" | "none";
 
 function Button({
   label,
@@ -221,6 +245,11 @@ export function AuthenticatedProjectWorkspace({
   const narrow = width < 760;
   const [splitRatio, setSplitRatio] = useState(SPLIT_RATIO_DEFAULT);
   const [chatOpen, setChatOpen] = useState(false);
+  const [contextDockOpen, setContextDockOpen] = useState(true);
+  const [draftDockTab, setDraftDockTab] = useState<
+    "brief" | "story" | "canvas" | "history"
+  >("brief");
+  const [focusHalo, setFocusHalo] = useState(false);
   const splitSurfaceRef = useRef<View>(null);
   useEffect(() => {
     if (storageAccountId === undefined) {
@@ -293,8 +322,32 @@ export function AuthenticatedProjectWorkspace({
   }, [canvasVisible, drillStack.length, onDrillBack]);
 
   useEffect(() => {
+    if (typeof document === "undefined" || !focusHalo) return;
+    const exitFocus = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setFocusHalo(false);
+    };
+    document.addEventListener("keydown", exitFocus);
+    return () => document.removeEventListener("keydown", exitFocus);
+  }, [focusHalo]);
+
+  useEffect(() => {
     if (!wide && mode === "split") onModeChange("draft");
   }, [mode, onModeChange, wide]);
+
+  useEffect(() => {
+    if (mode !== "draft" || selectedSceneId === undefined) {
+      setFocusHalo(false);
+      setDraftDockTab("brief");
+    }
+  }, [mode, selectedSceneId]);
+
+  useEffect(() => {
+    if (!narrow || (mode !== "draft" && mode !== "canvas")) return;
+    setCollapsedPanel("none");
+    if (mode === "draft") setContextDockOpen(false);
+  }, [mode, narrow, selectedSceneId]);
 
   useEffect(() => {
     if (
@@ -316,18 +369,77 @@ export function AuthenticatedProjectWorkspace({
     );
   }, [project, selectedSceneId, selection]);
 
-  useEffect(() => {
-    if (
-      selectedSceneId === undefined &&
-      projectScenes[0] !== undefined
-    ) {
-      onSelectedSceneIdChange(projectScenes[0].id);
-    }
-  }, [onSelectedSceneIdChange, projectScenes, selectedSceneId]);
-
   function chooseSelection(next: ManuscriptSelection): void {
     setSelection(next);
     if (next.kind === "scene") onSelectedSceneIdChange(next.sceneId);
+  }
+
+  const [quickBuildOpen, setQuickBuildOpen] = useState(false);
+  const [treeAddRequest, setTreeAddRequest] =
+    useState<ManuscriptTreeAddRequest>();
+  const quickBuildRequestId = useRef(0);
+  const trail = storyTrail(project, selection);
+  const quickOptions = quickBuildOptions(project, selection);
+  const launchpad = structureLaunchpad(project, selection);
+  const launchpadVisible =
+    mode === "draft" && selection.kind !== "scene" && launchpad !== undefined;
+  const resolvedSelection = resolveManuscriptSelection(project, selection);
+  const moveCandidates =
+    selection.kind === "chapter"
+      ? (resolvedSelection?.book?.unassignedScenes.filter(
+          (scene) => scene.archivedAt === undefined
+        ) ?? [])
+      : [];
+
+  const selectionKey = manuscriptSelectionKey(selection);
+  useEffect(() => {
+    setQuickBuildOpen(false);
+  }, [selectionKey, project.id]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const handleQuickBuildKey = (event: KeyboardEvent): void => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault();
+        setQuickBuildOpen((current) => !current);
+        return;
+      }
+      if (event.key === "Escape") {
+        setQuickBuildOpen((current) => (current ? false : current));
+      }
+    };
+    document.addEventListener("keydown", handleQuickBuildKey);
+    return () => document.removeEventListener("keydown", handleQuickBuildKey);
+  }, []);
+
+  function dispatchQuickBuild(option: QuickBuildOption): void {
+    setQuickBuildOpen(false);
+    if (!wide) setCollapsedPanel("tree");
+    quickBuildRequestId.current += 1;
+    setTreeAddRequest({
+      selectionKey: manuscriptSelectionKey(option.parent),
+      requestId: quickBuildRequestId.current
+    });
+  }
+
+  function openLaunchpadScene(scene: ProjectNavigatorScene): void {
+    const next = sceneSelection(project, scene.id);
+    if (next === undefined) return;
+    chooseSelection(next);
+    onModeChange("draft");
+  }
+
+  async function moveSceneToLaunchpadChapter(
+    scene: ProjectNavigatorScene
+  ): Promise<void> {
+    if (selection.kind !== "chapter") return;
+    await onCommand({
+      type: "scene.move",
+      sceneId: scene.id,
+      bookId: selection.bookId,
+      chapterId: selection.chapterId,
+      position: launchpad?.scenes.length ?? 0
+    });
   }
 
   async function addChild(
@@ -526,6 +638,7 @@ export function AuthenticatedProjectWorkspace({
 
   const tree = (
     <ManuscriptTree
+      addRequest={treeAddRequest}
       busy={busy}
       onAddChild={addChild}
       onEnterChapter={(next) => {
@@ -537,7 +650,10 @@ export function AuthenticatedProjectWorkspace({
       onOpenScene={(next) => {
         chooseSelection(next);
         onModeChange("draft");
-        if (!wide) setCollapsedPanel("tree");
+        if (!wide) {
+          setCollapsedPanel("none");
+          setContextDockOpen(false);
+        }
       }}
       onRename={renameSelection}
       onReorder={reorderSelection}
@@ -549,7 +665,7 @@ export function AuthenticatedProjectWorkspace({
   const inspector = (
     <SelectionInspector
       busy={busy}
-      onClose={wide ? undefined : () => setCollapsedPanel("tree")}
+      onClose={wide ? undefined : () => setCollapsedPanel("none")}
       onCommand={onCommand}
       onReorder={reorderSelection}
       project={project}
@@ -558,12 +674,127 @@ export function AuthenticatedProjectWorkspace({
     />
   );
   const draftVisible = mode === "draft" || mode === "split";
-  const centerTitle =
-    drillScope.kind === "scene"
+  const draftDeskActive =
+    mode === "draft" && selection.kind === "scene" && selectedScene !== undefined;
+  const draftKnowledge =
+    selectedScene === undefined
+      ? []
+      : project.storyKnowledge.filter(
+          (knowledge) =>
+            knowledge.archivedAt === undefined &&
+            knowledge.linkedSceneIds.includes(selectedScene.id)
+        );
+  const draftPresentation: DraftWorkspacePresentation = {
+    contextDockOpen,
+    focusHalo,
+    historyOpen: draftDockTab === "history",
+    narrow,
+    onContextDockOpenChange: setContextDockOpen,
+    onFocusHaloChange: setFocusHalo,
+    onHistoryOpenChange: (open) => {
+      setDraftDockTab(open ? "history" : "brief");
+      if (open) setContextDockOpen(true);
+    }
+  };
+  const draftContextDock = (
+    <View accessibilityLabel="Draft Context Dock" style={styles.draftDock}>
+      <View style={styles.draftDockHeading}>
+        <View style={styles.draftDockHeadingCopy}>
+          <Text style={styles.draftDockEyebrow}>Context Dock</Text>
+          <Text numberOfLines={1} style={styles.draftDockTitle}>
+            {selectedScene?.title ?? "Scene"}
+          </Text>
+        </View>
+        <Button
+          label="Close Context Dock"
+          onPress={() => setContextDockOpen(false)}
+        />
+      </View>
+      <View accessibilityLabel="Draft Context Dock tabs" style={styles.draftDockTabs}>
+        {(["brief", "story", "canvas", "history"] as const).map((tab) => (
+          <Pressable
+            accessibilityRole="tab"
+            accessibilityState={{ selected: draftDockTab === tab }}
+            key={tab}
+            onPress={() => setDraftDockTab(tab)}
+            style={({ pressed }) => [
+              styles.draftDockTab,
+              draftDockTab === tab && styles.draftDockTabSelected,
+              pressed && styles.pressed
+            ]}
+          >
+            <Text
+              style={[
+                styles.draftDockTabText,
+                draftDockTab === tab && styles.draftDockTabTextSelected
+              ]}
+            >
+              {tab[0]?.toUpperCase()}
+              {tab.slice(1)}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      {draftDockTab === "brief" ? (
+        inspector
+      ) : draftDockTab === "story" ? (
+        <ScrollView contentContainerStyle={styles.draftDockBody}>
+          <Text style={styles.draftDockSectionTitle}>Story in this scene</Text>
+          {draftKnowledge.length === 0 ? (
+            <Text style={styles.draftDockText}>
+              No active story records are linked to this scene yet.
+            </Text>
+          ) : (
+            draftKnowledge.map((knowledge) => (
+              <View key={knowledge.id} style={styles.draftDockCard}>
+                <Text style={styles.draftDockCardTitle}>{knowledge.label}</Text>
+                <Text style={styles.draftDockText}>
+                  {knowledge.kind} · {knowledge.authority}
+                </Text>
+                {knowledge.notes === undefined ? null : (
+                  <Text style={styles.draftDockText}>{knowledge.notes}</Text>
+                )}
+              </View>
+            ))
+          )}
+        </ScrollView>
+      ) : draftDockTab === "canvas" ? (
+        <View style={styles.draftDockBody}>
+          <Text style={styles.draftDockSectionTitle}>Canvas context</Text>
+          <Text style={styles.draftDockText}>
+            Open Canvas or Split from the project rail to review spatial
+            placement and directed links for this same canonical scene.
+          </Text>
+          <Button label="Open Canvas" onPress={() => onModeChange("canvas")} />
+          {wide ? (
+            <Button label="Open Split" onPress={() => onModeChange("split")} />
+          ) : null}
+        </View>
+      ) : (
+        <View style={styles.draftDockBody}>
+          <Text style={styles.draftDockSectionTitle}>Draft History</Text>
+          <Text style={styles.draftDockText}>
+            Timeline, named variants, compare, and restore are open in the
+            drawer below the manuscript page. The editor stays mounted.
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+  const centerTitle = launchpadVisible
+    ? launchpad.title
+    : drillScope.kind === "scene"
       ? (drillTrail[drillTrail.length - 1]?.label ?? selectedScene?.title)
       : drillScope.kind === "chapter"
         ? (drillTrail[drillTrail.length - 1]?.label ?? "Chapter lens")
         : (selectedScene?.title ?? "Shape the manuscript");
+  const centerEyebrow = launchpadVisible
+    ? launchpad.eyebrow
+    : mode === "draft"
+      ? "Focused Draft"
+      : mode === "canvas"
+        ? "Story Canvas"
+        : "Draft + Canvas";
 
   return (
     <View style={styles.screen}>
@@ -577,7 +808,12 @@ export function AuthenticatedProjectWorkspace({
             {profileDisplayName} · project version {project.version}
           </Text>
         </View>
-        <View style={styles.topbarActions}>
+        <View
+          style={[
+            styles.topbarActions,
+            narrow && styles.topbarActionsNarrow
+          ]}
+        >
           {allChangesIdle ? (
             <Text
               accessibilityLiveRegion="polite"
@@ -594,25 +830,44 @@ export function AuthenticatedProjectWorkspace({
                     ? "Hide manuscript tree"
                     : "Show manuscript tree"
                 }
-                onPress={() =>
-                  setCollapsedPanel((current) =>
-                    current === "tree" ? "inspector" : "tree"
-                  )
-                }
+                onPress={() => {
+                  setCollapsedPanel((current) => {
+                    const next = current === "tree" ? "none" : "tree";
+                    // Medium/narrow: tree and Context Dock are mutually exclusive.
+                    if (next === "tree") setContextDockOpen(false);
+                    return next;
+                  });
+                }}
                 selected={collapsedPanel === "tree"}
               />
               <Button
                 label={
-                  collapsedPanel === "inspector"
-                    ? "Hide inspector"
-                    : "Show inspector"
+                  draftDeskActive
+                    ? contextDockOpen
+                      ? "Hide Context Dock"
+                      : "Show Context Dock"
+                    : collapsedPanel === "inspector"
+                      ? "Hide inspector"
+                      : "Show inspector"
                 }
-                onPress={() =>
+                onPress={() => {
+                  if (draftDeskActive) {
+                    setContextDockOpen((open) => {
+                      const next = !open;
+                      if (next) setCollapsedPanel("none");
+                      return next;
+                    });
+                    return;
+                  }
                   setCollapsedPanel((current) =>
-                    current === "inspector" ? "tree" : "inspector"
-                  )
+                    current === "inspector" ? "none" : "inspector"
+                  );
+                }}
+                selected={
+                  draftDeskActive
+                    ? contextDockOpen
+                    : collapsedPanel === "inspector"
                 }
-                selected={collapsedPanel === "inspector"}
               />
             </>
           ) : null}
@@ -642,14 +897,29 @@ export function AuthenticatedProjectWorkspace({
           style={styles.narrowModes}
         >
           <Button
+            label="Project"
+            onPress={() => {
+              setContextDockOpen(false);
+              setCollapsedPanel("tree");
+            }}
+            selected={collapsedPanel === "tree"}
+          />
+          <Button
             label="Draft"
-            onPress={() => onModeChange("draft")}
-            selected={mode === "draft"}
+            onPress={() => {
+              setCollapsedPanel("none");
+              setContextDockOpen(false);
+              onModeChange("draft");
+            }}
+            selected={mode === "draft" && collapsedPanel === "none"}
           />
           <Button
             label="Canvas"
-            onPress={() => onModeChange("canvas")}
-            selected={mode === "canvas"}
+            onPress={() => {
+              setCollapsedPanel("none");
+              onModeChange("canvas");
+            }}
+            selected={mode === "canvas" && collapsedPanel === "none"}
           />
           {onOpenReader === undefined ? null : (
             <Button
@@ -667,7 +937,7 @@ export function AuthenticatedProjectWorkspace({
           narrow && styles.workspaceNarrow
         ]}
       >
-        {!narrow ? (
+        {!narrow && !focusHalo ? (
           <View
             accessibilityLabel="Project areas"
             style={styles.rail}
@@ -719,17 +989,17 @@ export function AuthenticatedProjectWorkspace({
           </View>
         ) : null}
 
-        {wide || collapsedPanel === "tree" ? (
-          <View
-            style={[
-              styles.treeRegion,
-              !wide && styles.collapsedRegion,
-              narrow && styles.narrowRegion
-            ]}
-          >
-            {tree}
-          </View>
-        ) : null}
+        <View
+          style={[
+            styles.treeRegion,
+            !wide && styles.collapsedRegion,
+            narrow && styles.narrowRegion,
+            (focusHalo || (!wide && collapsedPanel !== "tree")) &&
+              styles.regionHidden
+          ]}
+        >
+          {tree}
+        </View>
 
         <ScrollView
           contentContainerStyle={[
@@ -745,33 +1015,129 @@ export function AuthenticatedProjectWorkspace({
               <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
-          <View style={styles.centerHeading}>
-            <View style={styles.centerHeadingCopy}>
-              <Text style={styles.centerEyebrow}>
-                {mode === "draft"
-                  ? "Focused Draft"
-                  : mode === "canvas"
-                    ? "Story Canvas"
-                    : "Draft + Canvas"}
-              </Text>
-              <Text style={styles.centerTitle}>{centerTitle}</Text>
+          {focusHalo ? null : (
+            <>
+              <View
+                accessibilityLabel="Story Trail"
+                style={styles.storyTrailRow}
+              >
+            <View style={styles.storyTrail}>
+              {trail.map((item, index) => {
+                const current = index === trail.length - 1;
+                const key = manuscriptSelectionKey(item.selection);
+                return (
+                  <View key={key} style={styles.storyTrailItem}>
+                    {index === 0 ? null : (
+                      <Text style={styles.storyTrailDivider}>›</Text>
+                    )}
+                    <Pressable
+                      accessibilityLabel={
+                        current
+                          ? `Story Trail, current scope ${item.label}`
+                          : `Story Trail, go to ${item.label}`
+                      }
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: current }}
+                      disabled={current || busy}
+                      onPress={() => chooseSelection(item.selection)}
+                      style={({ pressed }) => [
+                        styles.storyTrailButton,
+                        current && styles.storyTrailCurrent,
+                        pressed && styles.pressed
+                      ]}
+                    >
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          styles.storyTrailText,
+                          current && styles.storyTrailTextCurrent
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
             </View>
-            <Text style={styles.centerRule}>
-              Tree order is canonical. Canvas relationships never reorder Draft.
-            </Text>
-          </View>
-          {canvasVisible ? (
-            <CanvasDrillBar
-              busy={busy}
-              canvasVisible={canvasVisible}
-              drillStack={drillStack}
-              onDrillBack={onDrillBack}
-              onDrillTo={onDrillTo}
-              onWorkflowLensChange={onWorkflowLensChange}
-              project={project}
-              workflowLens={workflowLens}
-            />
-          ) : null}
+            {quickOptions.length === 0 ? null : (
+              <View style={styles.quickBuild}>
+                <Pressable
+                  accessibilityLabel="Quick Build: add to the manuscript"
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: quickBuildOpen }}
+                  disabled={busy}
+                  onPress={() => setQuickBuildOpen((current) => !current)}
+                  style={({ pressed }) => [
+                    styles.quickBuildButton,
+                    quickBuildOpen && styles.buttonSelected,
+                    pressed && styles.pressed,
+                    busy && styles.disabled
+                  ]}
+                >
+                  <Text style={styles.quickBuildButtonText}>＋ Add</Text>
+                </Pressable>
+                {quickBuildOpen ? (
+                  <View
+                    accessibilityLabel="Quick Build options"
+                    style={styles.quickBuildMenu}
+                  >
+                    {quickOptions.map((option) => (
+                      <Pressable
+                        accessibilityLabel={option.label}
+                        accessibilityRole="menuitem"
+                        disabled={busy}
+                        key={option.id}
+                        onPress={() => dispatchQuickBuild(option)}
+                        style={({ pressed }) => [
+                          styles.quickBuildOption,
+                          pressed && styles.pressed
+                        ]}
+                      >
+                        <Text style={styles.quickBuildOptionLabel}>
+                          {option.label}
+                        </Text>
+                        <Text
+                          numberOfLines={2}
+                          style={styles.quickBuildOptionDetail}
+                        >
+                          {option.detail}
+                        </Text>
+                      </Pressable>
+                    ))}
+                    <Text style={styles.quickBuildHint}>
+                      Titles commit with Enter in the manuscript tree. Escape
+                      cancels.
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            )}
+              </View>
+              <View style={styles.centerHeading}>
+                <View style={styles.centerHeadingCopy}>
+                  <Text style={styles.centerEyebrow}>{centerEyebrow}</Text>
+                  <Text style={styles.centerTitle}>{centerTitle}</Text>
+                </View>
+                <Text style={styles.centerRule}>
+                  Tree order is canonical. Canvas relationships never reorder
+                  Draft.
+                </Text>
+              </View>
+              {canvasVisible ? (
+                <CanvasDrillBar
+                  busy={busy}
+                  canvasVisible={canvasVisible}
+                  drillStack={drillStack}
+                  onDrillBack={onDrillBack}
+                  onDrillTo={onDrillTo}
+                  onWorkflowLensChange={onWorkflowLensChange}
+                  project={project}
+                  workflowLens={workflowLens}
+                />
+              ) : null}
+            </>
+          )}
           <View
             ref={splitSurfaceRef}
             style={[
@@ -820,30 +1186,138 @@ export function AuthenticatedProjectWorkspace({
                     : undefined
                 ]}
               >
-                {renderDraft?.(selectedScene) ?? (
-                  <View style={styles.empty}>
-                    <Text style={styles.emptyTitle}>Choose or create a scene</Text>
-                    <Text style={styles.emptyText}>
-                      Draft opens one canonical manuscript scene at a time.
+                {launchpadVisible && mode === "draft" ? (
+                  <View
+                    accessibilityLabel="Scene Launchpad"
+                    style={styles.launchpad}
+                  >
+                    <Text style={styles.launchpadDescription}>
+                      {launchpad.description}
                     </Text>
+                    <View style={styles.launchpadActions}>
+                      {quickOptions[0] === undefined ? null : (
+                        <Button
+                          disabled={busy}
+                          label={quickOptions[0].label}
+                          onPress={() => {
+                            const first = quickOptions[0];
+                            if (first !== undefined) dispatchQuickBuild(first);
+                          }}
+                          primary
+                        />
+                      )}
+                      {launchpad.storyboardChapter === undefined ? null : (
+                        <Button
+                          disabled={busy}
+                          label="Storyboard on Canvas"
+                          onPress={() => {
+                            const chapter = launchpad.storyboardChapter;
+                            if (chapter === undefined) return;
+                            chooseSelection(chapter);
+                            onEnterChapter(chapter);
+                            onModeChange("canvas");
+                          }}
+                        />
+                      )}
+                    </View>
+                    {launchpad.scenes.length === 0 ? null : (
+                      <View
+                        accessibilityLabel="Scene launch list"
+                        style={styles.launchpadScenes}
+                      >
+                        {launchpad.scenes.map((scene) => (
+                          <Pressable
+                            accessibilityLabel={`Open scene ${scene.title}`}
+                            accessibilityRole="button"
+                            disabled={busy}
+                            key={scene.id}
+                            onPress={() => openLaunchpadScene(scene)}
+                            style={({ pressed }) => [
+                              styles.launchpadScene,
+                              pressed && styles.pressed
+                            ]}
+                          >
+                            <Text
+                              numberOfLines={1}
+                              style={styles.launchpadSceneTitle}
+                            >
+                              {scene.title}
+                            </Text>
+                            <Text style={styles.launchpadSceneMeta}>
+                              {scene.status} · open in Draft
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                    {moveCandidates.length === 0 ? null : (
+                      <View
+                        accessibilityLabel="Move an existing scene here"
+                        style={styles.launchpadScenes}
+                      >
+                        <Text style={styles.launchpadSectionTitle}>
+                          Move an unassigned scene into this chapter
+                        </Text>
+                        {moveCandidates.slice(0, 6).map((scene) => (
+                          <Pressable
+                            accessibilityLabel={`Move scene ${scene.title} here`}
+                            accessibilityRole="button"
+                            disabled={busy}
+                            key={scene.id}
+                            onPress={() =>
+                              void moveSceneToLaunchpadChapter(scene)
+                            }
+                            style={({ pressed }) => [
+                              styles.launchpadScene,
+                              pressed && styles.pressed
+                            ]}
+                          >
+                            <Text
+                              numberOfLines={1}
+                              style={styles.launchpadSceneTitle}
+                            >
+                              {scene.title}
+                            </Text>
+                            <Text style={styles.launchpadSceneMeta}>
+                              Move here · keeps one canonical order
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
                   </View>
+                ) : (
+                  (renderDraft?.(selectedScene, draftPresentation) ?? (
+                    <View style={styles.empty}>
+                      <Text style={styles.emptyTitle}>
+                        Open a scene to write
+                      </Text>
+                      <Text style={styles.emptyText}>
+                        Use the Scene Launchpad or manuscript tree to open one
+                        scene at a time. Draft never invents a scene for you.
+                      </Text>
+                    </View>
+                  ))
                 )}
               </View>
             ) : null}
           </View>
         </ScrollView>
 
-        {wide || collapsedPanel === "inspector" ? (
-          <View
-            style={[
-              styles.inspectorRegion,
-              !wide && styles.collapsedRegion,
-              narrow && styles.narrowRegion
-            ]}
-          >
-            {inspector}
-          </View>
-        ) : null}
+        <View
+          style={[
+            styles.inspectorRegion,
+            !wide && styles.collapsedRegion,
+            narrow && styles.narrowRegion,
+            (focusHalo ||
+              (draftDeskActive
+                ? !contextDockOpen
+                : !wide && collapsedPanel !== "inspector")) &&
+              styles.regionHidden
+          ]}
+        >
+          {draftDeskActive ? draftContextDock : inspector}
+        </View>
 
         {chatOpen && onChatSend !== undefined ? (
           <View
@@ -881,7 +1355,9 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     minWidth: 0,
-    position: "relative"
+    overflow: "hidden",
+    position: "relative",
+    width: "100%"
   },
   topbar: {
     alignItems: "center",
@@ -901,7 +1377,7 @@ const styles = StyleSheet.create({
   },
   topbarCopy: {
     flex: 1,
-    minWidth: 150
+    minWidth: 0
   },
   topbarTitle: {
     color: colors.ink,
@@ -920,6 +1396,10 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 5,
     minWidth: 0
+  },
+  topbarActionsNarrow: {
+    flexBasis: "100%",
+    width: "100%"
   },
   aggregateStatus: {
     color: colors.green,
@@ -1044,6 +1524,94 @@ const styles = StyleSheet.create({
     minWidth: 0,
     width: 310
   },
+  draftDock: {
+    backgroundColor: colors.paper,
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0
+  },
+  draftDockHeading: {
+    alignItems: "center",
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: 7,
+    justifyContent: "space-between",
+    padding: 11
+  },
+  draftDockHeadingCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  draftDockEyebrow: {
+    color: colors.kicker,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 7,
+    letterSpacing: 1.2,
+    textTransform: "uppercase"
+  },
+  draftDockTitle: {
+    color: colors.ink,
+    fontFamily: fonts.story,
+    fontSize: 20,
+    marginTop: 2
+  },
+  draftDockTabs: {
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 3,
+    padding: 7
+  },
+  draftDockTab: {
+    borderColor: "transparent",
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 5
+  },
+  draftDockTabSelected: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent
+  },
+  draftDockTabText: {
+    color: colors.muted,
+    fontFamily: fonts.uiMedium,
+    fontSize: 8
+  },
+  draftDockTabTextSelected: {
+    color: colors.accent,
+    fontFamily: fonts.uiSemibold
+  },
+  draftDockBody: {
+    gap: 9,
+    padding: 12
+  },
+  draftDockSectionTitle: {
+    color: colors.ink,
+    fontFamily: fonts.story,
+    fontSize: 20
+  },
+  draftDockText: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 9,
+    lineHeight: 14
+  },
+  draftDockCard: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 3,
+    padding: 9
+  },
+  draftDockCardTitle: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 9
+  },
   chatRegion: {
     borderLeftColor: colors.line,
     borderLeftWidth: 1,
@@ -1060,9 +1628,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderLeftWidth: 0,
     borderRightWidth: 0,
-    flex: 0,
+    flexGrow: 0,
+    flexShrink: 0,
+    height: 340,
     maxHeight: 430,
+    minHeight: 0,
     width: "100%"
+  },
+  regionHidden: {
+    display: "none"
   },
   center: {
     flex: 1,
@@ -1091,6 +1665,173 @@ const styles = StyleSheet.create({
     fontSize: 9,
     lineHeight: 14
   },
+  storyTrailRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    justifyContent: "space-between",
+    minWidth: 0,
+    zIndex: 30
+  },
+  storyTrail: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 3,
+    minWidth: 0
+  },
+  storyTrailItem: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 3,
+    minWidth: 0
+  },
+  storyTrailDivider: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 9
+  },
+  storyTrailButton: {
+    borderColor: "transparent",
+    borderRadius: 5,
+    borderWidth: 1,
+    maxWidth: 200,
+    paddingHorizontal: 5,
+    paddingVertical: 3
+  },
+  storyTrailCurrent: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent
+  },
+  storyTrailText: {
+    color: colors.muted,
+    fontFamily: fonts.uiMedium,
+    fontSize: 8
+  },
+  storyTrailTextCurrent: {
+    color: colors.accent,
+    fontFamily: fonts.uiSemibold
+  },
+  quickBuild: {
+    position: "relative",
+    zIndex: 30
+  },
+  quickBuildButton: {
+    alignItems: "center",
+    backgroundColor: colors.brandDark,
+    borderColor: colors.brandDark,
+    borderRadius: 6,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 33,
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
+  quickBuildButtonText: {
+    color: "#ffffff",
+    fontFamily: fonts.uiSemibold,
+    fontSize: 8
+  },
+  quickBuildMenu: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    elevation: 6,
+    gap: 2,
+    marginTop: 4,
+    minWidth: 250,
+    padding: 6,
+    position: "absolute",
+    right: 0,
+    shadowColor: "#1d150f",
+    shadowOffset: { height: 6, width: 0 },
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    top: "100%",
+    zIndex: 40
+  },
+  quickBuildOption: {
+    borderRadius: 6,
+    gap: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 6
+  },
+  quickBuildOptionLabel: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 9
+  },
+  quickBuildOptionDetail: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 7.5,
+    lineHeight: 11
+  },
+  quickBuildHint: {
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 7,
+    lineHeight: 10,
+    marginTop: 3,
+    paddingHorizontal: 7,
+    paddingTop: 5
+  },
+  launchpad: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 12,
+    padding: 18,
+    width: "100%"
+  },
+  launchpadDescription: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 9.5,
+    lineHeight: 15,
+    maxWidth: 520
+  },
+  launchpadActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7
+  },
+  launchpadScenes: {
+    gap: 5,
+    minWidth: 0
+  },
+  launchpadSectionTitle: {
+    color: colors.kicker,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 7.5,
+    letterSpacing: 1.1,
+    textTransform: "uppercase"
+  },
+  launchpadScene: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  launchpadSceneTitle: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 9.5
+  },
+  launchpadSceneMeta: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 7.5
+  },
   centerHeading: {
     alignItems: "flex-start",
     flexDirection: "row",
@@ -1101,7 +1842,7 @@ const styles = StyleSheet.create({
   },
   centerHeadingCopy: {
     flex: 1,
-    minWidth: 180
+    minWidth: 0
   },
   centerEyebrow: {
     color: colors.kicker,

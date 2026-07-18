@@ -52,6 +52,7 @@ import {
   type SceneSaveQueue,
   type SceneSaveQueueSnapshot
 } from "./scene-save-queue.js";
+import { sceneDocumentWordCount } from "./draft-desk.js";
 
 const { colors, fonts } = ghostwriterTheme;
 const LEASE_RENEWAL_INTERVAL_MS = 20_000;
@@ -66,7 +67,21 @@ export type DraftPanelProps = Readonly<{
   projectId: string;
   sceneId: string;
   sceneTitle: string;
+  sceneStatus?: string;
+  sceneSummary?: string;
+  povLabel?: string;
+  scenePosition?: string;
+  previousSceneTitle?: string;
+  nextSceneTitle?: string;
+  contextDockOpen?: boolean;
+  focusHalo?: boolean;
+  historyOpen?: boolean;
   readOnly?: boolean;
+  onContextDockOpenChange?(open: boolean): void;
+  onFocusHaloChange?(focused: boolean): void;
+  onHistoryOpenChange?(open: boolean): void;
+  onPreviousScene?(): void;
+  onNextScene?(): void;
   onAcknowledgement?(event: DraftAcknowledgementEvent): void;
   onActivityChange?(activity: DraftActivity): void;
   onProblem?(problem: DraftProblemEvent): void;
@@ -487,8 +502,8 @@ function messageForLeaseFailure(cause: unknown): string {
     cause.code === "LEASE_CONFLICT"
   ) {
     return (
-      "This Draft is read-only because another browser session holds its editing lease. " +
-      "This protects direct edits; Ghostwriter does not show live presence yet."
+      "This Draft is read-only because another browser session is editing it. " +
+      "Only one direct editor is allowed at a time; Ghostwriter does not show live presence yet."
     );
   }
   if (
@@ -496,16 +511,16 @@ function messageForLeaseFailure(cause: unknown): string {
     cause.code === "LEASE_EXPIRED"
   ) {
     return (
-      "The editing lease expired. Your unsaved Draft remains in local recovery for review; " +
-      "reacquire the lease before retrying."
+      "Editing timed out. Your unsaved Draft remains in local recovery for review; " +
+      "retry editing to continue."
     );
   }
   if (cause instanceof GhostwriterApiError && cause.status === 401) {
     return "Your session ended. This Draft is read-only until you sign in again.";
   }
   return (
-    "Ghostwriter could not confirm the editing lease. The Draft is read-only, and any " +
-    "captured unacknowledged prose remains in local recovery."
+    "Ghostwriter could not confirm exclusive editing for this scene. The Draft is read-only, " +
+    "and any captured unacknowledged prose remains in local recovery."
   );
 }
 
@@ -535,10 +550,10 @@ function leaseStatusText(
   readOnly: boolean,
   lease: SceneLeaseResponse | undefined
 ): string {
-  if (phase === "loading") return "Loading Draft…";
-  if (phase === "acquiring") return "Acquiring editing lease…";
+  if (phase === "loading") return "Opening Draft…";
+  if (phase === "acquiring") return "Opening this scene for editing…";
   if (phase === "held" && lease !== undefined) {
-    return "Editing lease held · renews automatically";
+    return "Editing here · stays active while you write";
   }
   return readOnly ? "Read-only · archived scene" : "Read-only";
 }
@@ -550,7 +565,21 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
       projectId,
       sceneId,
       sceneTitle,
+      sceneStatus = "planned",
+      sceneSummary,
+      povLabel,
+      scenePosition,
+      previousSceneTitle,
+      nextSceneTitle,
+      contextDockOpen = true,
+      focusHalo = false,
+      historyOpen = false,
       readOnly = false,
+      onContextDockOpenChange,
+      onFocusHaloChange,
+      onHistoryOpenChange,
+      onPreviousScene,
+      onNextScene,
       onAcknowledgement,
       onActivityChange,
       onProblem,
@@ -1480,23 +1509,53 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
     const statusText = saveStatusText(saveSnapshot, problem);
     const canReviewServer =
       problem?.kind === "revision" && problem.workspace !== undefined;
+    const wordCount = sceneDocumentWordCount(document);
 
     return (
-      <View style={styles.panel}>
-        <View style={styles.headingRow}>
+      <View
+        accessibilityLabel="Draft Desk"
+        style={[styles.panel, focusHalo && styles.panelFocused]}
+      >
+        <View accessibilityLabel="Draft scene ribbon" style={styles.sceneRibbon}>
+          <View style={styles.sceneNavigation}>
+            <DraftButton
+              disabled={onPreviousScene === undefined || actionBusy}
+              label={
+                previousSceneTitle === undefined
+                  ? "Previous scene"
+                  : `Previous scene: ${previousSceneTitle}`
+              }
+              onPress={() => onPreviousScene?.()}
+            />
+            <DraftButton
+              disabled={onNextScene === undefined || actionBusy}
+              label={
+                nextSceneTitle === undefined
+                  ? "Next scene"
+                  : `Next scene: ${nextSceneTitle}`
+              }
+              onPress={() => onNextScene?.()}
+            />
+          </View>
           <View style={styles.headingCopy}>
-            <Text style={styles.eyebrow}>Focused Draft</Text>
-            <Text style={styles.title}>{sceneTitle}</Text>
-            <Text style={styles.meta}>
-              {head === undefined
-                ? "Loading acknowledged scene document"
-                : `Draft version ${head.workingVersion}`}
+            <Text style={styles.eyebrow}>
+              {scenePosition ?? "Manuscript scene"}
             </Text>
+            <Text style={styles.title}>{sceneTitle}</Text>
+            <View style={styles.sceneMetaRow}>
+              <Text style={styles.meta}>{sceneStatus}</Text>
+              <Text style={styles.meta}>POV · {povLabel ?? "Open"}</Text>
+              <Text accessibilityLabel="Draft word count" style={styles.meta}>
+                {wordCount} {wordCount === 1 ? "word" : "words"}
+              </Text>
+              <Text style={styles.meta}>
+                {head === undefined
+                  ? "Loading acknowledged Draft"
+                  : `Draft ${head.workingVersion}`}
+              </Text>
+            </View>
           </View>
           <View style={styles.statusGroup}>
-            <Text accessibilityLabel="Draft lease status" style={styles.leaseStatus}>
-              {leaseStatusText(leasePhase, readOnly, lease)}
-            </Text>
             <Text
               accessibilityLabel="Draft save status"
               accessibilityLiveRegion="polite"
@@ -1508,6 +1567,31 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
             >
               {statusText}
             </Text>
+            {leasePhase === "held" && problem === undefined ? null : (
+              <Text
+                accessibilityLabel="Draft lease status"
+                style={styles.leaseStatus}
+              >
+                {leaseStatusText(leasePhase, readOnly, lease)}
+              </Text>
+            )}
+            <View style={styles.sceneRibbonActions}>
+              <DraftButton
+                label={contextDockOpen ? "Hide Context" : "Show Context"}
+                onPress={() =>
+                  onContextDockOpenChange?.(!contextDockOpen)
+                }
+              />
+              <DraftButton
+                label={historyOpen ? "Close History" : "History"}
+                onPress={() => onHistoryOpenChange?.(!historyOpen)}
+              />
+              <DraftButton
+                primary={focusHalo}
+                label={focusHalo ? "Exit focus" : "Focus"}
+                onPress={() => onFocusHaloChange?.(!focusHalo)}
+              />
+            </View>
           </View>
         </View>
 
@@ -1620,6 +1704,13 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
           </View>
         ) : (
           <View style={styles.editorHost}>
+            <View style={styles.manuscriptPageHeading}>
+              <Text style={styles.manuscriptPageEyebrow}>Manuscript page</Text>
+              <Text style={styles.manuscriptPageTitle}>{sceneTitle}</Text>
+              {sceneSummary === undefined ? null : (
+                <Text style={styles.manuscriptPageSummary}>{sceneSummary}</Text>
+              )}
+            </View>
             <SceneEditor
               ariaLabel={`Draft for ${sceneTitle}`}
               editable={editorIsEditable}
@@ -1637,6 +1728,7 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
                   queue.getAcknowledgedWorkingVersion()
                 );
               }}
+              selectionStorageKey={`ghostwriter:draft-selection:${accountId}:${projectId}:${sceneId}`}
               style={{
                 boxSizing: "border-box",
                 maxWidth: "100%",
@@ -1647,35 +1739,51 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
           </View>
         )}
 
-        <DraftHistoryArea
-          accountId={accountId}
-          busy={actionBusy}
-          canMutate={historyCanMutate}
-          comparison={comparison}
-          confirmingRestore={confirmingRestore}
-          currentCheckpointRevisionId={head?.checkpointRevisionId}
-          error={historyError}
-          history={history}
-          notice={historyNotice}
-          onCancelRestore={() => setConfirmingRestore(false)}
-          onCheckpoint={() => void createCheckpoint()}
-          onCompare={() => void compareSelectedRevision()}
-          onConfirmRestore={() => void restoreSelectedRevision()}
-          onCreateVariant={() => void createVariant()}
-          onReload={() => void refreshHistory(head?.checkpointRevisionId)}
-          onRequestRestore={() => setConfirmingRestore(true)}
-          onSelectRevision={(revisionId) => {
-            setSelectedRevisionId(revisionId);
-            setComparison(undefined);
-            setConfirmingRestore(false);
-            setHistoryNotice(undefined);
-          }}
-          onVariantNameChange={setVariantName}
-          phase={historyPhase}
-          selectedRevisionId={selectedRevisionId}
-          variantName={variantName}
-          workingMessage={historyWorking}
-        />
+        {historyOpen ? (
+          <View accessibilityLabel="Draft History drawer" style={styles.historyDrawer}>
+            <View style={styles.historyDrawerHeading}>
+              <View style={styles.headingCopy}>
+                <Text style={styles.eyebrow}>Draft History</Text>
+                <Text style={styles.historyDrawerTitle}>
+                  Timeline, variants, compare, and restore
+                </Text>
+              </View>
+              <DraftButton
+                label="Close Draft History"
+                onPress={() => onHistoryOpenChange?.(false)}
+              />
+            </View>
+            <DraftHistoryArea
+              accountId={accountId}
+              busy={actionBusy}
+              canMutate={historyCanMutate}
+              comparison={comparison}
+              confirmingRestore={confirmingRestore}
+              currentCheckpointRevisionId={head?.checkpointRevisionId}
+              error={historyError}
+              history={history}
+              notice={historyNotice}
+              onCancelRestore={() => setConfirmingRestore(false)}
+              onCheckpoint={() => void createCheckpoint()}
+              onCompare={() => void compareSelectedRevision()}
+              onConfirmRestore={() => void restoreSelectedRevision()}
+              onCreateVariant={() => void createVariant()}
+              onReload={() => void refreshHistory(head?.checkpointRevisionId)}
+              onRequestRestore={() => setConfirmingRestore(true)}
+              onSelectRevision={(revisionId) => {
+                setSelectedRevisionId(revisionId);
+                setComparison(undefined);
+                setConfirmingRestore(false);
+                setHistoryNotice(undefined);
+              }}
+              onVariantNameChange={setVariantName}
+              phase={historyPhase}
+              selectedRevisionId={selectedRevisionId}
+              variantName={variantName}
+              workingMessage={historyWorking}
+            />
+          </View>
+        ) : null}
       </View>
     );
   }
@@ -1683,22 +1791,30 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
 
 const styles = StyleSheet.create({
   panel: {
-    backgroundColor: colors.paper,
-    borderColor: colors.line,
-    borderRadius: 10,
-    borderWidth: 1,
+    backgroundColor: colors.canvas,
     minWidth: 0,
-    overflow: "hidden",
-    padding: 16,
+    padding: 4,
     width: "100%"
   },
-  headingRow: {
-    alignItems: "flex-start",
+  panelFocused: {
+    paddingHorizontal: 10
+  },
+  sceneRibbon: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 9,
+    borderWidth: 1,
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
+    gap: 10,
     justifyContent: "space-between",
-    marginBottom: 13
+    marginBottom: 12,
+    padding: 9
+  },
+  sceneNavigation: {
+    flexDirection: "row",
+    gap: 4
   },
   headingCopy: {
     flex: 1,
@@ -1721,12 +1837,24 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontFamily: fonts.ui,
     fontSize: 9,
-    marginTop: 3
+    textTransform: "capitalize"
+  },
+  sceneMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 4
   },
   statusGroup: {
     alignItems: "flex-end",
     gap: 4,
     maxWidth: "100%"
+  },
+  sceneRibbonActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    justifyContent: "flex-end"
   },
   leaseStatus: {
     color: colors.blue,
@@ -1842,16 +1970,67 @@ const styles = StyleSheet.create({
     fontSize: 10
   },
   editorHost: {
+    alignSelf: "center",
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 10,
+    borderWidth: 1,
+    maxWidth: 820,
     minWidth: 0,
     overflow: "hidden",
     width: "100%"
+  },
+  manuscriptPageHeading: {
+    paddingBottom: 4,
+    paddingHorizontal: 28,
+    paddingTop: 28
+  },
+  manuscriptPageEyebrow: {
+    color: colors.kicker,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 7,
+    letterSpacing: 1.4,
+    textTransform: "uppercase"
+  },
+  manuscriptPageTitle: {
+    color: colors.ink,
+    fontFamily: fonts.story,
+    fontSize: 30,
+    marginTop: 4
+  },
+  manuscriptPageSummary: {
+    color: colors.muted,
+    fontFamily: fonts.storyItalic,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 5
+  },
+  historyDrawer: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 12,
+    padding: 12
+  },
+  historyDrawerHeading: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between"
+  },
+  historyDrawerTitle: {
+    color: colors.ink,
+    fontFamily: fonts.story,
+    fontSize: 20,
+    marginTop: 2
   },
   history: {
     backgroundColor: colors.wash,
     borderColor: colors.line,
     borderRadius: 9,
     borderWidth: 1,
-    marginTop: 16,
+    marginTop: 10,
     minWidth: 0,
     padding: 12,
     width: "100%"

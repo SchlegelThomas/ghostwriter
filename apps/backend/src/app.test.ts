@@ -247,6 +247,39 @@ describe("backend app", () => {
     });
   });
 
+  it("runs an owner-scoped read capability and keeps optional Reader voice explicit", async () => {
+    const app = await seededApp();
+    const chat = await app.request("/api/workspace/chat", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: TEST_ORIGIN
+      },
+      body: JSON.stringify({
+        message: "project.navigator.read",
+        projectId: BELLWETHER_FIXTURE_PROJECT_ID
+      })
+    });
+
+    expect(chat.status).toBe(200);
+    await expect(chat.json()).resolves.toMatchObject({
+      reply: expect.stringContaining(BELLWETHER_FIXTURE_NAVIGATOR.title)
+    });
+
+    const voice = await app.request("/api/reader/speak", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: TEST_ORIGIN
+      },
+      body: JSON.stringify({ text: "The harbor answered.", voice: "noir" })
+    });
+    expect(voice.status).toBe(503);
+    await expect(voice.json()).resolves.toMatchObject({
+      code: "VOICE_UNAVAILABLE"
+    });
+  });
+
   it("executes typed commands and rejects stale writes", async () => {
     const app = await seededApp();
     const renamed = await app.request(

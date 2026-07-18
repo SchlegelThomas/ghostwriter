@@ -32,6 +32,7 @@ export type BookReaderPanelProps = Readonly<{
   projection?: BookReaderProjection;
   busy?: boolean;
   error?: string;
+  voiceError?: string;
   voicePack?: ReaderVoicePack;
   speaking?: boolean;
   onExit(): void;
@@ -242,6 +243,7 @@ function VoiceControls({
 function WideReader({
   projection,
   onExit,
+  voiceError,
   voicePack,
   speaking,
   onVoicePackChange,
@@ -250,6 +252,7 @@ function WideReader({
 }: Readonly<{
   projection: BookReaderProjection;
   onExit(): void;
+  voiceError?: string;
   voicePack: ReaderVoicePack;
   speaking: boolean;
   onVoicePackChange?(pack: ReaderVoicePack): void;
@@ -361,6 +364,11 @@ function WideReader({
         speechText={speechText}
         voicePack={voicePack}
       />
+      {voiceError === undefined ? null : (
+        <Text accessibilityRole="alert" style={styles.voiceError}>
+          {voiceError}
+        </Text>
+      )}
 
       <View style={styles.spreadRegion}>
         <Text style={styles.runningHeader}>
@@ -427,6 +435,7 @@ function WideReader({
 function NarrowReader({
   projection,
   onExit,
+  voiceError,
   voicePack,
   speaking,
   onVoicePackChange,
@@ -435,6 +444,7 @@ function NarrowReader({
 }: Readonly<{
   projection: BookReaderProjection;
   onExit(): void;
+  voiceError?: string;
   voicePack: ReaderVoicePack;
   speaking: boolean;
   onVoicePackChange?(pack: ReaderVoicePack): void;
@@ -480,6 +490,11 @@ function NarrowReader({
         speechText={speechText}
         voicePack={voicePack}
       />
+      {voiceError === undefined ? null : (
+        <Text accessibilityRole="alert" style={styles.voiceError}>
+          {voiceError}
+        </Text>
+      )}
 
       <ScrollView
         horizontal
@@ -581,6 +596,7 @@ export function BookReaderPanel({
   projection,
   busy = false,
   error,
+  voiceError,
   voicePack = "default",
   speaking = false,
   onExit,
@@ -620,6 +636,7 @@ export function BookReaderPanel({
       onVoicePackChange={onVoicePackChange}
       projection={projection}
       speaking={speaking}
+      voiceError={voiceError}
       voicePack={voicePack}
     />
   ) : (
@@ -630,6 +647,7 @@ export function BookReaderPanel({
       onVoicePackChange={onVoicePackChange}
       projection={projection}
       speaking={speaking}
+      voiceError={voiceError}
       voicePack={voicePack}
     />
   );
@@ -727,6 +745,14 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 10
+  },
+  voiceError: {
+    backgroundColor: colors.redSoft,
+    color: colors.red,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 9,
+    paddingHorizontal: 16,
+    paddingVertical: 8
   },
   voiceLabel: {
     color: colors.muted,

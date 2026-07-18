@@ -46,13 +46,26 @@ Use one copy per observable feature. Keep it in working notes or the active plan
 
 ## Tests
 
+Route authorship/repair through model-pinned project subagents: `routine-tests` (Composer 2.5
+fast) by default; `hard-tests` (Grok 4.5) only for an intrinsically hard case or after two distinct
+evidence-backed routine attempts. During implementation, use a real-browser walkthrough instead
+of writing Playwright. Defer Playwright until the user explicitly verifies the complete outcome.
+
 - Core invariants:
 - Repository parity/rollback:
 - Backend auth/validation/conflict:
 - Client state:
-- Wide Playwright:
-- Narrow/accessibility Playwright:
+- Wide browser walkthrough:
+- Narrow/accessibility browser walkthrough:
 - Performance or scale fixture:
+- Routing marker (`routine` or `hard`):
+- Subagent + resolved model:
+- Focused command/result:
+- Composer attempt count (maximum 2):
+- Hard escalation reason/evidence (if any):
+- User verification received:
+- Deferred Playwright audit (`GHOSTWRITER_PLAYWRIGHT_GATE=user-verified`):
+- Full suite run only after user verification and focused green:
 
 ## Documentation
 
@@ -76,14 +89,16 @@ Use one copy per observable feature. Keep it in working notes or the active plan
 - [ ] Authorization/non-disclosure remain intact
 - [ ] Keyboard, focus, narrow, and reduced motion work
 - [ ] Capabilities/MCP exceptions are truthful
-- [ ] Prior browser journeys still pass
+- [ ] Prior workflows pass direct browser walkthroughs
 - [ ] Docs and handoff are current
 
 ## Evidence
 
 - Targeted checks:
 - `pnpm verify`:
-- Playwright:
+- Browser walkthrough:
+- User verification:
+- Deferred Playwright:
 - Diagnostics/diff:
 - Commit:
 
