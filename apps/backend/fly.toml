@@ -20,7 +20,10 @@ primary_region = "iad"
   LAKEBASE_DB = "databricks_postgres"
   LAKEBASE_USER = "a4622cb7-c206-4ace-a085-2b9ecdf98b37"
   BETTER_AUTH_URL = "https://ghostwriter-di2.pages.dev"
-  AUTH_TRUSTED_ORIGINS = "https://ghostwriter-di2.pages.dev"
+  # Canonical Pages origin plus branch aliases (feat-*.ghostwriter-di2.pages.dev).
+  # Google redirect stays on the canonical host; session cookies are shared via
+  # cross-subdomain cookie domain configured in auth.ts.
+  AUTH_TRUSTED_ORIGINS = "https://ghostwriter-di2.pages.dev,https://*.ghostwriter-di2.pages.dev"
   # Direct read-write endpoint host. NOTE: use the direct host, not the "-pooler" host — the
   # connection pooler rejects Lakebase OAuth-token SASL auth (Postgres error 08P01).
   LAKEBASE_HOST = "ep-dawn-forest-d8ffu38j.database.us-east-2.cloud.databricks.com"

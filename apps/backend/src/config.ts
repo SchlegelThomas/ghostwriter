@@ -40,6 +40,43 @@ function parseOrigin(value: string, key: string): string {
   return url.origin;
 }
 
+/** Exact origins or Better Auth wildcard patterns such as https://*.example.pages.dev. */
+function parseTrustedOrigin(value: string, key: string): string {
+  if (!value.includes("*")) {
+    return parseOrigin(value, key);
+  }
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${key} must be an absolute http(s) origin pattern.`);
+  }
+
+  if (
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
+    url.origin !== value ||
+    url.pathname !== "/" ||
+    url.search.length > 0 ||
+    url.hash.length > 0
+  ) {
+    throw new Error(
+      `${key} wildcard entries must be origins without a path, query, or fragment.`
+    );
+  }
+
+  return url.origin;
+}
+
+export function pagesPreviewCookieDomain(baseUrl: string): string | undefined {
+  const host = new URL(baseUrl).hostname;
+  // Cloudflare Pages project host is registrable; branch aliases are subdomains of it.
+  if (!host.endsWith(".pages.dev") || host.split(".").length < 3) {
+    return undefined;
+  }
+  return `.${host}`;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig {
   const port = Number.parseInt(env.PORT ?? "8787", 10);
   if (Number.isNaN(port)) {
@@ -49,7 +86,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
   const baseUrl = parseOrigin(required(env, "BETTER_AUTH_URL"), "BETTER_AUTH_URL");
   const trustedOrigins = (env.AUTH_TRUSTED_ORIGINS ?? baseUrl)
     .split(",")
-    .map((origin) => parseOrigin(origin.trim(), "AUTH_TRUSTED_ORIGINS"));
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0)
+    .map((origin) => parseTrustedOrigin(origin, "AUTH_TRUSTED_ORIGINS"));
   const authSecret = required(env, "BETTER_AUTH_SECRET");
   if (authSecret.length < 32) {
     throw new Error("BETTER_AUTH_SECRET must contain at least 32 characters.");

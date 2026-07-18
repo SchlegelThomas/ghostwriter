@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadConfig } from "./config.js";
+import { loadConfig, pagesPreviewCookieDomain } from "./config.js";
 
 const baseEnv = {
   DATABASE_URL: "postgres://localhost/ghostwriter",
@@ -37,6 +37,24 @@ describe("backend auth configuration", () => {
         BETTER_AUTH_URL: "https://ghostwriter.example/untrusted"
       })
     ).toThrow("BETTER_AUTH_URL must be an origin");
+  });
+
+  it("accepts Cloudflare Pages wildcard trusted origins", () => {
+    const config = loadConfig({
+      ...baseEnv,
+      BETTER_AUTH_URL: "https://ghostwriter-di2.pages.dev",
+      AUTH_TRUSTED_ORIGINS:
+        "https://ghostwriter-di2.pages.dev,https://*.ghostwriter-di2.pages.dev"
+    });
+
+    expect(config.auth.trustedOrigins).toEqual([
+      "https://ghostwriter-di2.pages.dev",
+      "https://*.ghostwriter-di2.pages.dev"
+    ]);
+    expect(pagesPreviewCookieDomain(config.auth.baseUrl)).toBe(
+      ".ghostwriter-di2.pages.dev"
+    );
+    expect(pagesPreviewCookieDomain("http://localhost:8787")).toBeUndefined();
   });
 
   it("requires every server-side Google secret", () => {

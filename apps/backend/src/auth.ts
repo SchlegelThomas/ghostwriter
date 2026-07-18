@@ -4,7 +4,10 @@ import {
   type RepositoryDatabase
 } from "@ghostwriter/storage";
 import { betterAuth } from "better-auth";
-import type { BackendConfig } from "./config.js";
+import {
+  pagesPreviewCookieDomain,
+  type BackendConfig
+} from "./config.js";
 
 export type AuthenticatedAccount = Readonly<{
   id: string;
@@ -30,6 +33,7 @@ export function createBetterAuthGateway(
   db: RepositoryDatabase,
   config: BackendConfig["auth"]
 ): AuthGateway {
+  const previewCookieDomain = pagesPreviewCookieDomain(config.baseUrl);
   const auth = betterAuth({
     appName: "Ghostwriter",
     baseURL: config.baseUrl,
@@ -65,6 +69,16 @@ export function createBetterAuthGateway(
       useSecureCookies: config.secureCookies,
       disableCSRFCheck: false,
       disableOriginCheck: false,
+      // Branch previews are subdomains of the Pages project host. Keep Google's
+      // redirect on the canonical Pages origin, then share the session cookie.
+      ...(previewCookieDomain === undefined
+        ? {}
+        : {
+            crossSubDomainCookies: {
+              enabled: true,
+              domain: previewCookieDomain
+            }
+          }),
       defaultCookieAttributes: {
         httpOnly: true,
         secure: config.secureCookies,

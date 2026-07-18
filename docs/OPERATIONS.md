@@ -44,7 +44,15 @@ Production Google web-client configuration:
 - Authorized JavaScript origin: `https://ghostwriter-di2.pages.dev`
 - Authorized redirect URI:
   `https://ghostwriter-di2.pages.dev/api/auth/callback/google`
-- Better Auth public URL and trusted origin: `https://ghostwriter-di2.pages.dev`
+- Better Auth public URL: `https://ghostwriter-di2.pages.dev`
+- Trusted origins: canonical Pages host plus
+  `https://*.ghostwriter-di2.pages.dev` for branch preview aliases
+
+Branch preview OAuth (`feat-*.ghostwriter-di2.pages.dev`) keeps Google’s redirect on the
+canonical Pages callback (Google has no wildcard redirects). The backend trusts preview
+origins and sets the session cookie on `.ghostwriter-di2.pages.dev` so the alias can use
+the same login. Prefer the stable branch alias URL over one-off `*.pages.dev` hash deploys
+when validating beta builds.
 
 Local live-provider smoke configuration:
 
