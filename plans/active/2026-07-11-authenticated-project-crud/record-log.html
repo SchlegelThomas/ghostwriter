@@ -319,6 +319,11 @@
       <p><strong>Verification:</strong> <code>pnpm verify</code> passes 28 files / 189 tests plus 12 hook-policy checks after H3/H4/H5 polish. Cumulative browser evidence covers Story Trail/Quick Build/Launchpad, Draft Desk/Context/History/Focus, Canvas Workbench/aggregates/scene focus, Reader caret return, and narrow Project/Draft/Canvas modes. No new ADR: session-only shell/caret prefs remain noncanonical.</p>
       <p><strong>Stop for founder:</strong> present the complete H1–H5 outcome for product verification. After explicit go-ahead, audit existing Playwright journeys (including known Canvas pointer-drag flake) and add only the smallest high-value acceptance coverage under <code>GHOSTWRITER_PLAYWRIGHT_GATE=user-verified</code>. Do not push, open a PR, merge, or deploy without separate authorization.</p>
     </article>
+
+    <article>
+      <h2>2026-07-18 15:55 — Production custom domain cutover</h2>
+      <p>PR #6 merged to <code>main</code>. Production web custom domain is <code>https://ghost-writer.studio</code> on the Cloudflare Pages project <code>ghostwriter</code> (project host <code>ghostwriter-di2.pages.dev</code>). Google OAuth and Fly <code>BETTER_AUTH_URL</code> point at the studio origin; <code>AUTH_TRUSTED_ORIGINS</code> also keeps the Pages host and <code>https://*.ghostwriter-di2.pages.dev</code> for preview aliases. Living ops docs and ADR 0005 consequences updated to match; archive plan URLs that recorded earlier <code>pages.dev</code> previews are left as historical evidence.</p>
+    </article>
   </main>
 </body>
 </html>

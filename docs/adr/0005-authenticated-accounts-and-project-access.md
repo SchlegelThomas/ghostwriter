@@ -125,6 +125,10 @@ online-only and server-authoritative.
   application backend and Lakebase remains canonical.
 - Production and one stable acceptance environment require exact Google callback registration.
   Wildcard PR-preview callbacks are unavailable; hermetic CI does not depend on Google.
+- **Custom domain (2026-07-18):** production public origin is `https://ghost-writer.studio` with
+  Google callback `https://ghost-writer.studio/api/auth/callback/google`. The Cloudflare Pages
+  project host `ghostwriter-di2.pages.dev` remains for branch preview aliases and is listed in
+  `AUTH_TRUSTED_ORIGINS`; authenticated product use prefers the studio domain.
 - Identity tables, writer profiles, memberships, archive/version fields, and indexes require
   forward-only migrations and PGlite/Lakebase verification.
 - Authorization becomes a shared core dependency for all future commands, collaboration, audit,

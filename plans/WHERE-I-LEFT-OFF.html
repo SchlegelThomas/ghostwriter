@@ -11,13 +11,13 @@
     <header>
       <p class="eyebrow">Session handoff</p>
       <h1>Where we left off</h1>
-      <p><strong>Last updated:</strong> 2026-07-18 · <strong>Current branch:</strong> <code>feat/authenticated-project-crud</code></p>
+      <p><strong>Last updated:</strong> 2026-07-18 · <strong>Current branch:</strong> <code>docs/custom-domain-ghost-writer-studio</code></p>
     </header>
 
     <section>
       <h2>Current state</h2>
-      <p>PR #4 is merged to <code>main</code>. On <code>feat/authenticated-project-crud</code>, the owner-only writing foundation, tree + DAG shell, and writer-workspace-depth expansion (ADRs 0005–0009) are implemented locally: durable hierarchy/prose/history/recovery, Canvas boards/links/scope placements, Reader/TTS route, and MCP chat dock. A 2026-07-17 review of the real Cognition project found that the capabilities remain too form-driven and difficult to discover. The founder accepted <a href="designs/Ghostwriter%20Mockups%202.0.html#ux-proposal-workspace-2-1">Build · Map · Write UX 2.1</a> on 2026-07-18, authorizing Story Trail, Quick Build, Scene Launchpad, Canvas Workbench, Thread Trace, Chapter Aggregates, Scene Focus Stage, Draft Desk, Context Dock, Draft History drawer, and Focus Halo for checkpoints H1–H5.</p>
-      <p><strong>Verification:</strong> UX 2.1 checkpoints H1–H5 are implemented and browser-verified on the feature branch: Story Trail/Quick Build/Launchpad, Draft Desk/Context/History/Focus Halo, Canvas Workbench (tool dock, aggregates, Scene Focus Stage), handoffs/narrow modes, and Reader→Draft caret restore. <code>pnpm verify</code> passes 28 files / 189 tests plus 12 hook-policy checks. Playwright authoring/repair waits on explicit founder verification of this complete outcome (<code>GHOSTWRITER_PLAYWRIGHT_GATE=user-verified</code>). The separate pointer Canvas-card drag journey remains a known post-verification acceptance-audit item. <strong>Live:</strong> backend at <code>https://ghostwriter-backend.fly.dev</code> (<code>/health</code> ok); Lakebase <code>production</code> is migrated through the current checked-in schema.</p>
+      <p>PR #6 merged the authenticated writing workspace and Build · Map · Write UX 2.1 to <code>main</code>. Production web is <code>https://ghost-writer.studio</code> (Cloudflare Pages custom domain on project <code>ghostwriter</code> / host <code>ghostwriter-di2.pages.dev</code>). Backend is <code>https://ghostwriter-backend.fly.dev</code> with <code>BETTER_AUTH_URL=https://ghost-writer.studio</code>.</p>
+      <p><strong>Live:</strong> web at <code>https://ghost-writer.studio</code>; Google callback <code>https://ghost-writer.studio/api/auth/callback/google</code>; backend <code>/health</code> ok; Lakebase <code>production</code> migrated through the current checked-in schema. Branch previews remain on <code>*.ghostwriter-di2.pages.dev</code>.</p>
     </section>
 
     <section>
@@ -52,7 +52,7 @@
     <section>
       <h2>Active plans</h2>
       <ul>
-        <li><a href="active/2026-07-11-authenticated-project-crud/plan.html">Authenticated writing workspace, revisions, and Story Canvas</a> is active on <code>feat/authenticated-project-crud</code>. Phase 1 is pushed; the expanded technical milestone, accepted tree + DAG shell, and UX 2.1 H1–H5 are green locally and waiting on founder product verification before the deferred Playwright acceptance audit, push, and PR.</li>
+        <li><a href="active/2026-07-11-authenticated-project-crud/plan.html">Authenticated writing workspace, revisions, and Story Canvas</a> shipped via PR #6. Remaining: archive the plan when founder confirms post-release smoke on <code>https://ghost-writer.studio</code>, then continue later platform work.</li>
         <li>The long-running product/architecture blueprint remains at <a href="active/2026-07-11-agentic-writing-experience/plan.html">agentic writing experience</a>, retaining the experience, technical, agent, roadmap, and visual artifacts plus later platform decisions.</li>
       </ul>
       <p><strong>Living design source:</strong> <a href="designs/Ghostwriter%20Mockups%202.0.html">Ghostwriter Mockups 2.0</a> (never archived).</p>
@@ -62,7 +62,7 @@
       <h2>Incomplete and next delivery</h2>
       <p>The product direction is substantially accepted and the backend topology is now decided and deployed. These material decisions remain open:</p>
       <ol>
-        <li>Identity/authentication, safe CRUD, prose/history/recovery, Canvas state, tree/inspector/toasts, drill/workflow lenses, Reader, Split, depth features, and UX 2.1 H1–H5 are implemented locally under ADRs 0005–0009. Remaining work is founder verification of the complete outcome, the deferred Playwright acceptance audit (including pointer Canvas-card drag), any verification follow-ups, expanded milestone commit/push, PR Lakebase/CI, merge-driven release and post-release smoke, then archive.</li>
+        <li>Identity/authentication, safe CRUD, prose/history/recovery, Canvas, Reader, Split, depth features, and UX 2.1 H1–H5 shipped under ADRs 0005–0009. Remaining: founder post-release smoke on the studio domain, archive the delivery plan, then later platform work.</li>
         <li>Subscription/billing management.</li>
         <li>Real-time transport, presence, scene leases, backup/retention/deletion, and remote MCP authorization (backend/database selected in ADR 0004; live-update layer still open).</li>
         <li>Initial import/export formats; browser access is the accepted primary portability experience.</li>
@@ -73,7 +73,7 @@
 
     <section>
       <h2>Recommended next step</h2>
-      <p>Review the complete Build · Map · Write UX 2.1 outcome on <code>feat/authenticated-project-crud</code> (H1–H5). After founder verification, authorize the deferred Playwright acceptance audit with <code>GHOSTWRITER_PLAYWRIGHT_GATE=user-verified</code>, then commit/push/PR when ready. Do not push, open a PR, merge, or deploy without separate go-ahead.</p>
+      <p>Smoke Google sign-in and a short write path on <code>https://ghost-writer.studio</code>, then archive the authenticated-project-crud plan when satisfied. Merge the domain docs branch when ready.</p>
     </section>
 
     <section>

@@ -4,14 +4,10 @@ An AI tool for creative writers. One TypeScript/Node.js codebase targeting web, 
 (Electron), and mobile — plus an MCP server so external AI agents can collaborate on a
 writer's project directly.
 
-> Status: the foundation, product blueprint, multi-book kernel, and Lakebase backend are merged.
-> The current feature branch adds ADR 0005 Google/Better Auth accounts, writer profiles, owner-scoped
-> projects, a first-party Pages-to-Fly API path, and safe end-to-end commands for the current
-> project/book/manuscript-structure/scene-metadata/story-knowledge kernel. Local real-Google
-> acceptance is preserved at pushed checkpoint `a73d532`. The uncommitted expanded milestone now
-> adds durable Tiptap prose, owner leases, checkpoints/variants/compare/restore, encrypted
-> unacknowledged-work recovery, and server-authoritative Story Canvas/Split state. All 121 tests and
-> 13 browser journeys pass. Subscriptions, collaborators, AI, import/export, and purge remain later.
+> Status: foundation through authenticated writing workspace and Build · Map · Write UX 2.1 are on
+> `main` (PR #6). Production web is `https://ghost-writer.studio` with Google/Better Auth and a
+> first-party Pages-to-Fly `/api` path; backend is `https://ghostwriter-backend.fly.dev`.
+> Subscriptions, collaborators, AI, import/export, and purge remain later.
 
 ## Orientation
 
