@@ -808,12 +808,13 @@ test("pointer tree moves, Canvas drill, and workflow lenses preserve one scene",
 
   const lenses = page.getByLabel("Canvas workflow lenses");
   for (const lens of ["Relationships", "Continuity", "Review", "Outline"] as const) {
-    const button = lenses.getByRole("button", { name: lens, exact: true });
-    await button.click();
-    await expect(button).toHaveAttribute("aria-selected", "true");
+    const tab = lenses.getByRole("tab", { name: lens, exact: true });
+    await tab.click();
+    await expect(tab).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByText(new RegExp(`· ${lens}$`)).first()).toBeVisible();
   }
 
-  await lenses.getByRole("button", { name: "Plan → Draft" }).click();
+  await lenses.getByRole("tab", { name: "Plan → Draft" }).click();
   await expect(page.getByLabel("Story Canvas workspace")).toBeVisible();
   await expect(
     page.getByRole("textbox", { name: "Draft for Movable Signal" })

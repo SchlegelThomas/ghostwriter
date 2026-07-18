@@ -37,7 +37,7 @@ function LensButton({
 }>) {
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole="tab"
       accessibilityState={{ disabled, selected }}
       disabled={disabled}
       onPress={onPress}
@@ -141,6 +141,7 @@ export function CanvasDrillBar({
       </View>
       <View
         accessibilityLabel="Canvas workflow lenses"
+        accessibilityRole="tablist"
         style={styles.lensRow}
       >
         {CANVAS_WORKFLOW_LENSES.map((lens) => (
