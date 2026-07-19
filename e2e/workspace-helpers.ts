@@ -200,7 +200,7 @@ export async function activateCanvasTool(
   shortcut: string
 ): Promise<void> {
   await canvasToolDock(page)
-    .getByRole("button", { name: `${label} (${shortcut})` })
+    .getByRole("button", { name: `${label} · ${shortcut}` })
     .click();
 }
 
@@ -287,7 +287,7 @@ export async function openWorkspaceMode(
 export async function showCanvasDetailsIfHidden(page: Page): Promise<void> {
   const showDetails = page
     .getByLabel("Canvas utility bar")
-    .getByRole("button", { name: "Show Details" });
+    .getByRole("button", { name: /Show Details/ });
   if (await showDetails.isVisible().catch(() => false)) {
     await showDetails.click();
   }

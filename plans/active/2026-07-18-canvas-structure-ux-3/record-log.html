@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Canvas &amp; Structure UX 3.0 — record log</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter record log</p>
+      <h1>Canvas &amp; Structure UX 3.0</h1>
+      <p class="meta"><a href="plan.html">Return to delivery plan</a> · <strong>Branch:</strong> <code>feat/canvas-structure-ux-3</code></p>
+    </header>
+
+    <article>
+      <h2>2026-07-18 18:17 — Design slice opened</h2>
+      <p>Founder directed a UX-focused follow-on after UX 2.1 shipped: collapsible story structure, freer Canvas interaction (toolbar + right-click create, drag relationships, free move), keep keyboard shortcuts, more board real estate, keep layers with double-click zoom, and document full create/link/edit/delete/drag journeys in design before implementation.</p>
+      <p><strong>Locked decisions:</strong> (1) scene creation keeps explicit book + chapter-or-Unassigned; freeform is post-create geometry/interaction. (2) This slice delivers Mockups 3.0 + delivery plan scaffolding; no product code until design acceptance.</p>
+      <p>Preserved <code>plans/designs/Ghostwriter Mockups 2.0.html</code>. New living source: <a href="../../designs/Ghostwriter%20Mockups%203.0.html">Ghostwriter Mockups 3.0</a>. UX contract: <a href="ux-proposal-canvas-3.html">ux-proposal-canvas-3.html</a>.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 18:30 — Design artifacts landed</h2>
+      <p>Authored interactive Mockups 3.0 (collapse rail, edge tools, context menu, link-drag preview, free-drag prototype, layer zoom), delivery <code>plan.html</code>, this record log, and the UX contract. Stopped for founder design review before any <code>StoryCanvasPanel</code> / tree implementation.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 19:15 — Navigation real-estate + icon toolbar revision</h2>
+      <p>Founder accepted Canvas interaction direction and asked to deepen navigation updates for board real estate, keep the full keyboard shortcut map, and make the toolbar smaller/icon-driven with tooltips for every shortcut. Mockups 3.0 now defaults Map to collapsed structure + hidden Details, uses ~40px icon tools and icon utilities with Name · shortcut tooltips, documents the chrome budget and structure states, and includes a full keyboard table. UX contract and plan acceptance criteria updated to match.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 19:20 — Slimmer rails + motion / feel</h2>
+      <p>Collapsed project + structure + tool rails tightened to ~36px with a primary <strong>»|</strong> expand affordance (and <strong>|«</strong> when open). Added a Motion &amp; feel section: ease-out chrome/layer transitions, menu enter, card settle, one-motion-at-a-time, and reduced-motion rules aimed at writers who notice cadence. Plan/contract updated.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 19:45 — Design accepted; implementation started</h2>
+      <p>Founder accepted Mockups 3.0 and directed autonomous delivery of H1–H6. Branch remains <code>feat/canvas-structure-ux-3</code>.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 20:30 — H1–H5 product slice landed</h2>
+      <p><strong>H1:</strong> wide Map/Split structure rail collapses to 36px by default; <code>»|</code> / <code>|«</code> and <code>[</code> toggle; Quick Build hidden while collapsed; project rail slimmed to theme <code>railWidth: 36</code>.</p>
+      <p><strong>H2–H5:</strong> icon tool dock + utilities with <code>Name · shortcut</code> a11y/tooltips; Details default off (<code>]</code>); free card drag when Select; Hand/Space pan; surface/card context menus; out-handle link drag with rubber-band; ease-out cubic layer camera (reduced-motion still snaps).</p>
+      <p><strong>Tests:</strong> unit coverage via <code>routine-tests</code> for <code>map-structure-rail</code>, <code>canvas-interaction</code>, and camera easing. Playwright deferred until founder verifies the complete outcome. Existing e2e helper labels updated to <code>·</code> format for when the gate opens.</p>
+      <p><strong>Agent browser walkthrough (1440×960, e2e backend + exported web):</strong> collapsed structure default, expand/collapse + <code>[</code>, Quick Build hidden while collapsed, icon tools <code>Name · shortcut</code>, Details default-off and <code>]</code> toggle, context menu on board, Hand instruction, and free card drag via web pointer events (PanResponder kept as non-web fallback). Link out-handle visible on selection. Screenshots under <code>test-results/ux3-*.png</code>. Founder product verification still required before Playwright gate.</p>
+    </article>
+  </main>
+</body>
+</html>

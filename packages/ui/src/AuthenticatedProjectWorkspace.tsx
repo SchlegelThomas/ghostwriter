@@ -47,6 +47,13 @@ import {
 } from "./split-layout.js";
 import { ghostwriterTheme } from "./theme.js";
 import {
+  defaultMapStructureRail,
+  mapStructureQuickBuildVisible,
+  mapStructureRailWidth,
+  toggleMapStructureRail,
+  type MapStructureRailMode
+} from "./map-structure-rail.js";
+import {
   quickBuildOptions,
   storyTrail,
   structureLaunchpad,
@@ -305,10 +312,19 @@ export function AuthenticatedProjectWorkspace({
   );
   const [collapsedPanel, setCollapsedPanel] =
     useState<CollapsedPanel>("tree");
+  const [structureRail, setStructureRail] = useState<MapStructureRailMode>(() =>
+    defaultMapStructureRail(mode, width >= 1240)
+  );
   const previousSceneId = useRef(selectedSceneId);
   const canvasVisible = mode === "canvas" || mode === "split";
   const drillScope = currentDrillScope(drillStack);
   const drillTrail = drillBreadcrumbs(drillStack, project);
+  const structureWidth = mapStructureRailWidth(structureRail, wide);
+  const quickBuildVisible = mapStructureQuickBuildVisible(mode, structureRail);
+
+  useEffect(() => {
+    setStructureRail(defaultMapStructureRail(mode, wide));
+  }, [mode, wide]);
 
   useEffect(() => {
     if (!canvasVisible || typeof document === "undefined") return;
@@ -320,6 +336,29 @@ export function AuthenticatedProjectWorkspace({
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [canvasVisible, drillStack.length, onDrillBack]);
+
+  useEffect(() => {
+    if (!wide || typeof document === "undefined") return;
+    const handleStructureToggle = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      ) {
+        return;
+      }
+      if (event.key !== "[") return;
+      event.preventDefault();
+      setStructureRail((current) => toggleMapStructureRail(current));
+    };
+    document.addEventListener("keydown", handleStructureToggle);
+    return () =>
+      document.removeEventListener("keydown", handleStructureToggle);
+  }, [wide]);
 
   useEffect(() => {
     if (typeof document === "undefined" || !focusHalo) return;
@@ -990,15 +1029,63 @@ export function AuthenticatedProjectWorkspace({
         ) : null}
 
         <View
+          {...(wide && structureRail === "collapsed"
+            ? { accessibilityLabel: "Collapsed manuscript structure" }
+            : {})}
           style={[
             styles.treeRegion,
+            wide && { width: structureWidth },
+            wide &&
+              structureRail === "collapsed" &&
+              styles.treeRegionCollapsed,
             !wide && styles.collapsedRegion,
             narrow && styles.narrowRegion,
             (focusHalo || (!wide && collapsedPanel !== "tree")) &&
               styles.regionHidden
           ]}
         >
-          {tree}
+          {wide && canvasVisible ? (
+            structureRail === "collapsed" ? (
+              <View style={styles.structureCollapsedRail}>
+                <Pressable
+                  accessibilityLabel="Expand structure · ["
+                  accessibilityRole="button"
+                  disabled={busy}
+                  onPress={() => setStructureRail("expanded")}
+                  style={({ pressed }) => [
+                    styles.structureToggle,
+                    pressed && styles.pressed,
+                    busy && styles.disabled
+                  ]}
+                >
+                  <Text style={styles.structureToggleGlyph}>»|</Text>
+                </Pressable>
+                <Text style={styles.structureCollapsedHint}>Tree</Text>
+              </View>
+            ) : (
+              <View style={styles.structureExpandedShell}>
+                <View style={styles.structureExpandedHeader}>
+                  <Text style={styles.structureExpandedLabel}>Structure</Text>
+                  <Pressable
+                    accessibilityLabel="Collapse structure · ["
+                    accessibilityRole="button"
+                    disabled={busy}
+                    onPress={() => setStructureRail("collapsed")}
+                    style={({ pressed }) => [
+                      styles.structureToggle,
+                      pressed && styles.pressed,
+                      busy && styles.disabled
+                    ]}
+                  >
+                    <Text style={styles.structureToggleGlyph}>|«</Text>
+                  </Pressable>
+                </View>
+                {tree}
+              </View>
+            )
+          ) : (
+            tree
+          )}
         </View>
 
         <ScrollView
@@ -1060,7 +1147,7 @@ export function AuthenticatedProjectWorkspace({
                 );
               })}
             </View>
-            {quickOptions.length === 0 ? null : (
+            {quickOptions.length === 0 || !quickBuildVisible ? null : (
               <View style={styles.quickBuild}>
                 <Pressable
                   accessibilityLabel="Quick Build: add to the manuscript"
@@ -1461,27 +1548,27 @@ const styles = StyleSheet.create({
   },
   rail: {
     backgroundColor: colors.rail,
-    gap: 7,
+    gap: 4,
     minHeight: 0,
-    paddingHorizontal: 5,
-    paddingVertical: 9,
-    width: shell.railWidth + 10
+    paddingHorizontal: 3,
+    paddingVertical: 8,
+    width: shell.railWidth
   },
   railProject: {
     color: "#ffffff",
     fontFamily: fonts.brand,
-    fontSize: 22,
-    marginBottom: 4,
+    fontSize: 16,
+    marginBottom: 2,
     textAlign: "center"
   },
   railButton: {
     alignItems: "center",
     borderColor: "transparent",
-    borderRadius: 7,
+    borderRadius: 6,
     borderWidth: 1,
-    gap: 2,
+    gap: 1,
     justifyContent: "center",
-    minHeight: 46
+    minHeight: 34
   },
   railButtonSelected: {
     backgroundColor: colors.railActive,
@@ -1490,12 +1577,12 @@ const styles = StyleSheet.create({
   railGlyph: {
     color: colors.railText,
     fontFamily: fonts.uiSemibold,
-    fontSize: 11
+    fontSize: 10
   },
   railLabel: {
     color: colors.railText,
     fontFamily: fonts.uiMedium,
-    fontSize: 7
+    fontSize: 6
   },
   railTextSelected: {
     color: "#ffffff"
@@ -1506,8 +1593,8 @@ const styles = StyleSheet.create({
   railAuthority: {
     color: colors.railText,
     fontFamily: fonts.ui,
-    fontSize: 6,
-    lineHeight: 9,
+    fontSize: 5,
+    lineHeight: 8,
     textAlign: "center"
   },
   treeRegion: {
@@ -1515,7 +1602,62 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     minHeight: 0,
     minWidth: 0,
-    width: 292
+    overflow: "hidden",
+    width: shell.navigatorWidth
+  },
+  treeRegionCollapsed: {
+    backgroundColor: colors.wash
+  },
+  structureCollapsedRail: {
+    alignItems: "center",
+    flex: 1,
+    gap: 8,
+    paddingTop: 10,
+    paddingHorizontal: 2
+  },
+  structureExpandedShell: {
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0
+  },
+  structureExpandedHeader: {
+    alignItems: "center",
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 8,
+    paddingVertical: 6
+  },
+  structureExpandedLabel: {
+    color: colors.kicker,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 7,
+    letterSpacing: 1,
+    textTransform: "uppercase"
+  },
+  structureToggle: {
+    alignItems: "center",
+    borderColor: colors.line,
+    borderRadius: 5,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 28,
+    minWidth: 28,
+    paddingHorizontal: 4
+  },
+  structureToggleGlyph: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 11
+  },
+  structureCollapsedHint: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 7,
+    textAlign: "center",
+    transform: [{ rotate: "-90deg" }],
+    width: 48
   },
   inspectorRegion: {
     borderLeftColor: colors.line,

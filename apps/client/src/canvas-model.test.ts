@@ -363,10 +363,10 @@ describe("Canvas presentation helpers", () => {
 
     expect(new Set(instructions).size).toBe(tools.length);
     expect(canvasToolInstruction("select")).toBe(
-      "Select a card, link, or region to reveal its common actions."
+      "Drag cards freely. Right-click for create and actions. Esc clears the tool."
     );
     expect(canvasToolInstruction("connect")).toBe(
-      "Choose a source card, target, relationship kind, authority, and label."
+      "Drag from a card’s out-handle to a target, or finish the link in Details."
     );
   });
 

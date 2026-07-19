@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Canvas &amp; Structure UX 3.0</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan</p>
+      <h1>Canvas &amp; Structure UX 3.0</h1>
+      <p class="meta"><strong>Status:</strong> proposed — design review<br>
+        <strong>Branch:</strong> <code>feat/canvas-structure-ux-3</code><br>
+        <strong>Owner:</strong> founder + agent<br>
+        <strong>Living design:</strong> <a href="../../designs/Ghostwriter%20Mockups%203.0.html">Ghostwriter Mockups 3.0</a><br>
+        <strong>UX contract:</strong> <a href="ux-proposal-canvas-3.html">Canvas 3.0 proposal</a></p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Make Map mode feel like a real spatial board: collapsible manuscript structure for Canvas real estate, free pointer drag and pan, toolbar + right-click creation, drag-to-link relationships, and layer dive with zoom—while keeping keyboard shortcuts and explicit scene manuscript placement.</p>
+      <p><strong>Out of scope:</strong> collaboration presence, AI generation, binary image upload, Canvas-driven automatic manuscript reorder, provisional scenes without book/chapter-or-Unassigned, Draft Desk redesign, and product implementation before founder design acceptance.</p>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <h3>Design gate (this slice)</h3>
+      <ul>
+        <li>Mockups 3.0 browsable with Map default collapsed structure + hidden Details, icon toolbar/utilities with shortcut tooltips, full keyboard map, context menu, link-drag preview, free-drag prototype, and layer zoom.</li>
+        <li>Navigation / real-estate section documents chrome budget and structure states (collapsed / peek / expanded).</li>
+        <li>Full journeys documented for create / link / move / edit / archive-delete / combo / layer enter-exit.</li>
+        <li>Explicit scene placement locked; freeform applies after creation.</li>
+        <li>Delivery plan + UX contract record invariants and post-acceptance tasks.</li>
+        <li>Handoff points at Mockups 3.0 for Map/structure work; Mockups 2.0 remains shipped 2.1 reference.</li>
+      </ul>
+      <h3>Implementation gate (after founder acceptance)</h3>
+      <ul>
+        <li>Wide Map defaults to ~36px collapsed rails + Details dismissed; intuitive <strong>»|</strong> / <strong>|«</strong> expand controls; <kbd>[</kbd>/<kbd>]</kbd> toggle; Story Trail in a compact top bar.</li>
+        <li>Icon-only edge toolbar (~36px) and utility strip with tooltip = Name · shortcut for every control; thin instruction strip.</li>
+        <li>Chrome and layer transitions use quiet ease-out motion; reduced-motion falls back to instant meaning-preserving changes; shell motion never remounts Draft.</li>
+        <li>Full keyboard map shipped (tools, chrome, viewport, nudge) with parity to tooltips and context menus.</li>
+        <li>Right-click / long-press menus on empty board, card, region, and link mirror toolbar actions; destructive paths confirm.</li>
+        <li>Select-drag freely moves cards/regions on wide web; Hand/Space pans; keyboard nudge remains; Fit utilities recenter.</li>
+        <li>Relationship create via handle-drag and Connect tool; Escape cancels; direction/authority remain explicit.</li>
+        <li>Double-click / Enter layer zooms into chapter/region/scene scope; Esc/Back/breadcrumbs exit; reduced motion skips zoom.</li>
+        <li>Scene create still requires title + book · chapter/Unassigned before acknowledgement.</li>
+        <li>Manuscript order stays canonical; Canvas version domain stays separate; no silent Draft remount from non-scene selection.</li>
+        <li>Narrow retains ordered Canvas (no freeform claim) with action sheets for create/connect.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks</h2>
+      <ol>
+        <li><strong>Design slice (now):</strong> author Mockups 3.0, UX contract, this plan, record log, and handoff. Stop for founder review.</li>
+        <li><strong>After acceptance — H1 Structure rail:</strong> collapse/expand/peek manuscript in Map; Story Trail remains; Quick Build available when expanded.</li>
+        <li><strong>After acceptance — H2 Pointer board:</strong> reliable free drag + pan on wide web; fix RN PanResponder flake paths; keep nudge/Fit.</li>
+        <li><strong>After acceptance — H3 Menus &amp; create:</strong> context menus + toolbar parity; scene create keeps explicit placement sheet.</li>
+        <li><strong>After acceptance — H4 Link drag:</strong> handle-drag relationships + Connect tool; edit/delete link journeys.</li>
+        <li><strong>After acceptance — H5 Layer camera:</strong> double-click zoom enter/exit with reduced-motion fallback; aggregates unchanged as projections.</li>
+        <li><strong>After acceptance — H6 Verify &amp; docs:</strong> unit coverage, browser walkthrough, docs/ADR if needed, Playwright only after founder product verification gate.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li><strong>Design slice:</strong> open Mockups 3.0 in a browser; exercise demo controls; link-check plan pages.</li>
+        <li><strong>Post-acceptance:</strong> route new/rewritten tests through <code>routine-tests</code> / <code>hard-tests</code> per autonomous delivery skill; browser-first before Playwright; <code>GHOSTWRITER_PLAYWRIGHT_GATE=user-verified</code> after founder verifies the shipped outcome.</li>
+        <li>Focused cases: collapse state, drag move acknowledgement, context menu keyboard parity, link drag cancel/success, explicit scene placement refusal when incomplete, layer zoom + Esc, narrow ordered path.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p>Update <code>plans/WHERE-I-LEFT-OFF.html</code>, this plan’s record log, and (after acceptance) <code>docs/PRODUCT.md</code> Map notes. Living design for Map/structure work: <a href="../../designs/Ghostwriter%20Mockups%203.0.html">Mockups 3.0</a>. Shipped Build · Map · Write 2.1 reference remains <a href="../../designs/Ghostwriter%20Mockups%202.0.html">Mockups 2.0</a>.</p>
+      <p><strong>ADR:</strong> none required for the design slice. Revisit ADR 0007 only if freeform web drag or camera/session geometry needs a durable invariant beyond existing Canvas spatial state.</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li><strong>Locked:</strong> explicit scene manuscript placement; design + plan before product code.</li>
+        <li><strong>RN web drag flake:</strong> known from prior e2e; H2 must prove pointer drag in a real browser, not only nudge.</li>
+        <li><strong>Menu vs dock parity:</strong> every context action needs toolbar/keyboard equivalent.</li>
+        <li><strong>Zoom vs reduced motion:</strong> motion is progressive enhancement; scope change must work without it.</li>
+        <li><strong>Preview cookies / domain:</strong> unrelated; production remains <code>ghost-writer.studio</code>.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked disabled> Plan drafted with locked decisions</li>
+        <li><input type="checkbox" checked disabled> Mockups 3.0 authored</li>
+        <li><input type="checkbox" checked disabled> UX contract authored</li>
+        <li><input type="checkbox" checked disabled> Founder accepts Mockups 3.0 journeys and chrome</li>
+        <li><input type="checkbox" checked disabled> Implementation branch authorized</li>
+        <li><input type="checkbox" checked disabled> H1–H5 product implementation complete</li>
+        <li><input type="checkbox" disabled> H6 founder browser verification + remaining gaps</li>
+        <li><input type="checkbox" disabled> Playwright after user-verified gate</li>
+        <li><input type="checkbox" disabled> Plan archived</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

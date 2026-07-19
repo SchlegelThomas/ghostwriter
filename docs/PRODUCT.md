@@ -88,7 +88,11 @@ The active branch now proves the first owner-only version of the core promise:
 - An in-app MCP chat dock lists capabilities and can invoke read tools; OpenAI completion waits on
   a configured key;
 - wide web supports spatial writing and tree drag-and-drop; narrow web uses an ordered
-  keyboard/screen-reader Canvas posture instead of pretending freeform drag fits a phone.
+  keyboard/screen-reader Canvas posture instead of pretending freeform drag fits a phone;
+- Map (Canvas) mode defaults to a collapsed ~36px structure rail with `[` / »| expand, icon tool
+  dock with Name · shortcut tooltips, Details hidden until needed, free card drag, Space/Hand pan,
+  out-handle link drag, context menus mirroring tools, and ease-out layer camera on drill (instant
+  when reduced motion is preferred).
 
 This milestone does not yet deliver collaborators, comments/suggestions, real-time subscriptions or
 presence, AI/image generation, binary media hosting (R2), import/export, account exit, permanent

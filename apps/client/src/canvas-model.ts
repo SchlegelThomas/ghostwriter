@@ -99,9 +99,9 @@ export function clampCanvasZoom(zoom: number): number {
 export function canvasToolInstruction(tool: CanvasTool): string {
   switch (tool) {
     case "select":
-      return "Select a card, link, or region to reveal its common actions.";
+      return "Drag cards freely. Right-click for create and actions. Esc clears the tool.";
     case "hand":
-      return "Pan the board with the visible direction controls or Space.";
+      return "Drag the board to pan, or hold Space while Select is active.";
     case "scene":
       return "Choose manuscript placement, then create one scene in Canvas and Draft.";
     case "note":
@@ -113,7 +113,7 @@ export function canvasToolInstruction(tool: CanvasTool): string {
     case "region":
       return "Place a region behind cards to name a story area.";
     case "connect":
-      return "Choose a source card, target, relationship kind, authority, and label.";
+      return "Drag from a card’s out-handle to a target, or finish the link in Details.";
   }
 }
 

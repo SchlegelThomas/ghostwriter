@@ -37,8 +37,9 @@ export const ghostwriterTheme = Object.freeze({
   }),
   shell: Object.freeze({
     topbarHeight: 52,
-    railWidth: 58,
+    railWidth: 36,
     navigatorWidth: 252,
+    structureCollapsedWidth: 36,
     inspectorWidth: 276
   })
 });

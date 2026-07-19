@@ -18,6 +18,7 @@ import {
   canvasDrillScopeKey,
   chapterBoundOverlays,
   currentDrillScope,
+  easeOutCubic,
   ghostwriterTheme,
   interpolateCanvasViewport,
   projectCanvasLensProjection,
@@ -45,6 +46,7 @@ import {
   TextInput,
   useWindowDimensions,
   View,
+  type GestureResponderEvent,
   type LayoutChangeEvent
 } from "react-native";
 import type {
@@ -54,6 +56,16 @@ import type {
   CanvasScenePlacementInput,
   CanvasWorkspaceResponse
 } from "./api.js";
+import {
+  CANVAS_TOOL_DEFINITIONS,
+  canvasToolAccessibilityLabel,
+  canvasToolTip,
+  objectAtScreenPoint,
+  panViewportByScreenDelta,
+  shouldDragObjects,
+  shouldPanBoard,
+  type LinkDragState
+} from "./canvas-interaction.js";
 import {
   availableCanvasStoryKnowledge,
   canvasChapterAggregates,
@@ -174,6 +186,7 @@ function CanvasButton({
 }>) {
   return (
     <Pressable
+      accessibilityLabel={label}
       accessibilityRole="button"
       accessibilityState={{ disabled, selected }}
       disabled={disabled}
@@ -314,6 +327,49 @@ function linkStateLabel(link: CanvasLink): string {
     : "Confirmed";
 }
 
+function CanvasIconButton({
+  glyph,
+  label,
+  tip,
+  onPress,
+  disabled = false,
+  selected = false
+}: Readonly<{
+  glyph: string;
+  label: string;
+  tip: string;
+  onPress(): void;
+  disabled?: boolean;
+  selected?: boolean;
+}>) {
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      accessibilityState={{ disabled, selected }}
+      disabled={disabled}
+      onPress={onPress}
+      // RN web tooltip
+      {...({ title: tip } as object)}
+      style={({ pressed }) => [
+        styles.iconButton,
+        selected && styles.iconButtonSelected,
+        pressed && styles.pressed,
+        disabled && styles.disabled
+      ]}
+    >
+      <Text
+        style={[
+          styles.iconButtonGlyph,
+          selected && styles.iconButtonGlyphSelected
+        ]}
+      >
+        {glyph}
+      </Text>
+    </Pressable>
+  );
+}
+
 function SpatialObjectCard({
   object,
   viewport,
@@ -322,11 +378,15 @@ function SpatialObjectCard({
   staleLabel,
   dimmed = false,
   primary = false,
+  dragEnabled,
+  linkHandleVisible,
   onDismiss,
   onMove,
   onReview,
   onSelect,
-  onDrillIntoScene
+  onDrillIntoScene,
+  onContextMenu,
+  onLinkDragStart
 }: Readonly<{
   object: CanvasObject;
   viewport: CanvasViewport;
@@ -335,25 +395,102 @@ function SpatialObjectCard({
   staleLabel?: string;
   dimmed?: boolean;
   primary?: boolean;
+  dragEnabled: boolean;
+  linkHandleVisible: boolean;
   onDismiss(object: CanvasObject): Promise<void>;
   onMove(object: CanvasObject, x: number, y: number): Promise<void>;
   onReview(object: CanvasObject): void;
   onSelect(object: CanvasObject): void;
   onDrillIntoScene?(object: CanvasObject): void;
+  onContextMenu?(object: CanvasObject, x: number, y: number): void;
+  onLinkDragStart?(object: CanvasObject, x: number, y: number): void;
 }>) {
   const [dragDelta, setDragDelta] = useState({ x: 0, y: 0 });
   const draggedRef = useRef(false);
+  const dragStartRef = useRef<{ x: number; y: number } | undefined>(undefined);
   const frame = canvasScreenFrame(object, viewport);
+
+  useEffect(() => {
+    return () => {
+      dragStartRef.current = undefined;
+    };
+  }, []);
+
+  function handleContextMenu(event: GestureResponderEvent): void {
+    if (onContextMenu === undefined) return;
+    const native = event.nativeEvent as unknown as {
+      pageX?: number;
+      pageY?: number;
+      clientX?: number;
+      clientY?: number;
+      preventDefault?: () => void;
+    };
+    native.preventDefault?.();
+    onContextMenu(
+      object,
+      native.pageX ?? native.clientX ?? frame.left,
+      native.pageY ?? native.clientY ?? frame.top
+    );
+  }
+
+  function beginPointerDrag(clientX: number, clientY: number): void {
+    if (!dragEnabled) {
+      onSelect(object);
+      return;
+    }
+    draggedRef.current = false;
+    dragStartRef.current = { x: clientX, y: clientY };
+    onSelect(object);
+    const commitMove = onMove;
+
+    const handlePointerMove = (event: PointerEvent): void => {
+      const start = dragStartRef.current;
+      if (start === undefined) return;
+      const dx = event.clientX - start.x;
+      const dy = event.clientY - start.y;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        draggedRef.current = true;
+        setDragDelta({ x: dx, y: dy });
+      }
+    };
+    const handlePointerUp = (event: PointerEvent): void => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      const start = dragStartRef.current;
+      dragStartRef.current = undefined;
+      const dx = start === undefined ? 0 : event.clientX - start.x;
+      const dy = start === undefined ? 0 : event.clientY - start.y;
+      const moved = draggedRef.current;
+      setDragDelta({ x: 0, y: 0 });
+      draggedRef.current = false;
+      if (!moved || !dragEnabled) return;
+      const next = canvasPositionAfterDrag(
+        { x: object.x, y: object.y },
+        { x: dx, y: dy },
+        viewport.zoom
+      );
+      void commitMove(object, next.x, next.y);
+    };
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+  }
+
+  // Keep native PanResponder as a non-web fallback for spatial drag.
   const panResponder = useMemo(
     () =>
       PanResponder.create({
+        onStartShouldSetPanResponder: () => dragEnabled,
         onMoveShouldSetPanResponder: (_event, gesture) =>
-          Math.abs(gesture.dx) > 3 || Math.abs(gesture.dy) > 3,
+          dragEnabled &&
+          (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2),
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => dragEnabled,
         onPanResponderGrant: () => {
           draggedRef.current = false;
           onSelect(object);
         },
         onPanResponderMove: (_event, gesture) => {
+          if (!dragEnabled) return;
           draggedRef.current = true;
           setDragDelta({ x: gesture.dx, y: gesture.dy });
         },
@@ -361,7 +498,7 @@ function SpatialObjectCard({
           const moved = draggedRef.current;
           setDragDelta({ x: 0, y: 0 });
           draggedRef.current = false;
-          if (!moved) return;
+          if (!moved || !dragEnabled) return;
           const next = canvasPositionAfterDrag(
             { x: object.x, y: object.y },
             { x: gesture.dx, y: gesture.dy },
@@ -374,12 +511,40 @@ function SpatialObjectCard({
           draggedRef.current = false;
         }
       }),
-    [object, onMove, onSelect, viewport.zoom]
+    [dragEnabled, object, onMove, onSelect, viewport.zoom]
   );
+
+  const webPointer =
+    typeof window !== "undefined"
+      ? ({
+          onPointerDown: (event: {
+            button?: number;
+            clientX: number;
+            clientY: number;
+            preventDefault?: () => void;
+            stopPropagation?: () => void;
+          }) => {
+            if (event.button !== undefined && event.button !== 0) return;
+            event.preventDefault?.();
+            event.stopPropagation?.();
+            beginPointerDrag(event.clientX, event.clientY);
+          }
+        } as object)
+      : panResponder.panHandlers;
 
   return (
     <View
-      {...panResponder.panHandlers}
+      {...webPointer}
+      accessibilityLabel={`${objectKindLabel(object)} ${object.label}`}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      {...({
+        onClick: () => {
+          if (!draggedRef.current) onSelect(object);
+        },
+        onContextMenu: handleContextMenu,
+        onDoubleClick: () => onDrillIntoScene?.(object)
+      } as object)}
       style={[
         styles.spatialObject,
         object.kind === "scene-card" && styles.sceneObject,
@@ -400,20 +565,12 @@ function SpatialObjectCard({
           left: frame.left + dragDelta.x,
           top: frame.top + dragDelta.y,
           width: Math.max(132, frame.width),
-          zIndex: Math.round(object.z + 100)
+          zIndex: Math.round(object.z + 100),
+          ...(typeof window !== "undefined" ? { touchAction: "none" } : {})
         }
       ]}
     >
-      <Pressable
-        accessibilityLabel={`${objectKindLabel(object)} ${object.label}`}
-        accessibilityRole="button"
-        accessibilityState={{ selected }}
-        onPress={() => onSelect(object)}
-        style={({ pressed }) => [
-          styles.spatialObjectPressable,
-          pressed && styles.pressed
-        ]}
-      >
+      <View style={styles.spatialObjectPressable}>
         <Text
           style={[
             styles.objectBadge,
@@ -431,7 +588,7 @@ function SpatialObjectCard({
         <Text numberOfLines={3} style={styles.objectDetail}>
           {detail}
         </Text>
-      </Pressable>
+      </View>
       {object.kind === "scene-card" && onDrillIntoScene !== undefined ? (
         <Pressable
           accessibilityLabel={`Enter scene lens for ${object.label}`}
@@ -446,6 +603,34 @@ function SpatialObjectCard({
           ]}
         >
           <Text style={styles.quickActionText}>Enter scene</Text>
+        </Pressable>
+      ) : null}
+      {linkHandleVisible ? (
+        <Pressable
+          accessibilityLabel={`Connect from ${object.label}`}
+          accessibilityRole="button"
+          hitSlop={8}
+          onPressIn={(event) => {
+            event.stopPropagation();
+            onSelect(object);
+            const native = event.nativeEvent as unknown as {
+              pageX?: number;
+              pageY?: number;
+              locationX?: number;
+              locationY?: number;
+            };
+            onLinkDragStart?.(
+              object,
+              native.locationX ?? frame.width,
+              native.locationY ?? frame.height / 2
+            );
+          }}
+          style={({ pressed }) => [
+            styles.linkHandle,
+            pressed && styles.pressed
+          ]}
+        >
+          <Text style={styles.linkHandleGlyph}>+</Text>
         </Pressable>
       ) : null}
       {object.authority === "provisional" &&
@@ -681,8 +866,18 @@ export function StoryCanvasPanel({
     width: 900,
     height: 560
   });
-  const [showInspector, setShowInspector] = useState(!compact);
+  const [showInspector, setShowInspector] = useState(false);
   const [activeTool, setActiveTool] = useState<CanvasTool>("select");
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const [linkDrag, setLinkDrag] = useState<LinkDragState>();
+  const [contextMenu, setContextMenu] = useState<
+    | Readonly<{
+        x: number;
+        y: number;
+        objectId?: CanvasObjectId;
+      }>
+    | undefined
+  >();
   const [searchQuery, setSearchQuery] = useState("");
   const [showSceneForm, setShowSceneForm] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -717,6 +912,7 @@ export function StoryCanvasPanel({
   const previousDrillKeyRef = useRef(canvasDrillScopeKey(drillScope));
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
+  const panOriginRef = useRef(viewport);
 
   const board = workspace?.board;
   const scopePlacements = board?.scopePlacements ?? [];
@@ -856,16 +1052,37 @@ export function StoryCanvasPanel({
 
   useEffect(() => {
     if (typeof document === "undefined") return;
+    const typingTarget = (target: HTMLElement | null): boolean =>
+      target?.tagName === "INPUT" ||
+      target?.tagName === "TEXTAREA" ||
+      Boolean(target?.isContentEditable);
+
     const chooseTool = (event: KeyboardEvent): void => {
       const target = event.target as HTMLElement | null;
       if (
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.isContentEditable ||
+        typingTarget(target) ||
         event.metaKey ||
         event.ctrlKey ||
         event.altKey
       ) {
+        return;
+      }
+      if (event.code === "Space" || event.key === " ") {
+        event.preventDefault();
+        setSpaceHeld(true);
+        return;
+      }
+      if (event.key === "]") {
+        event.preventDefault();
+        setShowInspector((current) => !current);
+        return;
+      }
+      if (event.key === "/") {
+        event.preventDefault();
+        const search = document.querySelector<HTMLInputElement>(
+          '[aria-label="Search or jump on Canvas"]'
+        );
+        search?.focus();
         return;
       }
       const toolByKey: Readonly<Record<string, CanvasTool | undefined>> = {
@@ -881,6 +1098,8 @@ export function StoryCanvasPanel({
       if (event.key === "Escape") {
         setActiveTool("select");
         setShowSceneForm(false);
+        setContextMenu(undefined);
+        setLinkDrag(undefined);
         return;
       }
       const tool = toolByKey[event.key.toLocaleLowerCase()];
@@ -888,8 +1107,17 @@ export function StoryCanvasPanel({
       event.preventDefault();
       activateTool(tool);
     };
+    const releaseSpace = (event: KeyboardEvent): void => {
+      if (event.code === "Space" || event.key === " ") {
+        setSpaceHeld(false);
+      }
+    };
     document.addEventListener("keydown", chooseTool);
-    return () => document.removeEventListener("keydown", chooseTool);
+    document.addEventListener("keyup", releaseSpace);
+    return () => {
+      document.removeEventListener("keydown", chooseTool);
+      document.removeEventListener("keyup", releaseSpace);
+    };
   });
 
   useEffect(() => {
@@ -938,7 +1166,12 @@ export function StoryCanvasPanel({
         1,
         (now - startedAt) / CANVAS_CAMERA_TRANSITION_MS
       );
-      const next = interpolateCanvasViewport(from, target, progress);
+      const next = interpolateCanvasViewport(
+        from,
+        target,
+        progress,
+        easeOutCubic
+      );
       setViewport(next);
       if (progress < 1) {
         animationFrameRef.current = requestAnimationFrame(step);
@@ -1334,14 +1567,17 @@ export function StoryCanvasPanel({
     if (width > 0 && height > 0) setSurfaceSize({ width, height });
   }
 
-  function createLink(authority: "confirmed" | "provisional"): void {
-    if (selectedObject === undefined || linkTargetId === undefined) return;
+  function createLinkBetween(
+    fromObjectId: CanvasObjectId,
+    toObjectId: CanvasObjectId,
+    authority: "confirmed" | "provisional" = "confirmed"
+  ): void {
     void sendCommand({
       type: "canvas.link.create",
       link: {
         kind: linkKind,
-        fromObjectId: selectedObject.id,
-        toObjectId: linkTargetId,
+        fromObjectId,
+        toObjectId,
         authority,
         ...(linkLabel.trim().length === 0
           ? {}
@@ -1349,12 +1585,78 @@ export function StoryCanvasPanel({
         ...(authority === "confirmed"
           ? {}
           : {
-              sourceKey: `fixture:${linkKind}:${selectedObject.id}:${linkTargetId}`,
+              sourceKey: `fixture:${linkKind}:${fromObjectId}:${toObjectId}`,
               provenance:
                 "Deterministic Ghostwriter link fixture; no model call."
             })
       }
     });
+  }
+
+  function createLink(authority: "confirmed" | "provisional"): void {
+    if (selectedObject === undefined || linkTargetId === undefined) return;
+    createLinkBetween(selectedObject.id, linkTargetId, authority);
+  }
+
+  const boardPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () =>
+          shouldPanBoard(activeTool, spaceHeld) && linkDrag === undefined,
+        onMoveShouldSetPanResponder: (_event, gesture) =>
+          shouldPanBoard(activeTool, spaceHeld) &&
+          linkDrag === undefined &&
+          (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2),
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: () => {
+          panOriginRef.current = viewportRef.current;
+        },
+        onPanResponderMove: (_event, gesture) => {
+          if (!shouldPanBoard(activeTool, spaceHeld)) return;
+          setViewport(
+            panViewportByScreenDelta(
+              panOriginRef.current,
+              gesture.dx,
+              gesture.dy
+            )
+          );
+        },
+        onPanResponderRelease: (_event, gesture) => {
+          if (!shouldPanBoard(activeTool, spaceHeld)) return;
+          changeViewport(
+            panViewportByScreenDelta(
+              panOriginRef.current,
+              gesture.dx,
+              gesture.dy
+            )
+          );
+        }
+      }),
+    [activeTool, linkDrag, spaceHeld]
+  );
+
+  function openContextMenu(
+    x: number,
+    y: number,
+    objectId?: CanvasObjectId
+  ): void {
+    setContextMenu({ x, y, objectId });
+  }
+
+  function finishLinkDrag(screenX: number, screenY: number): void {
+    if (linkDrag === undefined) return;
+    const target = objectAtScreenPoint(
+      visibleObjects,
+      viewportRef.current,
+      screenX,
+      screenY,
+      linkDrag.fromObjectId
+    );
+    if (target !== undefined) {
+      createLinkBetween(linkDrag.fromObjectId, target.id, "confirmed");
+      setActiveTool("select");
+    }
+    setLinkDrag(undefined);
   }
 
   async function submitSceneHandoff(): Promise<void> {
@@ -2084,42 +2386,42 @@ export function StoryCanvasPanel({
 
       <View accessibilityLabel="Canvas Workbench" style={styles.workbench}>
         <View accessibilityLabel="Canvas tool dock" style={styles.toolDock}>
-          {(
-            [
-              ["select", "Select", "V"],
-              ["hand", "Hand", "H"],
-              ["scene", "Scene", "S"],
-              ["note", "Note", "N"],
-              ["story", "Story record", "K"],
-              ["image", "Image reference", "I"],
-              ["region", "Region", "R"],
-              ["connect", "Connect", "L"]
-            ] as const
-          ).map(([tool, label, shortcut]) => (
-            <CanvasButton
-              disabled={busy || (compact && (tool === "hand" || tool === "region"))}
-              key={tool}
-              label={`${label} (${shortcut})`}
-              onPress={() => activateTool(tool)}
-              selected={activeTool === tool}
+          {CANVAS_TOOL_DEFINITIONS.map((definition) => (
+            <CanvasIconButton
+              disabled={
+                busy ||
+                (compact &&
+                  (definition.tool === "hand" || definition.tool === "region"))
+              }
+              glyph={definition.glyph}
+              key={definition.tool}
+              label={canvasToolAccessibilityLabel(definition)}
+              onPress={() => activateTool(definition.tool)}
+              selected={activeTool === definition.tool}
+              tip={canvasToolTip(definition)}
             />
           ))}
         </View>
         <Text accessibilityLiveRegion="polite" style={styles.toolInstruction}>
           {canvasToolInstruction(activeTool)}
+          {spaceHeld ? " · Space pan" : ""}
         </Text>
         <View accessibilityLabel="Canvas utility bar" style={styles.utilityBar}>
           {!compact ? (
             <>
-              <CanvasButton
-                label="Spatial"
+              <CanvasIconButton
+                glyph="Sp"
+                label="Spatial · view"
                 onPress={() => setView("spatial")}
                 selected={view === "spatial"}
+                tip="Spatial view"
               />
-              <CanvasButton
-                label="Outline"
+              <CanvasIconButton
+                glyph="Ol"
+                label="Outline · view"
                 onPress={() => setView("outline")}
                 selected={view === "outline"}
+                tip="Outline view"
               />
             </>
           ) : (
@@ -2131,7 +2433,7 @@ export function StoryCanvasPanel({
             <TextInput
               accessibilityLabel="Search or jump on Canvas"
               onChangeText={setSearchQuery}
-              placeholder="Search or jump"
+              placeholder="Search or jump · /"
               placeholderTextColor={colors.muted}
               style={styles.searchInput}
               value={searchQuery}
@@ -2148,15 +2450,18 @@ export function StoryCanvasPanel({
               </View>
             )}
           </View>
-          <CanvasButton
+          <CanvasIconButton
             disabled={projectedObjects.length === 0}
+            glyph="Fit"
             label="Fit board"
             onPress={() =>
               changeViewport(fitCanvasObjects(projectedObjects, surfaceSize))
             }
+            tip="Fit board"
           />
-          <CanvasButton
+          <CanvasIconButton
             disabled={selectedObjectDisplay === undefined}
+            glyph="Sel"
             label="Fit selection"
             onPress={() => {
               if (selectedObjectDisplay !== undefined) {
@@ -2165,13 +2470,17 @@ export function StoryCanvasPanel({
                 );
               }
             }}
+            tip="Fit selection"
           />
-          <CanvasButton
+          <CanvasIconButton
             disabled={busy || board === undefined || board.version <= 1}
+            glyph="Un"
             label="Undo Canvas command"
             onPress={() => void onUndo()}
+            tip="Undo Canvas command"
           />
-          <CanvasButton
+          <CanvasIconButton
+            glyph="Hx"
             label={showHistory ? "Hide Canvas history" : "Show Canvas history"}
             onPress={() => {
               const next = !showHistory;
@@ -2179,19 +2488,25 @@ export function StoryCanvasPanel({
               if (next) void onLoadHistory();
             }}
             selected={showHistory}
+            tip="Canvas history"
           />
-          <CanvasButton
-            label={showInspector ? "Hide Details" : "Show Details"}
+          <CanvasIconButton
+            glyph="Dt"
+            label={showInspector ? "Hide Details · ]" : "Show Details · ]"}
             onPress={() => setShowInspector(!showInspector)}
+            selected={showInspector}
+            tip="Details · ]"
           />
-          <CanvasButton
+          <CanvasIconButton
             disabled={busy || hasProvisionalBeat}
+            glyph="Fx"
             label={
               hasProvisionalBeat
                 ? "Review fixture added"
                 : "Add provisional review fixture"
             }
             onPress={createProvisionalBeat}
+            tip="Add provisional review fixture"
           />
         </View>
       </View>
@@ -2711,8 +3026,46 @@ export function StoryCanvasPanel({
                     </Text>
                   </View>
                   <View
+                    {...boardPanResponder.panHandlers}
                     accessibilityLabel="Spatial Story Canvas"
                     onLayout={updateSurfaceSize}
+                    {...({
+                      onContextMenu: (event: {
+                        preventDefault?: () => void;
+                        nativeEvent?: {
+                          pageX?: number;
+                          pageY?: number;
+                          locationX?: number;
+                          locationY?: number;
+                        };
+                      }) => {
+                        event.preventDefault?.();
+                        const native = event.nativeEvent ?? {};
+                        openContextMenu(
+                          native.pageX ?? native.locationX ?? 24,
+                          native.pageY ?? native.locationY ?? 24
+                        );
+                      },
+                      onPointerMove: (event: {
+                        nativeEvent?: { locationX?: number; locationY?: number };
+                      }) => {
+                        if (linkDrag === undefined) return;
+                        setLinkDrag({
+                          ...linkDrag,
+                          x: event.nativeEvent?.locationX ?? linkDrag.x,
+                          y: event.nativeEvent?.locationY ?? linkDrag.y
+                        });
+                      },
+                      onPointerUp: (event: {
+                        nativeEvent?: { locationX?: number; locationY?: number };
+                      }) => {
+                        if (linkDrag === undefined) return;
+                        finishLinkDrag(
+                          event.nativeEvent?.locationX ?? linkDrag.x,
+                          event.nativeEvent?.locationY ?? linkDrag.y
+                        );
+                      }
+                    } as object)}
                     style={styles.surface}
                   >
                     {chapterOverlays.map((overlay) => {
@@ -2729,6 +3082,10 @@ export function StoryCanvasPanel({
                           accessibilityRole="button"
                           key={`${overlay.scope.chapterId}`}
                           onPress={() => onDrillIntoChapter(overlay.scope)}
+                          {...({
+                            onDoubleClick: () =>
+                              onDrillIntoChapter(overlay.scope)
+                          } as object)}
                           style={({ pressed }) => [
                             styles.chapterOverlay,
                             pressed && styles.pressed,
@@ -2776,6 +3133,36 @@ export function StoryCanvasPanel({
                         />
                       );
                     })}
+                    {linkDrag === undefined
+                      ? null
+                      : (() => {
+                          const from = objectById.get(linkDrag.fromObjectId);
+                          if (from === undefined) return null;
+                          const fromFrame = canvasScreenFrame(from, viewport);
+                          const startX = fromFrame.left + fromFrame.width;
+                          const startY = fromFrame.top + fromFrame.height / 2;
+                          const endX = linkDrag.x;
+                          const endY = linkDrag.y;
+                          const width = Math.hypot(endX - startX, endY - startY);
+                          const angle = Math.atan2(endY - startY, endX - startX);
+                          return (
+                            <View
+                              pointerEvents="none"
+                              style={[
+                                styles.linkRubberBand,
+                                {
+                                  left: startX,
+                                  top: startY,
+                                  transform: [
+                                    { rotate: `${angle}rad` },
+                                    { translateY: -1 }
+                                  ],
+                                  width: Math.max(4, width)
+                                }
+                              ]}
+                            />
+                          );
+                        })()}
                     {visibleObjects.map((object) => {
                       const canonicalState = canvasCanonicalReferenceState(
                         object,
@@ -2785,14 +3172,33 @@ export function StoryCanvasPanel({
                         <SpatialObjectCard
                           detail={objectDetail(object, scenes, project)}
                           dimmed={lensProjection?.dimmedObjectIds.has(object.id)}
+                          dragEnabled={shouldDragObjects(activeTool, spaceHeld)}
                           key={object.id}
+                          linkHandleVisible={
+                            !compact &&
+                            (activeTool === "connect" ||
+                              object.id === selectedObjectId)
+                          }
                           object={object}
+                          onContextMenu={(card, x, y) => {
+                            selectObject(card);
+                            openContextMenu(x, y, card.id);
+                          }}
                           onDismiss={dismissObject}
                           onDrillIntoScene={
                             drillScope.kind === "scene"
                               ? undefined
                               : enterSceneFromObject
                           }
+                          onLinkDragStart={(card, x, y) => {
+                            const frame = canvasScreenFrame(card, viewport);
+                            setActiveTool("connect");
+                            setLinkDrag({
+                              fromObjectId: card.id,
+                              x: frame.left + x,
+                              y: frame.top + y
+                            });
+                          }}
                           onMove={moveObject}
                           onReview={reviewObject}
                           onSelect={selectObject}
@@ -2814,6 +3220,86 @@ export function StoryCanvasPanel({
                         </Text>
                       </View>
                     ) : null}
+                    {contextMenu === undefined ? null : (
+                      <View
+                        accessibilityLabel="Canvas context menu"
+                        style={[
+                          styles.contextMenu,
+                          {
+                            left: Math.min(
+                              Math.max(8, contextMenu.x - 40),
+                              surfaceSize.width - 200
+                            ),
+                            top: Math.min(
+                              Math.max(8, contextMenu.y - 40),
+                              surfaceSize.height - 220
+                            )
+                          }
+                        ]}
+                      >
+                        {(
+                          [
+                            ["Select · V", () => activateTool("select")],
+                            ["Hand · H", () => activateTool("hand")],
+                            ["New scene · S", () => activateTool("scene")],
+                            ["New note · N", () => activateTool("note")],
+                            ["Connect · L", () => activateTool("connect")],
+                            [
+                              "Open Details · ]",
+                              () => setShowInspector(true)
+                            ],
+                            ...(contextMenu.objectId !== undefined &&
+                            objectById.get(contextMenu.objectId)?.sceneId !==
+                              undefined
+                              ? ([
+                                  [
+                                    "Open Draft",
+                                    () => {
+                                      const sceneId = objectById.get(
+                                        contextMenu.objectId!
+                                      )?.sceneId;
+                                      if (sceneId !== undefined) {
+                                        onOpenDraft?.(sceneId);
+                                      }
+                                    }
+                                  ]
+                                ] as const)
+                              : [])
+                          ] as const
+                        ).map(([label, action]) => (
+                          <Pressable
+                            accessibilityLabel={label}
+                            accessibilityRole="menuitem"
+                            key={label}
+                            onPress={() => {
+                              action();
+                              setContextMenu(undefined);
+                            }}
+                            style={({ pressed }) => [
+                              styles.contextMenuItem,
+                              pressed && styles.pressed
+                            ]}
+                          >
+                            <Text style={styles.contextMenuItemText}>
+                              {label}
+                            </Text>
+                          </Pressable>
+                        ))}
+                        <Pressable
+                          accessibilityLabel="Close context menu"
+                          accessibilityRole="menuitem"
+                          onPress={() => setContextMenu(undefined)}
+                          style={({ pressed }) => [
+                            styles.contextMenuItem,
+                            pressed && styles.pressed
+                          ]}
+                        >
+                          <Text style={styles.contextMenuItemText}>
+                            Close · Esc
+                          </Text>
+                        </Pressable>
+                      </View>
+                    )}
                   </View>
                 </>
               ) : (
@@ -3041,7 +3527,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 5
+    gap: 4
   },
   toolInstruction: {
     color: colors.accent,
@@ -3049,13 +3535,36 @@ const styles = StyleSheet.create({
     fontSize: 8,
     lineHeight: 13
   },
+  iconButton: {
+    alignItems: "center",
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 6,
+    borderWidth: 1,
+    height: 32,
+    justifyContent: "center",
+    minWidth: 32,
+    paddingHorizontal: 6
+  },
+  iconButtonSelected: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent
+  },
+  iconButtonGlyph: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 10
+  },
+  iconButtonGlyphSelected: {
+    color: colors.accent
+  },
   utilityBar: {
     alignItems: "center",
     borderTopColor: colors.line,
     borderTopWidth: 1,
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 5,
+    gap: 4,
     paddingTop: 7
   },
   searchBox: {
@@ -3546,6 +4055,61 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     position: "relative",
     width: "100%"
+  },
+  linkHandle: {
+    alignItems: "center",
+    backgroundColor: colors.accent,
+    borderColor: colors.panel,
+    borderRadius: 10,
+    borderWidth: 2,
+    height: 18,
+    justifyContent: "center",
+    position: "absolute",
+    right: -8,
+    top: "42%",
+    width: 18,
+    zIndex: 5
+  },
+  linkHandleGlyph: {
+    color: "#ffffff",
+    fontFamily: fonts.uiSemibold,
+    fontSize: 11,
+    lineHeight: 12
+  },
+  linkRubberBand: {
+    borderTopColor: colors.accent,
+    borderTopWidth: 2,
+    height: 1,
+    opacity: 0.85,
+    position: "absolute",
+    transformOrigin: "left center",
+    zIndex: 40
+  },
+  contextMenu: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    elevation: 6,
+    gap: 2,
+    minWidth: 168,
+    padding: 5,
+    position: "absolute",
+    shadowColor: "#1d150f",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    zIndex: 50
+  },
+  contextMenuItem: {
+    borderRadius: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 7
+  },
+  contextMenuItemText: {
+    color: colors.ink,
+    fontFamily: fonts.uiMedium,
+    fontSize: 9
   },
   lane: {
     borderRightColor: "#d6cdc1",
