@@ -189,7 +189,7 @@ function RailButton({
 }>) {
   return (
     <Pressable
-      accessibilityLabel={`${label}${selected ? ", selected" : ""}`}
+      accessibilityLabel={`${glyph} ${label}${selected ? ", selected" : ""}`}
       accessibilityRole="button"
       accessibilityState={{ selected }}
       disabled={disabled}

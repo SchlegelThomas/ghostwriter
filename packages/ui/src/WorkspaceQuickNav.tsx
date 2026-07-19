@@ -260,6 +260,40 @@ export function WorkspaceQuickNav({
                 ? ` · ${chatCapabilities.length} capabilities`
                 : ""}
             </Text>
+            {chatCapabilities.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.capabilityScroll}
+              >
+                {chatCapabilities.slice(0, 24).map((capability) =>
+                  capability.access === "read" ? (
+                    <Pressable
+                      accessibilityLabel={`Run ${capability.title}`}
+                      accessibilityRole="button"
+                      disabled={sending || chatBusy}
+                      key={capability.id}
+                      onPress={() => void sendChat(capability.id)}
+                      style={({ pressed }) => [
+                        styles.capabilityChip,
+                        pressed && styles.pressed,
+                        (sending || chatBusy) && styles.disabled
+                      ]}
+                    >
+                      <Text numberOfLines={1} style={styles.capabilityText}>
+                        {capability.title}
+                      </Text>
+                    </Pressable>
+                  ) : (
+                    <View key={capability.id} style={styles.capabilityChip}>
+                      <Text numberOfLines={1} style={styles.capabilityText}>
+                        {capability.title}
+                      </Text>
+                    </View>
+                  )
+                )}
+              </ScrollView>
+            ) : null}
             <ScrollView style={styles.chatLog}>
               {chatMessages.slice(-6).map((message) => (
                 <Text key={message.id} style={styles.chatLine}>
@@ -405,9 +439,29 @@ const styles = StyleSheet.create({
   chatBlock: {
     borderTopColor: colors.line,
     borderTopWidth: 1,
-    maxHeight: 220,
+    maxHeight: 260,
     paddingBottom: 10,
     paddingTop: 8
+  },
+  capabilityScroll: {
+    marginBottom: 4,
+    maxHeight: 36,
+    paddingHorizontal: 14
+  },
+  capabilityChip: {
+    backgroundColor: colors.wash,
+    borderColor: colors.line,
+    borderRadius: 999,
+    borderWidth: 1,
+    marginRight: 6,
+    maxWidth: 220,
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
+  capabilityText: {
+    color: colors.ink,
+    fontFamily: fonts.uiMedium,
+    fontSize: 11
   },
   chatEyebrow: {
     color: colors.kicker,

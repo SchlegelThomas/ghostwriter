@@ -608,8 +608,9 @@ test("narrow Canvas defaults to ordered keyboard review without freeform overflo
   await openWorkspaceMode(page, "Canvas");
 
   await expect(page.getByLabel("Ordered Canvas outline")).toBeVisible();
+  await expect(page.getByText("Ordered view")).toBeVisible();
   await expect(
-    page.getByText("Ordered review mode · freeform drag stays on wide web")
+    page.getByText("Every object, without spatial gestures")
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Spatial", exact: true })
@@ -876,9 +877,9 @@ test("workspace chat invokes the owner-scoped manuscript read capability", async
 }) => {
   await signIn(page);
   await createProject(page, "Chat Harbor", "Book of Tools");
-  await page.getByRole("button", { name: "Chat", exact: true }).click();
+  await page.getByRole("button", { name: /Chat/ }).click();
 
-  const chat = page.getByLabel("Workspace MCP chat");
+  const chat = page.getByLabel("Command and chat palette");
   await expect(chat).toBeVisible();
   await chat
     .getByRole("button", {
@@ -892,7 +893,7 @@ test("workspace chat invokes the owner-scoped manuscript read capability", async
   await expect(chat.getByText(/Chat Harbor · project version 1/)).toBeVisible();
   await expect(chat.getByText(/1 books · 0 scenes · 0 story records/)).toBeVisible();
 
-  await chat.getByRole("button", { name: "Close" }).click();
+  await chat.getByRole("button", { name: "Close palette" }).click();
   await expect(chat).toHaveCount(0);
 });
 
