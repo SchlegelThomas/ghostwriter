@@ -24,11 +24,14 @@ require an exact trusted `Origin`. Metadata JSON bodies are limited to 64 KiB an
 
 - `GET /api/me` returns the authenticated account, opaque session metadata, and idempotently
   bootstrapped Ghostwriter writer profile.
-- `PATCH /api/me/profile` accepts `displayName` and `expectedVersion`. A stale profile returns
+- `PATCH /api/me/profile` accepts `displayName`, optional `publishing` (nullable object of optional
+  contact/address/bio/representation strings), and `expectedVersion`. Omitting `publishing` leaves
+  stored publishing details unchanged; `null` clears them. A stale profile returns
   `409 VERSION_CONFLICT`.
 
 Email, display name, and provider image are not authorization keys. Core uses the opaque Better Auth
 user ID as its provider-neutral `AccountId`.
+Publishing contact fields are writer-owned profile data, not authorization.
 
 ## Projects
 
@@ -91,6 +94,14 @@ Unknown scenes, cross-project scene IDs, and projects owned by another account a
 `404 SCENE_NOT_FOUND` response. Session IDs and lease holders are never accepted from or exposed to
 the client. Revision IDs from another scene are treated as missing. History metadata includes
 content hashes and attribution but not stored documents.
+
+## Writing assist
+
+- `POST /api/projects/{projectId}/writing-assist` accepts a role (`scene-partner`,
+  `character-coach`, `worldkeeper`, `sketch-partner`), scene context, optional sketch/cast/
+  backdrop caption, and optional recent prose excerpt. It returns inspectable proposals labeled
+  `deterministic-local` in v1. Proposals never mutate the project; Apply is a separate client
+  action through `scene.update`, `storyKnowledge.update`, or Draft caret insert.
 
 ## Story Canvas
 
@@ -158,6 +169,7 @@ Manuscript structure:
 
 - `part.create`
 - `part.rename`
+- `part.update` (`title?`, `summary?` with `null` to clear)
 - `part.reorder`
 - `part.removeEmpty`
 - `chapter.create`
@@ -169,14 +181,14 @@ Manuscript structure:
 Scenes:
 
 - `scene.create`
-- `scene.update` (`title?`, `status?`, `summary?`, `povStoryKnowledgeId?`, `backdrop?`, `music?`, `imageRefs?`; media fields accept `null` to clear; URLs must be absolute http(s))
+- `scene.update` (`title?`, `status?`, `summary?`, `povStoryKnowledgeId?`, `backdrop?`, `music?`, `imageRefs?`, `sketch?`; media/sketch fields accept `null` to clear; URLs must be absolute http(s); sketch is craft JSON — purpose/conflict/turn/beats/sensoryNotes/openQuestions/detail/inkPaths — not manuscript prose)
 - `scene.move`
 - `scene.setArchived`
 
 Story knowledge:
 
 - `storyKnowledge.create`
-- `storyKnowledge.update` (`label?`, `kind?`, `authority?`, `notes?`, `aliases?`; `null` clears notes/aliases)
+- `storyKnowledge.update` (`label?`, `kind?`, `authority?`, `notes?`, `aliases?`, `characterSheet?`; `null` clears notes/aliases/characterSheet; characterSheet holds desire/pressure/voiceNotes)
 - `storyKnowledge.setSceneLink`
 - `storyKnowledge.setKnowledgeLink` (`fromId`, `toId`, `kind` of `cast` | `theme` | `development-cycle` | `breadcrumb` | `related`, `linked`)
 - `storyKnowledge.setArchived`

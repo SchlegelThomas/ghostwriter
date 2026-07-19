@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Record log — Structure cast browse</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Plan memory</p>
+      <h1>Record log</h1>
+      <p class="meta"><a href="plan.html">Structure browse · cast · launchpad actions</a></p>
+    </header>
+
+    <section>
+      <h2>2026-07-19 — Plan opened</h2>
+      <ul>
+        <li>Founder authorized remaining structure gaps: part descriptions, real launchpad actions, character relationship editing.</li>
+        <li>D1–D3 locked in plan; ships on Write branch for one review PR.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-19 — Implementation shipped for founder review</h2>
+      <ul>
+        <li><code>part.update</code> + <code>ManuscriptPart.summary</code>; migration <code>0010_part_summary</code> applied to production (owner profile).</li>
+        <li>Postgres part update path fixed to persist <code>summary</code> (caught by routine-tests subagent).</li>
+        <li>Launchpad Draft / Reader / Canvas are real buttons; part/chapter description editors on browse.</li>
+        <li><code>CharacterBrowsePanel</code> on Characters rail: notes, sheet, typed knowledge links, linked scenes.</li>
+        <li>Docs: PRODUCT, API, ARCHITECTURE; WHERE-I-LEFT-OFF updated.</li>
+        <li><code>pnpm verify</code> green after capability count 25; Playwright still gated.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-19 — Launchpad chrome collapse + PR wrap</h2>
+      <ul>
+        <li>Structure browse header collapsed to one row; New book pinned right; removed “Open · edit · read”; launchpad fills Draft column height.</li>
+        <li>Ships in the Write Experience PR with publishing profile + History rail polish.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

@@ -11,42 +11,44 @@
     <header>
       <p class="eyebrow">Session handoff</p>
       <h1>Where we left off</h1>
-      <p><strong>Last updated:</strong> 2026-07-19 · <strong>Current branch:</strong> <code>feat/canvas-structure-ux-3</code></p>
+      <p><strong>Last updated:</strong> 2026-07-19 · <strong>Current branch:</strong> <code>feat/writing-experience-ux-4</code></p>
     </header>
 
     <section>
       <h2>Current state</h2>
-      <p>Two active plans on the same branch:</p>
+      <p>Write epic + structure/cast polish + shell UX polish ship together on <code>feat/writing-experience-ux-4</code>. PR <a href="https://github.com/SchlegelThomas/ghostwriter/pull/9">#9</a> open; babysitting CI after Playwright selector repair.</p>
       <ul>
-        <li><a href="active/2026-07-18-canvas-structure-ux-3/plan.html">Canvas &amp; Structure UX 3.0</a> — Map card chrome (lock/resize/attach/tips/live links).</li>
-        <li><a href="active/2026-07-19-workspace-shell-palette/plan.html">Workspace shell palette</a> — Cursor-like activity rail + ⌘P / ⌘⇧P.</li>
+        <li><a href="active/2026-07-19-writing-experience-ux-4/plan.html">Writing Experience UX 4.0</a></li>
+        <li><a href="active/2026-07-19-structure-cast-browse/plan.html">Structure browse · cast · launchpad actions</a></li>
       </ul>
-      <p>Living design for Map remains <a href="designs/Ghostwriter%20Mockups%203.0.html">Mockups 3.0</a>. Playwright still gated.</p>
+      <p>Migrations: <code>0009_writing_craft</code>, <code>0010_part_summary</code>, <code>0011_writer_publishing</code> (apply with owner profile if SP lacks ALTER).</p>
     </section>
 
     <section>
-      <h2>Done in latest shell slice</h2>
+      <h2>Done for this PR</h2>
       <ul>
-        <li>Slim 32px glyph activity rail with Structure / Jump / Chat toggles.</li>
-        <li>⌘P manuscript jump; ⌘⇧P command + top MCP chat palette.</li>
-        <li>Resizable structure rail.</li>
+        <li>Write studio, sketch/assist, Sheet/Place companions, cast link from Sheet.</li>
+        <li>Structure launchpads, Characters (K), part summaries, collapsible rail, trail roles.</li>
+        <li>Topbar de-dupe (Sign out right; Jump/Chat on rail); History rail (no floating toasts).</li>
+        <li>Canvas overview zoom (min 12%; fit floor 0.65).</li>
+        <li>Publishing profile modal; sign-in lockup polish; structure launchpad full-height chrome.</li>
+        <li>Docs/ADR updates; e2e helpers aligned to History rail + profile modal.</li>
       </ul>
     </section>
 
     <section>
-      <h2>Incomplete / next</h2>
+      <h2>Incomplete / next after merge</h2>
       <ol>
-        <li><strong>Founder:</strong> hard-refresh — try ⌘P, ⌘⇧P, rail icons, structure drag.</li>
-        <li>Polish (inspector resize, persist structure width, Map-dense jump affordance if missing).</li>
-        <li>Consider splitting shell work onto <code>feat/workspace-shell-palette</code> before PR.</li>
+        <li>Land green PR #9; production deploy applies migrations via CI.</li>
+        <li>Optional later: freehand ink, OpenAI assist provider.</li>
       </ol>
     </section>
 
     <section>
       <h2>How to resume</h2>
       <ol>
-        <li>Checkout <code>feat/canvas-structure-ux-3</code>; run <code>./scripts/dev-local.sh</code>.</li>
-        <li>Founder verifies shell + Canvas; then polish or Playwright gate.</li>
+        <li>Checkout <code>feat/writing-experience-ux-4</code>; <code>./scripts/dev-local.sh</code>.</li>
+        <li>If columns missing: <code>DATABRICKS_PROFILE=ghostwriter-owner LAKEBASE_USER='tas9117@gmail.com' ./scripts/lakebase.sh migrate production</code> (unset SP client env first).</li>
       </ol>
     </section>
   </main>

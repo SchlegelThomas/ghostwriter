@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Record log — Writing Experience UX 4.0</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Plan memory</p>
+      <h1>Record log</h1>
+      <p class="meta"><a href="plan.html">Writing Experience UX 4.0</a> · <a href="ux-proposal-writing-4.html">UX proposal</a> · <a href="../../designs/Ghostwriter%20Mockups%204.0.html">Mockups 4.0</a></p>
+    </header>
+
+    <section>
+      <h2>2026-07-19 — Epic opened (design only)</h2>
+      <ul>
+        <li>Founder directed Write epic; Mockups 4.0 + proposal authored.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-19 — Chrome restyle from live app</h2>
+      <ul>
+        <li>Mockups 4.0 restyled from live Cognition chrome (dense toolbars, board spacing).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-19 — Rail timeline, browse launchpad, Characters</h2>
+      <ul>
+        <li>Rail utilities pinned bottom in inverse order (Chat → Jump → Menu/Structure).</li>
+        <li>Scene timeline on rail replaces Draft prev/next; <strong>K Characters</strong> destination.</li>
+        <li>Launchpads list browsable children (parts/chapters/scenes/records) with descriptions + cast in scope.</li>
+        <li>Sketch modal gains multiline fields + <code>detail</code> outline writing panel (JSON field, no SQL migration).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-19 — Slim Draft chrome + craft modals</h2>
+      <ul>
+        <li>Founder: Draft headers/sketch form stole the page; formatting toolbar open by default.</li>
+        <li>Draft uses Map-density topbar (trail + Add); removed FOCUSED DRAFT hero and manuscript-page heading.</li>
+        <li>Scene ribbon is one 36px toolbar; Write tools stay slim; Sketch + Assist open as modals.</li>
+        <li>Context dock defaults closed; SceneEditor formatting collapsed behind <code>Aa</code>.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-19 — Draft uses shared collapsible manuscript rail</h2>
+      <ul>
+        <li>Founder: manuscript sidebar was not collapsible in Draft.</li>
+        <li><code>structureCollapsible</code> is now <code>!narrow</code> for Draft / Canvas / Split (same Manuscript header, topbar toggle, rail Structure · [, and <code>[</code> shortcut).</li>
+        <li>Collapse choice persists across mode switches; Draft still opens expanded by default.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-19 — Topbar audit, Sheet link, Canvas overview zoom</h2>
+      <ul>
+        <li>Founder: Sign out not far-right; Jump/Chat duplicated vs left rail; Map on Write toolbar; Sheet had no link control; editor not full-bleed; Canvas stuck at 35% with huge cards.</li>
+        <li>Topbar: <code>marginLeft: auto</code> on actions; removed Jump/Chat (rail + shortcuts remain); Sign out is trailing.</li>
+        <li>Write toolbar: removed Map chip (Split is left-rail C / Split only).</li>
+        <li>Draft/Focus: dense column is edge-to-edge (no ScrollView page padding); dropped <code>maxWidth: 920</code>.</li>
+        <li>Sheet: Link / Unlink via <code>storyKnowledge.setSceneLink</code> from companion list.</li>
+        <li>Canvas: min zoom <code>0.12</code>; below fit floor <code>0.65</code> cards keep authored geometry so overview shrinks on screen.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-19 — Trail roles, Add on Write toolbar, composition UX</h2>
+      <ul>
+        <li>Founder: unclear Sheet / Backdrop / Map vs Page; Add crowded the trail; want structure labels on breadcrumbs.</li>
+        <li>Each Story Trail crumb shows a small role annotation (Project / Book / Part / Chapter / Scene…).</li>
+        <li>Draft moves <code>＋ Add</code> onto the Write toolbar; trail stays in the dense topbar without Add.</li>
+        <li><strong>Bd → Place</strong>. Page / Map / Sheet / Place get short live hints under the toolbar.</li>
+        <li>Sheet and Place render as a side companion beside the editor (not a stacked empty band). Empty states open Context; companion <code>Page</code> returns to prose-only.</li>
+        <li>Map still switches workspace to Split (Canvas beside Draft) — distinct from Sheet/Place craft companions.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-19 — Shell polish, history rail, publishing profile, PR</h2>
+      <ul>
+        <li>Sign-in: larger lockup, “Bring your ideas to life”, Continue with Google; library Pen Name + publishing modal (<code>0011_writer_publishing</code>).</li>
+        <li>Floating toasts removed; left-rail History shows acknowledgement feed (Canvas keeps Map history).</li>
+        <li>Structure launchpad header single-row + full-height card; trail current crumb no fill/border; tree keyboard help removed.</li>
+        <li>Founder authorized commit/push/PR/CI babysit for deploy.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-19 — Implementation authorized and shipped for review</h2>
+      <ul>
+        <li>Branch <code>feat/writing-experience-ux-4</code> from main; D1–D6 locked (browser dictation, craft-only ink, deterministic assist, own branch).</li>
+        <li><strong>Domain/persistence:</strong> <code>SceneSketch</code>, <code>CharacterSheet</code>, migration <code>0009_writing_craft</code>, navigator/API/command wiring.</li>
+        <li><strong>Studio:</strong> <code>WritingStudioLayer</code> + composition helpers; Draft Focus preserved; Assist panel with four roles.</li>
+        <li><strong>Dictation:</strong> Web Speech → <code>SceneEditor</code> <code>insertTextRequest</code>.</li>
+        <li><strong>Agents:</strong> <code>POST …/writing-assist</code> + deterministic proposals; Apply via commands / caret insert.</li>
+        <li><strong>Ink:</strong> craft strokes on sketch via “Add ink stroke” (pointer freehand deferred polish).</li>
+        <li><strong>Docs:</strong> ADR 0009, PRODUCT/API/ARCHITECTURE.</li>
+        <li><strong>Verify:</strong> <code>pnpm verify</code> green (264 tests). Playwright deferred pending founder product verification.</li>
+        <li><strong>Browser walkthrough:</strong> pending founder hard-refresh on Write studio (agent did not complete interactive browser session in this loop).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-19 — PR #9 CI: Playwright selectors for UX 4.0</h2>
+      <ul>
+        <li>CI authenticated journeys failed after History rail, toast removal, profile modal, and Chat rail moves.</li>
+        <li>Founder deploy gate authorized Playwright repair; updated <code>e2e/workspace-helpers.ts</code> + authenticated CRUD journeys.</li>
+        <li>Focused green locally: stale profile, workspace chat, Draft history checkpoints.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

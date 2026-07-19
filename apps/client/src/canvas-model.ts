@@ -92,7 +92,8 @@ export type CanvasHandoffPlacement =
       position?: number;
     }>;
 
-export const CANVAS_VIEW_MIN_ZOOM = 0.35;
+/** Low enough for board overview; card fit no longer holds constant screen size below ~0.65. */
+export const CANVAS_VIEW_MIN_ZOOM = 0.12;
 export const CANVAS_VIEW_MAX_ZOOM = 2.5;
 
 export function clampCanvasZoom(zoom: number): number {

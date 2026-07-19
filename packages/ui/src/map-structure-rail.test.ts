@@ -15,7 +15,7 @@ describe("defaultMapStructureRail", () => {
     expect(defaultMapStructureRail("split", true)).toBe("collapsed");
   });
 
-  it("keeps draft expanded even when collapsible", () => {
+  it("opens draft expanded when collapsible (writer can collapse after)", () => {
     expect(defaultMapStructureRail("draft", true)).toBe("expanded");
   });
 

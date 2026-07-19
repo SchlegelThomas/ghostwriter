@@ -404,6 +404,49 @@ describe("project commands", () => {
     ).toBeUndefined();
   });
 
+  it("updates part summary and title via part.update", async () => {
+    const { execute } = await setup();
+    let navigator = await execute(1, {
+      type: "part.create",
+      bookId: bookId("book-one"),
+      title: "Part One"
+    });
+    navigator = await execute(navigator.version, {
+      type: "part.update",
+      bookId: bookId("book-one"),
+      partId: partId("part-one"),
+      summary: "Act objectives: establish the harbor mystery."
+    });
+
+    expect(navigator.books[0]?.parts[0]).toMatchObject({
+      id: partId("part-one"),
+      title: "Part One",
+      summary: "Act objectives: establish the harbor mystery."
+    });
+
+    navigator = await execute(navigator.version, {
+      type: "part.update",
+      bookId: bookId("book-one"),
+      partId: partId("part-one"),
+      title: "Act One"
+    });
+
+    expect(navigator.books[0]?.parts[0]).toMatchObject({
+      title: "Act One",
+      summary: "Act objectives: establish the harbor mystery."
+    });
+
+    navigator = await execute(navigator.version, {
+      type: "part.update",
+      bookId: bookId("book-one"),
+      partId: partId("part-one"),
+      summary: null
+    });
+
+    expect(navigator.books[0]?.parts[0]?.summary).toBeUndefined();
+    expect(navigator.books[0]?.parts[0]?.title).toBe("Act One");
+  });
+
   it("rejects stale writes and unsafe archive operations atomically", async () => {
     const { execute } = await setup();
     const renamed = await execute(1, {

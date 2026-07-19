@@ -39,6 +39,118 @@ export async function selectTree(page: Page, label: string): Promise<void> {
   await expect(item).toHaveAttribute("aria-selected", "true");
 }
 
+function historyRailButton(page: Page) {
+  return page.getByRole("button", { name: /^◷ History/ });
+}
+
+export async function editPenName(page: Page, name: string): Promise<void> {
+  await page.getByRole("button", { name: "Edit writer profile" }).click();
+  await expect(page.getByLabel("Writer profile dialog")).toBeVisible();
+  await page.getByLabel("Pen name").fill(name);
+}
+
+export async function saveWriterProfile(page: Page): Promise<void> {
+  const saveButton = page.getByRole("button", { name: "Save profile" });
+  if (!(await saveButton.isEnabled().catch(() => false))) {
+    await page.getByRole("button", { name: "Close profile editor" }).click();
+    return;
+  }
+  await saveButton.click();
+}
+
+export async function setWriterPenName(page: Page, name: string): Promise<void> {
+  if (await page.getByText(`Welcome, ${name}`).isVisible().catch(() => false)) {
+    return;
+  }
+  await editPenName(page, name);
+  await saveWriterProfile(page);
+}
+
+/** Project-mode acknowledgements live in the left-rail History panel. */
+export async function openActivityHistory(page: Page): Promise<void> {
+  const panel = page.getByLabel("Notifications and history");
+  if (await panel.isVisible().catch(() => false)) {
+    return;
+  }
+  await historyRailButton(page).click();
+  await expect(panel).toBeVisible({ timeout: 10_000 });
+}
+
+export async function expectAcknowledgement(
+  page: Page,
+  title: string | RegExp
+): Promise<void> {
+  const canvasVisible = await page
+    .getByLabel("Story Canvas workspace")
+    .isVisible()
+    .catch(() => false);
+  if (canvasVisible) {
+    await showCanvasHistory(page);
+    await expect(
+      page.getByLabel("Canvas history").getByText(title).first()
+    ).toBeVisible({ timeout: 10_000 });
+    return;
+  }
+  await openActivityHistory(page);
+  await expect(
+    page.getByLabel("Notifications and history").getByText(title).first()
+  ).toBeVisible({ timeout: 10_000 });
+}
+
+export async function ensureSelectionInspectorVisible(
+  page: Page
+): Promise<void> {
+  await dismissAcknowledgementToasts(page);
+
+  const inspector = page.getByLabel("Selection inspector");
+  if (await inspector.isVisible().catch(() => false)) {
+    return;
+  }
+
+  const draftDesk = page.getByLabel("Draft Desk");
+  if (await draftDesk.isVisible().catch(() => false)) {
+    const contextDock = page.getByLabel("Draft Context Dock", { exact: true });
+    const contextTabs = page.getByLabel("Draft Context Dock tabs");
+    if (
+      !(await contextDock.isVisible().catch(() => false)) &&
+      !(await contextTabs.isVisible().catch(() => false))
+    ) {
+      await draftDesk.getByRole("button", { name: "Context" }).click();
+    }
+    await expect(contextDock).toBeVisible({ timeout: 5_000 });
+    const briefTab = contextTabs.getByRole("tab", { name: "Brief" });
+    if (await briefTab.isVisible().catch(() => false)) {
+      await briefTab.click();
+    }
+  }
+
+  await expect(inspector).toBeVisible({ timeout: 10_000 });
+}
+
+export async function moveSceneToDestination(
+  page: Page,
+  destinationLabel: string
+): Promise<void> {
+  await ensureSelectionInspectorVisible(page);
+  const inspector = page.getByLabel("Selection inspector");
+  const moveButton = inspector.getByRole("button", {
+    name: `Move scene to ${destinationLabel}`
+  });
+  if (await moveButton.isVisible().catch(() => false)) {
+    await moveButton.click();
+    return;
+  }
+  await inspector.getByLabel("Find scene destination").fill(destinationLabel);
+  await expect(moveButton).toBeVisible({ timeout: 10_000 });
+  await moveButton.click();
+}
+
+export function canvasStoryKnowledge(page: Page, label: string) {
+  return page
+    .getByLabel("Story Canvas workspace")
+    .getByLabel(`Story knowledge ${label}`);
+}
+
 export async function commitInspectorField(
   page: Page,
   label: string,
@@ -47,9 +159,7 @@ export async function commitInspectorField(
   const field = page.getByLabel(label);
   await field.fill(value);
   await field.blur();
-  await expect(page.getByText("Saved to project").first()).toBeVisible({
-    timeout: 10_000
-  });
+  await expectAcknowledgement(page, /Saved to project/);
   await dismissAcknowledgementToasts(page);
 }
 
@@ -178,12 +288,15 @@ export async function openDraftScene(
 }
 
 export async function openDraftHistory(page: Page): Promise<void> {
-  const closeHistory = page.getByRole("button", { name: "Close History" });
-  if (await closeHistory.isVisible().catch(() => false)) {
+  const drawer = page.getByLabel("Draft History drawer");
+  if (await drawer.isVisible().catch(() => false)) {
     return;
   }
-  await page.getByRole("button", { name: "History", exact: true }).click();
-  await expect(page.getByLabel("Draft History drawer")).toBeVisible();
+  await page
+    .getByLabel("Draft Desk")
+    .getByRole("button", { name: "History", exact: true })
+    .click();
+  await expect(drawer).toBeVisible();
 }
 
 function canvasToolDock(page: Page) {
@@ -327,34 +440,27 @@ export async function placeStoryKnowledgeOnCanvas(
   await showCanvasDetailsIfHidden(page);
 }
 
-/** Map-dense History lives in the topbar (not Canvas utilities). */
+/** Map-dense Canvas history opens from the left-rail ◷ History control. */
 export async function showCanvasHistory(page: Page): Promise<void> {
-  const hide = page.getByRole("button", {
-    name: "Hide notifications and history"
-  });
-  if (await hide.isVisible().catch(() => false)) {
+  const panel = page.getByLabel("Canvas history");
+  if (await panel.isVisible().catch(() => false)) {
     return;
   }
-  await page
-    .getByRole("button", { name: "Show notifications and history" })
-    .click();
-  await expect(page.getByLabel("Canvas history")).toBeVisible({
-    timeout: 10_000
-  });
+  await historyRailButton(page).click();
+  await expect(panel).toBeVisible({ timeout: 10_000 });
 }
 
 export async function hideCanvasHistory(page: Page): Promise<void> {
-  const hide = page.getByRole("button", {
-    name: "Hide notifications and history"
-  });
-  if (await hide.isVisible().catch(() => false)) {
-    await hide.click();
+  const panel = page.getByLabel("Canvas history");
+  if (await panel.isVisible().catch(() => false)) {
+    const close = panel.getByRole("button", { name: "Close" });
+    if (await close.isVisible().catch(() => false)) {
+      await close.click();
+    }
   }
-  const close = page.getByLabel("Canvas history").getByRole("button", {
-    name: "Close"
-  });
-  if (await close.isVisible().catch(() => false)) {
-    await close.click();
+  const selected = page.getByRole("button", { name: "◷ History, selected" });
+  if (await selected.isVisible().catch(() => false)) {
+    await historyRailButton(page).click();
   }
 }
 
@@ -417,8 +523,26 @@ export async function showCanvasDetailsIfHidden(page: Page): Promise<void> {
 }
 
 export async function dismissAcknowledgementToasts(page: Page): Promise<void> {
-  const dismiss = page.getByRole("button", { name: "Dismiss" });
+  const canvasVisible = await page
+    .getByLabel("Story Canvas workspace")
+    .isVisible()
+    .catch(() => false);
+  if (canvasVisible) {
+    if (await page.getByLabel("Canvas history").isVisible().catch(() => false)) {
+      await hideCanvasHistory(page);
+    }
+    return;
+  }
+  const panel = page.getByLabel("Notifications and history");
+  if (!(await panel.isVisible().catch(() => false))) {
+    return;
+  }
+  const dismiss = panel.getByRole("button", { name: "Dismiss" });
   while (await dismiss.count()) {
     await dismiss.first().click();
+  }
+  const close = page.getByRole("button", { name: "Close history" });
+  if (await close.isVisible().catch(() => false)) {
+    await close.click();
   }
 }

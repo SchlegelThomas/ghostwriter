@@ -30,17 +30,12 @@ export function AccountGateScreen({
     <View style={styles.screen}>
       <View style={styles.card}>
         <Image
-          accessibilityLabel="ghost-writer AI Writing Studio"
+          accessibilityLabel="ghost-writer — Bring your ideas to life"
           resizeMode="contain"
           source={brandLockup}
           style={styles.logo}
         />
-        <Text style={styles.eyebrow}>Your story, wherever you write</Text>
-        <Text style={styles.title}>Enter your private writing studio.</Text>
-        <Text style={styles.copy}>
-          Sign in before creating or opening a project. Your books are stored in your
-          writer-owned Ghostwriter account and are never a public sample workspace.
-        </Text>
+        <Text style={styles.eyebrow}>Bring your ideas to life</Text>
         {error === undefined ? null : (
           <View accessibilityRole="alert" style={styles.error}>
             <Text style={styles.errorText}>{error}</Text>
@@ -62,10 +57,6 @@ export function AccountGateScreen({
             <Text style={styles.buttonText}>Continue with Google</Text>
           )}
         </Pressable>
-        <Text style={styles.note}>
-          Google confirms your identity. Ghostwriter keeps project authorization and
-          session state on its own service.
-        </Text>
       </View>
     </View>
   );
@@ -85,8 +76,9 @@ const styles = StyleSheet.create({
     borderColor: colors.documentLine,
     borderRadius: 14,
     borderWidth: 1,
-    maxWidth: 520,
-    padding: 32,
+    maxWidth: 560,
+    paddingHorizontal: 36,
+    paddingVertical: 40,
     shadowColor: colors.brandDark,
     shadowOffset: { height: 12, width: 0 },
     shadowOpacity: 0.08,
@@ -95,32 +87,16 @@ const styles = StyleSheet.create({
   },
   logo: {
     alignSelf: "center",
-    height: 150,
-    width: 200
+    height: 260,
+    marginBottom: 4,
+    width: 340
   },
   eyebrow: {
     color: colors.kicker,
-    fontFamily: fonts.uiSemibold,
-    fontSize: 10,
-    letterSpacing: 1.8,
-    marginTop: 16,
-    textAlign: "center",
-    textTransform: "uppercase"
-  },
-  title: {
-    color: colors.ink,
-    fontFamily: fonts.story,
-    fontSize: 34,
-    lineHeight: 39,
-    marginTop: 8,
-    textAlign: "center"
-  },
-  copy: {
-    color: colors.muted,
-    fontFamily: fonts.ui,
-    fontSize: 13,
-    lineHeight: 21,
-    marginTop: 12,
+    fontFamily: fonts.brand,
+    fontSize: 28,
+    letterSpacing: 0.2,
+    marginTop: -40,
     textAlign: "center"
   },
   error: {
@@ -154,13 +130,5 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontFamily: fonts.uiSemibold,
     fontSize: 13
-  },
-  note: {
-    color: colors.muted,
-    fontFamily: fonts.ui,
-    fontSize: 9,
-    lineHeight: 14,
-    marginTop: 12,
-    textAlign: "center"
   }
 });

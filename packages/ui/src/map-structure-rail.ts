@@ -6,8 +6,10 @@ export const MAP_STRUCTURE_COLLAPSED_WIDTH = 36;
 export const MAP_STRUCTURE_EXPANDED_WIDTH = 252;
 
 /**
- * Map / Split defaults to collapsed structure whenever the layout can host a
- * thin rail (not narrow). Draft stays expanded for writing.
+ * Shared manuscript structure rail for Draft / Canvas / Split whenever the
+ * layout can host a thin rail (not narrow). Canvas / Split open collapsed so
+ * the board leads; Draft opens expanded for writing. Collapse state then
+ * persists across mode switches in the workspace shell.
  */
 export function defaultMapStructureRail(
   mode: MapStructureWorkspaceMode,
@@ -36,6 +38,8 @@ export function mapStructureQuickBuildVisible(
   mode: MapStructureWorkspaceMode,
   structureRail: MapStructureRailMode
 ): boolean {
+  // Draft keeps Quick Build in the center trail even when the structure rail
+  // is collapsed; Map / Split only expose it with the expanded tree.
   if (mode === "draft") return true;
   return structureRail === "expanded";
 }

@@ -12,7 +12,8 @@ import type {
   ProjectCommand,
   ProjectNavigator,
   SceneId,
-  StoryProjectSummary
+  StoryProjectSummary,
+  WriterPublishingDetails
 } from "@ghostwriter/core";
 import { GHOSTWRITER_CAPABILITIES } from "@ghostwriter/core";
 import {
@@ -32,7 +33,10 @@ import {
   type AcknowledgementToast,
   type ProjectWorkspaceMode,
   type ReaderVoicePack,
-  type WorkspaceChatMessage
+  type WriteComposition,
+  type WriteInputModality,
+  type WorkspaceChatMessage,
+  workspaceModeForComposition
 } from "@ghostwriter/ui";
 import { useFonts } from "expo-font";
 import { useEffect, useReducer, useRef, useState } from "react";
@@ -152,6 +156,11 @@ export default function App() {
   const [selectedProject, setSelectedProject] = useState<ProjectNavigator>();
   const [workspaceMode, setWorkspaceMode] =
     useState<ProjectWorkspaceMode>("draft");
+  const [writeComposition, setWriteComposition] =
+    useState<WriteComposition>("page");
+  const [writeModality, setWriteModality] =
+    useState<WriteInputModality>("keyboard");
+  const [assistOpen, setAssistOpen] = useState(false);
   const [drillStack, setDrillStack] =
     useState<CanvasDrillStack>(initialDrillStack);
   const [workflowLens, setWorkflowLens] =
@@ -191,6 +200,10 @@ export default function App() {
     "idle" | "saving" | "saved" | "error"
   >("idle");
   const [toasts, dispatchToast] = useReducer(toastReducer, []);
+  const [activityHistory, setActivityHistory] = useState<
+    readonly AcknowledgementToast[]
+  >([]);
+  const [activityHistoryOpen, setActivityHistoryOpen] = useState(false);
   const [readerProjection, setReaderProjection] = useState<BookReaderResponse>();
   const [readerLoading, setReaderLoading] = useState(false);
   const [readerError, setReaderError] = useState<string>();
@@ -257,11 +270,24 @@ export default function App() {
   ): void {
     if (action !== undefined) toastActionsRef.current.set(toast.id, action);
     dispatchToast({ type: "push", toast });
+    // History rail keeps a durable feed; floating toasts are no longer shown.
+    setActivityHistory((current) => {
+      const entry: AcknowledgementToast = {
+        ...toast,
+        expiresAt: undefined,
+        pausedRemainingMs: undefined
+      };
+      return [entry, ...current.filter((item) => item.id !== entry.id)].slice(
+        0,
+        40
+      );
+    });
   }
 
   function dismissToast(id: string): void {
     toastActionsRef.current.delete(id);
     dispatchToast({ type: "dismiss", id });
+    setActivityHistory((current) => current.filter((item) => item.id !== id));
   }
 
   function invalidateMetadataUndo(): void {
@@ -728,6 +754,7 @@ export default function App() {
 
   async function saveProfile(input: {
     displayName: string;
+    publishing?: WriterPublishingDetails | null;
     expectedVersion: number;
   }): Promise<void> {
     setBusy(true);
@@ -898,6 +925,18 @@ export default function App() {
       setCanvasHistoryLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (workspaceMode === "split") {
+      setWriteComposition("split-map");
+      return;
+    }
+    if (workspaceMode === "canvas") {
+      setWriteComposition("page");
+      setAssistOpen(false);
+      setWriteModality("keyboard");
+    }
+  }, [workspaceMode]);
 
   async function changeWorkspaceMode(
     nextMode: ProjectWorkspaceMode
@@ -1600,22 +1639,22 @@ export default function App() {
           if (sceneId !== undefined) void selectWorkspaceScene(sceneId);
         }}
         onSignOut={() => void endSession()}
+        activityHistory={activityHistory}
+        activityHistoryOpen={activityHistoryOpen}
+        onActivityHistoryOpenChange={setActivityHistoryOpen}
         onToastAction={(id) => {
           const action = toastActionsRef.current.get(id);
           if (action !== undefined) void action();
         }}
         onToastDismiss={dismissToast}
-        onToastPause={(id) =>
-          dispatchToast({ type: "pause", id, now: Date.now() })
-        }
-        onToastResume={(id) =>
-          dispatchToast({ type: "resume", id, now: Date.now() })
-        }
         onWorkflowLensChange={handleWorkflowLensChange}
         canvasHistoryOpen={canvasHistoryOpen}
         onCanvasHistoryOpenChange={(open) => {
           setCanvasHistoryOpen(open);
-          if (open) void loadCanvasHistoryForProject(selectedProject.id);
+          if (open) {
+            setActivityHistoryOpen(false);
+            void loadCanvasHistoryForProject(selectedProject.id);
+          }
         }}
         profileDisplayName={writer.profile.displayName}
         project={selectedProject}
@@ -1681,6 +1720,7 @@ export default function App() {
           return (
             <DraftPanel
               accountId={writer.account.id}
+              assistOpen={assistOpen}
               contextDockOpen={presentation.contextDockOpen}
               focusHalo={presentation.focusHalo}
               historyOpen={presentation.historyOpen}
@@ -1688,9 +1728,13 @@ export default function App() {
               nextSceneTitle={context.nextScene?.title}
               onAcknowledgement={handleDraftAcknowledgement}
               onActivityChange={setDraftActivity}
+              onAssistOpenChange={setAssistOpen}
               onContextDockOpenChange={presentation.onContextDockOpenChange}
               onFocusHaloChange={presentation.onFocusHaloChange}
               onHistoryOpenChange={presentation.onHistoryOpenChange}
+              {...(presentation.quickBuild === undefined
+                ? {}
+                : { quickBuild: presentation.quickBuild })}
               onNextScene={
                 nextSceneId === undefined
                   ? undefined
@@ -1703,21 +1747,61 @@ export default function App() {
               }
               onProblem={handleDraftProblem}
               onProblemResolved={dismissToast}
+              onProjectCommand={runCommand}
+              onWriteCompositionChange={(composition) => {
+                setWriteComposition(composition);
+                const nextMode = workspaceModeForComposition(composition);
+                if (nextMode !== workspaceMode) {
+                  void changeWorkspaceMode(nextMode);
+                }
+              }}
+              onWriteModalityChange={setWriteModality}
               povLabel={context.povLabel}
               previousSceneTitle={context.previousScene?.title}
               projectId={selectedProject.id}
+              projectVersion={selectedProject.version}
               readOnly={scene.archivedAt !== undefined}
               ref={draftPanelRef}
+              sceneBackdropCaption={scene.backdrop?.caption}
+              sceneBackdropUrl={scene.backdrop?.url}
+              sceneCast={selectedProject.storyKnowledge
+                .filter(
+                  (knowledge) =>
+                    knowledge.archivedAt === undefined &&
+                    knowledge.linkedSceneIds.includes(scene.id)
+                )
+                .map((knowledge) => ({
+                  id: knowledge.id,
+                  label: knowledge.label,
+                  ...(knowledge.characterSheet === undefined
+                    ? {}
+                    : { characterSheet: knowledge.characterSheet })
+                }))}
+              linkableCast={selectedProject.storyKnowledge
+                .filter(
+                  (knowledge) =>
+                    knowledge.archivedAt === undefined &&
+                    !knowledge.linkedSceneIds.includes(scene.id)
+                )
+                .map((knowledge) => ({
+                  id: knowledge.id,
+                  label: knowledge.label,
+                  ...(knowledge.characterSheet === undefined
+                    ? {}
+                    : { characterSheet: knowledge.characterSheet })
+                }))}
               sceneId={scene.id}
               scenePosition={context.positionLabel}
+              sceneSketch={scene.sketch}
               sceneStatus={scene.status}
               sceneSummary={scene.summary}
               sceneTitle={scene.title}
+              writeComposition={writeComposition}
+              writeModality={writeModality}
             />
           );
         }}
         selectedSceneId={selectedSceneId}
-        toasts={toasts}
         workflowLens={workflowLens}
       />
     );

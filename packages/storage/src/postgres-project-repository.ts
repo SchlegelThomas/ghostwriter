@@ -26,10 +26,12 @@ import {
   type AccountId,
   type ProjectMembership,
   type ProjectRole,
+  type CharacterSheet,
   type Scene,
   type SceneBackdrop,
   type SceneImageRef,
   type SceneMusic,
+  type SceneSketch,
   type SceneStatus,
   type StoryKnowledge,
   type StoryKnowledgeAuthority,
@@ -217,6 +219,7 @@ async function persistBuffer(
         backdrop: scene.backdrop ?? null,
         music: scene.music ?? null,
         imageRefs: scene.imageRefs === undefined ? null : [...scene.imageRefs],
+        sketch: scene.sketch ?? null,
         archivedAt: scene.archivedAt ?? null
       }))
     );
@@ -229,7 +232,13 @@ async function persistBuffer(
 
   for (const book of buffer.books) {
     book.manuscript.parts.forEach((part, partIndex) => {
-      partRows.push({ id: part.id, bookId: book.id, position: partIndex, title: part.title });
+      partRows.push({
+        id: part.id,
+        bookId: book.id,
+        position: partIndex,
+        title: part.title,
+        summary: part.summary ?? null
+      });
 
       part.chapters.forEach((chapter, chapterIndex) => {
         chapterRows.push({
@@ -272,6 +281,7 @@ async function persistBuffer(
         authority: knowledge.authority,
         notes: knowledge.notes ?? null,
         aliases: knowledge.aliases === undefined ? null : [...knowledge.aliases],
+        characterSheet: knowledge.characterSheet ?? null,
         archivedAt: knowledge.archivedAt ?? null
       }))
     );
@@ -379,7 +389,13 @@ function replacementRows(records: ProjectRecords): ReplacementRows {
     });
 
     book.manuscript.parts.forEach((part, partIndex) => {
-      partRows.push({ id: part.id, bookId: book.id, position: partIndex, title: part.title });
+      partRows.push({
+        id: part.id,
+        bookId: book.id,
+        position: partIndex,
+        title: part.title,
+        summary: part.summary ?? null
+      });
 
       part.chapters.forEach((chapter, chapterIndex) => {
         chapterRows.push({
@@ -421,6 +437,7 @@ function replacementRows(records: ProjectRecords): ReplacementRows {
       backdrop: scene.backdrop ?? null,
       music: scene.music ?? null,
       imageRefs: scene.imageRefs === undefined ? null : [...scene.imageRefs],
+      sketch: scene.sketch ?? null,
       archivedAt: scene.archivedAt ?? null
     });
   }
@@ -434,6 +451,7 @@ function replacementRows(records: ProjectRecords): ReplacementRows {
       authority: knowledge.authority,
       notes: knowledge.notes ?? null,
       aliases: knowledge.aliases === undefined ? null : [...knowledge.aliases],
+      characterSheet: knowledge.characterSheet ?? null,
       archivedAt: knowledge.archivedAt ?? null
     });
 
@@ -601,6 +619,7 @@ async function persistStableReplacementRows(
           authority: row.authority,
           notes: row.notes,
           aliases: row.aliases,
+          characterSheet: row.characterSheet,
           archivedAt: row.archivedAt
         })
         .where(eq(storyKnowledge.id, row.id));
@@ -624,6 +643,7 @@ async function persistStableReplacementRows(
           backdrop: row.backdrop,
           music: row.music,
           imageRefs: row.imageRefs,
+          sketch: row.sketch,
           archivedAt: row.archivedAt
         })
         .where(eq(scenes.id, row.id));
@@ -640,7 +660,8 @@ async function persistStableReplacementRows(
         .set({
           bookId: row.bookId,
           position: row.position,
-          title: row.title
+          title: row.title,
+          summary: row.summary
         })
         .where(eq(manuscriptParts.id, row.id));
     } else {
@@ -874,7 +895,14 @@ async function queryBooks(
         });
       }
 
-      parts.push({ id: partId(part.id), title: part.title, chapters });
+      parts.push({
+        id: partId(part.id),
+        title: part.title,
+        chapters,
+        ...(part.summary === null || part.summary === undefined
+          ? {}
+          : { summary: part.summary })
+      });
     }
 
     const unassignedRows = await exec
@@ -926,6 +954,7 @@ async function queryScenes(
       ...(scene.imageRefs === null
         ? {}
         : { imageRefs: scene.imageRefs as SceneImageRef[] }),
+      ...(scene.sketch === null ? {} : { sketch: scene.sketch as SceneSketch }),
       ...(scene.archivedAt === null ? {} : { archivedAt: scene.archivedAt })
     })
   );
@@ -973,6 +1002,9 @@ async function queryStoryKnowledge(
         ...(knowledge.aliases === null
           ? {}
           : { aliases: knowledge.aliases as string[] }),
+        ...(knowledge.characterSheet === null
+          ? {}
+          : { characterSheet: knowledge.characterSheet as CharacterSheet }),
         ...(knowledge.archivedAt === null
           ? {}
           : { archivedAt: knowledge.archivedAt })

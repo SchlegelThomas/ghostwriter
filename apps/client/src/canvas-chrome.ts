@@ -69,9 +69,14 @@ export type CanvasCardFitOptions = Readonly<{
 }>;
 
 /**
- * Minimum world size so card chrome/content fits at the current zoom.
- * Text/padding do not scale with zoom, so world mins must compensate.
+ * Minimum world size so card chrome stays usable near 1×.
+ *
+ * Below {@link CANVAS_CARD_FIT_ZOOM_FLOOR}, stop full zoom compensation so
+ * overview zoom actually shrinks cards on screen (otherwise 35% still reads ~1×).
  */
+/** Zoom at/above which fitted cards keep ~constant screen size. */
+export const CANVAS_CARD_FIT_ZOOM_FLOOR = 0.65;
+
 export function fittedCanvasCardSize(
   object: Pick<CanvasObject, "width" | "height" | "kind" | "label">,
   options: CanvasCardFitOptions = {}
@@ -79,7 +84,12 @@ export function fittedCanvasCardSize(
   const selected = options.selected === true;
   const sceneCard =
     options.sceneCard === true || object.kind === "scene-card";
-  const zoom = Math.max(0.35, options.zoom ?? 1);
+  const zoom = Math.max(0.12, options.zoom ?? 1);
+  // Overview: keep authored geometry so zoom-out shrinks cards on screen.
+  if (zoom < CANVAS_CARD_FIT_ZOOM_FLOOR) {
+    return { width: object.width, height: object.height };
+  }
+
   const detailLines = options.detailLines ?? (selected ? 2 : 3);
   const hasActionRow = options.hasActionRow ?? selected;
   // Hints live in accessibility/tooltips — not as overflow-prone card body text.
@@ -115,8 +125,8 @@ export function fittedCanvasCardSize(
     screenMinWidth = Math.max(screenMinWidth, sceneCard ? 248 : 220);
   }
 
-  const minWidth = Math.max(160, Math.ceil(screenMinWidth / zoom));
-  const minHeight = Math.max(96, Math.ceil(screenMinHeight / zoom));
+  const minWidth = Math.max(120, Math.ceil(screenMinWidth / zoom));
+  const minHeight = Math.max(72, Math.ceil(screenMinHeight / zoom));
 
   return {
     width: Math.max(object.width, minWidth),
