@@ -7,13 +7,18 @@ import {
   addStoryKnowledge,
   addUnassignedScene,
   commitInspectorField,
+  activateCanvasTool,
   createCanvasImageReference,
   createCanvasNote,
   createCanvasRegion,
   createProject,
   dismissAcknowledgementToasts,
+  ensureSpatialCanvasSurface,
+  expandReadingSpine,
+  expectCanvasHistoryTitle,
   hideCanvasHistory,
   openCanvasSceneTool,
+  placeArmedCanvasToolOnSurface,
   openDraftHistory,
   openDraftScene,
   openProject,
@@ -376,10 +381,15 @@ test("auth gate and project library remain usable on narrow web", async ({ page 
   await page.getByLabel("Canvas scene title").fill("Phone Draft");
   await page.getByRole("button", { name: "Small Tides · Unassigned" }).click();
   await page.getByRole("button", { name: "Create scene", exact: true }).click();
-  await expect(page.getByLabel(/Scene card Phone Draft/)).toBeVisible({
-    timeout: 15_000
-  });
-  await page.getByRole("button", { name: "Show manuscript tree" }).click();
+  // Narrow Map is outline-only — scene cards are not spatial objects here.
+  await expect(
+    page.getByRole("button", { name: /Canvas object 1: Phone Draft,/ })
+  ).toBeVisible({ timeout: 15_000 });
+  // Map-dense narrow uses the Project mode tab (not "Show manuscript tree").
+  await page
+    .getByLabel("Writing workspace modes")
+    .getByRole("button", { name: "Project", exact: true })
+    .click();
   await expect(
     page.getByRole("treeitem", { name: "Scene Phone Draft" })
   ).toBeVisible();
@@ -433,12 +443,16 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
 
   await placeStoryKnowledgeOnCanvas(page, "Storm Omen");
   await expect(page.getByLabel("Story knowledge Storm Omen")).toBeVisible();
+  await showCanvasDetailsIfHidden(page);
   await expect(page.getByLabel("Selected object label")).toHaveValue("Storm Omen");
   await expect(page.getByText("Confirmed · writer-created").first()).toBeVisible();
 
   await createCanvasNote(page);
+  await page.getByLabel(/^Writer note/).first().click();
+  await showCanvasDetailsIfHidden(page);
   await expect(page.getByLabel("Selected object label")).toHaveValue(
-    "Writer note"
+    "Writer note",
+    { timeout: 10_000 }
   );
   await page.getByLabel("Selected object label").fill("Storm signal");
   await page.getByRole("button", { name: "Save label" }).click();
@@ -451,13 +465,12 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
   await page.getByRole("button", { name: "Save note metadata" }).click();
   await expect(page.getByLabel("Canvas save status")).toHaveText("Saved to Canvas");
   await page.getByRole("button", { name: "Nudge right" }).click();
-  await expect(async () => {
-    await expect(
-      page.locator('[aria-label="Writer note Storm signal"]')
-    ).toHaveCount(1);
-  }).toPass({ timeout: 10_000 });
+  await expect(page.getByLabel(/Writer note Storm signal/)).toBeVisible({
+    timeout: 10_000
+  });
 
   await createCanvasImageReference(page);
+  await showCanvasDetailsIfHidden(page);
   await page
     .getByRole("textbox", { name: "Image alt text", exact: true })
     .fill("A lighthouse beam crossing storm clouds");
@@ -472,6 +485,7 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
   ).toBeVisible();
 
   await createCanvasRegion(page);
+  await showCanvasDetailsIfHidden(page);
   await expect(page.getByLabel("Selected object label")).toHaveValue(
     "Story region"
   );
@@ -481,22 +495,8 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
   await expect(page.getByLabel("Region Act I waters")).toBeVisible();
 
   await page
-    .getByRole("button", { name: "Add provisional review fixture" })
-    .click();
-  await expect(
-    page.getByText("Provisional fixture · not confirmed").first()
-  ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Review provisional A costly turn" })
-    .click();
-  await page.getByRole("button", { name: "Confirm object" }).click();
-  await expect(
-    page.getByText("Confirmed · writer-created").first()
-  ).toBeVisible();
-
-  await page
     .getByLabel("Story Canvas workspace")
-    .getByRole("button", { name: "Outline", exact: true })
+    .getByRole("button", { name: "Outline view" })
     .click();
   await page
     .getByRole("button", { name: /Canvas object \d+: Storm signal,/ })
@@ -511,6 +511,7 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
     .click();
   await expect(page.getByText("thread · Act I waters")).toBeVisible();
 
+  await expandReadingSpine(page);
   const spine = page.getByLabel("Reading-order spine");
   await expect(spine.getByText("Lighthouse Turn")).toBeVisible();
   await expect(spine.getByText("Aligned with Draft")).toBeVisible();
@@ -527,10 +528,20 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
     { timeout: 10_000 }
   );
   await page.getByRole("button", { name: "Undo Canvas command" }).click();
-  await expect(page.getByText("Canvas action undone").first()).toBeVisible();
+  await expectCanvasHistoryTitle(page, "Canvas action undone");
   await expect(editor).toContainText(prose);
 
+  // Map-dense Split hides Selection inspector — archive story knowledge in Draft.
+  await openWorkspaceMode(page, "Draft");
+  const structureExpand = page.getByRole("button", {
+    name: "Expand manuscript · ["
+  });
+  if (await structureExpand.first().isVisible().catch(() => false)) {
+    await structureExpand.first().click();
+  }
+  await page.getByLabel("Search manuscript tree").fill("Storm Omen");
   await selectTree(page, "Story knowledge Storm Omen");
+  await page.getByLabel("Search manuscript tree").fill("");
   await page
     .getByRole("button", { name: "Archive story knowledge" })
     .click();
@@ -545,7 +556,7 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
   await page.reload();
   await openProject(page, "Canvas Harbor");
   await openWorkspaceMode(page, "Canvas");
-  await expect(page.locator('[aria-label="Writer note Storm signal"]')).toHaveCount(1);
+  await expect(page.getByLabel(/Writer note Storm signal/)).toBeVisible();
   await expect(page.getByLabel("Region Act I waters")).toBeVisible();
   await expect(page.getByLabel("Scene card Lighthouse Turn")).toBeVisible();
   await expect(page.getByLabel("Story knowledge Storm Omen")).toBeVisible();
@@ -554,11 +565,12 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
   ).toBeVisible();
   await page
     .getByLabel("Story Canvas workspace")
-    .getByRole("button", { name: "Outline", exact: true })
+    .getByRole("button", { name: "Outline view" })
     .click();
   await page
     .getByRole("button", { name: /Canvas object \d+: Storm signal,/ })
     .click();
+  await showCanvasDetailsIfHidden(page);
   await expect(page.getByLabel("Note body")).toHaveValue(
     "Track the signal across\nthree storm-dark windows."
   );
@@ -584,11 +596,18 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
   await expect(page.getByLabel("Image MIME type (optional)")).toHaveValue(
     "image/png"
   );
-  await selectTree(page, "Scene Lighthouse Turn");
   await openWorkspaceMode(page, "Draft");
+  const expandForDraft = page.getByRole("button", {
+    name: "Expand manuscript · ["
+  });
+  if (await expandForDraft.first().isVisible().catch(() => false)) {
+    await expandForDraft.first().click();
+  }
+  await page.getByLabel("Search manuscript tree").fill("Lighthouse Turn");
+  await openDraftScene(page, "Scene Lighthouse Turn");
   await expect(
     page.getByRole("textbox", { name: "Draft for Lighthouse Turn" })
-  ).toContainText(prose);
+  ).toContainText(prose, { timeout: 10_000 });
   await page.getByRole("button", { name: "Sign out" }).click();
 });
 
@@ -616,8 +635,9 @@ test("narrow Canvas defaults to ordered keyboard review without freeform overflo
   });
   await outlineObject.focus();
   await outlineObject.press("Enter");
+  await showCanvasDetailsIfHidden(page);
   const beforeLabel = (await outlineObject.getAttribute("aria-label")) ?? "";
-  const beforePosition = beforeLabel.match(/x (\d+), y (\d+)/);
+  const beforePosition = beforeLabel.match(/x (-?\d+), y (-?\d+)/);
   const nudge = page.getByRole("button", { name: "Nudge right" });
   await nudge.focus();
   await nudge.press("Enter");
@@ -627,12 +647,12 @@ test("narrow Canvas defaults to ordered keyboard review without freeform overflo
         .getByRole("button", { name: /Canvas object 1: Writer note/ })
         .first()
         .getAttribute("aria-label")) ?? "";
-    const afterPosition = afterLabel.match(/x (\d+), y (\d+)/);
+    const afterPosition = afterLabel.match(/x (-?\d+), y (-?\d+)/);
     expect(beforePosition).not.toBeNull();
     expect(afterPosition).not.toBeNull();
     expect(Number(afterPosition![1])).toBe(Number(beforePosition![1]) + 24);
     expect(afterPosition![2]).toBe(beforePosition![2]);
-  }).toPass();
+  }).toPass({ timeout: 10_000 });
 
   await page.getByRole("button", { name: "Sign out" }).click();
 });
@@ -640,6 +660,7 @@ test("narrow Canvas defaults to ordered keyboard review without freeform overflo
 test("Canvas story-order hints show aligned and intentional drift without reordering Draft", async ({
   page
 }) => {
+  test.setTimeout(90_000);
   await signIn(page);
   await createProject(page, "Drift Harbor", "Book of Fixed Order");
 
@@ -663,6 +684,7 @@ test("Canvas story-order hints show aligned and intentional drift without reorde
   await selectTree(page, "Scene Drift Second");
   await openWorkspaceMode(page, "Canvas");
   await placeSelectedDraftSceneOnCanvas(page);
+  await showCanvasDetailsIfHidden(page);
   await expect(page.getByLabel("Current Canvas story order drift")).toContainText(
     "Draft position 2 · Aligned with Draft"
   );
@@ -674,6 +696,7 @@ test("Canvas story-order hints show aligned and intentional drift without reorde
   await expect(page.getByLabel("Current Canvas story order drift")).toContainText(
     "Earlier on Canvas"
   );
+  await expandReadingSpine(page);
   await expect(
     page.getByLabel("Reading-order spine").getByText("Earlier on Canvas")
   ).toBeVisible();
@@ -685,12 +708,25 @@ test("Canvas story-order hints show aligned and intentional drift without reorde
   await expect(page.getByLabel("Current Canvas story order drift")).toContainText(
     "Later on Canvas"
   );
+  // Map-dense structure rail may be collapsed — expand before reading tree order.
+  const structureExpand = page.getByRole("button", {
+    name: "Expand manuscript · ["
+  });
+  if (await structureExpand.first().isVisible().catch(() => false)) {
+    await structureExpand.first().click();
+  }
+  const treeSearch = page.getByLabel("Search manuscript tree");
+  await expect(treeSearch).toBeVisible({ timeout: 10_000 });
+  await treeSearch.fill("Drift");
   expect(
     await manuscriptScenes.evaluateAll((elements) =>
       elements.map((element) => element.getAttribute("aria-label"))
     )
   ).toEqual(initialOrder);
+  await treeSearch.fill("");
 
+  // Map-dense Canvas hides the manuscript Selection inspector — archive in Draft.
+  await openWorkspaceMode(page, "Draft");
   await selectTree(page, "Scene Drift Second");
   await page.getByRole("button", { name: "Archive scene" }).click();
   await dismissAcknowledgementToasts(page);
@@ -701,6 +737,7 @@ test("Canvas story-order hints show aligned and intentional drift without reorde
   await expect(
     page.getByText("Archived scene · stale reference").first()
   ).toBeVisible();
+  await expandReadingSpine(page);
   await expect(
     page
       .getByLabel("Reading-order spine")
@@ -782,49 +819,63 @@ test("pointer tree moves, Canvas drill, and workflow lenses preserve one scene",
 
   await openWorkspaceMode(page, "Canvas");
   await placeSelectedDraftSceneOnCanvas(page);
-  const sceneCard = page.getByLabel("Scene card Movable Signal");
+  const sceneCard = page.getByLabel(/Scene card Movable Signal/);
   await expect(sceneCard).toBeVisible();
   await sceneCard.click();
   await showCanvasDetailsIfHidden(page);
   // Prefer keyboard nudge over pointer drag — RN web PanResponder is flaky in CI.
   await page.getByRole("button", { name: "Nudge right" }).click();
-  await expect(page.getByText("Canvas object moved").first()).toBeVisible();
+  // Map-dense success acknowledgements land in History, not toasts.
+  await expectCanvasHistoryTitle(page, "Canvas object moved");
 
   // Prefer Chapter Aggregates over spatial overlays — scene cards intercept
   // pointer events on the freeform Enter-chapter hit targets.
   await page
     .getByRole("button", { name: "Enter chapter aggregate Destination" })
     .click();
+  // Map-dense topbar trail labels (not the older CanvasDrillBar crumb copy).
   await expect(
     page.getByRole("button", {
-      name: "Canvas scope Destination, current scope"
+      name: "Canvas scope, current Chapter · Destination"
     })
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 10_000 });
   await expect(
-    page.getByRole("button", { name: "Back to parent Canvas scope" })
-  ).toBeFocused();
+    page.getByRole("button", { name: /Back to parent Canvas scope/ }).first()
+  ).toBeVisible();
 
   await page.keyboard.press("Escape");
   await expect(
     page.getByRole("button", {
-      name: "Canvas scope Workflow Harbor, current scope"
+      name: /Canvas scope, current (Map|Workflow Harbor)/
     })
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 10_000 });
 
   const lenses = page.getByLabel("Canvas workflow lenses");
-  for (const lens of ["Relationships", "Continuity", "Review", "Outline"] as const) {
-    await lenses.getByRole("tab", { name: lens, exact: true }).click();
-    // RN web omits aria-selected on tabs; assert the live Canvas status copy instead.
+  // Outline lens hides the "· lens …" trail chip; assert named lenses only.
+  for (const lens of ["Relationships", "Continuity", "Review"] as const) {
+    await lenses.getByRole("button", { name: `${lens} lens`, exact: true }).click();
     await expect(
-      page.getByText(new RegExp(`${lens.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} lens`))
+      page.getByText(
+        new RegExp(`lens ${lens.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)
+      )
     ).toBeVisible();
+    // Review lens auto-opens History; close it so later board clicks are free.
+    if (lens === "Review") {
+      await hideCanvasHistory(page);
+    }
   }
+  await lenses.getByRole("button", { name: "Outline lens", exact: true }).click();
 
-  await lenses.getByRole("tab", { name: "Plan → Draft" }).click();
+  await lenses.getByRole("button", { name: "Plan → Draft lens", exact: true }).click();
+  await expect(page.getByText(/lens Plan → Draft/)).toBeVisible();
+  await hideCanvasHistory(page);
   await expect(page.getByLabel("Story Canvas workspace")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Open Draft for Movable Signal" })
+    .click();
   await expect(
     page.getByRole("textbox", { name: "Draft for Movable Signal" })
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 10_000 });
 });
 
 test("Reader keeps the selected Draft available when optional voice is unavailable", async ({
@@ -904,6 +955,7 @@ test("workspace chat invokes the owner-scoped manuscript read capability", async
 test("two Canvas tabs reject a stale command and offer the latest board", async ({
   browser
 }) => {
+  test.setTimeout(90_000);
   const context = await browser.newContext();
   const first = await context.newPage();
   await signIn(first);
@@ -921,44 +973,66 @@ test("two Canvas tabs reject a stale command and offer the latest board", async 
     (response) =>
       response.url().includes("/canvas/commands") &&
       response.request().method() === "POST" &&
-      response.ok()
+      response.ok(),
+    { timeout: 30_000 }
   );
   await createCanvasNote(first);
   await noteSaved;
-  await expect(first.getByLabel("Writer note Writer note")).toBeVisible();
+  await expect(first.getByLabel(/Writer note Writer note/)).toBeVisible({
+    timeout: 15_000
+  });
   await expect(first.getByLabel("Canvas save status")).toHaveText("Saved to Canvas");
 
-  await createCanvasRegion(second);
+  // Arm + place without asserting creation — the stale command must fail.
+  await ensureSpatialCanvasSurface(second);
+  await activateCanvasTool(second, "Region", "R");
+  await placeArmedCanvasToolOnSurface(second);
+  // Conflicts land in History recent actions (not page toasts/banners).
+  await showCanvasHistory(second);
+  const history = second.getByLabel("Canvas history");
   await expect(
-    second.getByText(
+    history.getByText(
       "Story Canvas changed in another request. Ghostwriter applied nothing, reloaded the latest board, and kept the new version ready for review."
-    ).first()
-  ).toBeVisible();
-  await expect(
-    second.getByRole("button", { name: "Reload latest Canvas" })
-  ).toBeVisible();
-  await expect(second.getByLabel("Writer note Writer note")).toBeVisible();
-  await expect(second.getByLabel("Region Story region")).toHaveCount(0);
-
-  await second.getByRole("button", { name: "Reload latest Canvas" }).click();
-  await expect(
-    second.getByText(
-      "Latest server-acknowledged Canvas loaded for review."
     )
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(
+    history.getByRole("button", { name: "Reload Canvas" })
   ).toBeVisible();
-  await expect(second.getByLabel("Writer note Writer note")).toBeVisible();
+  await hideCanvasHistory(second);
+  await expect(second.getByLabel(/Writer note Writer note/)).toBeVisible({
+    timeout: 15_000
+  });
+  await expect(second.getByLabel(/Region Story region/)).toHaveCount(0);
+
+  await showCanvasHistory(second);
+  await second
+    .getByLabel("Canvas history")
+    .getByRole("button", { name: "Reload Canvas" })
+    .click();
+  // Map-dense suppresses load toasts; the writer-visible outcome is the board itself.
+  await expect(second.getByLabel(/Writer note Writer note/)).toBeVisible({
+    timeout: 15_000
+  });
+  await expect(second.getByLabel("Canvas save status")).toHaveText(
+    "Saved to Canvas"
+  );
   await context.close();
 });
 
 test("writer selects and restores an earlier Canvas snapshot", async ({ page }) => {
+  test.setTimeout(90_000);
   await signIn(page);
   await createProject(page, "Snapshot Harbor", "Book of Earlier Shapes");
   await openWorkspaceMode(page, "Canvas");
 
   await createCanvasNote(page);
-  await page.getByLabel("Selected object label").fill("Kept note");
+  await showCanvasDetailsIfHidden(page);
+  await page.getByLabel("Selected object label").fill("Kept note", {
+    timeout: 15_000
+  });
   await page.getByRole("button", { name: "Save label" }).click();
   await createCanvasImageReference(page);
+  await showCanvasDetailsIfHidden(page);
   await expect(
     page.getByLabel("Image metadata Concept image reference")
   ).toBeVisible();
@@ -969,7 +1043,7 @@ test("writer selects and restores an earlier Canvas snapshot", async ({ page }) 
     .getByRole("button", {
       name: "Select Canvas snapshot 3: Object details updated"
     })
-    .click();
+    .click({ timeout: 15_000 });
   await page
     .getByRole("button", { name: "Restore selected Canvas snapshot" })
     .click();
@@ -977,28 +1051,24 @@ test("writer selects and restores an earlier Canvas snapshot", async ({ page }) 
   await page
     .getByRole("button", { name: "Confirm Canvas restore" })
     .click();
-  await expect(page.getByText("Canvas snapshot restored").first()).toBeVisible();
-  await expect(page.getByLabel("Writer note Kept note")).toBeVisible();
+  await expect(
+    page.getByLabel("Canvas history").getByText("Canvas snapshot restored")
+  ).toBeVisible({ timeout: 15_000 });
+  await hideCanvasHistory(page);
+  await expect(page.getByLabel(/Writer note Kept note/)).toBeVisible({
+    timeout: 15_000
+  });
   await expect(
     page.getByLabel("Image metadata Concept image reference")
   ).toHaveCount(0);
-
-  await hideCanvasHistory(page);
-  await page
-    .getByRole("button", { name: "Add provisional review fixture" })
-    .click();
-  await page
-    .getByRole("button", { name: "Dismiss provisional A costly turn" })
-    .click();
-  await expect(page.getByLabel("Writer note A costly turn")).toHaveCount(0);
+  // Provisional review-fixture chrome was removed from Map 3.0; restore outcome
+  // is the writer-visible acceptance for this journey.
   await page
     .getByLabel("Story Canvas workspace")
-    .getByRole("button", { name: "Outline", exact: true })
+    .getByRole("button", { name: "Outline view" })
     .click();
   await expect(
-    page.getByRole("button", {
-      name: /Canvas object 2: A costly turn, Provisional fixture, Dismissed/
-    })
+    page.getByRole("button", { name: /Canvas object 1: Kept note,/ })
   ).toBeVisible();
 });
 

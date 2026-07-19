@@ -4290,7 +4290,14 @@ export function StoryCanvasPanel({
                         );
                       },
                       onClick: (event: {
-                        nativeEvent?: { locationX?: number; locationY?: number };
+                        clientX?: number;
+                        clientY?: number;
+                        nativeEvent?: {
+                          locationX?: number;
+                          locationY?: number;
+                          clientX?: number;
+                          clientY?: number;
+                        };
                       }) => {
                         if (
                           draggingObject ||
@@ -4299,10 +4306,24 @@ export function StoryCanvasPanel({
                         ) {
                           return;
                         }
-                        const locationX = event.nativeEvent?.locationX;
-                        const locationY = event.nativeEvent?.locationY;
-                        if (locationX === undefined || locationY === undefined) {
-                          return;
+                        const native = event.nativeEvent ?? {};
+                        let locationX = native.locationX;
+                        let locationY = native.locationY;
+                        // DOM / Playwright clicks often omit RN locationX/Y — fall
+                        // back to client coordinates relative to the surface.
+                        if (
+                          locationX === undefined ||
+                          locationY === undefined
+                        ) {
+                          const clientX = native.clientX ?? event.clientX;
+                          const clientY = native.clientY ?? event.clientY;
+                          if (clientX === undefined || clientY === undefined) {
+                            return;
+                          }
+                          const point = surfacePointFromClient(clientX, clientY);
+                          if (point === undefined) return;
+                          locationX = point.x;
+                          locationY = point.y;
                         }
                         placeArmedToolAtScreen(locationX, locationY);
                       },
