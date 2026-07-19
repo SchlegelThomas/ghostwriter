@@ -94,7 +94,8 @@ describe("board interaction modes", () => {
 
   it("maps board cursors for tools and drag state", () => {
     expect(canvasBoardCursor("hand", false)).toBe("grab");
-    expect(canvasBoardCursor("select", false)).toBe("grab");
+    expect(canvasBoardCursor("select", false)).toBe("default");
+    expect(canvasBoardCursor("select", true)).toBe("grab");
     expect(canvasBoardCursor("select", false, { draggingObject: true })).toBe(
       "grabbing"
     );

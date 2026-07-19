@@ -11,42 +11,42 @@
     <header>
       <p class="eyebrow">Session handoff</p>
       <h1>Where we left off</h1>
-      <p><strong>Last updated:</strong> 2026-07-18 evening · <strong>Current branch:</strong> <code>feat/canvas-structure-ux-3</code></p>
+      <p><strong>Last updated:</strong> 2026-07-19 · <strong>Current branch:</strong> <code>feat/canvas-structure-ux-3</code></p>
     </header>
 
     <section>
       <h2>Current state</h2>
-      <p>PR #6 shipped Build · Map · Write UX 2.1 to <code>main</code>. Active delivery is <a href="active/2026-07-18-canvas-structure-ux-3/plan.html">Canvas &amp; Structure UX 3.0</a> on <code>feat/canvas-structure-ux-3</code>. Living design: <a href="designs/Ghostwriter%20Mockups%203.0.html">Mockups 3.0</a>.</p>
-      <p><strong>Checkpoint:</strong> Map chrome and board interactions are much closer to the vision, but founder reports remaining jumpy / awkward Canvas feel. Video walkthrough planned for next session. Playwright still gated until product accept.</p>
+      <p>Two active plans on the same branch:</p>
+      <ul>
+        <li><a href="active/2026-07-18-canvas-structure-ux-3/plan.html">Canvas &amp; Structure UX 3.0</a> — Map card chrome (lock/resize/attach/tips/live links).</li>
+        <li><a href="active/2026-07-19-workspace-shell-palette/plan.html">Workspace shell palette</a> — Cursor-like activity rail + ⌘P / ⌘⇧P.</li>
+      </ul>
+      <p>Living design for Map remains <a href="designs/Ghostwriter%20Mockups%203.0.html">Mockups 3.0</a>. Playwright still gated.</p>
     </section>
 
     <section>
-      <h2>Done in this checkpoint</h2>
+      <h2>Done in latest shell slice</h2>
       <ul>
-        <li>One dense Canvas toolbar; Map top bar contracted; lane footer removed; no structure peek-hover.</li>
-        <li>Structure rail collapses by default in Canvas/Split when not narrow; <code>[</code> / »| toggle.</li>
-        <li>Spine defaults to slim <code>Spine · N</code> strip (cycle bubbles → full → minimized).</li>
-        <li>Selection / Scene Focus bars removed; node <code>+</code> menu + drag-to-link; create forms as modals; Split handoff from scene modal.</li>
-        <li>Free drag with optimistic drops; empty-board pan; trackpad scroll pan; pinch/Ctrl-wheel zoom; left toggleable zoom slider.</li>
-        <li>Dashed animated rubber-band for unconfirmed links; click-to-place Note/Region/Image.</li>
+        <li>Slim 32px glyph activity rail with Structure / Jump / Chat toggles.</li>
+        <li>⌘P manuscript jump; ⌘⇧P command + top MCP chat palette.</li>
+        <li>Resizable structure rail.</li>
       </ul>
     </section>
 
     <section>
       <h2>Incomplete / next</h2>
       <ol>
-        <li><strong>Founder:</strong> record a short video of jumpy Canvas interactions (drag, pan, zoom, link, create).</li>
-        <li><strong>Next session:</strong> polish feel from that video — settle animation, gesture conflicts, zoom/pan tuning, any remaining chrome gaps.</li>
-        <li>After explicit product verification: Playwright under <code>GHOSTWRITER_PLAYWRIGHT_GATE=user-verified</code>.</li>
+        <li><strong>Founder:</strong> hard-refresh — try ⌘P, ⌘⇧P, rail icons, structure drag.</li>
+        <li>Polish (inspector resize, persist structure width, Map-dense jump affordance if missing).</li>
+        <li>Consider splitting shell work onto <code>feat/workspace-shell-palette</code> before PR.</li>
       </ol>
     </section>
 
     <section>
       <h2>How to resume</h2>
       <ol>
-        <li>Pull / checkout <code>feat/canvas-structure-ux-3</code>; read this handoff and the plan record log.</li>
-        <li>Run local via <code>./scripts/dev-local.sh</code> (or existing backend + Expo on :8081).</li>
-        <li>Watch founder video (or re-walk Map) and fix interaction feel before more feature work.</li>
+        <li>Checkout <code>feat/canvas-structure-ux-3</code>; run <code>./scripts/dev-local.sh</code>.</li>
+        <li>Founder verifies shell + Canvas; then polish or Playwright gate.</li>
       </ol>
     </section>
   </main>

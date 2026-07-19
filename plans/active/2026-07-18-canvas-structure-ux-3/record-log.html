@@ -89,6 +89,55 @@
       <h2>2026-07-18 22:05 — Checkpoint for overnight</h2>
       <p>Founder: direction is much closer; remaining work is jumpy/awkward Canvas interaction feel. Agent cannot record a browser video in this session. Checkpoint commit on <code>feat/canvas-structure-ux-3</code>; founder will bring a video tomorrow. Playwright still deferred until product verification.</p>
     </article>
+
+    <article>
+      <h2>2026-07-19 10:10 — Links follow live drag geometry</h2>
+      <p>Founder: while dragging a card, relationship lines stayed on the old position then snapped back — felt detached.</p>
+      <p><strong>Fix:</strong> optimistic <code>liveGeometryById</code> shared by cards and links (and rubber-band origin). Drag/resize publish world geometry each frame; cleared when the board version acknowledges the same bounds.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-19 10:05 — Lock icon, BR actions, attach ports, white tips</h2>
+      <p>Founder recording: resize felt funky / inconsistent; tip text still unreadable (dark-on-dark + native <code>title</code>); wanted clearer card chrome for connect/actions.</p>
+      <p><strong>Shipped:</strong> top-left lock/unlock toggles resize (default locked; border drag only when unlocked); actions control moved to bottom-right (<code>⋯</code>); mid-side attach ports for link drag; relationship lines snap to nearest opposing ports; tooltips forced white 16/14px with inline styles, native title removed, style tag version bump. Auto-fit persist removed (was fighting resize).</p>
+    </article>
+
+    <article>
+      <h2>2026-07-19 09:55 — Readable tips; border resize; content-fit mins</h2>
+      <p>Founder: tooltips visible but shortcuts hard to read; want border-hover resize cursors + drag resize; screenshot showed scene-card text overflowing fixed boxes at zoomed-out cameras.</p>
+      <p><strong>Shipped:</strong> floating tips show a larger name line plus a distinct <code>Shortcut · …</code> badge; cards are resizable by default via edge/corner hit zones with proper resize cursors (optional Lock size); west/north edges update position + size; zoom-aware content mins grow world size so chrome fits when zoomed out; selected cards auto-persist fit; overflow clipped inside the card; removed overflow-prone selected hint body text. Unit coverage via <code>routine-tests</code> for fit/resize/tooltip helpers.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-19 09:25 — Tooltips via body portal; menus above cards; no History popup</h2>
+      <p>Founder: History must not auto-popup; action-bar tooltips still invisible; card menus still under cards.</p>
+      <p><strong>Shipped:</strong> History opens only from the top-bar ◷ click; toolbar icons are real DOM buttons with hover tips portaled to <code>document.body</code>; context menus also portaled with <code>position: fixed</code> and z-index above cards.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-19 09:20 — Visible tooltips, notifications in History, Map trail</h2>
+      <p>Founder: tooltips still invisible; conflict banner duplicated with toast; History button should live in top bar; Map location still unclear.</p>
+      <p><strong>Shipped:</strong> toolbar tips use <code>position: fixed</code> (escape panel overflow clip); Map suppresses toast host entirely; conflict/error go to History notifications with Reload (banner removed); History ◷ moved to Map top bar; drill trail labels are <code>Map › Chapter · … › Scene · …</code> with location eyebrow + selected-card hint; removed “Opening…” status noise.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-19 09:10 — Toasts → history; menu anchor; lock/resize; tooltips</h2>
+      <p>Founder confirmed pan/zoom jerk is fixed. Follow-up screenshots: success toasts are noisy; card menus floated away from cards; need lock/unlock resize + auto-fit; toolbar icons need visible shortcut tooltips.</p>
+      <p><strong>Shipped:</strong> Canvas success acknowledgements go to a Recent actions list in the History tool panel (Map hides success toasts); menus convert to surface-local coords and anchor beside the card; Unlock to resize / Lock size + SE resize handle; cards auto-grow display size to fit selected actions; hover tooltips on toolbar icons with Name · shortcut tips; chrome helpers covered by unit tests.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-19 08:55 — Founder video: pan/zoom jerk-back race</h2>
+      <p>Second recording showed the board snapping to an earlier camera after fast pan/zoom. Root cause: live viewport updates persisted preference, parent <code>setCanvasPreference</code> echoed the response, and <code>useEffect([preference])</code> re-applied that (often stale) camera over the live ref. A second contributor: the drill-camera effect re-ran on surface/board changes and could animate back to a fit target.</p>
+      <p><strong>Fix:</strong> hydrate preference once per project; never re-apply persist echoes; debounce persist always reads <code>viewportRef</code>; ignore out-of-order preference saves; camera animation only on drill-scope change (not resize/board refresh); selection persist uses live camera ref.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-19 08:40 — Founder video: navigation + card discoverability</h2>
+      <p>Reviewed screen recording (~37s). Main confusion: clicking a scene updated the Map top-bar Story Trail to that scene (manuscript selection), so it looked like Enter layer while the board stayed on the project lens. Secondary: pan/zoom felt laggy; card <code>+</code> and scene click affordances were unclear; Hand/grab cursor looked like Hand mode was always on.</p>
+      <p><strong>Shipped:</strong> Map-dense top trail uses Canvas drill scope (+ muted “· selected {scene}” when a card is selected at project lens); removed CSS left/top transitions on cards (they fought pan/zoom); Select board cursor is default (Hand stays grab); selected cards show hint + Draft/Split/Enter/More (or Actions); hover/selected <code>↗</code> handle for menu/link; object context menus are action-first; chapter overlay copy clarified.</p>
+      <p>Founder re-verify in browser still required before Playwright.</p>
+    </article>
   </main>
 </body>
 </html>

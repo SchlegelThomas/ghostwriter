@@ -223,7 +223,7 @@ export function drillBreadcrumbs(
       case "project":
         return {
           scope,
-          label: project.title,
+          label: "Map",
           focusKey: "drill-breadcrumb-project"
         };
       case "chapter": {
@@ -233,7 +233,7 @@ export function drillBreadcrumbs(
           ?.chapters.find((candidate) => candidate.id === scope.chapterId);
         return {
           scope,
-          label: chapter?.title ?? "Chapter",
+          label: `Chapter · ${chapter?.title ?? "Untitled"}`,
           focusKey: `drill-breadcrumb-${scope.chapterId}`
         };
       }
@@ -248,7 +248,7 @@ export function drillBreadcrumbs(
           .find((candidate) => candidate.id === scope.sceneId);
         return {
           scope,
-          label: scene?.title ?? "Scene",
+          label: `Scene · ${scene?.title ?? "Untitled"}`,
           focusKey: `drill-breadcrumb-${scope.sceneId}`
         };
       }

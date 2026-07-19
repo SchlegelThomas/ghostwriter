@@ -31,6 +31,7 @@ export function canvasToolTip(definition: CanvasToolDefinition): string {
 
 export type LinkDragState = Readonly<{
   fromObjectId: CanvasObjectId;
+  fromSide?: "n" | "e" | "s" | "w";
   x: number;
   y: number;
 }>;
@@ -125,7 +126,9 @@ export function canvasBoardCursor(
 ): string {
   if (options.draggingObject) return "grabbing";
   if (options.panning) return "grabbing";
-  if (activeTool === "hand" || spaceHeld || activeTool === "select") {
+  // Hand / Space advertise pan. Select keeps a normal cursor so card hover
+  // (grab-to-move) stays distinct from "I am in Hand mode".
+  if (activeTool === "hand" || spaceHeld) {
     return "grab";
   }
   if (activeTool === "connect") return "crosshair";

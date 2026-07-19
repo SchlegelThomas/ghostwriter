@@ -14,3 +14,5 @@ export * from "./workspace-structure.js";
 export * from "./map-structure-rail.js";
 export * from "./theme.js";
 export * from "./WorkspaceChatPanel.js";
+export * from "./WorkspaceQuickNav.js";
+export * from "./workspace-quick-nav.js";

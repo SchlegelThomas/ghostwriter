@@ -213,7 +213,7 @@ describe("canvas drill stack", () => {
       sceneDrillScope(navigator, firstScene)!
     );
     expect(drillBreadcrumbs(stack, navigator).map((crumb) => crumb.label)).toEqual(
-      ["Drill novel", "Opening", "First beat"]
+      ["Map", "Chapter · Opening", "Scene · First beat"]
     );
     expect(drillToScope(stack, { kind: "project" })).toEqual([
       { kind: "project" }

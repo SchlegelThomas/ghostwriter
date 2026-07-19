@@ -39,6 +39,7 @@ import {
   useState,
   type ReactNode
 } from "react";
+import { createPortal } from "react-dom";
 import {
   PanResponder,
   Pressable,
@@ -58,6 +59,24 @@ import type {
   CanvasScenePlacementInput,
   CanvasWorkspaceResponse
 } from "./api.js";
+import {
+  ATTACH_SIDES,
+  attachPointOnFrame,
+  cardMenuAnchor,
+  clampMenuPosition,
+  fittedCanvasCardSize,
+  liveGeometryEquals,
+  nearestAttachPair,
+  resizeCursorForEdge,
+  resizeObjectByEdge,
+  splitToolTip,
+  surfaceLocalPoint,
+  withLiveCanvasGeometry,
+  type AttachSide,
+  type LiveCanvasGeometry,
+  type RecentCanvasAction,
+  type ResizeEdge
+} from "./canvas-chrome.js";
 import {
   CANVAS_TOOL_DEFINITIONS,
   canvasBoardCursor,
@@ -153,6 +172,9 @@ export type StoryCanvasPanelProps = Readonly<{
   message?: CanvasPanelMessage;
   history?: CanvasHistoryResponse;
   historyLoading?: boolean;
+  recentActions?: readonly RecentCanvasAction[];
+  historyOpen?: boolean;
+  onHistoryOpenChange?(open: boolean): void;
   onCommand(command: CanvasCommand): Promise<boolean>;
   onCreateScene(input: {
     title: string;
@@ -345,6 +367,94 @@ function linkStateLabel(link: CanvasLink): string {
     : "Confirmed";
 }
 
+const CANVAS_TOOLTIP_STYLE_ID = "gw-canvas-icon-tooltip-style-v3";
+
+function ensureCanvasTooltipStyles(): void {
+  if (typeof document === "undefined") return;
+  const existing = document.getElementById(CANVAS_TOOLTIP_STYLE_ID);
+  if (existing !== null) return;
+  // Drop older tip style tags so hard-refresh isn’t required mid-session.
+  for (const stale of Array.from(
+    document.querySelectorAll(
+      "#gw-canvas-icon-tooltip-style, #gw-canvas-icon-tooltip-style-v2"
+    )
+  )) {
+    stale.remove();
+  }
+  const style = document.createElement("style");
+  style.id = CANVAS_TOOLTIP_STYLE_ID;
+  style.textContent = `
+.gw-canvas-icon-tip {
+  align-items: center;
+  background: ${colors.panel};
+  border: 1px solid ${colors.line};
+  border-radius: 6px;
+  box-sizing: border-box;
+  color: ${colors.ink};
+  cursor: pointer;
+  display: inline-flex;
+  font-family: GhostwriterUISemibold, "Jost", sans-serif;
+  font-size: 12px;
+  height: 28px;
+  justify-content: center;
+  line-height: 1;
+  min-width: 28px;
+  padding: 0 5px;
+}
+.gw-canvas-icon-tip[data-selected="true"] {
+  background: ${colors.accentSoft};
+  border-color: ${colors.accent};
+  color: ${colors.accent};
+}
+.gw-canvas-icon-tip:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+.gw-canvas-floating-tip {
+  background: #1d1510 !important;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(29, 21, 15, 0.42);
+  color: #ffffff !important;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  left: 0;
+  max-width: 340px;
+  min-width: 128px;
+  padding: 12px 14px;
+  pointer-events: none;
+  position: fixed;
+  top: 0;
+  transform: translateX(-50%);
+  z-index: 2147483647;
+}
+.gw-canvas-floating-tip__name {
+  color: #ffffff !important;
+  font-family: GhostwriterUISemibold, "Jost", sans-serif !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  line-height: 1.3 !important;
+}
+.gw-canvas-floating-tip__shortcut {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
+  color: #ffffff !important;
+  display: inline-flex;
+  font-family: GhostwriterUISemibold, "Jost", sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.03em;
+  line-height: 1.25 !important;
+  padding: 5px 8px;
+  width: fit-content;
+}
+`;
+  document.head.appendChild(style);
+}
+
 function CanvasIconButton({
   glyph,
   label,
@@ -360,15 +470,115 @@ function CanvasIconButton({
   disabled?: boolean;
   selected?: boolean;
 }>) {
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const [tipPos, setTipPos] = useState<
+    Readonly<{ left: number; top: number }> | undefined
+  >();
+
+  useEffect(() => {
+    ensureCanvasTooltipStyles();
+  }, []);
+
+  function hideTip(): void {
+    setTipPos(undefined);
+  }
+
+  function revealTip(): void {
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (rect === undefined) return;
+    setTipPos({
+      left: rect.left + rect.width / 2,
+      top: rect.bottom + 8
+    });
+  }
+
+  // Real DOM button + body portal tip — RN Pressable hover/title is unreliable on web,
+  // and ancestor overflow:hidden clips in-tree tooltips.
+  if (typeof document !== "undefined") {
+    return createElement(
+      "span",
+      { style: { display: "inline-flex", position: "relative" } },
+      createElement(
+        "button",
+        {
+          ref: (node: HTMLButtonElement | null) => {
+            buttonRef.current = node;
+          },
+          type: "button",
+          className: "gw-canvas-icon-tip",
+          "data-selected": selected ? "true" : "false",
+          "aria-label": label,
+          disabled,
+          onMouseEnter: revealTip,
+          onMouseLeave: hideTip,
+          onFocus: revealTip,
+          onBlur: hideTip,
+          onClick: (event: { preventDefault(): void }) => {
+            event.preventDefault();
+            if (!disabled) onPress();
+          }
+        },
+        glyph
+      ),
+      tipPos === undefined
+        ? null
+        : createPortal(
+            (() => {
+              const parts = splitToolTip(tip);
+              return createElement(
+                "div",
+                {
+                  className: "gw-canvas-floating-tip",
+                  role: "tooltip",
+                  style: {
+                    background: "#1d1510",
+                    color: "#ffffff",
+                    left: tipPos.left,
+                    top: tipPos.top
+                  }
+                },
+                createElement(
+                  "div",
+                  {
+                    className: "gw-canvas-floating-tip__name",
+                    style: {
+                      color: "#ffffff",
+                      fontSize: 16,
+                      fontWeight: 600,
+                      lineHeight: 1.3
+                    }
+                  },
+                  parts.name
+                ),
+                parts.shortcut
+                  ? createElement(
+                      "div",
+                      {
+                        className: "gw-canvas-floating-tip__shortcut",
+                        style: {
+                          color: "#ffffff",
+                          fontSize: 14,
+                          fontWeight: 600
+                        }
+                      },
+                      `Shortcut · ${parts.shortcut}`
+                    )
+                  : null
+              );
+            })(),
+            document.body
+          )
+    );
+  }
+
   return (
     <Pressable
+      accessibilityHint={tip}
       accessibilityLabel={label}
       accessibilityRole="button"
       accessibilityState={{ disabled, selected }}
       disabled={disabled}
       onPress={onPress}
-      // RN web tooltip
-      {...({ title: tip } as object)}
       style={({ pressed }) => [
         styles.iconButton,
         selected && styles.iconButtonSelected,
@@ -527,6 +737,40 @@ function LinkRubberBand({
   );
 }
 
+function resizeEdgeStyle(edge: ResizeEdge) {
+  switch (edge) {
+    case "n":
+      return styles.resizeEdge_n;
+    case "s":
+      return styles.resizeEdge_s;
+    case "e":
+      return styles.resizeEdge_e;
+    case "w":
+      return styles.resizeEdge_w;
+    case "ne":
+      return styles.resizeEdge_ne;
+    case "nw":
+      return styles.resizeEdge_nw;
+    case "se":
+      return styles.resizeEdge_se;
+    case "sw":
+      return styles.resizeEdge_sw;
+  }
+}
+
+function attachPointStyle(side: AttachSide) {
+  switch (side) {
+    case "n":
+      return styles.attachPoint_n;
+    case "e":
+      return styles.attachPoint_e;
+    case "s":
+      return styles.attachPoint_s;
+    case "w":
+      return styles.attachPoint_w;
+  }
+}
+
 function SpatialObjectCard({
   object,
   viewport,
@@ -537,16 +781,23 @@ function SpatialObjectCard({
   primary = false,
   dragEnabled,
   linkHandleVisible,
+  liveGeometry,
+  onLiveGeometryChange,
   onDismiss,
   onMove,
   onReview,
   onSelect,
   onDrillIntoScene,
+  onOpenDraft,
+  onOpenSplit,
   onContextMenu,
   onLinkDragStart,
   onNodeActions,
+  onResize,
+  onToggleResizeLock,
   onDragActiveChange,
-  linkDropTarget = false
+  linkDropTarget = false,
+  resizeLocked = true
 }: Readonly<{
   object: CanvasObject;
   viewport: CanvasViewport;
@@ -557,38 +808,51 @@ function SpatialObjectCard({
   primary?: boolean;
   dragEnabled: boolean;
   linkHandleVisible: boolean;
+  liveGeometry?: LiveCanvasGeometry;
+  onLiveGeometryChange?(
+    objectId: CanvasObject["id"],
+    geometry: LiveCanvasGeometry | undefined
+  ): void;
   onDismiss(object: CanvasObject): Promise<void>;
   onMove(object: CanvasObject, x: number, y: number): Promise<void>;
   onReview(object: CanvasObject): void;
   onSelect(object: CanvasObject): void;
   onDrillIntoScene?(object: CanvasObject): void;
+  onOpenDraft?(object: CanvasObject): void;
+  onOpenSplit?(object: CanvasObject): void;
   onContextMenu?(object: CanvasObject, x: number, y: number): void;
-  onLinkDragStart?(object: CanvasObject): void;
+  onLinkDragStart?(object: CanvasObject, side: AttachSide): void;
   onNodeActions?(object: CanvasObject, x: number, y: number): void;
+  onResize?(
+    object: CanvasObject,
+    next: Readonly<{ x: number; y: number; width: number; height: number }>
+  ): void;
+  onToggleResizeLock?(object: CanvasObject): void;
   onDragActiveChange?(active: boolean): void;
   linkDropTarget?: boolean;
+  resizeLocked?: boolean;
 }>) {
-  const [dragDelta, setDragDelta] = useState({ x: 0, y: 0 });
-  const [pendingWorld, setPendingWorld] = useState<
-    Readonly<{ x: number; y: number }> | undefined
-  >();
   const [dragging, setDragging] = useState(false);
+  const [resizing, setResizing] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const draggedRef = useRef(false);
   const dragStartRef = useRef<{ x: number; y: number } | undefined>(undefined);
   const dragRafRef = useRef(0);
   const latestDeltaRef = useRef({ x: 0, y: 0 });
-  const baseObject =
-    pendingWorld === undefined
-      ? object
-      : { ...object, x: pendingWorld.x, y: pendingWorld.y };
-  const frame = canvasScreenFrame(baseObject, viewport);
+  const geometry = withLiveCanvasGeometry(object, liveGeometry);
+  const frame = canvasScreenFrame(geometry, viewport);
+  const showActions =
+    linkHandleVisible && (selected || hovered || linkDropTarget);
+  const showAttachPoints =
+    linkHandleVisible && (selected || hovered || linkDropTarget);
+  const showChrome = selected || hovered || linkDropTarget;
+  const isSceneCard =
+    object.kind === "scene-card" && object.sceneId !== undefined;
+  const canResize = onResize !== undefined && !resizeLocked;
 
-  useEffect(() => {
-    if (pendingWorld === undefined) return;
-    if (object.x === pendingWorld.x && object.y === pendingWorld.y) {
-      setPendingWorld(undefined);
-    }
-  }, [object.x, object.y, pendingWorld]);
+  function publishLiveGeometry(next: LiveCanvasGeometry | undefined): void {
+    onLiveGeometryChange?.(object.id, next);
+  }
 
   useEffect(() => {
     return () => {
@@ -621,7 +885,12 @@ function SpatialObjectCard({
     draggedRef.current = false;
     dragStartRef.current = { x: clientX, y: clientY };
     onSelect(object);
-    const origin = { x: baseObject.x, y: baseObject.y };
+    const origin = {
+      x: geometry.x,
+      y: geometry.y,
+      width: geometry.width,
+      height: geometry.height
+    };
     const commitMove = onMove;
 
     const handlePointerMove = (event: PointerEvent): void => {
@@ -639,7 +908,18 @@ function SpatialObjectCard({
         if (dragRafRef.current !== 0) return;
         dragRafRef.current = requestAnimationFrame(() => {
           dragRafRef.current = 0;
-          setDragDelta(latestDeltaRef.current);
+          const delta = latestDeltaRef.current;
+          const next = canvasPositionAfterDrag(
+            { x: origin.x, y: origin.y },
+            delta,
+            viewport.zoom
+          );
+          publishLiveGeometry({
+            x: next.x,
+            y: next.y,
+            width: origin.width,
+            height: origin.height
+          });
         });
       }
     };
@@ -659,41 +939,89 @@ function SpatialObjectCard({
       onDragActiveChange?.(false);
       draggedRef.current = false;
       if (!moved || !dragEnabled) {
-        setDragDelta({ x: 0, y: 0 });
         return;
       }
-      const next = canvasPositionAfterDrag(origin, { x: dx, y: dy }, viewport.zoom);
-      // Keep the card at the drop point until the server board catches up.
-      setPendingWorld(next);
-      setDragDelta({ x: 0, y: 0 });
+      const next = canvasPositionAfterDrag(
+        { x: origin.x, y: origin.y },
+        { x: dx, y: dy },
+        viewport.zoom
+      );
+      // Keep card + links at the drop point until the board catches up.
+      publishLiveGeometry({
+        x: next.x,
+        y: next.y,
+        width: origin.width,
+        height: origin.height
+      });
       void commitMove(object, next.x, next.y);
     };
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
   }
 
-  function beginHandlePointer(clientX: number, clientY: number): void {
+  function openActionsMenu(clientX: number, clientY: number): void {
     onSelect(object);
-    const start = { x: clientX, y: clientY };
-    let moved = false;
-    const handlePointerMove = (event: PointerEvent): void => {
-      const dx = event.clientX - start.x;
-      const dy = event.clientY - start.y;
-      if (!moved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
-        moved = true;
-        onLinkDragStart?.(object);
-      }
-    };
-    const handlePointerUp = (event: PointerEvent): void => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-      if (!moved) {
-        onNodeActions?.(object, event.clientX, event.clientY);
-      }
-    };
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
+    onNodeActions?.(object, clientX, clientY);
   }
+
+  function beginAttachLink(side: AttachSide): void {
+    onSelect(object);
+    onLinkDragStart?.(object, side);
+  }
+
+  function beginResizePointer(
+    edge: ResizeEdge,
+    clientX: number,
+    clientY: number
+  ): void {
+    if (!canResize || onResize === undefined) return;
+    onSelect(object);
+    setResizing(true);
+    onDragActiveChange?.(true);
+    const origin = {
+      x: geometry.x,
+      y: geometry.y,
+      width: geometry.width,
+      height: geometry.height
+    };
+    const pointerOrigin = { x: clientX, y: clientY };
+    const minSize = fittedCanvasCardSize(geometry, {
+      selected,
+      sceneCard: isSceneCard,
+      zoom: viewport.zoom,
+      detailLines: selected ? 2 : 3,
+      hasActionRow: selected,
+      hasHint: false
+    });
+    let live = { ...origin };
+    const onPointerMove = (event: PointerEvent): void => {
+      const worldDx =
+        (event.clientX - pointerOrigin.x) / Math.max(0.2, viewport.zoom);
+      const worldDy =
+        (event.clientY - pointerOrigin.y) / Math.max(0.2, viewport.zoom);
+      live = resizeObjectByEdge(origin, edge, worldDx, worldDy, minSize);
+      publishLiveGeometry(live);
+    };
+    const onPointerUp = (): void => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      setResizing(false);
+      onDragActiveChange?.(false);
+      if (
+        live.x !== origin.x ||
+        live.y !== origin.y ||
+        live.width !== origin.width ||
+        live.height !== origin.height
+      ) {
+        publishLiveGeometry(live);
+        onResize(object, live);
+      }
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+  }
+
+  const panOriginRef = useRef<LiveCanvasGeometry | undefined>(undefined);
 
   // Keep native PanResponder as a non-web fallback for spatial drag.
   const panResponder = useMemo(
@@ -707,46 +1035,73 @@ function SpatialObjectCard({
         onShouldBlockNativeResponder: () => dragEnabled,
         onPanResponderGrant: () => {
           draggedRef.current = false;
+          panOriginRef.current = {
+            x: geometry.x,
+            y: geometry.y,
+            width: geometry.width,
+            height: geometry.height
+          };
           onSelect(object);
         },
         onPanResponderMove: (_event, gesture) => {
           if (!dragEnabled) return;
+          const origin = panOriginRef.current;
+          if (origin === undefined) return;
           draggedRef.current = true;
           setDragging(true);
           onDragActiveChange?.(true);
-          setDragDelta({ x: gesture.dx, y: gesture.dy });
-        },
-        onPanResponderRelease: (_event, gesture) => {
-          const moved = draggedRef.current;
-          setDragging(false);
-          onDragActiveChange?.(false);
-          draggedRef.current = false;
-          if (!moved || !dragEnabled) {
-            setDragDelta({ x: 0, y: 0 });
-            return;
-          }
           const next = canvasPositionAfterDrag(
-            { x: baseObject.x, y: baseObject.y },
+            { x: origin.x, y: origin.y },
             { x: gesture.dx, y: gesture.dy },
             viewport.zoom
           );
-          setPendingWorld(next);
-          setDragDelta({ x: 0, y: 0 });
+          publishLiveGeometry({
+            x: next.x,
+            y: next.y,
+            width: origin.width,
+            height: origin.height
+          });
+        },
+        onPanResponderRelease: (_event, gesture) => {
+          const moved = draggedRef.current;
+          const origin = panOriginRef.current;
+          panOriginRef.current = undefined;
+          setDragging(false);
+          onDragActiveChange?.(false);
+          draggedRef.current = false;
+          if (!moved || !dragEnabled || origin === undefined) {
+            return;
+          }
+          const next = canvasPositionAfterDrag(
+            { x: origin.x, y: origin.y },
+            { x: gesture.dx, y: gesture.dy },
+            viewport.zoom
+          );
+          publishLiveGeometry({
+            x: next.x,
+            y: next.y,
+            width: origin.width,
+            height: origin.height
+          });
           void onMove(object, next.x, next.y);
         },
         onPanResponderTerminate: () => {
-          setDragDelta({ x: 0, y: 0 });
+          panOriginRef.current = undefined;
+          publishLiveGeometry(undefined);
           setDragging(false);
           onDragActiveChange?.(false);
           draggedRef.current = false;
         }
       }),
     [
-      baseObject.x,
-      baseObject.y,
       dragEnabled,
+      geometry.height,
+      geometry.width,
+      geometry.x,
+      geometry.y,
       object,
       onDragActiveChange,
+      onLiveGeometryChange,
       onMove,
       onSelect,
       viewport.zoom
@@ -771,18 +1126,50 @@ function SpatialObjectCard({
         } as object)
       : panResponder.panHandlers;
 
+  const fitted = fittedCanvasCardSize(geometry, {
+    selected,
+    sceneCard: isSceneCard,
+    zoom: viewport.zoom,
+    detailLines: selected ? 2 : 3,
+    hasActionRow: selected && isSceneCard,
+    hasHint: false
+  });
+
+  const worldWidth = Math.max(fitted.width, geometry.width);
+  const worldHeight = Math.max(fitted.height, geometry.height);
+  const screenWidth = worldWidth * viewport.zoom;
+  const screenHeight = worldHeight * viewport.zoom;
+  const resizeEdges: readonly ResizeEdge[] = [
+    "n",
+    "s",
+    "e",
+    "w",
+    "ne",
+    "nw",
+    "se",
+    "sw"
+  ];
+
   return (
     <View
       {...webPointer}
-      accessibilityLabel={`${objectKindLabel(object)} ${object.label}`}
+      accessibilityLabel={`${objectKindLabel(object)} ${object.label}${
+        selected
+          ? isSceneCard
+            ? ". Selected. Drag to move. Unlock top-left to resize. Side ports connect. Actions bottom-right. Double-click to enter scene."
+            : ". Selected. Drag to move. Unlock top-left to resize. Side ports connect. Actions bottom-right."
+          : ""
+      }`}
       accessibilityRole="button"
       accessibilityState={{ selected }}
       {...({
         onClick: () => {
-          if (!draggedRef.current) onSelect(object);
+          if (!draggedRef.current && !resizing) onSelect(object);
         },
         onContextMenu: handleContextMenu,
-        onDoubleClick: () => onDrillIntoScene?.(object)
+        onDoubleClick: () => onDrillIntoScene?.(object),
+        onPointerEnter: () => setHovered(true),
+        onPointerLeave: () => setHovered(false)
       } as object)}
       style={[
         styles.spatialObject,
@@ -797,16 +1184,18 @@ function SpatialObjectCard({
         primary && styles.primaryObject,
         selected && styles.spatialObjectSelected,
         linkDropTarget && styles.spatialObjectLinkTarget,
-        dragging && styles.spatialObjectDragging,
+        (dragging || resizing) && styles.spatialObjectDragging,
         {
           ...(object.kind === "note" && object.note?.color !== undefined
             ? { backgroundColor: object.note.color }
             : {}),
-          height: Math.max(76, frame.height),
-          left: frame.left + dragDelta.x,
-          top: frame.top + dragDelta.y,
-          width: Math.max(132, frame.width),
-          zIndex: Math.round(object.z + (dragging || linkDropTarget ? 400 : 100))
+          height: screenHeight,
+          left: frame.left,
+          top: frame.top,
+          width: screenWidth,
+          zIndex: Math.round(
+            object.z + (dragging || resizing || linkDropTarget ? 400 : 100)
+          )
         },
         typeof window !== "undefined"
           ? ({
@@ -821,9 +1210,9 @@ function SpatialObjectCard({
                 : linkDropTarget
                   ? [{ scale: 1.02 }]
                   : [{ scale: 1 }],
-              transition: dragging
-                ? "box-shadow 140ms ease, border-color 140ms ease, transform 140ms ease"
-                : "left 200ms cubic-bezier(0.22, 1, 0.36, 1), top 200ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 160ms ease, border-color 160ms ease, transform 160ms ease"
+              // Never transition left/top — pan/zoom would lag every card.
+              transition:
+                "box-shadow 140ms ease, border-color 140ms ease, transform 140ms ease"
             } as object)
           : null
       ]}
@@ -843,32 +1232,61 @@ function SpatialObjectCard({
         <Text numberOfLines={2} style={styles.objectTitle}>
           {object.label}
         </Text>
-        <Text numberOfLines={3} style={styles.objectDetail}>
+        <Text numberOfLines={selected ? 2 : 3} style={styles.objectDetail}>
           {detail}
         </Text>
       </View>
-      {linkHandleVisible ? (
-        <View
-          accessibilityLabel={`Node actions for ${object.label}`}
-          accessibilityRole="button"
-          {...({
-            onPointerDown: (event: {
-              button?: number;
-              clientX: number;
-              clientY: number;
-              preventDefault?: () => void;
-              stopPropagation?: () => void;
-            }) => {
-              if (event.button !== undefined && event.button !== 0) return;
-              event.preventDefault?.();
-              event.stopPropagation?.();
-              beginHandlePointer(event.clientX, event.clientY);
-            },
-            title: "Actions · click for menu · drag to link"
-          } as object)}
-          style={styles.linkHandle}
-        >
-          <Text style={styles.linkHandleGlyph}>+</Text>
+      {selected && isSceneCard ? (
+        <View style={styles.cardActionRow}>
+          {onOpenDraft !== undefined ? (
+            <Pressable
+              accessibilityLabel={`Open Draft for ${object.label}`}
+              accessibilityRole="button"
+              onPress={(event) => {
+                event.stopPropagation();
+                onOpenDraft(object);
+              }}
+              style={({ pressed }) => [
+                styles.cardAction,
+                pressed && styles.pressed
+              ]}
+            >
+              <Text style={styles.cardActionText}>Draft</Text>
+            </Pressable>
+          ) : null}
+          {onOpenSplit !== undefined ? (
+            <Pressable
+              accessibilityLabel={`Open Split for ${object.label}`}
+              accessibilityRole="button"
+              onPress={(event) => {
+                event.stopPropagation();
+                onOpenSplit(object);
+              }}
+              style={({ pressed }) => [
+                styles.cardAction,
+                pressed && styles.pressed
+              ]}
+            >
+              <Text style={styles.cardActionText}>Split</Text>
+            </Pressable>
+          ) : null}
+          {onDrillIntoScene !== undefined ? (
+            <Pressable
+              accessibilityLabel={`Enter scene layer for ${object.label}`}
+              accessibilityRole="button"
+              onPress={(event) => {
+                event.stopPropagation();
+                onDrillIntoScene(object);
+              }}
+              style={({ pressed }) => [
+                styles.cardAction,
+                styles.cardActionEmphasis,
+                pressed && styles.pressed
+              ]}
+            >
+              <Text style={styles.cardActionText}>Enter</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
       {object.authority === "provisional" &&
@@ -907,6 +1325,120 @@ function SpatialObjectCard({
           </Pressable>
         </View>
       ) : null}
+      {showChrome && onToggleResizeLock !== undefined ? (
+        <View
+          accessibilityLabel={
+            resizeLocked
+              ? `Unlock resize for ${object.label}`
+              : `Lock size for ${object.label}`
+          }
+          accessibilityRole="button"
+          {...({
+            onPointerDown: (event: {
+              button?: number;
+              preventDefault?: () => void;
+              stopPropagation?: () => void;
+            }) => {
+              if (event.button !== undefined && event.button !== 0) return;
+              event.preventDefault?.();
+              event.stopPropagation?.();
+              onSelect(object);
+              onToggleResizeLock(object);
+            },
+            title: resizeLocked ? "Unlock resize" : "Lock size"
+          } as object)}
+          style={[
+            styles.resizeLockButton,
+            !resizeLocked && styles.resizeLockButtonOpen
+          ]}
+        >
+          <Text style={styles.resizeLockGlyph}>
+            {resizeLocked ? "🔒" : "🔓"}
+          </Text>
+        </View>
+      ) : null}
+      {showActions ? (
+        <View
+          accessibilityLabel={`Actions for ${object.label}`}
+          accessibilityRole="button"
+          {...({
+            onPointerDown: (event: {
+              button?: number;
+              clientX: number;
+              clientY: number;
+              preventDefault?: () => void;
+              stopPropagation?: () => void;
+            }) => {
+              if (event.button !== undefined && event.button !== 0) return;
+              event.preventDefault?.();
+              event.stopPropagation?.();
+              openActionsMenu(event.clientX, event.clientY);
+            },
+            title: "Actions"
+          } as object)}
+          style={[styles.actionsHandle, selected && styles.actionsHandleSelected]}
+        >
+          <Text style={styles.linkHandleGlyph}>⋯</Text>
+        </View>
+      ) : null}
+      {showAttachPoints
+        ? ATTACH_SIDES.map((side) => (
+            <View
+              key={side}
+              accessibilityLabel={`Connect from ${side} of ${object.label}`}
+              accessibilityRole="button"
+              {...({
+                onPointerDown: (event: {
+                  button?: number;
+                  preventDefault?: () => void;
+                  stopPropagation?: () => void;
+                }) => {
+                  if (event.button !== undefined && event.button !== 0) return;
+                  event.preventDefault?.();
+                  event.stopPropagation?.();
+                  beginAttachLink(side);
+                },
+                title: "Drag to connect"
+              } as object)}
+              style={[
+                styles.attachPoint,
+                attachPointStyle(side),
+                linkDropTarget && styles.attachPointHot
+              ]}
+            />
+          ))
+        : null}
+      {canResize && showChrome
+        ? resizeEdges.map((edge) => (
+            <View
+              key={edge}
+              accessibilityLabel={`Resize ${object.label} from ${edge}`}
+              accessibilityRole="button"
+              {...({
+                onPointerDown: (event: {
+                  button?: number;
+                  clientX: number;
+                  clientY: number;
+                  preventDefault?: () => void;
+                  stopPropagation?: () => void;
+                }) => {
+                  if (event.button !== undefined && event.button !== 0) return;
+                  event.preventDefault?.();
+                  event.stopPropagation?.();
+                  beginResizePointer(edge, event.clientX, event.clientY);
+                },
+                title: "Drag border to resize"
+              } as object)}
+              style={[
+                styles.resizeEdge,
+                resizeEdgeStyle(edge),
+                typeof window !== "undefined"
+                  ? ({ cursor: resizeCursorForEdge(edge) } as object)
+                  : null
+              ]}
+            />
+          ))
+        : null}
     </View>
   );
 }
@@ -924,14 +1456,9 @@ function SpatialLink({
 }>) {
   const fromFrame = canvasScreenFrame(from, viewport);
   const toFrame = canvasScreenFrame(to, viewport);
-  const start = {
-    x: fromFrame.left + fromFrame.width / 2,
-    y: fromFrame.top + fromFrame.height / 2
-  };
-  const end = {
-    x: toFrame.left + toFrame.width / 2,
-    y: toFrame.top + toFrame.height / 2
-  };
+  const pair = nearestAttachPair(fromFrame, toFrame);
+  const start = attachPointOnFrame(fromFrame, pair.fromSide);
+  const end = attachPointOnFrame(toFrame, pair.toSide);
   const width = Math.hypot(end.x - start.x, end.y - start.y);
   const angle = Math.atan2(end.y - start.y, end.x - start.x);
 
@@ -1151,6 +1678,9 @@ export function StoryCanvasPanel({
   preference,
   history,
   historyLoading = false,
+  recentActions = [],
+  historyOpen,
+  onHistoryOpenChange,
   selectedSceneId,
   selectedObjectId,
   loading = false,
@@ -1213,7 +1743,12 @@ export function StoryCanvasPanel({
   >();
   const [searchQuery, setSearchQuery] = useState("");
   const [showSceneForm, setShowSceneForm] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
+  const [showHistoryUncontrolled, setShowHistoryUncontrolled] = useState(false);
+  const showHistory = historyOpen ?? showHistoryUncontrolled;
+  function setShowHistory(open: boolean): void {
+    if (onHistoryOpenChange !== undefined) onHistoryOpenChange(open);
+    else setShowHistoryUncontrolled(open);
+  }
   const [objectLabel, setObjectLabel] = useState("");
   const [noteBody, setNoteBody] = useState("");
   const [noteColor, setNoteColor] = useState("");
@@ -1239,6 +1774,12 @@ export function StoryCanvasPanel({
   const [sceneWidth, setSceneWidth] = useState("260");
   const [sceneHeight, setSceneHeight] = useState("160");
   const [cameraTransitioning, setCameraTransitioning] = useState(false);
+  const [resizeUnlockedIds, setResizeUnlockedIds] = useState(
+    () => new Set<CanvasObjectId>()
+  );
+  const [liveGeometryById, setLiveGeometryById] = useState(
+    () => new Map<CanvasObjectId, LiveCanvasGeometry>()
+  );
   const animationFrameRef = useRef<number | undefined>(undefined);
   const viewportByScopeRef = useRef(new Map<string, CanvasViewport>());
   const drillScope = currentDrillScope(drillStack);
@@ -1249,6 +1790,8 @@ export function StoryCanvasPanel({
   const viewportPersistTimerRef = useRef<
     ReturnType<typeof setTimeout> | undefined
   >(undefined);
+  const viewportHydratedRef = useRef(false);
+  const cameraInitializedRef = useRef(false);
   const activeToolRef = useRef(activeTool);
   activeToolRef.current = activeTool;
   const spaceHeldRef = useRef(spaceHeld);
@@ -1268,22 +1811,45 @@ export function StoryCanvasPanel({
     | undefined
   >(undefined);
   const boardPanGestureRef = useRef(false);
+  const selectedObjectIdRef = useRef(selectedObjectId);
+  selectedObjectIdRef.current = selectedObjectId;
+
+  function scheduleViewportPersist(
+    next: CanvasViewport,
+    options: Readonly<{ immediate?: boolean }> = {}
+  ): void {
+    if (viewportPersistTimerRef.current !== undefined) {
+      clearTimeout(viewportPersistTimerRef.current);
+      viewportPersistTimerRef.current = undefined;
+    }
+    const payload = {
+      ...next,
+      selectedObjectId:
+        selectedObjectIdRef.current === undefined
+          ? null
+          : selectedObjectIdRef.current
+    };
+    if (options.immediate) {
+      void onPreferenceChange(payload);
+      return;
+    }
+    viewportPersistTimerRef.current = setTimeout(() => {
+      viewportPersistTimerRef.current = undefined;
+      // Always persist the latest live camera, not the debounced snapshot.
+      void onPreferenceChange({
+        ...viewportRef.current,
+        ...(selectedObjectIdRef.current === undefined
+          ? { selectedObjectId: null }
+          : { selectedObjectId: selectedObjectIdRef.current })
+      });
+    }, 220);
+  }
 
   function applyLiveViewport(next: CanvasViewport): void {
     const normalized = { ...next, zoom: clampCanvasZoom(next.zoom) };
     setViewport(normalized);
     viewportRef.current = normalized;
-    if (viewportPersistTimerRef.current !== undefined) {
-      clearTimeout(viewportPersistTimerRef.current);
-    }
-    viewportPersistTimerRef.current = setTimeout(() => {
-      void onPreferenceChange({
-        ...normalized,
-        ...(selectedObjectId === undefined
-          ? { selectedObjectId: null }
-          : { selectedObjectId })
-      });
-    }, 180);
+    scheduleViewportPersist(normalized);
   }
 
   function rememberTouchPoint(
@@ -1357,6 +1923,54 @@ export function StoryCanvasPanel({
       withResolvedGeometry(object, scopePlacements, drillScope)
     ])
   );
+
+  function resolveLiveObject(object: CanvasObject): CanvasObject {
+    return withLiveCanvasGeometry(object, liveGeometryById.get(object.id));
+  }
+
+  function setLiveGeometry(
+    objectId: CanvasObjectId,
+    geometry: LiveCanvasGeometry | undefined
+  ): void {
+    setLiveGeometryById((current) => {
+      const previous = current.get(objectId);
+      if (geometry === undefined) {
+        if (previous === undefined) return current;
+        const next = new Map(current);
+        next.delete(objectId);
+        return next;
+      }
+      if (liveGeometryEquals(previous, geometry)) return current;
+      const next = new Map(current);
+      next.set(objectId, geometry);
+      return next;
+    });
+  }
+
+  useEffect(() => {
+    setLiveGeometryById((current) => {
+      if (current.size === 0) return current;
+      let changed = false;
+      const next = new Map(current);
+      for (const [objectId, geometry] of current) {
+        const object = objectById.get(objectId);
+        if (
+          object !== undefined &&
+          object.x === geometry.x &&
+          object.y === geometry.y &&
+          object.width === geometry.width &&
+          object.height === geometry.height
+        ) {
+          next.delete(objectId);
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+    // Clear optimistic geometry only when the board acknowledges new positions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- objectById is rebuilt each render
+  }, [board?.version]);
+
   const outline =
     board === undefined || workspace === undefined
       ? []
@@ -1556,13 +2170,50 @@ export function StoryCanvasPanel({
   }, [onLoadHistory, workflowLens]);
 
   useEffect(() => {
-    if (board === undefined) return;
+    viewportHydratedRef.current = false;
+    cameraInitializedRef.current = false;
+    viewportByScopeRef.current.clear();
+  }, [project.id]);
+
+  // Hydrate the camera once from saved preference. Never re-apply later —
+  // persist echoes used to snap the board back mid pan/zoom.
+  useEffect(() => {
+    if (viewportHydratedRef.current) return;
+    if (preference === undefined || preference === null) return;
+    viewportHydratedRef.current = true;
+    const next = {
+      x: preference.x,
+      y: preference.y,
+      zoom: clampCanvasZoom(preference.zoom)
+    };
+    setViewport(next);
+    viewportRef.current = next;
+    viewportByScopeRef.current.set(
+      canvasDrillScopeKey(drillScope),
+      next
+    );
+  }, [drillScope, preference]);
+
+  useEffect(() => {
+    if (board === undefined || surfaceSize.width <= 0 || surfaceSize.height <= 0) {
+      return;
+    }
     const drillKey = canvasDrillScopeKey(drillScope);
     const previousKey = previousDrillKeyRef.current;
-    if (previousKey !== drillKey) {
+    const scopeChanged = previousKey !== drillKey;
+
+    // Same Map lens: keep the writer's live camera. Surface resizes and board
+    // refreshes must not animate back to a stale fit target.
+    if (cameraInitializedRef.current && !scopeChanged) {
+      viewportByScopeRef.current.set(drillKey, viewportRef.current);
+      return;
+    }
+
+    if (scopeChanged) {
       viewportByScopeRef.current.set(previousKey, viewportRef.current);
       previousDrillKeyRef.current = drillKey;
     }
+    cameraInitializedRef.current = true;
 
     const restored = viewportByScopeRef.current.get(drillKey);
     const target =
@@ -1575,14 +2226,15 @@ export function StoryCanvasPanel({
       animationFrameRef.current = undefined;
     }
 
-    if (readPrefersReducedMotion()) {
-      setViewport(target);
-      void onPreferenceChange({
-        ...target,
-        ...(selectedObjectId === undefined
-          ? { selectedObjectId: null }
-          : { selectedObjectId })
-      });
+    const commitTarget = (next: CanvasViewport): void => {
+      setViewport(next);
+      viewportRef.current = next;
+      viewportByScopeRef.current.set(drillKey, next);
+      scheduleViewportPersist(next, { immediate: true });
+    };
+
+    if (readPrefersReducedMotion() || !scopeChanged) {
+      commitTarget(target);
       return;
     }
 
@@ -1601,18 +2253,14 @@ export function StoryCanvasPanel({
         easeOutCubic
       );
       setViewport(next);
+      viewportRef.current = next;
       if (progress < 1) {
         animationFrameRef.current = requestAnimationFrame(step);
         return;
       }
       setCameraTransitioning(false);
       animationFrameRef.current = undefined;
-      void onPreferenceChange({
-        ...target,
-        ...(selectedObjectId === undefined
-          ? { selectedObjectId: null }
-          : { selectedObjectId })
-      });
+      commitTarget(target);
     };
     animationFrameRef.current = requestAnimationFrame(step);
     return () => {
@@ -1621,15 +2269,6 @@ export function StoryCanvasPanel({
       }
     };
   }, [board, drillScope, project, surfaceSize.height, surfaceSize.width]);
-
-  useEffect(() => {
-    if (preference === undefined || preference === null) return;
-    setViewport({
-      x: preference.x,
-      y: preference.y,
-      zoom: clampCanvasZoom(preference.zoom)
-    });
-  }, [preference]);
 
   useEffect(() => {
     setObjectLabel(selectedObject?.label ?? "");
@@ -1730,8 +2369,9 @@ export function StoryCanvasPanel({
     onSelectObject(object.id);
     if (object.sceneId !== undefined) onSelectScene(object.sceneId);
     if (compact) setShowInspector(true);
+    // Persist selection against the live camera — never a stale React viewport.
     void onPreferenceChange({
-      ...viewport,
+      ...viewportRef.current,
       selectedObjectId: object.id
     });
   }
@@ -1740,12 +2380,7 @@ export function StoryCanvasPanel({
     const normalized = { ...next, zoom: clampCanvasZoom(next.zoom) };
     setViewport(normalized);
     viewportRef.current = normalized;
-    void onPreferenceChange({
-      ...normalized,
-      ...(selectedObjectId === undefined
-        ? { selectedObjectId: null }
-        : { selectedObjectId })
-    });
+    scheduleViewportPersist(normalized, { immediate: true });
   }
 
   useEffect(() => {
@@ -2153,11 +2788,62 @@ export function StoryCanvasPanel({
   );
 
   function openContextMenu(
-    x: number,
-    y: number,
-    objectId?: CanvasObjectId
+    pageX: number,
+    pageY: number,
+    objectId?: CanvasObjectId,
+    options: Readonly<{ anchorToObject?: boolean }> = {}
   ): void {
-    setContextMenu({ x, y, objectId });
+    const surface =
+      typeof document === "undefined"
+        ? null
+        : document.getElementById("story-canvas-surface");
+    const rect = surface?.getBoundingClientRect();
+    let local = rect
+      ? surfaceLocalPoint(pageX, pageY, rect)
+      : { x: pageX, y: pageY };
+
+    if (options.anchorToObject && objectId !== undefined) {
+      const object = objectById.get(objectId);
+      if (object !== undefined) {
+        const frame = canvasScreenFrame(object, viewportRef.current);
+        local = cardMenuAnchor(frame);
+      }
+    }
+
+    const clamped = clampMenuPosition(local.x, local.y, {
+      width: surfaceSize.width || rect?.width || 640,
+      height: surfaceSize.height || rect?.height || 480
+    });
+    setContextMenu({ x: clamped.x, y: clamped.y, objectId });
+  }
+
+  function toggleResizeLock(objectId: CanvasObjectId): void {
+    setResizeUnlockedIds((current) => {
+      const next = new Set(current);
+      if (next.has(objectId)) next.delete(objectId);
+      else next.add(objectId);
+      return next;
+    });
+  }
+
+  function resizeObject(
+    object: CanvasObject,
+    next: Readonly<{ x: number; y: number; width: number; height: number }>
+  ): void {
+    const moved = next.x !== object.x || next.y !== object.y;
+    const resized =
+      next.width !== object.width || next.height !== object.height;
+    if (moved) {
+      void moveObject(object, next.x, next.y);
+    }
+    if (resized) {
+      void sendCommand({
+        type: "canvas.object.resize",
+        objectId: object.id,
+        width: next.width,
+        height: next.height
+      });
+    }
   }
 
   const projectedObjectsRef = useRef(projectedObjects);
@@ -2190,14 +2876,19 @@ export function StoryCanvasPanel({
     setActiveTool("connect");
   }
 
-  function beginLinkDragFromObject(object: CanvasObject): void {
+  function beginLinkDragFromObject(
+    object: CanvasObject,
+    side: AttachSide = "e"
+  ): void {
     const frame = canvasScreenFrame(object, viewportRef.current);
+    const origin = attachPointOnFrame(frame, side);
     setActiveTool("connect");
     setLinkDropTargetId(undefined);
     setLinkDrag({
       fromObjectId: object.id,
-      x: frame.left + frame.width - 6,
-      y: frame.top + frame.height / 2
+      fromSide: side,
+      x: origin.x,
+      y: origin.y
     });
   }
 
@@ -2962,28 +3653,29 @@ export function StoryCanvasPanel({
             <>
               <CanvasIconButton
                 glyph="◫"
-                label="Spatial · view"
+                label="Spatial view"
                 onPress={() => setView("spatial")}
                 selected={view === "spatial"}
-                tip="Spatial view"
+                tip="Spatial view · board"
               />
               <CanvasIconButton
                 glyph="☰"
-                label="Outline · view"
+                label="Outline view"
                 onPress={() => setView("outline")}
                 selected={view === "outline"}
-                tip="Outline view"
+                tip="Outline view · list"
               />
             </>
           ) : null}
           <View style={styles.searchBox}>
             <TextInput
-              accessibilityLabel="Search or jump on Canvas"
+              accessibilityLabel="Search or jump on Canvas · /"
               onChangeText={setSearchQuery}
               placeholder="⌕ /"
               placeholderTextColor={colors.muted}
               style={styles.searchInput}
               value={searchQuery}
+              {...({ title: "Jump / search · /" } as object)}
             />
             {searchResults.length === 0 ? null : (
               <View
@@ -3056,18 +3748,7 @@ export function StoryCanvasPanel({
             glyph="↶"
             label="Undo Canvas command"
             onPress={() => void onUndo()}
-            tip="Undo Canvas command"
-          />
-          <CanvasIconButton
-            glyph="◷"
-            label={showHistory ? "Hide Canvas history" : "Show Canvas history"}
-            onPress={() => {
-              const next = !showHistory;
-              setShowHistory(next);
-              if (next) void onLoadHistory();
-            }}
-            selected={showHistory}
-            tip="Canvas history"
+            tip="Undo last Canvas action"
           />
           <CanvasIconButton
             glyph="▥"
@@ -3088,30 +3769,9 @@ export function StoryCanvasPanel({
               styles.saveStatusWarning
           ]}
         >
-          {cameraTransitioning
-            ? "Opening…"
-            : saveStateLabel(saveState, loading)}
+          {saveStateLabel(saveState, loading)}
         </Text>
       </View>
-
-      {message === undefined ? null : (
-        <View
-          accessibilityRole="alert"
-          style={[
-            styles.message,
-            message.kind === "conflict" && styles.messageConflict
-          ]}
-        >
-          <Text style={styles.messageText}>{message.text}</Text>
-          {message.kind === "conflict" || message.kind === "error" ? (
-            <CanvasButton
-              disabled={loading}
-              label="Reload latest Canvas"
-              onPress={() => void onReload()}
-            />
-          ) : null}
-        </View>
-      )}
 
       {pendingLink === undefined ? null : (
         <CanvasModal
@@ -3168,13 +3828,13 @@ export function StoryCanvasPanel({
       {showHistory ? (
         <CanvasModal
           accessibilityLabel="Canvas history"
-          eyebrow="Canvas history"
+          eyebrow="History tool"
           onClose={() => {
             setShowHistory(false);
             setConfirmHistoryRestore(false);
           }}
-          rule="Restoring creates a new current Canvas. Draft prose and manuscript order stay unchanged."
-          title="Earlier board snapshots"
+          rule="Recent Map actions stay here instead of toasts. Restoring a snapshot creates a new current Canvas; Draft prose and manuscript order stay unchanged."
+          title="Recent actions & snapshots"
           footer={
             selectedHistoryRevisionId === undefined ? (
               <CanvasButton
@@ -3203,6 +3863,51 @@ export function StoryCanvasPanel({
             )
           }
         >
+          <Text style={styles.historySectionTitle}>Notifications & actions</Text>
+          {recentActions.length === 0 ? (
+            <Text style={styles.emptyText}>
+              Map actions and alerts will appear here instead of toasts.
+            </Text>
+          ) : (
+            <View style={styles.historyList}>
+              {recentActions.map((action) => (
+                <View
+                  key={action.id}
+                  style={[
+                    styles.recentActionRow,
+                    action.tone === "warning" && styles.recentActionWarning,
+                    action.tone === "error" && styles.recentActionError
+                  ]}
+                >
+                  <View style={styles.recentActionCopy}>
+                    <Text style={styles.historyVersion}>{action.title}</Text>
+                    <Text style={styles.historyReason}>{action.detail}</Text>
+                    <Text style={styles.historyTime}>
+                      {new Date(action.createdAt).toLocaleTimeString()}
+                    </Text>
+                  </View>
+                  {action.canUndo ? (
+                    <CanvasButton
+                      disabled={busy}
+                      label="Undo"
+                      onPress={() => void onUndo()}
+                    />
+                  ) : null}
+                  {action.actionKind === "reload-canvas" ? (
+                    <CanvasButton
+                      disabled={busy || loading}
+                      label={action.actionLabel ?? "Reload Canvas"}
+                      onPress={() => void onReload()}
+                      primary
+                    />
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          )}
+          <Text style={[styles.historySectionTitle, styles.historySectionSpaced]}>
+            Board snapshots
+          </Text>
           {historyLoading ? (
             <Text style={styles.emptyText}>Loading Canvas history…</Text>
           ) : priorCanvasSnapshots.length === 0 ? (
@@ -3802,7 +4507,7 @@ export function StoryCanvasPanel({
                           ]}
                         >
                           <Text style={styles.chapterOverlayLabel}>
-                            Enter {overlay.label}
+                            Chapter · {overlay.label} · open
                           </Text>
                         </Pressable>
                       );
@@ -3820,10 +4525,10 @@ export function StoryCanvasPanel({
                       }
                       return (
                         <SpatialLink
-                          from={from}
+                          from={resolveLiveObject(from)}
                           key={link.id}
                           link={link}
-                          to={to}
+                          to={resolveLiveObject(to)}
                           viewport={viewport}
                         />
                       );
@@ -3833,11 +4538,18 @@ export function StoryCanvasPanel({
                       : (() => {
                           const from = objectById.get(linkDrag.fromObjectId);
                           if (from === undefined) return null;
-                          const fromFrame = canvasScreenFrame(from, viewport);
+                          const fromFrame = canvasScreenFrame(
+                            resolveLiveObject(from),
+                            viewport
+                          );
+                          const origin = attachPointOnFrame(
+                            fromFrame,
+                            linkDrag.fromSide ?? "e"
+                          );
                           return (
                             <LinkRubberBand
-                              fromX={fromFrame.left + fromFrame.width - 6}
-                              fromY={fromFrame.top + fromFrame.height / 2}
+                              fromX={origin.x}
+                              fromY={origin.y}
                               hot={linkDropTargetId !== undefined}
                               toX={linkDrag.x}
                               toY={linkDrag.y}
@@ -3857,10 +4569,13 @@ export function StoryCanvasPanel({
                           key={object.id}
                           linkDropTarget={object.id === linkDropTargetId}
                           linkHandleVisible={!compact}
+                          liveGeometry={liveGeometryById.get(object.id)}
                           object={object}
                           onContextMenu={(card, x, y) => {
                             selectObject(card);
-                            openContextMenu(x, y, card.id);
+                            openContextMenu(x, y, card.id, {
+                              anchorToObject: true
+                            });
                           }}
                           onDismiss={dismissObject}
                           onDragActiveChange={setDraggingObject}
@@ -3870,16 +4585,42 @@ export function StoryCanvasPanel({
                               : enterSceneFromObject
                           }
                           onLinkDragStart={beginLinkDragFromObject}
+                          onLiveGeometryChange={setLiveGeometry}
                           onMove={moveObject}
-                          onNodeActions={(card, x, y) => {
+                          onNodeActions={(card, _x, _y) => {
                             selectObject(card);
-                            openContextMenu(x, y, card.id);
+                            openContextMenu(0, 0, card.id, {
+                              anchorToObject: true
+                            });
                           }}
+                          onOpenDraft={
+                            onOpenDraft === undefined
+                              ? undefined
+                              : (card) => {
+                                  if (card.sceneId !== undefined) {
+                                    onOpenDraft(card.sceneId);
+                                  }
+                                }
+                          }
+                          onOpenSplit={
+                            compact || onOpenSplit === undefined
+                              ? undefined
+                              : (card) => {
+                                  if (card.sceneId !== undefined) {
+                                    onOpenSplit(card.sceneId);
+                                  }
+                                }
+                          }
+                          onResize={resizeObject}
                           onReview={reviewObject}
                           onSelect={selectObject}
+                          onToggleResizeLock={(card) =>
+                            toggleResizeLock(card.id)
+                          }
                           primary={lensProjection?.primaryObjectIds.has(
                             object.id
                           )}
+                          resizeLocked={!resizeUnlockedIds.has(object.id)}
                           selected={object.id === selectedObjectId}
                           staleLabel={canonicalState.label}
                           viewport={viewport}
@@ -3906,197 +4647,232 @@ export function StoryCanvasPanel({
                         </View>
                       </View>
                     ) : null}
-                    {contextMenu === undefined ? null : (
-                      <View
-                        accessibilityLabel="Canvas context menu"
-                        style={[
-                          styles.contextMenu,
-                          {
-                            left: Math.min(
-                              Math.max(8, contextMenu.x - 40),
-                              surfaceSize.width - 200
-                            ),
-                            top: Math.min(
-                              Math.max(8, contextMenu.y - 40),
-                              surfaceSize.height - 220
-                            )
-                          }
-                        ]}
-                      >
-                        {(
-                          [
-                            ["New scene… · S", () => activateTool("scene")],
-                            [
-                              "New note · N",
-                              () => {
-                                const world = canvasWorldPointFromScreen(
-                                  viewport,
-                                  contextMenu.x,
-                                  contextMenu.y
-                                );
-                                createNote({
-                                  x: world.x - 120,
-                                  y: world.y - 70
-                                });
-                                setActiveTool("select");
-                              }
-                            ],
-                            [
-                              "New region · R",
-                              () => {
-                                const world = canvasWorldPointFromScreen(
-                                  viewport,
-                                  contextMenu.x,
-                                  contextMenu.y
-                                );
-                                createRegion({
-                                  x: world.x - 310,
-                                  y: world.y - 180
-                                });
-                                setActiveTool("select");
-                              }
-                            ],
-                            [
-                              "Place story record… · K",
-                              () => activateTool("story")
-                            ],
-                            ...(contextMenu.objectId !== undefined
-                              ? ([
-                                  [
-                                    "Connect from here · L",
-                                    () => {
-                                      const object = objectById.get(
-                                        contextMenu.objectId!
-                                      );
-                                      if (object !== undefined) {
-                                        selectObject(object);
-                                        activateTool("connect");
-                                      }
-                                    }
-                                  ],
-                                  [
-                                    "Enter layer",
-                                    () => {
-                                      const object = objectById.get(
-                                        contextMenu.objectId!
-                                      );
-                                      if (object !== undefined) {
-                                        enterSceneFromObject(object);
-                                      }
-                                    }
-                                  ],
-                                  [
-                                    "Bring forward",
-                                    () => {
-                                      const object = objectById.get(
-                                        contextMenu.objectId!
-                                      );
-                                      if (object !== undefined) {
-                                        void sendCommand({
-                                          type: "canvas.object.update",
-                                          objectId: object.id,
-                                          changes: { z: maxZ + 1 }
-                                        });
-                                      }
-                                    }
-                                  ],
-                                  [
-                                    "Send backward",
-                                    () => {
-                                      const object = objectById.get(
-                                        contextMenu.objectId!
-                                      );
-                                      if (object !== undefined) {
-                                        void sendCommand({
-                                          type: "canvas.object.update",
-                                          objectId: object.id,
-                                          changes: { z: minZ - 1 }
-                                        });
-                                      }
-                                    }
-                                  ]
-                                ] as const)
-                              : []),
-                            ...(contextMenu.objectId !== undefined &&
-                            objectById.get(contextMenu.objectId)?.sceneId !==
-                              undefined
-                              ? ([
-                                  [
-                                    "Open Draft",
-                                    () => {
-                                      const sceneId = objectById.get(
-                                        contextMenu.objectId!
-                                      )?.sceneId;
-                                      if (sceneId !== undefined) {
-                                        onOpenDraft?.(sceneId);
-                                      }
-                                    }
-                                  ],
-                                  ...(compact
-                                    ? []
-                                    : ([
-                                        [
-                                          "Open Split",
-                                          () => {
-                                            const sceneId = objectById.get(
-                                              contextMenu.objectId!
-                                            )?.sceneId;
-                                            if (sceneId !== undefined) {
-                                              onOpenSplit?.(sceneId);
-                                            }
+                    {contextMenu === undefined
+                      ? null
+                      : (() => {
+                          const surfaceRect =
+                            typeof document === "undefined"
+                              ? undefined
+                              : document
+                                  .getElementById("story-canvas-surface")
+                                  ?.getBoundingClientRect();
+                          const menuLeft =
+                            (surfaceRect?.left ?? 0) + contextMenu.x;
+                          const menuTop =
+                            (surfaceRect?.top ?? 0) + contextMenu.y;
+                          const menu = (
+                            <View
+                              accessibilityLabel="Canvas context menu"
+                              style={[
+                                styles.contextMenu,
+                                {
+                                  left: menuLeft,
+                                  top: menuTop,
+                                  ...(typeof document !== "undefined"
+                                    ? ({ position: "fixed" } as object)
+                                    : {})
+                                }
+                              ]}
+                            >
+                              {(
+                                contextMenu.objectId === undefined
+                                  ? ([
+                                      [
+                                        "New scene… · S",
+                                        () => activateTool("scene")
+                                      ],
+                                      [
+                                        "New note · N",
+                                        () => {
+                                          const world =
+                                            canvasWorldPointFromScreen(
+                                              viewport,
+                                              contextMenu.x,
+                                              contextMenu.y
+                                            );
+                                          createNote({
+                                            x: world.x - 120,
+                                            y: world.y - 70
+                                          });
+                                          setActiveTool("select");
+                                        }
+                                      ],
+                                      [
+                                        "New region · R",
+                                        () => {
+                                          const world =
+                                            canvasWorldPointFromScreen(
+                                              viewport,
+                                              contextMenu.x,
+                                              contextMenu.y
+                                            );
+                                          createRegion({
+                                            x: world.x - 310,
+                                            y: world.y - 180
+                                          });
+                                          setActiveTool("select");
+                                        }
+                                      ],
+                                      [
+                                        "Place story record… · K",
+                                        () => activateTool("story")
+                                      ],
+                                      [
+                                        "Notifications & history",
+                                        () => {
+                                          setShowHistory(true);
+                                          void onLoadHistory();
+                                        }
+                                      ],
+                                      [
+                                        "Select · V",
+                                        () => activateTool("select")
+                                      ],
+                                      [
+                                        "Hand · H",
+                                        () => activateTool("hand")
+                                      ]
+                                    ] as const)
+                                  : ([
+                                      ...(objectById.get(contextMenu.objectId)
+                                        ?.sceneId !== undefined
+                                        ? ([
+                                            [
+                                              "Open Draft",
+                                              () => {
+                                                const sceneId = objectById.get(
+                                                  contextMenu.objectId!
+                                                )?.sceneId;
+                                                if (sceneId !== undefined) {
+                                                  onOpenDraft?.(sceneId);
+                                                }
+                                              }
+                                            ],
+                                            ...(compact
+                                              ? []
+                                              : ([
+                                                  [
+                                                    "Open Split",
+                                                    () => {
+                                                      const sceneId =
+                                                        objectById.get(
+                                                          contextMenu.objectId!
+                                                        )?.sceneId;
+                                                      if (
+                                                        sceneId !== undefined
+                                                      ) {
+                                                        onOpenSplit?.(sceneId);
+                                                      }
+                                                    }
+                                                  ]
+                                                ] as const)),
+                                            [
+                                              "Enter scene · double-click",
+                                              () => {
+                                                const object = objectById.get(
+                                                  contextMenu.objectId!
+                                                );
+                                                if (object !== undefined) {
+                                                  enterSceneFromObject(object);
+                                                }
+                                              }
+                                            ]
+                                          ] as const)
+                                        : []),
+                                      [
+                                        "Connect from here · L",
+                                        () => {
+                                          const object = objectById.get(
+                                            contextMenu.objectId!
+                                          );
+                                          if (object !== undefined) {
+                                            selectObject(object);
+                                            activateTool("connect");
                                           }
-                                        ]
-                                      ] as const))
-                                ] as const)
-                              : []),
-                            [
-                              "Open Details · ]",
-                              () => setShowInspector(true)
-                            ],
-                            [
-                              "Canvas history",
-                              () => {
-                                setShowHistory(true);
-                                void onLoadHistory();
-                              }
-                            ],
-                            ["Select · V", () => activateTool("select")],
-                            ["Hand · H", () => activateTool("hand")]
-                          ] as const
-                        ).map(([label, action]) => (
-                          <Pressable
-                            accessibilityLabel={label}
-                            accessibilityRole="menuitem"
-                            key={label}
-                            onPress={() => {
-                              action();
-                              setContextMenu(undefined);
-                            }}
-                            style={({ pressed }) => [
-                              styles.contextMenuItem,
-                              pressed && styles.pressed
-                            ]}
-                          >
-                            <Text style={styles.contextMenuItemText}>
-                              {label}
-                            </Text>
-                          </Pressable>
-                        ))}
-                        <Pressable
-                          accessibilityLabel="Close context menu"
-                          accessibilityRole="menuitem"
-                          onPress={() => setContextMenu(undefined)}
-                          style={({ pressed }) => [
-                            styles.contextMenuItem,
-                            pressed && styles.pressed
-                          ]}
-                        >
-                          <Text style={styles.contextMenuItemText}>
-                            Close · Esc
-                          </Text>
-                        </Pressable>
-                      </View>
-                    )}
+                                        }
+                                      ],
+                                      [
+                                        resizeUnlockedIds.has(
+                                          contextMenu.objectId
+                                        )
+                                          ? "Lock size"
+                                          : "Unlock resize",
+                                        () =>
+                                          toggleResizeLock(contextMenu.objectId!)
+                                      ],
+                                      [
+                                        "Open Details · ]",
+                                        () => setShowInspector(true)
+                                      ],
+                                      [
+                                        "Bring forward",
+                                        () => {
+                                          const object = objectById.get(
+                                            contextMenu.objectId!
+                                          );
+                                          if (object !== undefined) {
+                                            void sendCommand({
+                                              type: "canvas.object.update",
+                                              objectId: object.id,
+                                              changes: { z: maxZ + 1 }
+                                            });
+                                          }
+                                        }
+                                      ],
+                                      [
+                                        "Send backward",
+                                        () => {
+                                          const object = objectById.get(
+                                            contextMenu.objectId!
+                                          );
+                                          if (object !== undefined) {
+                                            void sendCommand({
+                                              type: "canvas.object.update",
+                                              objectId: object.id,
+                                              changes: { z: minZ - 1 }
+                                            });
+                                          }
+                                        }
+                                      ]
+                                    ] as const)
+                              ).map(([label, action]) => (
+                                <Pressable
+                                  accessibilityLabel={label}
+                                  accessibilityRole="menuitem"
+                                  key={label}
+                                  onPress={() => {
+                                    action();
+                                    setContextMenu(undefined);
+                                  }}
+                                  style={({ pressed }) => [
+                                    styles.contextMenuItem,
+                                    pressed && styles.pressed
+                                  ]}
+                                >
+                                  <Text style={styles.contextMenuItemText}>
+                                    {label}
+                                  </Text>
+                                </Pressable>
+                              ))}
+                              <Pressable
+                                accessibilityLabel="Close context menu"
+                                accessibilityRole="menuitem"
+                                onPress={() => setContextMenu(undefined)}
+                                style={({ pressed }) => [
+                                  styles.contextMenuItem,
+                                  pressed && styles.pressed
+                                ]}
+                              >
+                                <Text style={styles.contextMenuItemText}>
+                                  Close · Esc
+                                </Text>
+                              </Pressable>
+                            </View>
+                          );
+                          return typeof document === "undefined"
+                            ? menu
+                            : createPortal(menu, document.body);
+                        })()}
                   </View>
                 </View>
               ) : (
@@ -4223,7 +4999,8 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     minWidth: 0,
-    overflow: "hidden",
+    // Keep visible so toolbar CSS tooltips are not clipped.
+    overflow: "visible",
     position: "relative",
     width: "100%"
   },
@@ -4236,8 +5013,10 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 6,
     minHeight: 36,
+    overflow: "visible",
     paddingHorizontal: 8,
-    paddingVertical: 4
+    paddingVertical: 4,
+    zIndex: 200000
   },
   chromeGroup: {
     alignItems: "center",
@@ -4344,6 +5123,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6
+  },
+  iconButtonWrap: {
+    position: "relative",
+    zIndex: 5
   },
   iconButton: {
     alignItems: "center",
@@ -4524,6 +5307,40 @@ const styles = StyleSheet.create({
   },
   historyList: {
     gap: 6
+  },
+  historySectionTitle: {
+    color: colors.kicker,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 9,
+    letterSpacing: 0.6,
+    marginBottom: 6,
+    textTransform: "uppercase"
+  },
+  historySectionSpaced: {
+    marginTop: 14
+  },
+  recentActionRow: {
+    alignItems: "center",
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 7,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between",
+    padding: 9
+  },
+  recentActionCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  recentActionWarning: {
+    backgroundColor: colors.amberSoft,
+    borderColor: colors.amber
+  },
+  recentActionError: {
+    backgroundColor: colors.redSoft,
+    borderColor: colors.red
   },
   historyRow: {
     backgroundColor: colors.panel,
@@ -4888,29 +5705,169 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     position: "relative"
   },
-  linkHandle: {
+  resizeLockButton: {
+    alignItems: "center",
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 11,
+    borderWidth: 1,
+    height: 22,
+    justifyContent: "center",
+    left: 6,
+    position: "absolute",
+    top: 6,
+    width: 22,
+    zIndex: 8,
+    ...(typeof window !== "undefined"
+      ? ({ cursor: "pointer" } as object)
+      : {})
+  },
+  resizeLockButtonOpen: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent
+  },
+  resizeLockGlyph: {
+    fontSize: 11,
+    lineHeight: 13
+  },
+  actionsHandle: {
     alignItems: "center",
     backgroundColor: colors.accent,
     borderColor: colors.panel,
     borderRadius: 12,
     borderWidth: 2,
+    bottom: 6,
     height: 24,
     justifyContent: "center",
     position: "absolute",
-    // Keep inside the card so board overflow does not clip the control.
     right: 6,
-    top: "42%",
     width: 24,
-    zIndex: 5,
+    zIndex: 8,
     ...(typeof window !== "undefined"
       ? ({ cursor: "pointer" } as object)
       : {})
   },
+  actionsHandleSelected: {
+    height: 26,
+    width: 26
+  },
+  attachPoint: {
+    backgroundColor: colors.panel,
+    borderColor: colors.accent,
+    borderRadius: 7,
+    borderWidth: 2,
+    height: 12,
+    position: "absolute",
+    width: 12,
+    zIndex: 7,
+    ...(typeof window !== "undefined"
+      ? ({ cursor: "crosshair" } as object)
+      : {})
+  },
+  attachPointHot: {
+    backgroundColor: colors.green,
+    borderColor: colors.green
+  },
+  attachPoint_n: {
+    left: "50%",
+    marginLeft: -6,
+    top: -6
+  },
+  attachPoint_e: {
+    marginTop: -6,
+    right: -6,
+    top: "50%"
+  },
+  attachPoint_s: {
+    bottom: -6,
+    left: "50%",
+    marginLeft: -6
+  },
+  attachPoint_w: {
+    left: -6,
+    marginTop: -6,
+    top: "50%"
+  },
+  resizeEdge: {
+    position: "absolute",
+    zIndex: 6
+  },
+  resizeEdge_n: {
+    height: 8,
+    left: 10,
+    right: 10,
+    top: 0
+  },
+  resizeEdge_s: {
+    bottom: 0,
+    height: 8,
+    left: 10,
+    right: 10
+  },
+  resizeEdge_e: {
+    bottom: 10,
+    right: 0,
+    top: 10,
+    width: 8
+  },
+  resizeEdge_w: {
+    bottom: 10,
+    left: 0,
+    top: 10,
+    width: 8
+  },
+  resizeEdge_ne: {
+    height: 14,
+    right: 0,
+    top: 0,
+    width: 14
+  },
+  resizeEdge_nw: {
+    height: 14,
+    left: 0,
+    top: 0,
+    width: 14
+  },
+  resizeEdge_se: {
+    bottom: 0,
+    height: 14,
+    right: 0,
+    width: 14
+  },
+  resizeEdge_sw: {
+    bottom: 0,
+    height: 14,
+    left: 0,
+    width: 14
+  },
   linkHandleGlyph: {
     color: "#ffffff",
     fontFamily: fonts.uiSemibold,
-    fontSize: 14,
-    lineHeight: 16
+    fontSize: 13,
+    lineHeight: 15
+  },
+  cardActionRow: {
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    paddingRight: 34
+  },
+  cardAction: {
+    alignItems: "center",
+    backgroundColor: colors.wash,
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 28,
+    paddingHorizontal: 4,
+    paddingVertical: 5
+  },
+  cardActionEmphasis: {
+    backgroundColor: colors.blueSoft
+  },
+  cardActionText: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 9
   },
   linkRubberBand: {
     borderStyle: "dashed",
@@ -5016,16 +5973,17 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
-    elevation: 6,
+    elevation: 24,
     gap: 2,
     minWidth: 168,
     padding: 5,
     position: "absolute",
     shadowColor: "#1d150f",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.16,
-    shadowRadius: 10,
-    zIndex: 50
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
+    // Above spatial cards (z ~100–500) and chapter overlays.
+    zIndex: 100000
   },
   contextMenuItem: {
     borderRadius: 5,
@@ -5150,7 +6108,9 @@ const styles = StyleSheet.create({
   spatialObjectPressable: {
     flex: 1,
     minWidth: 0,
-    padding: 10
+    overflow: "hidden",
+    padding: 10,
+    paddingLeft: 28
   },
   quickActionRow: {
     borderTopColor: colors.line,
