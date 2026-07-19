@@ -585,3 +585,59 @@ export function sendWorkspaceChat(input: Readonly<{
     })
   );
 }
+
+export type WritingAssistApiProposal = Readonly<{
+  id: string;
+  role: string;
+  kind: string;
+  title: string;
+  summary: string;
+  provider: string;
+  status: string;
+  prose?: string;
+  sketch?: Readonly<Record<string, unknown>>;
+  characterSheet?: Readonly<Record<string, unknown>>;
+  storyKnowledgeId?: string;
+  backdropCaption?: string;
+}>;
+
+export type WritingAssistResponse = Readonly<{
+  provider: string;
+  proposals: readonly WritingAssistApiProposal[];
+}>;
+
+export function requestWritingAssist(input: Readonly<{
+  projectId: string;
+  role: string;
+  sceneId: string;
+  sceneTitle: string;
+  sceneSummary?: string;
+  recentProse?: string;
+  sketch?: unknown;
+  backdropCaption?: string;
+  cast?: readonly Readonly<{
+    id: string;
+    label: string;
+    characterSheet?: unknown;
+  }>[];
+}>): Promise<WritingAssistResponse> {
+  return requestJson(
+    `/api/projects/${encodeURIComponent(input.projectId)}/writing-assist`,
+    jsonRequest("POST", {
+      role: input.role,
+      sceneId: input.sceneId,
+      sceneTitle: input.sceneTitle,
+      ...(input.sceneSummary === undefined
+        ? {}
+        : { sceneSummary: input.sceneSummary }),
+      ...(input.recentProse === undefined
+        ? {}
+        : { recentProse: input.recentProse }),
+      ...(input.sketch === undefined ? {} : { sketch: input.sketch }),
+      ...(input.backdropCaption === undefined
+        ? {}
+        : { backdropCaption: input.backdropCaption }),
+      ...(input.cast === undefined ? {} : { cast: input.cast })
+    })
+  );
+}

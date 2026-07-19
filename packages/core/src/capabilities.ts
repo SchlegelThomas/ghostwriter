@@ -348,6 +348,20 @@ export const BOOK_READER_CAPABILITY = Object.freeze({
   })
 }) satisfies GhostwriterCapability;
 
+export const WRITING_ASSIST_CAPABILITY = Object.freeze({
+  id: "writing.assist.propose",
+  title: "Propose writing-assist craft or prose variants",
+  access: "propose",
+  scope: "scene",
+  coreUseCase: "buildDeterministicWritingAssistProposals",
+  bindings: Object.freeze({
+    ui: "WritingAssistPanel",
+    web: "POST /api/projects/{projectId}/writing-assist",
+    mcpException:
+      "Writing-assist proposals stay human-gated in the Write studio until scoped agent grants are accepted."
+  })
+}) satisfies GhostwriterCapability;
+
 export const GHOSTWRITER_CAPABILITIES: readonly GhostwriterCapability[] = Object.freeze([
   PROJECT_NAVIGATOR_CAPABILITY,
   ...PROJECT_COMMAND_CAPABILITIES,
@@ -356,5 +370,6 @@ export const GHOSTWRITER_CAPABILITIES: readonly GhostwriterCapability[] = Object
   ...SCENE_WRITING_MUTATION_CAPABILITIES,
   ...CANVAS_READ_CAPABILITIES,
   ...CANVAS_MUTATION_CAPABILITIES,
-  BOOK_READER_CAPABILITY
+  BOOK_READER_CAPABILITY,
+  WRITING_ASSIST_CAPABILITY
 ]);

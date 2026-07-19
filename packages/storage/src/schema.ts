@@ -154,6 +154,7 @@ export const scenes = pgTable("scenes", {
   backdrop: jsonb("backdrop"),
   music: jsonb("music"),
   imageRefs: jsonb("image_refs"),
+  sketch: jsonb("sketch"),
   archivedAt: text("archived_at")
 });
 
@@ -324,6 +325,7 @@ export const storyKnowledge = pgTable("story_knowledge", {
   authority: text("authority").notNull(),
   notes: text("notes"),
   aliases: jsonb("aliases"),
+  characterSheet: jsonb("character_sheet"),
   archivedAt: text("archived_at")
 });
 

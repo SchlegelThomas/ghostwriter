@@ -69,7 +69,19 @@ canonical local or offline project. See ADR 0005.
   multiple prose variants, but their output stays provisional until an author or authorized
   editor chooses what to apply.
 
-## Current writing milestone — implemented locally 2026-07-12
+## Current writing milestone — Write Experience 4.0 (2026-07-19)
+
+On `feat/writing-experience-ux-4`, writers also get:
+
+- Writing Studio chrome on Draft: composition chips (Page / Split·Map / Sheet / Backdrop), Focus, Assist, keyboard / dictate / ink modalities;
+- Scene Sketch craft fields (and craft-only ink paths) plus character sheet desire/pressure/voice on story knowledge;
+- Split companions for cast sheets and backdrop notes beside Draft;
+- Browser dictation into the live Tiptap caret;
+- Deterministic writing-assist proposals (Scene Partner, Character Coach, Worldkeeper, Sketch Partner) that require explicit Apply.
+
+Agents still never silent-write canon. OpenAI completion remains optional/unconfigured; proposals are labeled `deterministic-local` until a provider ADR lands.
+
+## Prior writing milestone — implemented locally 2026-07-12
 
 The active branch now proves the first owner-only version of the core promise:
 

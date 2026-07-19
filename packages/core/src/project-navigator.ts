@@ -6,11 +6,13 @@ import {
   type PartId,
   type ProjectId,
   type ProjectRecords,
+  type CharacterSheet,
   type Scene,
   type SceneBackdrop,
   type SceneId,
   type SceneImageRef,
   type SceneMusic,
+  type SceneSketch,
   type SceneStatus,
   type StoryKnowledgeAuthority,
   type StoryKnowledgeId,
@@ -28,6 +30,7 @@ export type ProjectNavigatorScene = Readonly<{
   backdrop?: SceneBackdrop;
   music?: SceneMusic;
   imageRefs?: readonly SceneImageRef[];
+  sketch?: SceneSketch;
   archivedAt?: string;
 }>;
 
@@ -72,6 +75,7 @@ export type ProjectNavigatorKnowledge = Readonly<{
   linkedKnowledge: readonly StoryKnowledgeLink[];
   notes?: string;
   aliases?: readonly string[];
+  characterSheet?: CharacterSheet;
   archivedAt?: string;
 }>;
 
@@ -118,6 +122,7 @@ function requireScene(
     ...(scene.backdrop === undefined ? {} : { backdrop: scene.backdrop }),
     ...(scene.music === undefined ? {} : { music: scene.music }),
     ...(scene.imageRefs === undefined ? {} : { imageRefs: scene.imageRefs }),
+    ...(scene.sketch === undefined ? {} : { sketch: scene.sketch }),
     ...(scene.archivedAt === undefined ? {} : { archivedAt: scene.archivedAt })
   });
 }
@@ -196,6 +201,9 @@ export function projectNavigatorFromRecords(records: ProjectRecords): ProjectNav
         ...(knowledge.aliases === undefined
           ? {}
           : { aliases: freezeList(knowledge.aliases) }),
+        ...(knowledge.characterSheet === undefined
+          ? {}
+          : { characterSheet: knowledge.characterSheet }),
         ...(knowledge.archivedAt === undefined
           ? {}
           : { archivedAt: knowledge.archivedAt })

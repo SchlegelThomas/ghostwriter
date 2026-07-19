@@ -22,7 +22,8 @@ export type DomainValidationCode =
   | "CROSS_BOOK_REFERENCE"
   | "INCOMPLETE_MANUSCRIPT"
   | "INVALID_VERSION"
-  | "INVALID_URL";
+  | "INVALID_URL"
+  | "INVALID_CRAFT";
 
 export class DomainValidationError extends Error {
   readonly code: DomainValidationCode;
@@ -285,6 +286,35 @@ export type SceneImageRef = Readonly<{
   caption?: string;
 }>;
 
+export type SceneSketchInkPoint = Readonly<{
+  x: number;
+  y: number;
+  pressure?: number;
+}>;
+
+export type SceneSketchInkPath = Readonly<{
+  points: readonly SceneSketchInkPoint[];
+  color: string;
+  size: number;
+}>;
+
+/** Planned craft companion for a scene — not manuscript prose. */
+export type SceneSketch = Readonly<{
+  purpose?: string;
+  conflict?: string;
+  turn?: string;
+  beats?: readonly string[];
+  sensoryNotes?: string;
+  openQuestions?: string;
+  inkPaths?: readonly SceneSketchInkPath[];
+}>;
+
+export type CharacterSheet = Readonly<{
+  desire?: string;
+  pressure?: string;
+  voiceNotes?: string;
+}>;
+
 export type Scene = Readonly<{
   id: SceneId;
   projectId: ProjectId;
@@ -296,6 +326,7 @@ export type Scene = Readonly<{
   backdrop?: SceneBackdrop;
   music?: SceneMusic;
   imageRefs?: readonly SceneImageRef[];
+  sketch?: SceneSketch;
   archivedAt?: string;
 }>;
 
@@ -331,6 +362,125 @@ function createSceneImageRef(input: SceneImageRef): SceneImageRef {
   });
 }
 
+function createOptionalSketchText(
+  value: string | undefined,
+  label: string
+): string | undefined {
+  return value === undefined ? undefined : requireText(value, label);
+}
+
+function createSceneSketchInkPath(input: SceneSketchInkPath): SceneSketchInkPath {
+  if (input.points.length === 0) {
+    throw new DomainValidationError(
+      "INVALID_CRAFT",
+      "Scene sketch ink paths must include at least one point."
+    );
+  }
+  const size = input.size;
+  if (!Number.isFinite(size) || size <= 0 || size > 64) {
+    throw new DomainValidationError(
+      "INVALID_CRAFT",
+      "Scene sketch ink size must be a finite number between 0 and 64."
+    );
+  }
+  return Object.freeze({
+    color: requireText(input.color, "Scene sketch ink color"),
+    size,
+    points: freezeList(
+      input.points.map((point) => {
+        if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+          throw new DomainValidationError(
+            "INVALID_CRAFT",
+            "Scene sketch ink points must use finite coordinates."
+          );
+        }
+        const pressure = point.pressure;
+        if (
+          pressure !== undefined &&
+          (!Number.isFinite(pressure) || pressure < 0 || pressure > 1)
+        ) {
+          throw new DomainValidationError(
+            "INVALID_CRAFT",
+            "Scene sketch ink pressure must be between 0 and 1."
+          );
+        }
+        return Object.freeze({
+          x: point.x,
+          y: point.y,
+          ...(pressure === undefined ? {} : { pressure })
+        });
+      })
+    )
+  });
+}
+
+export function createSceneSketch(input: SceneSketch): SceneSketch {
+  const purpose = createOptionalSketchText(input.purpose, "Scene sketch purpose");
+  const conflict = createOptionalSketchText(input.conflict, "Scene sketch conflict");
+  const turn = createOptionalSketchText(input.turn, "Scene sketch turn");
+  const sensoryNotes = createOptionalSketchText(
+    input.sensoryNotes,
+    "Scene sketch sensory notes"
+  );
+  const openQuestions = createOptionalSketchText(
+    input.openQuestions,
+    "Scene sketch open questions"
+  );
+  const beats =
+    input.beats === undefined
+      ? undefined
+      : freezeList(
+          input.beats.map((beat) => requireText(beat, "Scene sketch beat"))
+        );
+  const inkPaths =
+    input.inkPaths === undefined
+      ? undefined
+      : freezeList(input.inkPaths.map(createSceneSketchInkPath));
+
+  const sketch = Object.freeze({
+    ...(purpose === undefined ? {} : { purpose }),
+    ...(conflict === undefined ? {} : { conflict }),
+    ...(turn === undefined ? {} : { turn }),
+    ...(beats === undefined ? {} : { beats }),
+    ...(sensoryNotes === undefined ? {} : { sensoryNotes }),
+    ...(openQuestions === undefined ? {} : { openQuestions }),
+    ...(inkPaths === undefined ? {} : { inkPaths })
+  });
+
+  if (Object.keys(sketch).length === 0) {
+    throw new DomainValidationError(
+      "EMPTY_VALUE",
+      "Scene sketch must include at least one craft field."
+    );
+  }
+
+  return sketch;
+}
+
+export function createCharacterSheet(input: CharacterSheet): CharacterSheet {
+  const desire = createOptionalSketchText(input.desire, "Character sheet desire");
+  const pressure = createOptionalSketchText(
+    input.pressure,
+    "Character sheet pressure"
+  );
+  const voiceNotes = createOptionalSketchText(
+    input.voiceNotes,
+    "Character sheet voice notes"
+  );
+  const sheet = Object.freeze({
+    ...(desire === undefined ? {} : { desire }),
+    ...(pressure === undefined ? {} : { pressure }),
+    ...(voiceNotes === undefined ? {} : { voiceNotes })
+  });
+  if (Object.keys(sheet).length === 0) {
+    throw new DomainValidationError(
+      "EMPTY_VALUE",
+      "Character sheet must include at least one field."
+    );
+  }
+  return sheet;
+}
+
 export function createScene(input: Scene): Scene {
   const summary =
     input.summary === undefined ? undefined : requireText(input.summary, "Scene summary");
@@ -345,6 +495,8 @@ export function createScene(input: Scene): Scene {
     input.imageRefs === undefined
       ? undefined
       : freezeList(input.imageRefs.map(createSceneImageRef));
+  const sketch =
+    input.sketch === undefined ? undefined : createSceneSketch(input.sketch);
 
   return Object.freeze({
     id: input.id,
@@ -359,6 +511,7 @@ export function createScene(input: Scene): Scene {
     ...(backdrop === undefined ? {} : { backdrop }),
     ...(music === undefined ? {} : { music }),
     ...(imageRefs === undefined ? {} : { imageRefs }),
+    ...(sketch === undefined ? {} : { sketch }),
     ...(archivedAt === undefined ? {} : { archivedAt })
   });
 }
@@ -394,6 +547,7 @@ export type StoryKnowledge = Readonly<{
   linkedKnowledge: readonly StoryKnowledgeLink[];
   notes?: string;
   aliases?: readonly string[];
+  characterSheet?: CharacterSheet;
   archivedAt?: string;
 }>;
 
@@ -427,6 +581,10 @@ export function createStoryKnowledge(input: StoryKnowledge): StoryKnowledge {
     input.archivedAt === undefined
       ? undefined
       : requireText(input.archivedAt, "Story knowledge archive time");
+  const characterSheet =
+    input.characterSheet === undefined
+      ? undefined
+      : createCharacterSheet(input.characterSheet);
 
   return Object.freeze({
     id: input.id,
@@ -438,6 +596,7 @@ export function createStoryKnowledge(input: StoryKnowledge): StoryKnowledge {
     linkedKnowledge: freezeList(input.linkedKnowledge.map(createStoryKnowledgeLink)),
     ...(notes === undefined ? {} : { notes }),
     ...(aliases === undefined ? {} : { aliases }),
+    ...(characterSheet === undefined ? {} : { characterSheet }),
     ...(archivedAt === undefined ? {} : { archivedAt })
   });
 }

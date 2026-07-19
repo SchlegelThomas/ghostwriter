@@ -64,6 +64,13 @@
       "when": 1783905558808,
       "tag": "0008_burly_black_bolt",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784484000000,
+      "tag": "0009_writing_craft",
+      "breakpoints": true
     }
   ]
 }

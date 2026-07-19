@@ -11,42 +11,39 @@
     <header>
       <p class="eyebrow">Session handoff</p>
       <h1>Where we left off</h1>
-      <p><strong>Last updated:</strong> 2026-07-19 · <strong>Current branch:</strong> <code>feat/canvas-structure-ux-3</code></p>
+      <p><strong>Last updated:</strong> 2026-07-19 · <strong>Current branch:</strong> <code>feat/writing-experience-ux-4</code></p>
     </header>
 
     <section>
       <h2>Current state</h2>
-      <p>Two active plans on the same branch:</p>
-      <ul>
-        <li><a href="active/2026-07-18-canvas-structure-ux-3/plan.html">Canvas &amp; Structure UX 3.0</a> — Map card chrome (lock/resize/attach/tips/live links).</li>
-        <li><a href="active/2026-07-19-workspace-shell-palette/plan.html">Workspace shell palette</a> — Cursor-like activity rail + ⌘P / ⌘⇧P.</li>
-      </ul>
-      <p>Living design for Map remains <a href="designs/Ghostwriter%20Mockups%203.0.html">Mockups 3.0</a>. Playwright still gated.</p>
+      <p><a href="active/2026-07-19-writing-experience-ux-4/plan.html">Writing Experience UX 4.0</a> is implemented on its feature branch for founder product review. Living design: <a href="designs/Ghostwriter%20Mockups%204.0.html">Mockups 4.0</a>. <code>pnpm verify</code> green. Playwright still gated.</p>
     </section>
 
     <section>
-      <h2>Done in latest shell slice</h2>
+      <h2>Done for review</h2>
       <ul>
-        <li>Slim 32px glyph activity rail with Structure / Jump / Chat toggles.</li>
-        <li>⌘P manuscript jump; ⌘⇧P command + top MCP chat palette.</li>
-        <li>Resizable structure rail.</li>
+        <li>Writing Studio: composition chips, Assist, Focus, keyboard / dictate / ink.</li>
+        <li>Scene sketch + character sheet persistence (migration 0009) + Split companions.</li>
+        <li>Browser dictation into Tiptap caret.</li>
+        <li>Deterministic writing-assist API + Apply for four roles.</li>
+        <li>Craft-only ink strokes on sketch; ADR 0009; PRODUCT/API/ARCHITECTURE updates.</li>
       </ul>
     </section>
 
     <section>
       <h2>Incomplete / next</h2>
       <ol>
-        <li><strong>Founder:</strong> hard-refresh — try ⌘P, ⌘⇧P, rail icons, structure drag.</li>
-        <li>Polish (inspector resize, persist structure width, Map-dense jump affordance if missing).</li>
-        <li>Consider splitting shell work onto <code>feat/workspace-shell-palette</code> before PR.</li>
+        <li><strong>Founder:</strong> hard-refresh Write — exercise Page / Split Map·Sheet·Backdrop, Assist Generate/Apply, Dictate, Ink, Focus, Save sketch.</li>
+        <li>After verification: authorize Playwright gate + PR.</li>
+        <li>Optional polish: richer freehand pointer ink, OpenAI provider when configured.</li>
       </ol>
     </section>
 
     <section>
       <h2>How to resume</h2>
       <ol>
-        <li>Checkout <code>feat/canvas-structure-ux-3</code>; run <code>./scripts/dev-local.sh</code>.</li>
-        <li>Founder verifies shell + Canvas; then polish or Playwright gate.</li>
+        <li>Checkout <code>feat/writing-experience-ux-4</code>; run <code>./scripts/dev-local.sh</code> (apply DB migration 0009 if needed).</li>
+        <li>Open a project → Draft scene → use Writing Studio toolbar above the manuscript.</li>
       </ol>
     </section>
   </main>

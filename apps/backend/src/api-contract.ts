@@ -115,6 +115,50 @@ const sceneImageRef = z.object({
   alt: z.string().trim().min(1).max(500),
   caption: z.string().trim().min(1).max(500).optional()
 });
+const sceneSketchInkPoint = z.object({
+  x: z.number().finite(),
+  y: z.number().finite(),
+  pressure: z.number().min(0).max(1).optional()
+});
+const sceneSketchInkPath = z.object({
+  points: z.array(sceneSketchInkPoint).min(1).max(2_000),
+  color: z.string().trim().min(1).max(40),
+  size: z.number().positive().max(64)
+});
+const sceneSketch = z
+  .object({
+    purpose: z.string().trim().min(1).max(2_000).optional(),
+    conflict: z.string().trim().min(1).max(2_000).optional(),
+    turn: z.string().trim().min(1).max(2_000).optional(),
+    beats: z.array(z.string().trim().min(1).max(500)).max(40).optional(),
+    sensoryNotes: z.string().trim().min(1).max(5_000).optional(),
+    openQuestions: z.string().trim().min(1).max(5_000).optional(),
+    inkPaths: z.array(sceneSketchInkPath).max(100).optional()
+  })
+  .refine(
+    (value) =>
+      value.purpose !== undefined ||
+      value.conflict !== undefined ||
+      value.turn !== undefined ||
+      (value.beats !== undefined && value.beats.length > 0) ||
+      value.sensoryNotes !== undefined ||
+      value.openQuestions !== undefined ||
+      (value.inkPaths !== undefined && value.inkPaths.length > 0),
+    "Sketch must include at least one craft field"
+  );
+const characterSheet = z
+  .object({
+    desire: z.string().trim().min(1).max(2_000).optional(),
+    pressure: z.string().trim().min(1).max(2_000).optional(),
+    voiceNotes: z.string().trim().min(1).max(5_000).optional()
+  })
+  .refine(
+    (value) =>
+      value.desire !== undefined ||
+      value.pressure !== undefined ||
+      value.voiceNotes !== undefined,
+    "Character sheet must include at least one field"
+  );
 const longText = z.string().trim().min(1).max(20_000);
 const alias = z.string().trim().min(1).max(200);
 
@@ -126,6 +170,31 @@ export const createProjectRequestSchema = z.object({
 export const updateProfileRequestSchema = z.object({
   displayName,
   expectedVersion: z.number().int().positive()
+});
+
+export const writingAssistRequestSchema = z.object({
+  role: z.enum([
+    "scene-partner",
+    "character-coach",
+    "worldkeeper",
+    "sketch-partner"
+  ]),
+  sceneId: id,
+  sceneTitle: title,
+  sceneSummary: z.string().trim().min(1).max(5_000).optional(),
+  recentProse: z.string().max(8_000).optional(),
+  sketch: sceneSketch.optional(),
+  backdropCaption: z.string().trim().min(1).max(2_000).optional(),
+  cast: z
+    .array(
+      z.object({
+        id,
+        label: title,
+        characterSheet: characterSheet.optional()
+      })
+    )
+    .max(40)
+    .optional()
 });
 
 const commandSchema = z.discriminatedUnion("type", [
@@ -210,7 +279,8 @@ const commandSchema = z.discriminatedUnion("type", [
     povStoryKnowledgeId: id.nullable().optional(),
     backdrop: sceneBackdrop.nullable().optional(),
     music: sceneMusic.nullable().optional(),
-    imageRefs: z.array(sceneImageRef).max(50).nullable().optional()
+    imageRefs: z.array(sceneImageRef).max(50).nullable().optional(),
+    sketch: sceneSketch.nullable().optional()
   }),
   z.object({
     type: z.literal("scene.move"),
@@ -237,7 +307,8 @@ const commandSchema = z.discriminatedUnion("type", [
     kind: knowledgeKind.optional(),
     authority: knowledgeAuthority.optional(),
     notes: longText.nullable().optional(),
-    aliases: z.array(alias).max(50).nullable().optional()
+    aliases: z.array(alias).max(50).nullable().optional(),
+    characterSheet: characterSheet.nullable().optional()
   }),
   z.object({
     type: z.literal("storyKnowledge.setSceneLink"),

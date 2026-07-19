@@ -19,11 +19,13 @@ import {
   type Project,
   type ProjectId,
   type ProjectRecords,
+  type CharacterSheet,
   type Scene,
   type SceneBackdrop,
   type SceneId,
   type SceneImageRef,
   type SceneMusic,
+  type SceneSketch,
   type SceneStatus,
   type StoryKnowledge,
   type StoryKnowledgeAuthority,
@@ -140,6 +142,7 @@ export type ProjectCommand =
       backdrop?: SceneBackdrop | null;
       music?: SceneMusic | null;
       imageRefs?: readonly SceneImageRef[] | null;
+      sketch?: SceneSketch | null;
     }>
   | Readonly<{
       type: "scene.move";
@@ -163,6 +166,7 @@ export type ProjectCommand =
       authority?: StoryKnowledgeAuthority;
       notes?: string | null;
       aliases?: readonly string[] | null;
+      characterSheet?: CharacterSheet | null;
     }>
   | Readonly<{
       type: "storyKnowledge.setSceneLink";
@@ -649,6 +653,13 @@ export function applyProjectCommandToRecords(
             ? withoutImageRefs
             : { ...withoutImageRefs, imageRefs: command.imageRefs };
       }
+      if (command.sketch !== undefined) {
+        const { sketch: _ignored, ...withoutSketch } = updated;
+        updated =
+          command.sketch === null
+            ? withoutSketch
+            : { ...withoutSketch, sketch: command.sketch };
+      }
       scenes = replaceScene(scenes, command.sceneId, createScene(updated));
       break;
     }
@@ -727,6 +738,13 @@ export function applyProjectCommandToRecords(
           command.aliases === null
             ? withoutAliases
             : { ...withoutAliases, aliases: command.aliases };
+      }
+      if (command.characterSheet !== undefined) {
+        const { characterSheet: _ignored, ...withoutSheet } = updatedFields;
+        updatedFields =
+          command.characterSheet === null
+            ? withoutSheet
+            : { ...withoutSheet, characterSheet: command.characterSheet };
       }
       const updated = createStoryKnowledge(updatedFields);
       storyKnowledge = storyKnowledge.map((record) =>

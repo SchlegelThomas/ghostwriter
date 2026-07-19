@@ -165,6 +165,8 @@ metadata persistence now updates stable canonical rows rather than deleting/rebu
 - The responsive client exposes Draft, Canvas, Split, and Project setup. Wide web supports spatial
   editing and inspectors; narrow web defaults to an ordered keyboard/screen-reader representation.
   Canvas position and story-order hints expose drift but never reorder the manuscript.
+- [ADR 0009](adr/0009-writing-craft-and-assist.md) adds scene sketch + character sheet craft JSON,
+  craft-only ink, browser dictation into Tiptap, and propose-only writing-assist proposals.
 - Canonical MCP writes, real-time subscriptions/presence, editor invitations, comments/suggestions,
   image generation, and full offline access remain explicit later decisions.
 

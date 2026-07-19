@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ghostwriter UX proposal — Writing Experience 4.0</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Proposed UX 4.0 direction</p>
+      <h1>Writing Experience 4.0</h1>
+      <p class="meta"><strong>Status:</strong> proposed — awaiting founder design acceptance<br>
+        <strong>Parent plan:</strong> <a href="plan.html">Writing Experience UX 4.0</a><br>
+        <strong>Interactive source:</strong> <a href="../../designs/Ghostwriter%20Mockups%204.0.html">Ghostwriter Mockups 4.0</a><br>
+        <strong>Lineage:</strong> agentic writing blueprint · agent contracts · shipped Write/Canvas kernel · Mockups 2.0 / 3.0</p>
+      <p>This epic puts writing back at the center: a focused manuscript studio, craft companions (sketches, character sheets, backdrops), bounded writing agents, and input modes for keyboard, dictation, and stylus — integrated with Canvas and Split views.</p>
+      <p class="callout"><strong>Chrome contract:</strong> Mockups 4.0 visuals are synced to the live app (2026-07-19) — dense 44/36 toolbars, 32px rail, Map board spacing — not older mockup shells. Concepts unchanged; re-review the interactive studio first.</p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Writers should feel they are crafting a scene — inventing intent, casting people, setting place, then writing — with optional AI partners that propose, never silently author. Canvas remains the spatial sibling; Split lets craft or Map sit beside prose without remounting the scene lease.</p>
+    </section>
+
+    <section>
+      <h2>Feature descriptions</h2>
+      <ol>
+        <li>
+          <strong>F1 · Writing Studio</strong> — Draft Desk gains Focus, Assist, clear lease/save chrome, and a composition switcher (Page / Split · Map / Sheet / Backdrop). Formatting stays minimal; craft and agents get the attention.
+        </li>
+        <li>
+          <strong>F2 · Scene Sketch</strong> — Purpose, conflict, turn, beats, optional ink pad. Planned craft authority. Can pin to Canvas as a linked card.
+        </li>
+        <li>
+          <strong>F3 · Character Sheet</strong> — Deepens story-knowledge characters (desire, pressure, voice, evidence). Split · Sheet shows active cast beside Draft.
+        </li>
+        <li>
+          <strong>F4 · Backdrop</strong> — Extends scene ambience into a place/atmosphere companion for Split and Canvas pins. Never auto-dumps setting into prose.
+        </li>
+        <li>
+          <strong>F5 · Writing Agents</strong> — Scene Partner, Character Coach, Worldkeeper, Sketch Partner. Assignment → proposal → compare → apply/dismiss. MCP parity required.
+        </li>
+        <li>
+          <strong>F6 · Input Modalities</strong> — Keyboard default; dictation inserts into Tiptap; stylus writes on sketch/ink craft layer; free-text capture can land in notes/sketch before promotion.
+        </li>
+        <li>
+          <strong>F7 · Split compositions</strong> — Named layouts sharing one scene lease. Narrow web stacks; no fake dual-pane Map under ~900px.
+        </li>
+        <li>
+          <strong>F8 · First-book path</strong> — Optional guided spark → sketch → sheet → first scene. “Start writing” always available. Phase B+.
+        </li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Editor recommendation</h2>
+      <p><strong>Keep Tiptap / ProseMirror</strong> as the canonical manuscript engine. It already carries schema-v1 JSON, stable block IDs, checkpoints, variants, and compare. Replacing it would reset the trust surface for negligible modality gains.</p>
+      <ul>
+        <li><strong>Dictation:</strong> speech → editor insert commands (browser SpeechRecognition first; managed STT later if quality demands).</li>
+        <li><strong>Stylus:</strong> craft ink on Scene Sketch (recommended). Optional freehand-in-document is a later spike with schema risk.</li>
+        <li><strong>Agent edits:</strong> never drive the live editor directly; emit revision-bound proposals.</li>
+        <li><strong>Reject for this epic:</strong> Lexical/Slate/Quill migration, code editors, native-only ink apps as the primary web substrate.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Canvas &amp; Split integration</h2>
+      <ul>
+        <li>Mockups 3.0 continues to own Map tools, structure collapse, and layer camera.</li>
+        <li>Write 4.0 owns Draft chrome, Assist, craft panes, and modality controls.</li>
+        <li>Opening Split from a Canvas scene card mounts the same scene ID; board gestures stay on Canvas version domain.</li>
+        <li>Sketch / character / backdrop objects may appear as Canvas cards via canonical IDs — not duplicate truth.</li>
+        <li>Draft remains authority for reading order.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Agent beachhead</h2>
+      <p>Ship <strong>Scene Partner</strong> first (continuation / beat variants) once craft context and proposal UI exist. Character Coach and Worldkeeper follow sheet/backdrop persistence. Sketch Partner converts messy notes/ink summaries into sketch fields only.</p>
+      <p>All roles inherit the permanent authority rule from <a href="../2026-07-11-agentic-writing-experience/agent-contracts.html">agent contracts</a>.</p>
+    </section>
+
+    <section>
+      <h2>Implementation sequence after acceptance</h2>
+      <ol>
+        <li><strong>Phase A</strong> — Writing Studio chrome (Focus, Assist shell, composition switcher)</li>
+        <li><strong>Phase B</strong> — Craft artifacts (Sketch, Sheet depth, Backdrop split + Canvas pins)</li>
+        <li><strong>Phase C</strong> — Dictation v1</li>
+        <li><strong>Phase D</strong> — Scene Partner proposals</li>
+        <li><strong>Phase E</strong> — Coach + Worldkeeper</li>
+        <li><strong>Phase F</strong> — Stylus craft + optional convert-to-text proposals</li>
+      </ol>
+      <p>Each phase becomes its own accepted delivery plan with tests, docs/ADR updates, and founder verification before Playwright expansion.</p>
+    </section>
+
+    <section>
+      <h2>Open decisions for founder</h2>
+      <ol>
+        <li><strong>D1</strong> Accept Mockups 4.0 as Write living design?</li>
+        <li><strong>D2</strong> Dictation: browser-first vs managed STT for v1?</li>
+        <li><strong>D3</strong> Ink: craft-only on Sketch (recommended) vs freehand nodes in prose?</li>
+        <li><strong>D4</strong> First agent: Scene Partner (recommended)?</li>
+        <li><strong>D5</strong> Model/provider posture timing relative to Phase D?</li>
+        <li><strong>D6</strong> Park or finish Canvas 3 / shell palette before opening Write implementation branch?</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked disabled> Vision and mockup authored</li>
+        <li><input type="checkbox" checked disabled> Feature catalog and editor stance written</li>
+        <li><input type="checkbox" disabled> Founder accepts D1 and resolves D2–D6</li>
+        <li><input type="checkbox" disabled> Phase A delivery plan opened</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

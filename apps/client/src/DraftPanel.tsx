@@ -1,10 +1,22 @@
-import { SceneEditor } from "@ghostwriter/editor/react";
+import {
+  SceneEditor,
+  type SceneEditorInsertRequest
+} from "@ghostwriter/editor/react";
 import type {
   SceneBlockV1,
   SceneDocumentComparison,
   SceneDocumentV1
 } from "@ghostwriter/editor";
-import { ghostwriterTheme } from "@ghostwriter/ui";
+import type {
+  CharacterSheet,
+  ProjectCommand,
+  SceneSketch
+} from "@ghostwriter/core";
+import {
+  ghostwriterTheme,
+  type WriteComposition,
+  type WriteInputModality
+} from "@ghostwriter/ui";
 import {
   forwardRef,
   useCallback,
@@ -13,6 +25,7 @@ import {
   useRef,
   useState
 } from "react";
+import { WritingStudioLayer } from "./WritingStudioLayer.js";
 import {
   Pressable,
   StyleSheet,
@@ -65,10 +78,19 @@ export type DraftPanelHandle = Readonly<{
 export type DraftPanelProps = Readonly<{
   accountId: string;
   projectId: string;
+  projectVersion: number;
   sceneId: string;
   sceneTitle: string;
   sceneStatus?: string;
   sceneSummary?: string;
+  sceneSketch?: SceneSketch;
+  sceneBackdropUrl?: string;
+  sceneBackdropCaption?: string;
+  sceneCast?: readonly Readonly<{
+    id: string;
+    label: string;
+    characterSheet?: CharacterSheet;
+  }>[];
   povLabel?: string;
   scenePosition?: string;
   previousSceneTitle?: string;
@@ -77,6 +99,13 @@ export type DraftPanelProps = Readonly<{
   focusHalo?: boolean;
   historyOpen?: boolean;
   readOnly?: boolean;
+  writeComposition?: WriteComposition;
+  writeModality?: WriteInputModality;
+  assistOpen?: boolean;
+  onWriteCompositionChange?(composition: WriteComposition): void;
+  onWriteModalityChange?(modality: WriteInputModality): void;
+  onAssistOpenChange?(open: boolean): void;
+  onProjectCommand?(command: ProjectCommand): Promise<boolean>;
   onContextDockOpenChange?(open: boolean): void;
   onFocusHaloChange?(focused: boolean): void;
   onHistoryOpenChange?(open: boolean): void;
@@ -558,15 +587,37 @@ function leaseStatusText(
   return readOnly ? "Read-only · archived scene" : "Read-only";
 }
 
+function recentProseFromDocument(
+  document: SceneDocumentV1 | undefined
+): string {
+  if (document === undefined) return "";
+  const chunks: string[] = [];
+  const walk = (node: unknown): void => {
+    if (node === null || typeof node !== "object") return;
+    const record = node as Readonly<{ text?: unknown; content?: unknown }>;
+    if (typeof record.text === "string") chunks.push(record.text);
+    if (Array.isArray(record.content)) {
+      for (const child of record.content) walk(child);
+    }
+  };
+  walk(document.document);
+  return chunks.join(" ").replace(/\s+/g, " ").trim();
+}
+
 export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
   function DraftPanel(
     {
       accountId,
       projectId,
+      projectVersion,
       sceneId,
       sceneTitle,
       sceneStatus = "planned",
       sceneSummary,
+      sceneSketch,
+      sceneBackdropUrl,
+      sceneBackdropCaption,
+      sceneCast = [],
       povLabel,
       scenePosition,
       previousSceneTitle,
@@ -575,6 +626,13 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
       focusHalo = false,
       historyOpen = false,
       readOnly = false,
+      writeComposition = "page",
+      writeModality = "keyboard",
+      assistOpen = false,
+      onWriteCompositionChange,
+      onWriteModalityChange,
+      onAssistOpenChange,
+      onProjectCommand,
       onContextDockOpenChange,
       onFocusHaloChange,
       onHistoryOpenChange,
@@ -609,6 +667,9 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
     const [recoveryOffer, setRecoveryOffer] = useState<SceneRecoveryEntry>();
     const [recoveryMode, setRecoveryMode] =
       useState<SceneRecoveryStorageMode>();
+    const [insertTextRequest, setInsertTextRequest] =
+      useState<SceneEditorInsertRequest>();
+    const insertSeqRef = useRef(0);
     const queueRef = useRef<SceneSaveQueue | undefined>(undefined);
     const recoveryRef = useRef<SceneRecoveryCoordinator | undefined>(
       undefined
@@ -1614,6 +1675,46 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
           </View>
         ) : null}
 
+        {onProjectCommand === undefined ? null : (
+          <WritingStudioLayer
+            assistOpen={assistOpen}
+            backdropCaption={sceneBackdropCaption}
+            backdropUrl={sceneBackdropUrl}
+            cast={sceneCast}
+            composition={writeComposition}
+            disabled={readOnly || !editorIsEditable}
+            focusHalo={focusHalo}
+            modality={writeModality}
+            onAcknowledgement={(title, detail) =>
+              onAcknowledgement?.({
+                kind: "save",
+                title,
+                detail
+              })
+            }
+            onAssistOpenChange={(open) => {
+              onAssistOpenChange?.(open);
+              if (open) onContextDockOpenChange?.(true);
+            }}
+            onCommand={onProjectCommand}
+            onCompositionChange={(composition) =>
+              onWriteCompositionChange?.(composition)
+            }
+            onInsertProse={(text) => {
+              insertSeqRef.current += 1;
+              setInsertTextRequest({ id: insertSeqRef.current, text });
+            }}
+            onModalityChange={(modality) => onWriteModalityChange?.(modality)}
+            projectId={projectId}
+            projectVersion={projectVersion}
+            recentProse={recentProseFromDocument(document)}
+            sceneId={sceneId}
+            sceneSummary={sceneSummary}
+            sceneTitle={sceneTitle}
+            sketch={sceneSketch}
+          />
+        )}
+
         {recoveryOffer === undefined ? null : (
           <View accessibilityRole="alert" style={styles.recoveryOffer}>
             <Text style={styles.problemText}>
@@ -1714,6 +1815,7 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
             <SceneEditor
               ariaLabel={`Draft for ${sceneTitle}`}
               editable={editorIsEditable}
+              insertTextRequest={insertTextRequest}
               onChange={(nextDocument) => {
                 setDocument(nextDocument);
                 const queue = queueRef.current;

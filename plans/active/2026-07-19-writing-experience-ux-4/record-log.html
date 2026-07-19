@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Record log — Writing Experience UX 4.0</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Plan memory</p>
+      <h1>Record log</h1>
+      <p class="meta"><a href="plan.html">Writing Experience UX 4.0</a> · <a href="ux-proposal-writing-4.html">UX proposal</a> · <a href="../../designs/Ghostwriter%20Mockups%204.0.html">Mockups 4.0</a></p>
+    </header>
+
+    <section>
+      <h2>2026-07-19 — Epic opened (design only)</h2>
+      <ul>
+        <li>Founder directed Write epic; Mockups 4.0 + proposal authored.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-19 — Chrome restyle from live app</h2>
+      <ul>
+        <li>Mockups 4.0 restyled from live Cognition chrome (dense toolbars, board spacing).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-19 — Implementation authorized and shipped for review</h2>
+      <ul>
+        <li>Branch <code>feat/writing-experience-ux-4</code> from main; D1–D6 locked (browser dictation, craft-only ink, deterministic assist, own branch).</li>
+        <li><strong>Domain/persistence:</strong> <code>SceneSketch</code>, <code>CharacterSheet</code>, migration <code>0009_writing_craft</code>, navigator/API/command wiring.</li>
+        <li><strong>Studio:</strong> <code>WritingStudioLayer</code> + composition helpers; Draft Focus preserved; Assist panel with four roles.</li>
+        <li><strong>Dictation:</strong> Web Speech → <code>SceneEditor</code> <code>insertTextRequest</code>.</li>
+        <li><strong>Agents:</strong> <code>POST …/writing-assist</code> + deterministic proposals; Apply via commands / caret insert.</li>
+        <li><strong>Ink:</strong> craft strokes on sketch via “Add ink stroke” (pointer freehand deferred polish).</li>
+        <li><strong>Docs:</strong> ADR 0009, PRODUCT/API/ARCHITECTURE.</li>
+        <li><strong>Verify:</strong> <code>pnpm verify</code> green (264 tests). Playwright deferred pending founder product verification.</li>
+        <li><strong>Browser walkthrough:</strong> pending founder hard-refresh on Write studio (agent did not complete interactive browser session in this loop).</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

@@ -29,6 +29,12 @@ import {
 
 export { clampEditorSelection } from "./selection.js";
 
+/** Request token — bump `id` to insert `text` at the live caret. */
+export type SceneEditorInsertRequest = Readonly<{
+  id: number;
+  text: string;
+}>;
+
 export const SCENE_EDITOR_CLASS_NAMES = {
   root: "ghostwriter-scene-editor",
   toolbar: "ghostwriter-scene-editor__toolbar",
@@ -57,6 +63,8 @@ export interface SceneEditorProps {
   readonly style?: CSSProperties;
   /** Session-only caret/selection recovery across Reader and shell remounts. */
   readonly selectionStorageKey?: string;
+  /** Dictation / assist insert at the current selection (id must change each request). */
+  readonly insertTextRequest?: SceneEditorInsertRequest;
 }
 
 interface ToolbarButtonProps {
@@ -279,6 +287,7 @@ export function SceneEditor({
   editorClassName,
   style,
   selectionStorageKey,
+  insertTextRequest,
 }: SceneEditorProps) {
   const normalizedValue = useMemo(
     () => validateSceneDocumentV1(value),
@@ -481,6 +490,22 @@ export function SceneEditor({
       restoreStoredSelection(editor);
     }
   }, [canonicalValue, editor, isEditable, normalizedValue]);
+
+  const lastInsertIdRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (
+      editor === null ||
+      editor.isDestroyed ||
+      !isEditable ||
+      insertTextRequest === undefined ||
+      insertTextRequest.text.length === 0 ||
+      insertTextRequest.id === lastInsertIdRef.current
+    ) {
+      return;
+    }
+    lastInsertIdRef.current = insertTextRequest.id;
+    editor.chain().focus().insertContent(insertTextRequest.text).run();
+  }, [editor, insertTextRequest, isEditable]);
 
   if (ariaLabel.trim().length === 0) {
     throw new Error("SceneEditor requires a non-empty ariaLabel.");

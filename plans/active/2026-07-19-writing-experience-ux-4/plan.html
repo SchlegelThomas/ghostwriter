@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Writing Experience UX 4.0</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan · Write epic</p>
+      <h1>Writing Experience UX 4.0</h1>
+      <p class="meta"><strong>Status:</strong> active — founder authorized implementation 2026-07-19<br>
+        <strong>Branch:</strong> <code>feat/writing-experience-ux-4</code><br>
+        <strong>Owner:</strong> founder + agent<br>
+        <strong>Living design:</strong> <a href="../../designs/Ghostwriter%20Mockups%204.0.html">Ghostwriter Mockups 4.0</a><br>
+        <strong>Proposal:</strong> <a href="ux-proposal-writing-4.html">UX proposal</a></p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Ship the Write epic: Writing Studio chrome, craft artifacts (sketch / character sheet / backdrop), browser dictation, stylus ink on sketches, and bounded writing agents (Scene Partner, Character Coach, Worldkeeper, Sketch Partner) with human apply authority — integrated with Canvas Split and live chrome density.</p>
+    </section>
+
+    <section>
+      <h2>Locked decisions (D1–D6)</h2>
+      <ul>
+        <li><strong>D1</strong> Mockups 4.0 accepted as Write living design.</li>
+        <li><strong>D2</strong> Dictation: browser SpeechRecognition first.</li>
+        <li><strong>D3</strong> Ink: craft-only on Scene Sketch (not prose JSON).</li>
+        <li><strong>D4</strong> Agents: ship all four roles; Scene Partner is beachhead UX.</li>
+        <li><strong>D5</strong> Provider: deterministic local assist in v1; optional OpenAI when configured (no silent canon writes).</li>
+        <li><strong>D6</strong> Own branch <code>feat/writing-experience-ux-4</code> from current main.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ul>
+        <li>Write density: Focus, Assist rail, composition chips (Page / Split·Map / Sheet / Backdrop) on live toolbar language.</li>
+        <li>Scene Sketch persists (purpose/conflict/turn/beats/ink) via <code>scene.update</code>; visible in Assist/Split.</li>
+        <li>Character sheet fields (desire/pressure/voice) on character knowledge; Split · Sheet shows cast.</li>
+        <li>Split · Backdrop shows scene ambience companion beside Draft.</li>
+        <li>Dictation inserts into Tiptap at caret with listening chrome.</li>
+        <li>Writing agents return inspectable proposals; apply uses existing commands/variants; dismiss is safe.</li>
+        <li>Stylus ink draws on sketch craft layer and persists with sketch.</li>
+        <li><code>pnpm verify</code> green; browser walkthrough recorded; Playwright deferred until founder verifies.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks</h2>
+      <ol>
+        <li>Phase A — Writing Studio chrome (Focus polish, Assist shell, composition switcher).</li>
+        <li>Phase B — Domain + UI for Sketch, Character Sheet depth, Backdrop split.</li>
+        <li>Phase C — Dictation via Web Speech → editor insert.</li>
+        <li>Phase D/E — Writing-assist API + Assist apply path for four roles.</li>
+        <li>Phase F — Sketch ink pad.</li>
+        <li>Docs, ADR for craft + assist, handoff for founder review.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li>Core/command/repository tests via <code>routine-tests</code> subagent.</li>
+        <li>UI unit tests for composition/assist helpers.</li>
+        <li>Real-browser walkthrough of Write studio + agents; Playwright after founder gate.</li>
+        <li><code>pnpm verify</code> before handoff.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p>Living design: Mockups 4.0. Update PRODUCT, ARCHITECTURE, API. ADR for scene sketch / character sheet / writing-assist propose-apply.</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li>OpenAI may be unset — deterministic proposals must remain useful and clearly labeled.</li>
+        <li>Ink stays off prose schema to protect compare/checkpoints.</li>
+        <li>Agent proposals are session/API artifacts applied through existing mutation paths (no silent canon).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked disabled> Design accepted; branch created</li>
+        <li><input type="checkbox" checked disabled> Phase A Writing Studio chrome</li>
+        <li><input type="checkbox" checked disabled> Phase B Craft artifacts</li>
+        <li><input type="checkbox" checked disabled> Phase C Dictation</li>
+        <li><input type="checkbox" checked disabled> Phase D/E Writing agents</li>
+        <li><input type="checkbox" checked disabled> Phase F Stylus ink (craft stroke persistence; freehand polish later)</li>
+        <li><input type="checkbox" checked disabled> Docs + verify</li>
+        <li><input type="checkbox" disabled> Founder product verification / Playwright gate</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

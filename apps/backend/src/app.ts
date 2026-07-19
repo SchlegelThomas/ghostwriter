@@ -27,8 +27,11 @@ import {
   type CanvasRevisionMetadata,
   type CanvasServices,
   type CanvasWorkspace,
+  buildDeterministicWritingAssistProposals,
   type GhostwriterServices,
   type IdentityServices,
+  type WritingAssistRole,
+  storyKnowledgeId,
   type SceneDocumentHead,
   type SceneRevisionMetadata,
   type SceneVariant,
@@ -54,7 +57,8 @@ import {
   toCanvasCommand,
   toCreateSceneFromCanvasInput,
   toProjectCommand,
-  updateProfileRequestSchema
+  updateProfileRequestSchema,
+  writingAssistRequestSchema
 } from "./api-contract.js";
 import type { AuthGateway, AuthenticatedSession } from "./auth.js";
 import {
@@ -541,6 +545,81 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
         "Matching capabilities:",
         listed
       ].join("\n")
+    });
+  });
+
+  app.post("/api/projects/:projectId/writing-assist", async (context) => {
+    const id = projectId(context.req.param("projectId"));
+    const parsed = await parseJsonRequest(
+      context.req.raw,
+      writingAssistRequestSchema
+    );
+    if (!parsed.success) {
+      return context.json(
+        {
+          error: "Invalid request.",
+          code: parsed.code,
+          ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
+        },
+        parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
+      );
+    }
+    const authSession = context.get("authSession");
+    try {
+      const navigator = await dependencies.services.getProjectNavigator(
+        accountId(authSession.account.id),
+        id
+      );
+      if (navigator === undefined) {
+        return context.json(
+          { error: "Project not found.", code: "PROJECT_NOT_FOUND" },
+          404
+        );
+      }
+    } catch (error) {
+      if (
+        error instanceof DomainValidationError ||
+        error instanceof ProjectAccessDeniedError
+      ) {
+        return context.json(
+          { error: "Project not found.", code: "PROJECT_NOT_FOUND" },
+          404
+        );
+      }
+      throw error;
+    }
+
+    const proposals = buildDeterministicWritingAssistProposals(
+      parsed.data.role as WritingAssistRole,
+      {
+        sceneTitle: parsed.data.sceneTitle,
+        ...(parsed.data.sceneSummary === undefined
+          ? {}
+          : { sceneSummary: parsed.data.sceneSummary }),
+        ...(parsed.data.recentProse === undefined
+          ? {}
+          : { recentProse: parsed.data.recentProse }),
+        ...(parsed.data.sketch === undefined ? {} : { sketch: parsed.data.sketch }),
+        ...(parsed.data.backdropCaption === undefined
+          ? {}
+          : { backdropCaption: parsed.data.backdropCaption }),
+        ...(parsed.data.cast === undefined
+          ? {}
+          : {
+              cast: parsed.data.cast.map((entry) => ({
+                id: storyKnowledgeId(entry.id),
+                label: entry.label,
+                ...(entry.characterSheet === undefined
+                  ? {}
+                  : { characterSheet: entry.characterSheet })
+              }))
+            })
+      }
+    );
+
+    return context.json({
+      provider: "deterministic-local",
+      proposals
     });
   });
 
