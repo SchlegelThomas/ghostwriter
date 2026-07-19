@@ -50,10 +50,18 @@ export async function editPenName(page: Page, name: string): Promise<void> {
 }
 
 export async function saveWriterProfile(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Save profile" }).click();
+  const saveButton = page.getByRole("button", { name: "Save profile" });
+  if (!(await saveButton.isEnabled().catch(() => false))) {
+    await page.getByRole("button", { name: "Close profile editor" }).click();
+    return;
+  }
+  await saveButton.click();
 }
 
 export async function setWriterPenName(page: Page, name: string): Promise<void> {
+  if (await page.getByText(`Welcome, ${name}`).isVisible().catch(() => false)) {
+    return;
+  }
   await editPenName(page, name);
   await saveWriterProfile(page);
 }
@@ -92,18 +100,49 @@ export async function expectAcknowledgement(
 export async function ensureSelectionInspectorVisible(
   page: Page
 ): Promise<void> {
+  await dismissAcknowledgementToasts(page);
+
   const inspector = page.getByLabel("Selection inspector");
   if (await inspector.isVisible().catch(() => false)) {
     return;
   }
+
   const draftDesk = page.getByLabel("Draft Desk");
   if (await draftDesk.isVisible().catch(() => false)) {
-    const contextButton = draftDesk.getByRole("button", { name: "Context" });
-    if (await contextButton.isVisible().catch(() => false)) {
-      await contextButton.click();
+    const contextDock = page.getByLabel("Draft Context Dock", { exact: true });
+    const contextTabs = page.getByLabel("Draft Context Dock tabs");
+    if (
+      !(await contextDock.isVisible().catch(() => false)) &&
+      !(await contextTabs.isVisible().catch(() => false))
+    ) {
+      await draftDesk.getByRole("button", { name: "Context" }).click();
+    }
+    await expect(contextDock).toBeVisible({ timeout: 5_000 });
+    const briefTab = contextTabs.getByRole("tab", { name: "Brief" });
+    if (await briefTab.isVisible().catch(() => false)) {
+      await briefTab.click();
     }
   }
+
   await expect(inspector).toBeVisible({ timeout: 10_000 });
+}
+
+export async function moveSceneToDestination(
+  page: Page,
+  destinationLabel: string
+): Promise<void> {
+  await ensureSelectionInspectorVisible(page);
+  const inspector = page.getByLabel("Selection inspector");
+  const moveButton = inspector.getByRole("button", {
+    name: `Move scene to ${destinationLabel}`
+  });
+  if (await moveButton.isVisible().catch(() => false)) {
+    await moveButton.click();
+    return;
+  }
+  await inspector.getByLabel("Find scene destination").fill(destinationLabel);
+  await expect(moveButton).toBeVisible({ timeout: 10_000 });
+  await moveButton.click();
 }
 
 export function canvasStoryKnowledge(page: Page, label: string) {

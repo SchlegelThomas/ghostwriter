@@ -21,6 +21,7 @@ import {
   expectAcknowledgement,
   expectCanvasHistoryTitle,
   hideCanvasHistory,
+  moveSceneToDestination,
   openCanvasSceneTool,
   placeArmedCanvasToolOnSurface,
   openDraftHistory,
@@ -128,12 +129,12 @@ test("writer signs in and manages a durable project hierarchy", async ({ page })
   }).toPass();
   await addChapter(page, "Part One", "High Water");
   await selectTree(page, "Scene The Empty Pier");
-  await page
-    .getByRole("button", {
-      name: "Move scene to Book of Tides · Part One · High Water"
-    })
-    .click();
+  await moveSceneToDestination(
+    page,
+    "Book of Tides · Part One · High Water"
+  );
 
+  await ensureSelectionInspectorVisible(page);
   await page.getByLabel("Scene summary").fill("Mara finds the harbor abandoned.");
   await page.getByLabel("Scene summary").blur();
 
@@ -150,6 +151,7 @@ test("writer signs in and manages a durable project hierarchy", async ({ page })
   await treeSearch.fill("The Empty Pier");
   await selectTree(page, "Scene The Empty Pier");
   await treeSearch.fill("");
+  await ensureSelectionInspectorVisible(page);
   await page.getByRole("button", { name: "Archive scene" }).click();
   await page.getByRole("button", { name: "Confirm archive scene" }).click();
   await expect(page.getByRole("button", { name: "Restore scene" })).toBeVisible();
@@ -820,6 +822,7 @@ test("pointer tree moves, Canvas drill, and workflow lenses preserve one scene",
   await treeSearch.fill("Movable Signal");
   await selectTree(page, "Scene Movable Signal");
   await treeSearch.fill("");
+  await ensureSelectionInspectorVisible(page);
   await expect(
     page
       .getByLabel("Selection inspector")
