@@ -8,13 +8,17 @@ import {
   addUnassignedScene,
   commitInspectorField,
   activateCanvasTool,
+  canvasStoryKnowledge,
   createCanvasImageReference,
   createCanvasNote,
   createCanvasRegion,
   createProject,
   dismissAcknowledgementToasts,
+  editPenName,
+  ensureSelectionInspectorVisible,
   ensureSpatialCanvasSurface,
   expandReadingSpine,
+  expectAcknowledgement,
   expectCanvasHistoryTitle,
   hideCanvasHistory,
   openCanvasSceneTool,
@@ -25,7 +29,9 @@ import {
   openWorkspaceMode,
   placeSelectedDraftSceneOnCanvas,
   placeStoryKnowledgeOnCanvas,
+  saveWriterProfile,
   selectTree,
+  setWriterPenName,
   showCanvasDetailsIfHidden,
   showCanvasHistory,
   signIn
@@ -50,13 +56,13 @@ test("writer signs in and manages a durable project hierarchy", async ({ page })
     timeout: 15_000
   });
 
-  await page.getByLabel("Writer display name").fill("Test Novelist");
-  await page.getByRole("button", { name: "Save profile" }).click();
+  await setWriterPenName(page, "Test Novelist");
   await expect(page.getByText("Welcome, Test Novelist")).toBeVisible();
   await expect(page.getByText("Profile saved")).toBeVisible();
 
   await createProject(page, "The Glass Harbor", "Book of Tides");
-  await expect(page.getByText("Saved to project")).toBeVisible();
+  await expectAcknowledgement(page, /Saved to project/);
+  await dismissAcknowledgementToasts(page);
 
   await commitInspectorField(page, "Project title", "The Glass Harbor Cycle");
 
@@ -103,7 +109,8 @@ test("writer signs in and manages a durable project hierarchy", async ({ page })
     .getByLabel("Persistent manuscript tree")
     .getByRole("button", { name: "Move Scene up", exact: true })
     .click();
-  await expect(page.getByText("Scene reordered").first()).toBeVisible();
+  await expectAcknowledgement(page, "Scene reordered");
+  await dismissAcknowledgementToasts(page);
   await expect(page.getByRole("treeitem", { name: "Scene The Empty Pier" })).toBeVisible();
   const manuscriptTree = page.getByLabel("Persistent manuscript tree");
   await expect(async () => {
@@ -254,7 +261,8 @@ test("writer checkpoints, compares, restores, and reloads Draft history", async 
 
   await openDraftHistory(page);
   await page.getByRole("button", { name: "Create checkpoint" }).click();
-  await expect(page.getByText("Checkpoint created").first()).toBeVisible();
+  await expectAcknowledgement(page, "Checkpoint created");
+  await dismissAcknowledgementToasts(page);
   await expect(
     page.getByRole("button", { name: /Select revision \d+:/ })
   ).toHaveCount(2);
@@ -290,7 +298,8 @@ test("writer checkpoints, compares, restores, and reloads Draft history", async 
   await page.getByRole("button", { name: "Confirm restore" }).click();
   await expect(editor).toContainText(checkpointProse);
   await expect(editor).not.toContainText(laterProse.trim());
-  await expect(page.getByText("Draft revision restored").first()).toBeVisible();
+  await expectAcknowledgement(page, "Draft revision restored");
+  await dismissAcknowledgementToasts(page);
   await expect(
     page.getByRole("button", { name: /Select revision \d+:/ })
   ).toHaveCount(4);
@@ -442,7 +451,7 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
   });
 
   await placeStoryKnowledgeOnCanvas(page, "Storm Omen");
-  await expect(page.getByLabel("Story knowledge Storm Omen")).toBeVisible();
+  await expect(canvasStoryKnowledge(page, "Storm Omen")).toBeVisible();
   await showCanvasDetailsIfHidden(page);
   await expect(page.getByLabel("Selected object label")).toHaveValue("Storm Omen");
   await expect(page.getByText("Confirmed · writer-created").first()).toBeVisible();
@@ -559,7 +568,7 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
   await expect(page.getByLabel(/Writer note Storm signal/)).toBeVisible();
   await expect(page.getByLabel("Region Act I waters")).toBeVisible();
   await expect(page.getByLabel("Scene card Lighthouse Turn")).toBeVisible();
-  await expect(page.getByLabel("Story knowledge Storm Omen")).toBeVisible();
+  await expect(canvasStoryKnowledge(page, "Storm Omen")).toBeVisible();
   await expect(
     page.getByText("Archived story record · stale reference").first()
   ).toBeVisible();
@@ -728,6 +737,7 @@ test("Canvas story-order hints show aligned and intentional drift without reorde
   // Map-dense Canvas hides the manuscript Selection inspector — archive in Draft.
   await openWorkspaceMode(page, "Draft");
   await selectTree(page, "Scene Drift Second");
+  await ensureSelectionInspectorVisible(page);
   await page.getByRole("button", { name: "Archive scene" }).click();
   await dismissAcknowledgementToasts(page);
   await page
@@ -803,7 +813,8 @@ test("pointer tree moves, Canvas drill, and workflow lenses preserve one scene",
   await destination.dispatchEvent("dragover", { dataTransfer });
   await destination.dispatchEvent("drop", { dataTransfer });
   await source.dispatchEvent("dragend", { dataTransfer });
-  await expect(page.getByText("Scene moved").first()).toBeVisible();
+  await expectAcknowledgement(page, "Scene moved");
+  await dismissAcknowledgementToasts(page);
 
   const treeSearch = page.getByLabel("Search manuscript tree");
   await treeSearch.fill("Movable Signal");
@@ -932,7 +943,7 @@ test("workspace chat invokes the owner-scoped manuscript read capability", async
 }) => {
   await signIn(page);
   await createProject(page, "Chat Harbor", "Book of Tools");
-  await page.getByRole("button", { name: "Chat · ⌘⇧P", exact: true }).click();
+  await page.getByRole("button", { name: "✦ Chat · ⌘⇧P" }).click();
 
   const chat = page.getByLabel("Command and chat palette");
   await expect(chat).toBeVisible();
@@ -1106,17 +1117,19 @@ test("stale profile writes reload the latest account profile", async ({ browser 
 
   const second = await context.newPage();
   await second.goto("/");
-  await first.getByLabel("Writer display name").fill("First Profile");
-  await second.getByLabel("Writer display name").fill("Stale Profile");
+  await editPenName(first, "First Profile");
+  await editPenName(second, "Stale Profile");
 
-  await first.getByRole("button", { name: "Save profile" }).click();
+  await saveWriterProfile(first);
   await expect(first.getByText("Profile saved")).toBeVisible();
-  await second.getByRole("button", { name: "Save profile" }).click();
+  await saveWriterProfile(second);
   await expect(
     second.getByText(
       "Your profile changed in another tab. Ghostwriter reloaded the latest name; review and save again."
     )
   ).toBeVisible();
-  await expect(second.getByLabel("Writer display name")).toHaveValue("First Profile");
+  await second.getByRole("button", { name: "Close profile editor" }).click();
+  await second.getByRole("button", { name: "Edit writer profile" }).click();
+  await expect(second.getByLabel("Pen name")).toHaveValue("First Profile");
   await context.close();
 });
