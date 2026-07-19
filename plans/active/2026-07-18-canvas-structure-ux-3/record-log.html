@@ -48,6 +48,47 @@
       <p><strong>Tests:</strong> unit coverage via <code>routine-tests</code> for <code>map-structure-rail</code>, <code>canvas-interaction</code>, and camera easing. Playwright deferred until founder verifies the complete outcome. Existing e2e helper labels updated to <code>·</code> format for when the gate opens.</p>
       <p><strong>Agent browser walkthrough (1440×960, e2e backend + exported web):</strong> collapsed structure default, expand/collapse + <code>[</code>, Quick Build hidden while collapsed, icon tools <code>Name · shortcut</code>, Details default-off and <code>]</code> toggle, context menu on board, Hand instruction, and free card drag via web pointer events (PanResponder kept as non-web fallback). Link out-handle visible on selection. Screenshots under <code>test-results/ux3-*.png</code>. Founder product verification still required before Playwright gate.</p>
     </article>
+
+    <article>
+      <h2>2026-07-18 20:00 — Founder local review: chrome still too heavy</h2>
+      <p>Founder screenshot of localhost Map showed remaining gaps vs Mockups 3.0: hero “Story Canvas” heading, Story Trail + inspector still eating board space, letter-ish utilities, full zoom/pan text controls, lenses as wide text tabs. Auth on Pages preview remains blocked by <code>BETTER_AUTH_URL=ghost-writer.studio</code> vs <code>*.pages.dev</code> (local is the verification path).</p>
+      <p><strong>Follow-up chrome pass:</strong> Map-dense shell (trail + »| in ~40px top bar, hide center hero, hide SelectionInspector while mapping, board fills viewport), compact icon lenses, mockup tool/utility glyphs, icon zoom/pan, structure peek-on-hover, Fit ⇧1/⇧2 + ± zoom keys, link confirm sheet after handle drop, richer context-menu create/connect/layer rows. Still open vs mockup: glyph-only manuscript rows when collapsed, narrow action sheets polish, Archive confirm from menu.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 21:10 — Chrome contraction: one toolbar, no peek, no lane footer</h2>
+      <p>Founder asked to contract the header, remove the mid strip between icon toolbars, put all icon tools on one header, delete the Beginning/Middle/Ending lane footer (mockup note only), smooth structure-width CSS, and remove peek-on-hover expand/collapse.</p>
+      <p><strong>Shipped:</strong> single ~36px Canvas toolbar (tools + lenses + utilities/zoom); Map top bar contracted (13px title, secondary actions off the Map chrome); CanvasDrillBar omitted in Map-dense (lenses live in the Canvas toolbar); structure rail is collapsed|expanded only with eased width; lane Views removed from the board.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 21:30 — Spine bubbles, free drag, node + handle</h2>
+      <p>Founder feedback: remove selection/Scene Focus chrome; make reading-order spine collapsible with hover-zoom bubbles; fix clunky drag (cursor, no snap-back, no column placement); wire card <code>+</code> to actions menu (click) and link-drag (drag); make create easier via click-to-place.</p>
+      <p><strong>Shipped:</strong> collapsed spine bubble strip (expand for full cards); selection bar + Scene Focus Stage removed (actions via <code>+</code>/context menu); optimistic drop positions; grab/grabbing/crosshair cursors; center-spiral capture (not columns); Note/Region/Image arm then click board to place; always-visible node <code>+</code> with click menu + drag-to-link.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 21:40 — Modals, dashed link drag, + inset</h2>
+      <p>Founder: <code>+</code> was clipped; want better drag feel; connect to any part of a card; dashed animated rubber-band for unconfirmed links; scene/create forms should be modals so the board does not jump; easy Split handoff from the create modal.</p>
+      <p><strong>Shipped:</strong> <code>+</code> inset inside the card; rAF drag + lift scale; padded hit-test + green drop highlight; animated dashed SVG rubber-band; scene / story-knowledge / link-confirm / history as overlay modals; Create and open Split on scene modal.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 21:45 — Pinch zoom + click-drag pan</h2>
+      <p>Founder asked for pinch-to-zoom and click-drag pan on the Canvas board.</p>
+      <p><strong>Shipped:</strong> empty-board / middle-button drag pans in Select (cards still drag); trackpad scroll pans; Ctrl/⌘+scroll and touch pinch zoom toward the cursor/midpoint; Hand and Space unchanged.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 21:50 — Slim spine, restore structure rail, trackpad zoom + slider</h2>
+      <p>Founder: spine still too tall; collapsing manuscript rail missing in Map; trackpad pinch unclear; wants a toggleable left zoom slider.</p>
+      <p><strong>Shipped:</strong> spine defaults to a 28px “Spine · N” strip (cycle to bubbles, then full cards); structure rail collapses by default in Canvas/Split whenever not narrow (not only ≥1240); trackpad pinch bound on <code>window</code> with ctrlKey detection + stronger factor; left zoom % toggle opens a vertical drag slider.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-18 22:05 — Checkpoint for overnight</h2>
+      <p>Founder: direction is much closer; remaining work is jumpy/awkward Canvas interaction feel. Agent cannot record a browser video in this session. Checkpoint commit on <code>feat/canvas-structure-ux-3</code>; founder will bring a video tomorrow. Playwright still deferred until product verification.</p>
+    </article>
   </main>
 </body>
 </html>

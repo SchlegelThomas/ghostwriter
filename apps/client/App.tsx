@@ -1415,9 +1415,9 @@ export default function App() {
     title: string;
     manuscriptPlacement: CanvasScenePlacementInput;
     canvas: CanvasSceneGeometryInput;
-  }): Promise<boolean> {
+  }): Promise<SceneId | undefined> {
     if (selectedProject === undefined || canvasWorkspace === undefined) {
-      return false;
+      return undefined;
     }
     setCanvasBusy(true);
     setCanvasSaveState("saving");
@@ -1453,10 +1453,10 @@ export default function App() {
           now: Date.now()
         })
       );
-      return true;
+      return result.scene.id;
     } catch (cause) {
       await handleCanvasFailure(cause);
-      return false;
+      return undefined;
     } finally {
       setCanvasBusy(false);
     }
@@ -1635,6 +1635,8 @@ export default function App() {
             selectedObjectId={selectedCanvasObjectId}
             selectedSceneId={selectedSceneId}
             workflowLens={workflowLens}
+            onWorkflowLensChange={setWorkflowLens}
+            onDrillBack={handleDrillBack}
             workspace={canvasWorkspace}
           />
         }

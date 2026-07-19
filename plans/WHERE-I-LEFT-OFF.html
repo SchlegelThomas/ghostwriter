@@ -11,45 +11,42 @@
     <header>
       <p class="eyebrow">Session handoff</p>
       <h1>Where we left off</h1>
-      <p><strong>Last updated:</strong> 2026-07-18 · <strong>Current branch:</strong> <code>feat/canvas-structure-ux-3</code></p>
+      <p><strong>Last updated:</strong> 2026-07-18 evening · <strong>Current branch:</strong> <code>feat/canvas-structure-ux-3</code></p>
     </header>
 
     <section>
       <h2>Current state</h2>
-      <p>PR #6 shipped the authenticated writing workspace and Build · Map · Write UX 2.1 to <code>main</code>. Production web is <code>https://ghost-writer.studio</code>; backend is <code>https://ghostwriter-backend.fly.dev</code>.</p>
-      <p><strong>Active delivery:</strong> <a href="active/2026-07-18-canvas-structure-ux-3/plan.html">Canvas &amp; Structure UX 3.0</a> — design accepted; product implementation of H1–H5 landed on <code>feat/canvas-structure-ux-3</code>. Living design: <a href="designs/Ghostwriter%20Mockups%203.0.html">Mockups 3.0</a>.</p>
+      <p>PR #6 shipped Build · Map · Write UX 2.1 to <code>main</code>. Active delivery is <a href="active/2026-07-18-canvas-structure-ux-3/plan.html">Canvas &amp; Structure UX 3.0</a> on <code>feat/canvas-structure-ux-3</code>. Living design: <a href="designs/Ghostwriter%20Mockups%203.0.html">Mockups 3.0</a>.</p>
+      <p><strong>Checkpoint:</strong> Map chrome and board interactions are much closer to the vision, but founder reports remaining jumpy / awkward Canvas feel. Video walkthrough planned for next session. Playwright still gated until product accept.</p>
     </section>
 
     <section>
-      <h2>Latest completed work</h2>
+      <h2>Done in this checkpoint</h2>
       <ul>
-        <li>Design slice: Mockups 3.0, UX contract, plan + record log.</li>
-        <li>H1: Map structure collapse/expand (~36px), thin project rail, Quick Build gated when collapsed, <code>[</code> toggle.</li>
-        <li>H2–H5: icon tool dock + utility tips, free drag + Space/Hand pan, context menus, link-handle drag, eased layer camera, Details default-off.</li>
-        <li>Unit coverage for rail + interaction + camera easing helpers via <code>routine-tests</code>.</li>
+        <li>One dense Canvas toolbar; Map top bar contracted; lane footer removed; no structure peek-hover.</li>
+        <li>Structure rail collapses by default in Canvas/Split when not narrow; <code>[</code> / »| toggle.</li>
+        <li>Spine defaults to slim <code>Spine · N</code> strip (cycle bubbles → full → minimized).</li>
+        <li>Selection / Scene Focus bars removed; node <code>+</code> menu + drag-to-link; create forms as modals; Split handoff from scene modal.</li>
+        <li>Free drag with optimistic drops; empty-board pan; trackpad scroll pan; pinch/Ctrl-wheel zoom; left toggleable zoom slider.</li>
+        <li>Dashed animated rubber-band for unconfirmed links; click-to-place Note/Region/Image.</li>
       </ul>
     </section>
 
     <section>
-      <h2>Incomplete and next delivery</h2>
+      <h2>Incomplete / next</h2>
       <ol>
-        <li><strong>Now:</strong> founder browser-verifies the complete UX 3.0 Map outcome on a local or preview build.</li>
-        <li>After explicit product verification: Playwright updates under <code>GHOSTWRITER_PLAYWRIGHT_GATE=user-verified</code> (tool a11y labels are now <code>Name · shortcut</code>).</li>
-        <li>Archive this plan when acceptance criteria are green; archive authenticated-project-crud if studio smoke is done.</li>
+        <li><strong>Founder:</strong> record a short video of jumpy Canvas interactions (drag, pan, zoom, link, create).</li>
+        <li><strong>Next session:</strong> polish feel from that video — settle animation, gesture conflicts, zoom/pan tuning, any remaining chrome gaps.</li>
+        <li>After explicit product verification: Playwright under <code>GHOSTWRITER_PLAYWRIGHT_GATE=user-verified</code>.</li>
       </ol>
-    </section>
-
-    <section>
-      <h2>Recommended next step</h2>
-      <p>Run local product, open Canvas on a wide viewport, and walk collapse, drag, pan, context menu, link drag, and layer zoom. Reply with accept / fix notes. Do not start Playwright until that gate.</p>
     </section>
 
     <section>
       <h2>How to resume</h2>
       <ol>
-        <li>Read this handoff and <a href="active/2026-07-18-canvas-structure-ux-3/plan.html">the Canvas 3.0 plan</a>.</li>
-        <li>If founder verified: run Playwright via <code>routine-tests</code> with both routing markers.</li>
-        <li>Otherwise fix product gaps from walkthrough notes.</li>
+        <li>Pull / checkout <code>feat/canvas-structure-ux-3</code>; read this handoff and the plan record log.</li>
+        <li>Run local via <code>./scripts/dev-local.sh</code> (or existing backend + Expo on :8081).</li>
+        <li>Watch founder video (or re-walk Map) and fix interaction feel before more feature work.</li>
       </ol>
     </section>
   </main>

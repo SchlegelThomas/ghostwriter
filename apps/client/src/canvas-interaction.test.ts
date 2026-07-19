@@ -6,13 +6,18 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   CANVAS_TOOL_DEFINITIONS,
+  canvasBoardCursor,
   canvasToolAccessibilityLabel,
   canvasToolTip,
+  isCanvasPlaceTool,
   objectAtScreenPoint,
   panViewportByScreenDelta,
+  pinchDistance,
+  shouldBackgroundPanBoard,
   shouldDragObjects,
   shouldPanBoard
 } from "./canvas-interaction.js";
+import { zoomViewportAtScreenPoint } from "./canvas-model.js";
 
 const project = projectId("project-canvas-interaction");
 
@@ -59,11 +64,45 @@ describe("board interaction modes", () => {
     expect(shouldPanBoard("scene", false)).toBe(false);
   });
 
+  it("background-pans on Select, Hand, Space, or middle button", () => {
+    expect(shouldBackgroundPanBoard("select", false)).toBe(true);
+    expect(shouldBackgroundPanBoard("hand", false)).toBe(true);
+    expect(shouldBackgroundPanBoard("note", false, { placeArmed: true })).toBe(
+      false
+    );
+    expect(
+      shouldBackgroundPanBoard("note", false, { middleButton: true })
+    ).toBe(true);
+    expect(
+      shouldBackgroundPanBoard("select", false, { linkDragging: true })
+    ).toBe(false);
+  });
+
   it("drags objects only with select and without spacebar", () => {
     expect(shouldDragObjects("select", false)).toBe(true);
     expect(shouldDragObjects("select", true)).toBe(false);
     expect(shouldDragObjects("hand", false)).toBe(false);
     expect(shouldDragObjects("hand", true)).toBe(false);
+  });
+
+  it("treats note, region, and image as click-to-place tools", () => {
+    expect(isCanvasPlaceTool("note")).toBe(true);
+    expect(isCanvasPlaceTool("region")).toBe(true);
+    expect(isCanvasPlaceTool("image")).toBe(true);
+    expect(isCanvasPlaceTool("select")).toBe(false);
+  });
+
+  it("maps board cursors for tools and drag state", () => {
+    expect(canvasBoardCursor("hand", false)).toBe("grab");
+    expect(canvasBoardCursor("select", false)).toBe("grab");
+    expect(canvasBoardCursor("select", false, { draggingObject: true })).toBe(
+      "grabbing"
+    );
+    expect(canvasBoardCursor("select", false, { panning: true })).toBe(
+      "grabbing"
+    );
+    expect(canvasBoardCursor("connect", false)).toBe("crosshair");
+    expect(canvasBoardCursor("note", false)).toBe("crosshair");
   });
 });
 
@@ -76,6 +115,22 @@ describe("panViewportByScreenDelta", () => {
       y: 45,
       zoom: 2
     });
+  });
+});
+
+describe("zoomViewportAtScreenPoint", () => {
+  it("keeps the world point under the cursor stable while zooming", () => {
+    const viewport = { x: 0, y: 0, zoom: 1 };
+    const next = zoomViewportAtScreenPoint(viewport, 200, 100, 2);
+    expect(next.zoom).toBe(2);
+    expect(viewport.x + 200 / viewport.zoom).toBeCloseTo(next.x + 200 / next.zoom);
+    expect(viewport.y + 100 / viewport.zoom).toBeCloseTo(next.y + 100 / next.zoom);
+  });
+});
+
+describe("pinchDistance", () => {
+  it("measures the distance between two touch points", () => {
+    expect(pinchDistance({ x: 0, y: 0 }, { x: 3, y: 4 })).toBe(5);
   });
 });
 

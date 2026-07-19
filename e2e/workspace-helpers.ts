@@ -187,11 +187,11 @@ export async function openDraftHistory(page: Page): Promise<void> {
 }
 
 function canvasToolDock(page: Page) {
-  return page.getByLabel("Canvas tool dock");
+  return page.getByLabel("Canvas tools");
 }
 
 function canvasUtilityBar(page: Page) {
-  return page.getByLabel("Canvas utility bar");
+  return page.getByLabel("Canvas utilities");
 }
 
 export async function activateCanvasTool(
@@ -286,7 +286,7 @@ export async function openWorkspaceMode(
 
 export async function showCanvasDetailsIfHidden(page: Page): Promise<void> {
   const showDetails = page
-    .getByLabel("Canvas utility bar")
+    .getByLabel("Canvas utilities")
     .getByRole("button", { name: /Show Details/ });
   if (await showDetails.isVisible().catch(() => false)) {
     await showDetails.click();

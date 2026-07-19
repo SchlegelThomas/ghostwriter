@@ -3,22 +3,23 @@ import {
   MAP_STRUCTURE_COLLAPSED_WIDTH,
   MAP_STRUCTURE_EXPANDED_WIDTH,
   defaultMapStructureRail,
+  mapBoardOwnsViewport,
   mapStructureQuickBuildVisible,
   mapStructureRailWidth,
   toggleMapStructureRail
 } from "./map-structure-rail.js";
 
 describe("defaultMapStructureRail", () => {
-  it("collapses on wide canvas and split for board real estate", () => {
+  it("collapses on canvas and split when the rail can collapse", () => {
     expect(defaultMapStructureRail("canvas", true)).toBe("collapsed");
     expect(defaultMapStructureRail("split", true)).toBe("collapsed");
   });
 
-  it("keeps draft expanded even on wide layouts", () => {
+  it("keeps draft expanded even when collapsible", () => {
     expect(defaultMapStructureRail("draft", true)).toBe("expanded");
   });
 
-  it("always expands when the workspace is not wide", () => {
+  it("always expands when the rail cannot collapse (narrow)", () => {
     expect(defaultMapStructureRail("canvas", false)).toBe("expanded");
     expect(defaultMapStructureRail("split", false)).toBe("expanded");
     expect(defaultMapStructureRail("draft", false)).toBe("expanded");
@@ -33,7 +34,7 @@ describe("toggleMapStructureRail", () => {
 });
 
 describe("mapStructureRailWidth", () => {
-  it("uses 36px collapsed and 252px expanded on wide layouts", () => {
+  it("uses 36px collapsed and 252px expanded when collapsible", () => {
     expect(mapStructureRailWidth("collapsed", true)).toBe(
       MAP_STRUCTURE_COLLAPSED_WIDTH
     );
@@ -44,7 +45,7 @@ describe("mapStructureRailWidth", () => {
     expect(MAP_STRUCTURE_EXPANDED_WIDTH).toBe(252);
   });
 
-  it("uses full width when the workspace is not wide", () => {
+  it("uses full width when the rail cannot collapse", () => {
     expect(mapStructureRailWidth("collapsed", false)).toBe(
       MAP_STRUCTURE_EXPANDED_WIDTH
     );
@@ -63,5 +64,13 @@ describe("mapStructureQuickBuildVisible", () => {
     expect(mapStructureQuickBuildVisible("canvas", "expanded")).toBe(true);
     expect(mapStructureQuickBuildVisible("split", "collapsed")).toBe(false);
     expect(mapStructureQuickBuildVisible("split", "expanded")).toBe(true);
+  });
+});
+
+describe("mapBoardOwnsViewport", () => {
+  it("is true for canvas and split", () => {
+    expect(mapBoardOwnsViewport("canvas")).toBe(true);
+    expect(mapBoardOwnsViewport("split")).toBe(true);
+    expect(mapBoardOwnsViewport("draft")).toBe(false);
   });
 });

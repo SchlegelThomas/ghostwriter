@@ -18,10 +18,18 @@ if [ ! -f apps/client/package.json ]; then
 fi
 
 echo "Building web export from branch '$BRANCH'..."
-pnpm --filter client exec expo export --platform web
+# Preview auth must hit same-origin /api (Pages Function → Fly). Never bake a
+# local EXPO_PUBLIC_API_URL into the artifact or browsers CORS to localhost.
+# Clear Metro cache so a prior local export cannot reuse a baked-in origin.
+rm -rf apps/client/dist apps/client/.expo
+EXPO_PUBLIC_API_URL= pnpm --filter client exec expo export --platform web --clear
 
 echo "Deploying preview for '$BRANCH' to Cloudflare Pages..."
 (
   cd apps/client
-  pnpm exec wrangler pages deploy dist --project-name=ghostwriter --branch="$BRANCH"
+  if rg -q '127\.0\.0\.1:8787|localhost:8787' dist/_expo/static/js/web/*.js 2>/dev/null; then
+    echo "Refusing deploy: dist still contains a local API origin." >&2
+    exit 1
+  fi
+  pnpm exec wrangler pages deploy dist --project-name=ghostwriter --branch="$BRANCH" --commit-dirty=true
 )

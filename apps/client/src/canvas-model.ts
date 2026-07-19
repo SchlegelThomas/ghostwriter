@@ -92,16 +92,36 @@ export type CanvasHandoffPlacement =
       position?: number;
     }>;
 
+export const CANVAS_VIEW_MIN_ZOOM = 0.35;
+export const CANVAS_VIEW_MAX_ZOOM = 2.5;
+
 export function clampCanvasZoom(zoom: number): number {
-  return Math.min(2.5, Math.max(0.35, zoom));
+  return Math.min(CANVAS_VIEW_MAX_ZOOM, Math.max(CANVAS_VIEW_MIN_ZOOM, zoom));
+}
+
+/** Zoom while keeping the world point under a screen coordinate stable. */
+export function zoomViewportAtScreenPoint(
+  viewport: CanvasViewport,
+  screenX: number,
+  screenY: number,
+  nextZoom: number
+): CanvasViewport {
+  const zoom = clampCanvasZoom(nextZoom);
+  const worldX = viewport.x + screenX / viewport.zoom;
+  const worldY = viewport.y + screenY / viewport.zoom;
+  return {
+    x: worldX - screenX / zoom,
+    y: worldY - screenY / zoom,
+    zoom
+  };
 }
 
 export function canvasToolInstruction(tool: CanvasTool): string {
   switch (tool) {
     case "select":
-      return "Drag cards freely. Right-click for create and actions. Esc clears the tool.";
+      return "Drag cards freely. Drag empty board to pan. Pinch or Ctrl+scroll to zoom.";
     case "hand":
-      return "Drag the board to pan, or hold Space while Select is active.";
+      return "Drag the board to pan. Pinch or Ctrl+scroll to zoom. Space also pans in Select.";
     case "scene":
       return "Choose manuscript placement, then create one scene in Canvas and Draft.";
     case "note":
@@ -284,6 +304,10 @@ export function visibleCanvasObjects(
   );
 }
 
+/**
+ * Soft default placement near the viewport center with a light spiral offset.
+ * Intentionally not a column grid — writers drag freely after create.
+ */
 export function canvasCapturePosition(
   objectIndex: number,
   viewport: CanvasViewport,
@@ -292,33 +316,27 @@ export function canvasCapturePosition(
   const zoom = clampCanvasZoom(viewport.zoom);
   const worldWidth = Math.max(1, size.width / zoom);
   const worldHeight = Math.max(1, size.height / zoom);
-  const columnSpacing = 290;
-  const rowSpacing = 190;
-  const originX = 48;
-  const originY = 52;
-  const columns = Math.max(
-    1,
-    Math.floor(Math.max(0, worldWidth - originX * 2) / columnSpacing) + 1
-  );
-  const rows = Math.max(
-    1,
-    Math.floor(Math.max(0, worldHeight - originY * 2) / rowSpacing) + 1
-  );
   const normalizedIndex = Math.max(0, Math.floor(objectIndex));
-  const capacity = columns * rows;
-  const slot = normalizedIndex % capacity;
-  const cascade = (Math.floor(normalizedIndex / capacity) % 4) * 24;
+  const centerX = viewport.x + worldWidth * 0.5 - 130;
+  const centerY = viewport.y + worldHeight * 0.5 - 80;
+  const angle = normalizedIndex * 2.399963;
+  const radius = 24 + (normalizedIndex % 7) * 22;
 
   return {
-    x: Math.round(
-      viewport.x + originX + (slot % columns) * columnSpacing + cascade
-    ),
-    y: Math.round(
-      viewport.y +
-        originY +
-        Math.floor(slot / columns) * rowSpacing +
-        cascade
-    )
+    x: Math.round(centerX + Math.cos(angle) * radius),
+    y: Math.round(centerY + Math.sin(angle) * radius)
+  };
+}
+
+export function canvasWorldPointFromScreen(
+  viewport: CanvasViewport,
+  screenX: number,
+  screenY: number
+): Readonly<{ x: number; y: number }> {
+  const zoom = clampCanvasZoom(viewport.zoom);
+  return {
+    x: viewport.x + screenX / zoom,
+    y: viewport.y + screenY / zoom
   };
 }
 
