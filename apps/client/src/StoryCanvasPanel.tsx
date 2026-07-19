@@ -15,7 +15,6 @@ import { resolveObjectGeometry } from "@ghostwriter/core";
 import {
   CANVAS_CAMERA_TRANSITION_MS,
   CANVAS_WORKFLOW_LENSES,
-  PROVISIONAL_BEAT_FIXTURE_SOURCE,
   canvasDrillScopeKey,
   chapterBoundOverlays,
   currentDrillScope,
@@ -1687,7 +1686,7 @@ export function StoryCanvasPanel({
   busy = false,
   condensed = false,
   saveState = "saved",
-  message,
+  message: _message,
   onCommand,
   onCreateScene,
   onLoadHistory,
@@ -1769,11 +1768,9 @@ export function StoryCanvasPanel({
   const [sceneTitle, setSceneTitle] = useState("");
   const [scenePlacement, setScenePlacement] = useState("");
   const [sceneStoryOrderHint, setSceneStoryOrderHint] = useState("");
-  const [sceneX, setSceneX] = useState("160");
-  const [sceneY, setSceneY] = useState("140");
-  const [sceneWidth, setSceneWidth] = useState("260");
-  const [sceneHeight, setSceneHeight] = useState("160");
-  const [cameraTransitioning, setCameraTransitioning] = useState(false);
+  const sceneWidth = "260";
+  const sceneHeight = "160";
+  const [, setCameraTransitioning] = useState(false);
   const [resizeUnlockedIds, setResizeUnlockedIds] = useState(
     () => new Set<CanvasObjectId>()
   );
@@ -1968,7 +1965,6 @@ export function StoryCanvasPanel({
       return changed ? next : current;
     });
     // Clear optimistic geometry only when the board acknowledges new positions.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- objectById is rebuilt each render
   }, [board?.version]);
 
   const outline =
@@ -2012,9 +2008,6 @@ export function StoryCanvasPanel({
   const activeSceneCard = projectedObjects.find(
     (object) =>
       object.kind === "scene-card" && object.sceneId === selectedSceneId
-  );
-  const hasProvisionalBeat = (board?.objects ?? []).some(
-    (object) => object.sourceKey === PROVISIONAL_BEAT_FIXTURE_SOURCE
   );
   const maxZ = Math.max(0, ...(board?.objects.map((object) => object.z) ?? []));
   const minZ = Math.min(0, ...(board?.objects.map((object) => object.z) ?? []));
@@ -2551,27 +2544,6 @@ export function StoryCanvasPanel({
           altText: "Image metadata placeholder",
           caption: "Local asset metadata can be attached later."
         }
-      }
-    });
-  }
-
-  function createProvisionalBeat(): void {
-    const position = defaultPosition();
-    void sendCommand({
-      type: "canvas.object.create",
-      object: {
-        kind: "note",
-        ...position,
-        width: 250,
-        height: 150,
-        z: maxZ + 1,
-        authority: "provisional",
-        label: "A costly turn",
-        note: {
-          body: "Provisional beat fixture: the apparent success creates a harder choice."
-        },
-        sourceKey: PROVISIONAL_BEAT_FIXTURE_SOURCE,
-        provenance: "Deterministic Ghostwriter review fixture; no model call."
       }
     });
   }
