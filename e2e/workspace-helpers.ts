@@ -187,11 +187,11 @@ export async function openDraftHistory(page: Page): Promise<void> {
 }
 
 function canvasToolDock(page: Page) {
-  return page.getByLabel("Canvas tool dock");
+  return page.getByLabel("Canvas tools");
 }
 
 function canvasUtilityBar(page: Page) {
-  return page.getByLabel("Canvas utility bar");
+  return page.getByLabel("Canvas utilities");
 }
 
 export async function activateCanvasTool(
@@ -200,20 +200,91 @@ export async function activateCanvasTool(
   shortcut: string
 ): Promise<void> {
   await canvasToolDock(page)
-    .getByRole("button", { name: `${label} (${shortcut})` })
+    .getByRole("button", { name: `${label} · ${shortcut}` })
     .click();
 }
 
+/**
+ * Narrow Map is outline-only (<760). Widening alone leaves `view === "outline"`,
+ * so Spatial must be selected before `#story-canvas-surface` exists.
+ */
+export async function ensureSpatialCanvasSurface(page: Page): Promise<{
+  restoreNarrow: boolean;
+  previousViewport: { width: number; height: number } | null;
+}> {
+  const surface = page.locator("#story-canvas-surface");
+  const viewport = page.viewportSize();
+  const restoreNarrow =
+    viewport !== null &&
+    viewport.width < 760 &&
+    !(await surface.isVisible().catch(() => false));
+  if (restoreNarrow && viewport !== null) {
+    await page.setViewportSize({ width: 800, height: viewport.height });
+  }
+  // Wait for the compact→wide chrome to publish Spatial before clicking.
+  const spatial = canvasUtilityBar(page).getByRole("button", {
+    name: "Spatial view"
+  });
+  await expect(spatial).toBeVisible({ timeout: 10_000 });
+  await spatial.click();
+  await expect(surface).toBeVisible({ timeout: 10_000 });
+  return { restoreNarrow, previousViewport: viewport };
+}
+
+/**
+ * RN web's board handler requires locationX/Y from an element click with position.
+ * page.mouse.click often omits those fields, so armed place tools silently no-op.
+ */
+export async function placeArmedCanvasToolOnSurface(page: Page): Promise<void> {
+  const surface = page.locator("#story-canvas-surface");
+  await expect(surface).toBeVisible({ timeout: 10_000 });
+  const box = await surface.boundingBox();
+  if (!box) throw new Error("missing canvas surface");
+  // Prefer a near-corner hit so existing cards near board center are not selected.
+  await surface.click({
+    position: {
+      x: Math.min(36, Math.max(8, box.width * 0.08)),
+      y: Math.min(36, Math.max(8, box.height * 0.08))
+    }
+  });
+}
+
 export async function createCanvasNote(page: Page): Promise<void> {
+  const { restoreNarrow, previousViewport } =
+    await ensureSpatialCanvasSurface(page);
+  // Re-arm after Spatial chrome clicks so place tool stays selected.
   await activateCanvasTool(page, "Note", "N");
+  await placeArmedCanvasToolOnSurface(page);
+  if (restoreNarrow && previousViewport !== null) {
+    await page.setViewportSize(previousViewport);
+  }
+  await expect(
+    page
+      .getByLabel(/^Writer note/)
+      .or(page.getByRole("button", { name: /Canvas object \d+: Writer note,/ }))
+      .first()
+  ).toBeVisible({ timeout: 10_000 });
+  await showCanvasDetailsIfHidden(page);
 }
 
 export async function createCanvasRegion(page: Page): Promise<void> {
+  await ensureSpatialCanvasSurface(page);
   await activateCanvasTool(page, "Region", "R");
+  await placeArmedCanvasToolOnSurface(page);
+  await expect(page.getByLabel(/^Region /).first()).toBeVisible({
+    timeout: 10_000
+  });
+  await showCanvasDetailsIfHidden(page);
 }
 
 export async function createCanvasImageReference(page: Page): Promise<void> {
+  await ensureSpatialCanvasSurface(page);
   await activateCanvasTool(page, "Image reference", "I");
+  await placeArmedCanvasToolOnSurface(page);
+  await expect(
+    page.getByLabel(/Image metadata|Concept image reference/).first()
+  ).toBeVisible({ timeout: 10_000 });
+  await showCanvasDetailsIfHidden(page);
 }
 
 export async function openCanvasSceneTool(page: Page): Promise<void> {
@@ -227,14 +298,19 @@ export async function placeSelectedDraftSceneOnCanvas(page: Page): Promise<void>
   await handoff
     .getByRole("button", { name: "Place selected Draft scene" })
     .click();
-  await expect(page.getByText("Scene placed on Canvas").first()).toBeVisible({
+  await expect(handoff).toHaveCount(0, { timeout: 10_000 });
+  await showCanvasDetailsIfHidden(page);
+}
+
+export async function expectCanvasHistoryTitle(
+  page: Page,
+  title: string | RegExp
+): Promise<void> {
+  await showCanvasHistory(page);
+  await expect(page.getByLabel("Canvas history").getByText(title)).toBeVisible({
     timeout: 10_000
   });
-  const cancel = handoff.getByRole("button", { name: "Cancel scene tool" });
-  if (await cancel.isVisible().catch(() => false)) {
-    await cancel.click();
-  }
-  await showCanvasDetailsIfHidden(page);
+  await hideCanvasHistory(page);
 }
 
 export async function placeStoryKnowledgeOnCanvas(
@@ -248,18 +324,60 @@ export async function placeStoryKnowledgeOnCanvas(
     .getByRole("button", { name: new RegExp(`^${escaped} ·`) })
     .click();
   await page.getByRole("button", { name: `Place ${label} on Canvas` }).click();
+  await showCanvasDetailsIfHidden(page);
 }
 
+/** Map-dense History lives in the topbar (not Canvas utilities). */
 export async function showCanvasHistory(page: Page): Promise<void> {
-  await canvasUtilityBar(page)
-    .getByRole("button", { name: "Show Canvas history" })
+  const hide = page.getByRole("button", {
+    name: "Hide notifications and history"
+  });
+  if (await hide.isVisible().catch(() => false)) {
+    return;
+  }
+  await page
+    .getByRole("button", { name: "Show notifications and history" })
     .click();
+  await expect(page.getByLabel("Canvas history")).toBeVisible({
+    timeout: 10_000
+  });
 }
 
 export async function hideCanvasHistory(page: Page): Promise<void> {
-  await canvasUtilityBar(page)
-    .getByRole("button", { name: "Hide Canvas history" })
-    .click();
+  const hide = page.getByRole("button", {
+    name: "Hide notifications and history"
+  });
+  if (await hide.isVisible().catch(() => false)) {
+    await hide.click();
+  }
+  const close = page.getByLabel("Canvas history").getByRole("button", {
+    name: "Close"
+  });
+  if (await close.isVisible().catch(() => false)) {
+    await close.click();
+  }
+}
+
+/** ReadingSpine defaults minimized; drift copy appears in expanded chrome. */
+export async function expandReadingSpine(page: Page): Promise<void> {
+  const expandedRule = page.getByText(
+    "Canvas position never silently reorders the manuscript."
+  );
+  if (await expandedRule.isVisible().catch(() => false)) {
+    return;
+  }
+  const toggle = page.getByRole("button", {
+    name: /Reading-order spine, \d+ scenes\. Activate to change size\./
+  });
+  await expect(toggle).toBeVisible();
+  // Cycle minimized → bubbles → expanded (at most two clicks from minimized).
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (await expandedRule.isVisible().catch(() => false)) {
+      return;
+    }
+    await toggle.click();
+  }
+  await expect(expandedRule).toBeVisible({ timeout: 5_000 });
 }
 
 export async function openWorkspaceMode(
@@ -285,12 +403,17 @@ export async function openWorkspaceMode(
 }
 
 export async function showCanvasDetailsIfHidden(page: Page): Promise<void> {
+  const inspector = page.getByLabel("Canvas inspector");
+  if (await inspector.isVisible().catch(() => false)) {
+    return;
+  }
   const showDetails = page
-    .getByLabel("Canvas utility bar")
-    .getByRole("button", { name: "Show Details" });
+    .getByLabel("Canvas utilities")
+    .getByRole("button", { name: /Show Details/ });
   if (await showDetails.isVisible().catch(() => false)) {
     await showDetails.click();
   }
+  await expect(inspector).toBeVisible({ timeout: 5_000 });
 }
 
 export async function dismissAcknowledgementToasts(page: Page): Promise<void> {

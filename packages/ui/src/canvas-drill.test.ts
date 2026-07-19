@@ -20,7 +20,9 @@ import {
   drillIntoChapter,
   drillIntoScene,
   drillToScope,
+  easeOutCubic,
   initialDrillStack,
+  interpolateCanvasViewport,
   projectCanvasLensProjection,
   readPrefersReducedMotion,
   sceneDrillScope,
@@ -211,7 +213,7 @@ describe("canvas drill stack", () => {
       sceneDrillScope(navigator, firstScene)!
     );
     expect(drillBreadcrumbs(stack, navigator).map((crumb) => crumb.label)).toEqual(
-      ["Drill novel", "Opening", "First beat"]
+      ["Map", "Chapter · Opening", "Scene · First beat"]
     );
     expect(drillToScope(stack, { kind: "project" })).toEqual([
       { kind: "project" }
@@ -317,5 +319,30 @@ describe("reduced motion", () => {
     expect(
       readPrefersReducedMotion(() => ({ matches: false }))
     ).toBe(false);
+  });
+});
+
+describe("viewport easing", () => {
+  it("eases out with cubic deceleration", () => {
+    expect(easeOutCubic(0)).toBe(0);
+    expect(easeOutCubic(1)).toBe(1);
+    expect(easeOutCubic(0.5)).toBeCloseTo(0.875);
+    expect(easeOutCubic(-1)).toBe(0);
+    expect(easeOutCubic(2)).toBe(1);
+  });
+
+  it("interpolates camera motion with easeOutCubic", () => {
+    const from = { x: 0, y: 0, zoom: 1 };
+    const to = { x: 100, y: 200, zoom: 2 };
+
+    expect(interpolateCanvasViewport(from, to, 0, easeOutCubic)).toEqual(from);
+    expect(interpolateCanvasViewport(from, to, 1, easeOutCubic)).toEqual(to);
+    expect(
+      interpolateCanvasViewport(from, to, 0.5, easeOutCubic)
+    ).toEqual({
+      x: 87.5,
+      y: 175,
+      zoom: 1.875
+    });
   });
 });

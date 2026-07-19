@@ -22,6 +22,7 @@ import {
 import {
   currentDrillScope,
   drillBreadcrumbs,
+  workflowLensLabel,
   type CanvasDrillScope,
   type CanvasDrillStack,
   type CanvasWorkflowLens
@@ -47,15 +48,30 @@ import {
 } from "./split-layout.js";
 import { ghostwriterTheme } from "./theme.js";
 import {
+  defaultMapStructureRail,
+  mapBoardOwnsViewport,
+  mapStructureQuickBuildVisible,
+  mapStructureRailWidth,
+  toggleMapStructureRail,
+  type MapStructureRailMode
+} from "./map-structure-rail.js";
+import {
   quickBuildOptions,
   storyTrail,
   structureLaunchpad,
   type QuickBuildOption
 } from "./workspace-structure.js";
 import {
-  WorkspaceChatPanel,
   type WorkspaceChatMessage
 } from "./WorkspaceChatPanel.js";
+import {
+  WorkspaceQuickNav,
+  type WorkspacePaletteMode
+} from "./WorkspaceQuickNav.js";
+import {
+  buildWorkspaceJumpTargets,
+  type WorkspaceJumpTarget
+} from "./workspace-quick-nav.js";
 
 export type ProjectWorkspaceMode = "draft" | "canvas" | "split";
 
@@ -97,6 +113,8 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
     selection: Extract<ManuscriptSelection, { kind: "chapter" }>
   ): void;
   onWorkflowLensChange?(lens: CanvasWorkflowLens): void;
+  canvasHistoryOpen?: boolean;
+  onCanvasHistoryOpenChange?(open: boolean): void;
   storageAccountId?: string;
   renderCanvas?: ReactNode;
   renderDraft?(
@@ -109,6 +127,10 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
 }>;
 
 const { colors, fonts, shell } = ghostwriterTheme;
+
+const STRUCTURE_WIDTH_MIN = 180;
+const STRUCTURE_WIDTH_MAX = 420;
+const STRUCTURE_WIDTH_DEFAULT = shell.navigatorWidth;
 
 type CollapsedPanel = "tree" | "inspector" | "none";
 
@@ -167,6 +189,7 @@ function RailButton({
 }>) {
   return (
     <Pressable
+      accessibilityLabel={`${glyph} ${label}${selected ? ", selected" : ""}`}
       accessibilityRole="button"
       accessibilityState={{ selected }}
       disabled={disabled}
@@ -177,12 +200,10 @@ function RailButton({
         pressed && styles.pressed,
         disabled && styles.disabled
       ]}
+      {...({ title: label } as object)}
     >
       <Text style={[styles.railGlyph, selected && styles.railTextSelected]}>
         {glyph}
-      </Text>
-      <Text style={[styles.railLabel, selected && styles.railTextSelected]}>
-        {label}
       </Text>
     </Pressable>
   );
@@ -233,6 +254,8 @@ export function AuthenticatedProjectWorkspace({
   onDrillTo = () => undefined,
   onEnterChapter = () => undefined,
   onWorkflowLensChange = () => undefined,
+  canvasHistoryOpen = false,
+  onCanvasHistoryOpenChange,
   storageAccountId,
   renderCanvas,
   renderDraft,
@@ -244,7 +267,10 @@ export function AuthenticatedProjectWorkspace({
   const wide = width >= 1240;
   const narrow = width < 760;
   const [splitRatio, setSplitRatio] = useState(SPLIT_RATIO_DEFAULT);
-  const [chatOpen, setChatOpen] = useState(false);
+  const [paletteMode, setPaletteMode] = useState<WorkspacePaletteMode>();
+  const [structureWidthPx, setStructureWidthPx] = useState<number>(
+    STRUCTURE_WIDTH_DEFAULT
+  );
   const [contextDockOpen, setContextDockOpen] = useState(true);
   const [draftDockTab, setDraftDockTab] = useState<
     "brief" | "story" | "canvas" | "history"
@@ -307,8 +333,54 @@ export function AuthenticatedProjectWorkspace({
     useState<CollapsedPanel>("tree");
   const previousSceneId = useRef(selectedSceneId);
   const canvasVisible = mode === "canvas" || mode === "split";
+  const structureCollapsible = canvasVisible && !narrow;
+  const [structureRail, setStructureRail] = useState<MapStructureRailMode>(() =>
+    defaultMapStructureRail(mode, width >= 760)
+  );
+  const mapDense = mapBoardOwnsViewport(mode);
   const drillScope = currentDrillScope(drillStack);
   const drillTrail = drillBreadcrumbs(drillStack, project);
+  const structureWidth =
+    structureCollapsible && structureRail === "collapsed"
+      ? mapStructureRailWidth(structureRail, structureCollapsible)
+      : structureCollapsible
+        ? structureWidthPx
+        : shell.navigatorWidth;
+  const quickBuildVisible = mapStructureQuickBuildVisible(mode, structureRail);
+  const structureCollapsed = structureRail === "collapsed";
+  const jumpTargets = useMemo(
+    () => buildWorkspaceJumpTargets(project),
+    [project]
+  );
+  const structureResizeOriginRef = useRef(structureWidthPx);
+
+  const structureResizeResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () =>
+          structureCollapsible && structureRail === "expanded",
+        onMoveShouldSetPanResponder: () =>
+          structureCollapsible && structureRail === "expanded",
+        onPanResponderGrant: () => {
+          structureResizeOriginRef.current = structureWidthPx;
+        },
+        onPanResponderMove: (_event, gesture) => {
+          const next = Math.min(
+            STRUCTURE_WIDTH_MAX,
+            Math.max(
+              STRUCTURE_WIDTH_MIN,
+              structureResizeOriginRef.current + gesture.dx
+            )
+          );
+          setStructureWidthPx(next);
+        }
+      }),
+    [structureCollapsible, structureRail, structureWidthPx]
+  );
+
+  useEffect(() => {
+    setStructureRail(defaultMapStructureRail(mode, structureCollapsible));
+  }, [mode, structureCollapsible]);
 
   useEffect(() => {
     if (!canvasVisible || typeof document === "undefined") return;
@@ -320,6 +392,29 @@ export function AuthenticatedProjectWorkspace({
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [canvasVisible, drillStack.length, onDrillBack]);
+
+  useEffect(() => {
+    if (!structureCollapsible || typeof document === "undefined") return;
+    const handleStructureToggle = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      ) {
+        return;
+      }
+      if (event.key !== "[") return;
+      event.preventDefault();
+      setStructureRail((current) => toggleMapStructureRail(current));
+    };
+    document.addEventListener("keydown", handleStructureToggle);
+    return () =>
+      document.removeEventListener("keydown", handleStructureToggle);
+  }, [structureCollapsible]);
 
   useEffect(() => {
     if (typeof document === "undefined" || !focusHalo) return;
@@ -400,6 +495,7 @@ export function AuthenticatedProjectWorkspace({
     if (typeof document === "undefined") return;
     const handleQuickBuildKey = (event: KeyboardEvent): void => {
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        if (paletteMode !== undefined) return;
         event.preventDefault();
         setQuickBuildOpen((current) => !current);
         return;
@@ -410,7 +506,70 @@ export function AuthenticatedProjectWorkspace({
     };
     document.addEventListener("keydown", handleQuickBuildKey);
     return () => document.removeEventListener("keydown", handleQuickBuildKey);
-  }, []);
+  }, [paletteMode]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const handlePaletteKeys = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement | null;
+      const typingInField =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable === true;
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "p") {
+        return;
+      }
+      // Allow ⌘P / ⌘⇧P even from inputs so jump stays global.
+      event.preventDefault();
+      if (event.shiftKey) {
+        setPaletteMode((current) =>
+          current === "command" ? undefined : "command"
+        );
+        return;
+      }
+      if (typingInField && paletteMode === undefined) {
+        // still open jump — founders expect IDE-style global jump
+      }
+      setPaletteMode((current) => (current === "jump" ? undefined : "jump"));
+    };
+    document.addEventListener("keydown", handlePaletteKeys);
+    return () => document.removeEventListener("keydown", handlePaletteKeys);
+  }, [paletteMode]);
+
+  function applyJumpTarget(target: WorkspaceJumpTarget): void {
+    if (target.toggleJump === true) {
+      setPaletteMode("jump");
+      return;
+    }
+    if (target.toggleChat === true) {
+      setPaletteMode((current) =>
+        current === "command" ? undefined : "command"
+      );
+      return;
+    }
+    if (target.toggleStructure === true) {
+      if (structureCollapsible) {
+        setStructureRail((current) => toggleMapStructureRail(current));
+      } else if (!wide) {
+        setCollapsedPanel((current) =>
+          current === "tree" ? "none" : "tree"
+        );
+      }
+      setPaletteMode(undefined);
+      return;
+    }
+    if (target.selection !== undefined) {
+      chooseSelection(target.selection);
+      if (!wide) setCollapsedPanel("tree");
+    }
+    if (target.mode !== undefined) {
+      onModeChange(target.mode);
+    }
+    if (target.openReader === true) {
+      onOpenReader?.();
+    }
+    setPaletteMode(undefined);
+  }
 
   function dispatchQuickBuild(option: QuickBuildOption): void {
     setQuickBuildOpen(false);
@@ -796,98 +955,314 @@ export function AuthenticatedProjectWorkspace({
         ? "Story Canvas"
         : "Draft + Canvas";
 
+  const storyTrailNodes = (
+    <View accessibilityLabel="Story Trail" style={styles.storyTrail}>
+      {trail.map((item, index) => {
+        const current = index === trail.length - 1;
+        const key = manuscriptSelectionKey(item.selection);
+        return (
+          <View key={key} style={styles.storyTrailItem}>
+            {index === 0 ? null : (
+              <Text style={styles.storyTrailDivider}>›</Text>
+            )}
+            <Pressable
+              accessibilityLabel={
+                current
+                  ? `Story Trail, current scope ${item.label}`
+                  : `Story Trail, go to ${item.label}`
+              }
+              accessibilityRole="button"
+              accessibilityState={{ disabled: current }}
+              disabled={current || busy}
+              onPress={() => chooseSelection(item.selection)}
+              style={({ pressed }) => [
+                styles.storyTrailButton,
+                current && styles.storyTrailCurrent,
+                pressed && styles.pressed
+              ]}
+            >
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.storyTrailText,
+                  current && styles.storyTrailTextCurrent
+                ]}
+              >
+                {item.label}
+              </Text>
+            </Pressable>
+          </View>
+        );
+      })}
+    </View>
+  );
+
+  // Map chrome must show Canvas drill scope — not manuscript selection.
+  // Selecting a scene card syncs the tree, but must not look like Enter layer.
+  const mapLocationLabel =
+    drillScope.kind === "project"
+      ? `Project board · ${project.title}`
+      : drillScope.kind === "chapter"
+        ? "Inside chapter lens"
+        : "Inside scene lens";
+
+  const mapScopeTrailNodes = (
+    <View accessibilityLabel="Canvas scope trail" style={styles.mapTrail}>
+      <Text style={styles.mapTrailEyebrow}>{mapLocationLabel}</Text>
+      <View style={styles.storyTrail}>
+        {drillTrail.map((crumb, index) => {
+          const current = index === drillTrail.length - 1;
+          return (
+            <View key={crumb.focusKey} style={styles.storyTrailItem}>
+              {index === 0 ? null : (
+                <Text style={styles.storyTrailDivider}>›</Text>
+              )}
+              <Pressable
+                accessibilityLabel={
+                  current
+                    ? `Canvas scope, current ${crumb.label}`
+                    : `Canvas scope, go to ${crumb.label}`
+                }
+                accessibilityRole="button"
+                accessibilityState={{ disabled: current }}
+                disabled={current || busy}
+                onPress={() => onDrillTo?.(crumb.scope)}
+                style={({ pressed }) => [
+                  styles.storyTrailButton,
+                  current && styles.storyTrailCurrent,
+                  pressed && styles.pressed
+                ]}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.storyTrailText,
+                    current && styles.storyTrailTextCurrent
+                  ]}
+                >
+                  {crumb.label}
+                </Text>
+              </Pressable>
+            </View>
+          );
+        })}
+        {canvasVisible &&
+        selectedScene !== undefined &&
+        drillScope.kind === "project" ? (
+          <View style={styles.storyTrailItem}>
+            <Text style={styles.mapSelectionHint}>
+              · card selected: {selectedScene.title} · Enter to dive
+            </Text>
+          </View>
+        ) : null}
+        {workflowLens !== "outline" ? (
+          <View style={styles.storyTrailItem}>
+            <Text style={styles.mapSelectionHint}>
+              · lens {workflowLensLabel(workflowLens)}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+
   return (
     <View style={styles.screen}>
-      <View style={[styles.topbar, narrow && styles.topbarNarrow]}>
+      <View
+        style={[
+          styles.topbar,
+          mapDense && styles.topbarMap,
+          narrow && styles.topbarNarrow
+        ]}
+      >
         <Button disabled={busy} label="← Projects" onPress={onBack} />
+        {structureCollapsible && mapDense ? (
+          <Pressable
+            accessibilityLabel={
+              structureCollapsed
+                ? "Expand manuscript · ["
+                : "Collapse manuscript · ["
+            }
+            accessibilityRole="button"
+            disabled={busy}
+            onPress={() =>
+              setStructureRail((current) => toggleMapStructureRail(current))
+            }
+            style={({ pressed }) => [
+              styles.structureTopToggle,
+              pressed && styles.pressed,
+              busy && styles.disabled
+            ]}
+          >
+            <Text style={styles.structureTopToggleGlyph}>
+              {structureCollapsed ? "»|" : "|«"}
+            </Text>
+          </Pressable>
+        ) : null}
         <View style={styles.topbarCopy}>
-          <Text numberOfLines={1} style={styles.topbarTitle}>
+          <Text
+            numberOfLines={1}
+            style={[styles.topbarTitle, mapDense && styles.topbarTitleMap]}
+          >
             {project.title}
           </Text>
-          <Text numberOfLines={1} style={styles.topbarMeta}>
-            {profileDisplayName} · project version {project.version}
-          </Text>
+          {mapDense ? null : (
+            <Text numberOfLines={1} style={styles.topbarMeta}>
+              {profileDisplayName} · project version {project.version}
+            </Text>
+          )}
         </View>
+        {wide && mapDense && !focusHalo ? (
+          <View style={styles.topbarTrail}>
+            {canvasVisible ? mapScopeTrailNodes : storyTrailNodes}
+          </View>
+        ) : null}
         <View
           style={[
             styles.topbarActions,
             narrow && styles.topbarActionsNarrow
           ]}
         >
+          {mapDense && canvasVisible && onCanvasHistoryOpenChange !== undefined ? (
+            <Pressable
+              accessibilityLabel={
+                canvasHistoryOpen
+                  ? "Hide notifications and history"
+                  : "Show notifications and history"
+              }
+              accessibilityRole="button"
+              accessibilityState={{ selected: canvasHistoryOpen }}
+              disabled={busy}
+              onPress={() => onCanvasHistoryOpenChange(!canvasHistoryOpen)}
+              style={({ pressed }) => [
+                styles.topbarHistoryButton,
+                canvasHistoryOpen && styles.topbarHistoryButtonSelected,
+                pressed && styles.pressed,
+                busy && styles.disabled
+              ]}
+              {...({ title: "Notifications & history" } as object)}
+            >
+              <Text style={styles.topbarHistoryGlyph}>◷</Text>
+            </Pressable>
+          ) : null}
           {allChangesIdle ? (
             <Text
               accessibilityLiveRegion="polite"
               style={styles.aggregateStatus}
             >
-              All changes saved
+              {mapDense ? "Saved" : "All changes saved"}
             </Text>
           ) : null}
-          {!wide ? (
+          {mapDense ? (
             <>
               <Button
-                label={
-                  collapsedPanel === "tree"
-                    ? "Hide manuscript tree"
-                    : "Show manuscript tree"
+                disabled={busy}
+                label="⌕"
+                onPress={() =>
+                  setPaletteMode((current) =>
+                    current === "jump" ? undefined : "jump"
+                  )
                 }
-                onPress={() => {
-                  setCollapsedPanel((current) => {
-                    const next = current === "tree" ? "none" : "tree";
-                    // Medium/narrow: tree and Context Dock are mutually exclusive.
-                    if (next === "tree") setContextDockOpen(false);
-                    return next;
-                  });
-                }}
-                selected={collapsedPanel === "tree"}
+                selected={paletteMode === "jump"}
               />
-              <Button
-                label={
-                  draftDeskActive
-                    ? contextDockOpen
-                      ? "Hide Context Dock"
-                      : "Show Context Dock"
-                    : collapsedPanel === "inspector"
-                      ? "Hide inspector"
-                      : "Show inspector"
-                }
-                onPress={() => {
-                  if (draftDeskActive) {
-                    setContextDockOpen((open) => {
-                      const next = !open;
-                      if (next) setCollapsedPanel("none");
-                      return next;
-                    });
-                    return;
+              {onChatSend === undefined ? null : (
+                <Button
+                  disabled={busy}
+                  label="✦"
+                  onPress={() =>
+                    setPaletteMode((current) =>
+                      current === "command" ? undefined : "command"
+                    )
                   }
-                  setCollapsedPanel((current) =>
-                    current === "inspector" ? "none" : "inspector"
-                  );
-                }}
-                selected={
-                  draftDeskActive
-                    ? contextDockOpen
-                    : collapsedPanel === "inspector"
-                }
-              />
+                  selected={paletteMode === "command"}
+                />
+              )}
+              <Button disabled={busy} label="Sign out" onPress={onSignOut} />
             </>
-          ) : null}
-          <Button disabled={busy} label="Refresh" onPress={onRefresh} />
-          {onOpenReader === undefined ? null : (
-            <Button
-              disabled={busy || selectedSceneId === undefined}
-              label="Reader"
-              onPress={onOpenReader}
-            />
+          ) : (
+            <>
+              {!wide ? (
+                <>
+                  <Button
+                    label={
+                      collapsedPanel === "tree"
+                        ? "Hide manuscript tree"
+                        : "Show manuscript tree"
+                    }
+                    onPress={() => {
+                      setCollapsedPanel((current) => {
+                        const next = current === "tree" ? "none" : "tree";
+                        // Medium/narrow: tree and Context Dock are mutually exclusive.
+                        if (next === "tree") setContextDockOpen(false);
+                        return next;
+                      });
+                    }}
+                    selected={collapsedPanel === "tree"}
+                  />
+                  <Button
+                    label={
+                      draftDeskActive
+                        ? contextDockOpen
+                          ? "Hide Context Dock"
+                          : "Show Context Dock"
+                        : collapsedPanel === "inspector"
+                          ? "Hide inspector"
+                          : "Show inspector"
+                    }
+                    onPress={() => {
+                      if (draftDeskActive) {
+                        setContextDockOpen((open) => {
+                          const next = !open;
+                          if (next) setCollapsedPanel("none");
+                          return next;
+                        });
+                        return;
+                      }
+                      setCollapsedPanel((current) =>
+                        current === "inspector" ? "none" : "inspector"
+                      );
+                    }}
+                    selected={
+                      draftDeskActive
+                        ? contextDockOpen
+                        : collapsedPanel === "inspector"
+                    }
+                  />
+                </>
+              ) : null}
+              <Button disabled={busy} label="Refresh" onPress={onRefresh} />
+              {onOpenReader === undefined ? null : (
+                <Button
+                  disabled={busy || selectedSceneId === undefined}
+                  label="Reader"
+                  onPress={onOpenReader}
+                />
+              )}
+              <Button
+                disabled={busy}
+                label="Jump · ⌘P"
+                onPress={() =>
+                  setPaletteMode((current) =>
+                    current === "jump" ? undefined : "jump"
+                  )
+                }
+                selected={paletteMode === "jump"}
+              />
+              {onChatSend === undefined ? null : (
+                <Button
+                  disabled={busy}
+                  label="Chat · ⌘⇧P"
+                  onPress={() =>
+                    setPaletteMode((current) =>
+                      current === "command" ? undefined : "command"
+                    )
+                  }
+                  selected={paletteMode === "command"}
+                />
+              )}
+              <Button disabled={busy} label="Sign out" onPress={onSignOut} />
+            </>
           )}
-          {onChatSend === undefined ? null : (
-            <Button
-              disabled={busy}
-              label={chatOpen ? "Hide chat" : "Chat"}
-              onPress={() => setChatOpen((current) => !current)}
-              selected={chatOpen}
-            />
-          )}
-          <Button disabled={busy} label="Sign out" onPress={onSignOut} />
         </View>
       </View>
 
@@ -975,156 +1350,193 @@ export function AuthenticatedProjectWorkspace({
                 selected={false}
               />
             )}
+            <View style={styles.railDivider} />
+            <RailButton
+              disabled={busy || !structureCollapsible}
+              glyph="☰"
+              label="Structure · ["
+              onPress={() =>
+                setStructureRail((current) => toggleMapStructureRail(current))
+              }
+              selected={structureCollapsible && structureRail === "expanded"}
+            />
+            <RailButton
+              disabled={busy}
+              glyph="⌕"
+              label="Jump · ⌘P"
+              onPress={() =>
+                setPaletteMode((current) =>
+                  current === "jump" ? undefined : "jump"
+                )
+              }
+              selected={paletteMode === "jump"}
+            />
             {onChatSend === undefined ? null : (
               <RailButton
                 disabled={busy}
-                glyph="M"
-                label="Chat"
-                onPress={() => setChatOpen((current) => !current)}
-                selected={chatOpen}
+                glyph="✦"
+                label="Chat · ⌘⇧P"
+                onPress={() =>
+                  setPaletteMode((current) =>
+                    current === "command" ? undefined : "command"
+                  )
+                }
+                selected={paletteMode === "command"}
               />
             )}
             <View style={styles.railSpacer} />
-            <Text style={styles.railAuthority}>Tree = order</Text>
           </View>
         ) : null}
 
         <View
+          {...(structureCollapsible && structureRail === "collapsed"
+            ? { accessibilityLabel: "Collapsed manuscript structure" }
+            : {})}
           style={[
             styles.treeRegion,
-            !wide && styles.collapsedRegion,
+            structureCollapsible &&
+              ({
+                width: structureWidth,
+                transition:
+                  "width 380ms cubic-bezier(0.22, 1, 0.36, 1), background-color 280ms ease"
+              } as object),
+            structureCollapsible &&
+              structureRail === "collapsed" &&
+              styles.treeRegionCollapsed,
+            !wide && !structureCollapsible && styles.collapsedRegion,
             narrow && styles.narrowRegion,
             (focusHalo || (!wide && collapsedPanel !== "tree")) &&
               styles.regionHidden
           ]}
         >
-          {tree}
-        </View>
-
-        <ScrollView
-          contentContainerStyle={[
-            styles.centerContent,
-            narrow && styles.centerContentNarrow
-          ]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator
-          style={styles.center}
-        >
-          {error === undefined ? null : (
-            <View accessibilityRole="alert" style={styles.error}>
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          )}
-          {focusHalo ? null : (
-            <>
-              <View
-                accessibilityLabel="Story Trail"
-                style={styles.storyTrailRow}
-              >
-            <View style={styles.storyTrail}>
-              {trail.map((item, index) => {
-                const current = index === trail.length - 1;
-                const key = manuscriptSelectionKey(item.selection);
-                return (
-                  <View key={key} style={styles.storyTrailItem}>
-                    {index === 0 ? null : (
-                      <Text style={styles.storyTrailDivider}>›</Text>
-                    )}
-                    <Pressable
-                      accessibilityLabel={
-                        current
-                          ? `Story Trail, current scope ${item.label}`
-                          : `Story Trail, go to ${item.label}`
-                      }
-                      accessibilityRole="button"
-                      accessibilityState={{ disabled: current }}
-                      disabled={current || busy}
-                      onPress={() => chooseSelection(item.selection)}
-                      style={({ pressed }) => [
-                        styles.storyTrailButton,
-                        current && styles.storyTrailCurrent,
-                        pressed && styles.pressed
-                      ]}
-                    >
-                      <Text
-                        numberOfLines={1}
-                        style={[
-                          styles.storyTrailText,
-                          current && styles.storyTrailTextCurrent
-                        ]}
-                      >
-                        {item.label}
-                      </Text>
-                    </Pressable>
-                  </View>
-                );
-              })}
-            </View>
-            {quickOptions.length === 0 ? null : (
-              <View style={styles.quickBuild}>
+          {structureCollapsible ? (
+            structureRail === "collapsed" ? (
+              <View style={styles.structureCollapsedRail}>
                 <Pressable
-                  accessibilityLabel="Quick Build: add to the manuscript"
+                  accessibilityLabel="Expand manuscript · ["
                   accessibilityRole="button"
-                  accessibilityState={{ expanded: quickBuildOpen }}
                   disabled={busy}
-                  onPress={() => setQuickBuildOpen((current) => !current)}
+                  onPress={() => setStructureRail("expanded")}
                   style={({ pressed }) => [
-                    styles.quickBuildButton,
-                    quickBuildOpen && styles.buttonSelected,
+                    styles.structureToggle,
                     pressed && styles.pressed,
                     busy && styles.disabled
                   ]}
                 >
-                  <Text style={styles.quickBuildButtonText}>＋ Add</Text>
+                  <Text style={styles.structureToggleGlyph}>»|</Text>
                 </Pressable>
-                {quickBuildOpen ? (
-                  <View
-                    accessibilityLabel="Quick Build options"
-                    style={styles.quickBuildMenu}
+                <Text style={styles.structureCollapsedHint}>Tree</Text>
+              </View>
+            ) : (
+              <View style={styles.structureExpandedShell}>
+                <View style={styles.structureExpandedHeader}>
+                  <Text style={styles.structureExpandedLabel}>Manuscript</Text>
+                  <Pressable
+                    accessibilityLabel="Collapse manuscript · ["
+                    accessibilityRole="button"
+                    disabled={busy}
+                    onPress={() => setStructureRail("collapsed")}
+                    style={({ pressed }) => [
+                      styles.structureToggle,
+                      pressed && styles.pressed,
+                      busy && styles.disabled
+                    ]}
                   >
-                    {quickOptions.map((option) => (
+                    <Text style={styles.structureToggleGlyph}>|«</Text>
+                  </Pressable>
+                </View>
+                {tree}
+              </View>
+            )
+          ) : (
+            tree
+          )}
+          {structureCollapsible && structureRail === "expanded" ? (
+            <View
+              accessibilityLabel="Resize manuscript structure"
+              accessibilityRole="adjustable"
+              {...structureResizeResponder.panHandlers}
+              style={styles.structureResizeHandle}
+            />
+          ) : null}
+        </View>
+
+        {(() => {
+          const centerChrome = focusHalo ? null : (
+            <>
+              {mapDense && wide ? null : (
+                <View style={styles.storyTrailRow}>
+                  {storyTrailNodes}
+                  {quickOptions.length === 0 || !quickBuildVisible ? null : (
+                    <View style={styles.quickBuild}>
                       <Pressable
-                        accessibilityLabel={option.label}
-                        accessibilityRole="menuitem"
+                        accessibilityLabel="Quick Build: add to the manuscript"
+                        accessibilityRole="button"
+                        accessibilityState={{ expanded: quickBuildOpen }}
                         disabled={busy}
-                        key={option.id}
-                        onPress={() => dispatchQuickBuild(option)}
+                        onPress={() =>
+                          setQuickBuildOpen((current) => !current)
+                        }
                         style={({ pressed }) => [
-                          styles.quickBuildOption,
-                          pressed && styles.pressed
+                          styles.quickBuildButton,
+                          quickBuildOpen && styles.buttonSelected,
+                          pressed && styles.pressed,
+                          busy && styles.disabled
                         ]}
                       >
-                        <Text style={styles.quickBuildOptionLabel}>
-                          {option.label}
-                        </Text>
-                        <Text
-                          numberOfLines={2}
-                          style={styles.quickBuildOptionDetail}
-                        >
-                          {option.detail}
-                        </Text>
+                        <Text style={styles.quickBuildButtonText}>＋ Add</Text>
                       </Pressable>
-                    ))}
-                    <Text style={styles.quickBuildHint}>
-                      Titles commit with Enter in the manuscript tree. Escape
-                      cancels.
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-            )}
-              </View>
-              <View style={styles.centerHeading}>
-                <View style={styles.centerHeadingCopy}>
-                  <Text style={styles.centerEyebrow}>{centerEyebrow}</Text>
-                  <Text style={styles.centerTitle}>{centerTitle}</Text>
+                      {quickBuildOpen ? (
+                        <View
+                          accessibilityLabel="Quick Build options"
+                          style={styles.quickBuildMenu}
+                        >
+                          {quickOptions.map((option) => (
+                            <Pressable
+                              accessibilityLabel={option.label}
+                              accessibilityRole="menuitem"
+                              disabled={busy}
+                              key={option.id}
+                              onPress={() => dispatchQuickBuild(option)}
+                              style={({ pressed }) => [
+                                styles.quickBuildOption,
+                                pressed && styles.pressed
+                              ]}
+                            >
+                              <Text style={styles.quickBuildOptionLabel}>
+                                {option.label}
+                              </Text>
+                              <Text
+                                numberOfLines={2}
+                                style={styles.quickBuildOptionDetail}
+                              >
+                                {option.detail}
+                              </Text>
+                            </Pressable>
+                          ))}
+                          <Text style={styles.quickBuildHint}>
+                            Titles commit with Enter in the manuscript tree.
+                            Escape cancels.
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  )}
                 </View>
-                <Text style={styles.centerRule}>
-                  Tree order is canonical. Canvas relationships never reorder
-                  Draft.
-                </Text>
-              </View>
-              {canvasVisible ? (
+              )}
+              {mapDense ? null : (
+                <View style={styles.centerHeading}>
+                  <View style={styles.centerHeadingCopy}>
+                    <Text style={styles.centerEyebrow}>{centerEyebrow}</Text>
+                    <Text style={styles.centerTitle}>{centerTitle}</Text>
+                  </View>
+                  <Text style={styles.centerRule}>
+                    Tree order is canonical. Canvas relationships never reorder
+                    Draft.
+                  </Text>
+                </View>
+              )}
+              {canvasVisible && !mapDense ? (
                 <CanvasDrillBar
                   busy={busy}
                   canvasVisible={canvasVisible}
@@ -1137,11 +1549,13 @@ export function AuthenticatedProjectWorkspace({
                 />
               ) : null}
             </>
-          )}
+          );
+          const workSurface = (
           <View
             ref={splitSurfaceRef}
             style={[
               styles.workSurface,
+              mapDense && styles.workSurfaceMap,
               mode === "split" && styles.workSurfaceSplit,
               narrow && styles.workSurfaceNarrow
             ]}
@@ -1302,7 +1716,40 @@ export function AuthenticatedProjectWorkspace({
               </View>
             ) : null}
           </View>
-        </ScrollView>
+          );
+          if (mapDense) {
+            return (
+              <View style={[styles.center, styles.centerMap]}>
+                {error === undefined ? null : (
+                  <View accessibilityRole="alert" style={styles.error}>
+                    <Text style={styles.errorText}>{error}</Text>
+                  </View>
+                )}
+                {centerChrome}
+                {workSurface}
+              </View>
+            );
+          }
+          return (
+            <ScrollView
+              contentContainerStyle={[
+                styles.centerContent,
+                narrow && styles.centerContentNarrow
+              ]}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
+              style={styles.center}
+            >
+              {error === undefined ? null : (
+                <View accessibilityRole="alert" style={styles.error}>
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              )}
+              {centerChrome}
+              {workSurface}
+            </ScrollView>
+          );
+        })()}
 
         <View
           style={[
@@ -1310,6 +1757,7 @@ export function AuthenticatedProjectWorkspace({
             !wide && styles.collapsedRegion,
             narrow && styles.narrowRegion,
             (focusHalo ||
+              mapDense ||
               (draftDeskActive
                 ? !contextDockOpen
                 : !wide && collapsedPanel !== "inspector")) &&
@@ -1319,31 +1767,27 @@ export function AuthenticatedProjectWorkspace({
           {draftDeskActive ? draftContextDock : inspector}
         </View>
 
-        {chatOpen && onChatSend !== undefined ? (
-          <View
-            style={[
-              styles.chatRegion,
-              narrow && styles.narrowRegion
-            ]}
-          >
-            <WorkspaceChatPanel
-              busy={busy}
-              capabilities={chatCapabilities}
-              messages={chatMessages}
-              onClose={() => setChatOpen(false)}
-              onSend={onChatSend}
-              open={chatOpen}
-            />
-          </View>
-        ) : null}
       </View>
+
+      {paletteMode === undefined ? null : (
+        <WorkspaceQuickNav
+          chatBusy={busy}
+          chatCapabilities={chatCapabilities}
+          chatMessages={chatMessages}
+          mode={paletteMode}
+          onChatSend={onChatSend}
+          onClose={() => setPaletteMode(undefined)}
+          onPick={applyJumpTarget}
+          targets={jumpTargets}
+        />
+      )}
 
       <AcknowledgementToastHost
         onAction={onToastAction}
         onDismiss={onToastDismiss}
         onPause={onToastPause}
         onResume={onToastResume}
-        toasts={toasts}
+        toasts={mapDense ? [] : toasts}
       />
     </View>
   );
@@ -1371,18 +1815,36 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     zIndex: 20
   },
+  topbarMap: {
+    alignItems: "center",
+    gap: 6,
+    minHeight: 44,
+    paddingHorizontal: 8,
+    paddingVertical: 4
+  },
   topbarNarrow: {
     alignItems: "flex-start",
     flexWrap: "wrap"
   },
   topbarCopy: {
-    flex: 1,
+    flexGrow: 0,
+    flexShrink: 1,
+    maxWidth: 140,
     minWidth: 0
+  },
+  topbarTrail: {
+    flex: 1,
+    minWidth: 180,
+    paddingHorizontal: 4
   },
   topbarTitle: {
     color: colors.ink,
     fontFamily: fonts.story,
     fontSize: 21
+  },
+  topbarTitleMap: {
+    fontFamily: fonts.uiSemibold,
+    fontSize: 13
   },
   topbarMeta: {
     color: colors.muted,
@@ -1401,10 +1863,30 @@ const styles = StyleSheet.create({
     flexBasis: "100%",
     width: "100%"
   },
+  structureTopToggle: {
+    alignItems: "center",
+    borderColor: colors.line,
+    borderRadius: 6,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: "center",
+    minWidth: 28,
+    paddingHorizontal: 6
+  },
+  structureTopToggleGlyph: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 12
+  },
   aggregateStatus: {
     color: colors.green,
     fontFamily: fonts.uiSemibold,
     fontSize: 8
+  },
+  centerMap: {
+    flex: 1,
+    minHeight: 0,
+    padding: 0
   },
   button: {
     alignItems: "center",
@@ -1461,27 +1943,27 @@ const styles = StyleSheet.create({
   },
   rail: {
     backgroundColor: colors.rail,
-    gap: 7,
+    gap: 2,
     minHeight: 0,
-    paddingHorizontal: 5,
-    paddingVertical: 9,
-    width: shell.railWidth + 10
+    paddingHorizontal: 2,
+    paddingVertical: 6,
+    width: 32
   },
   railProject: {
     color: "#ffffff",
     fontFamily: fonts.brand,
-    fontSize: 22,
+    fontSize: 13,
     marginBottom: 4,
     textAlign: "center"
   },
   railButton: {
     alignItems: "center",
     borderColor: "transparent",
-    borderRadius: 7,
+    borderRadius: 5,
     borderWidth: 1,
-    gap: 2,
+    height: 28,
     justifyContent: "center",
-    minHeight: 46
+    width: 28
   },
   railButtonSelected: {
     backgroundColor: colors.railActive,
@@ -1490,32 +1972,94 @@ const styles = StyleSheet.create({
   railGlyph: {
     color: colors.railText,
     fontFamily: fonts.uiSemibold,
-    fontSize: 11
-  },
-  railLabel: {
-    color: colors.railText,
-    fontFamily: fonts.uiMedium,
-    fontSize: 7
+    fontSize: 12
   },
   railTextSelected: {
     color: "#ffffff"
   },
+  railDivider: {
+    alignSelf: "center",
+    backgroundColor: "#4a4039",
+    height: 1,
+    marginVertical: 4,
+    width: 16
+  },
   railSpacer: {
     flex: 1
-  },
-  railAuthority: {
-    color: colors.railText,
-    fontFamily: fonts.ui,
-    fontSize: 6,
-    lineHeight: 9,
-    textAlign: "center"
   },
   treeRegion: {
     borderRightColor: colors.line,
     borderRightWidth: 1,
     minHeight: 0,
     minWidth: 0,
-    width: 292
+    overflow: "hidden",
+    position: "relative",
+    width: shell.navigatorWidth
+  },
+  structureResizeHandle: {
+    bottom: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    width: 6,
+    zIndex: 4,
+    ...(typeof document !== "undefined"
+      ? ({ cursor: "ew-resize" } as object)
+      : {})
+  },
+  treeRegionCollapsed: {
+    backgroundColor: colors.wash
+  },
+  structureCollapsedRail: {
+    alignItems: "center",
+    flex: 1,
+    gap: 8,
+    paddingTop: 10,
+    paddingHorizontal: 2
+  },
+  structureExpandedShell: {
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0
+  },
+  structureExpandedHeader: {
+    alignItems: "center",
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 8,
+    paddingVertical: 6
+  },
+  structureExpandedLabel: {
+    color: colors.kicker,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 7,
+    letterSpacing: 1,
+    textTransform: "uppercase"
+  },
+  structureToggle: {
+    alignItems: "center",
+    borderColor: colors.line,
+    borderRadius: 5,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 28,
+    minWidth: 28,
+    paddingHorizontal: 4
+  },
+  structureToggleGlyph: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 11
+  },
+  structureCollapsedHint: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 7,
+    textAlign: "center",
+    transform: [{ rotate: "-90deg" }],
+    width: 48
   },
   inspectorRegion: {
     borderLeftColor: colors.line,
@@ -1710,6 +2254,44 @@ const styles = StyleSheet.create({
     fontFamily: fonts.uiMedium,
     fontSize: 8
   },
+  mapTrail: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0
+  },
+  mapTrailEyebrow: {
+    color: colors.kicker,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 9,
+    letterSpacing: 0.4
+  },
+  mapSelectionHint: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 11,
+    maxWidth: 220,
+    paddingHorizontal: 4
+  },
+  topbarHistoryButton: {
+    alignItems: "center",
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 6,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: "center",
+    minWidth: 28,
+    paddingHorizontal: 6
+  },
+  topbarHistoryButtonSelected: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent
+  },
+  topbarHistoryGlyph: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 12
+  },
   storyTrailTextCurrent: {
     color: colors.accent,
     fontFamily: fonts.uiSemibold
@@ -1871,6 +2453,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
     width: "100%"
   },
+  workSurfaceMap: {
+    alignItems: "stretch",
+    flex: 1,
+    gap: 0,
+    minHeight: 0
+  },
   workSurfaceSplit: {
     alignItems: "stretch",
     gap: 0
@@ -1880,6 +2468,7 @@ const styles = StyleSheet.create({
   },
   workSurfacePane: {
     flex: 1,
+    minHeight: 0,
     minWidth: 0,
     width: "100%"
   },

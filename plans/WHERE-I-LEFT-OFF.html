@@ -11,77 +11,42 @@
     <header>
       <p class="eyebrow">Session handoff</p>
       <h1>Where we left off</h1>
-      <p><strong>Last updated:</strong> 2026-07-18 · <strong>Current branch:</strong> <code>feat/authenticated-project-crud</code></p>
+      <p><strong>Last updated:</strong> 2026-07-19 · <strong>Current branch:</strong> <code>feat/canvas-structure-ux-3</code></p>
     </header>
 
     <section>
       <h2>Current state</h2>
-      <p>PR #4 is merged to <code>main</code>. On <code>feat/authenticated-project-crud</code>, the owner-only writing foundation, tree + DAG shell, and writer-workspace-depth expansion (ADRs 0005–0009) are implemented locally: durable hierarchy/prose/history/recovery, Canvas boards/links/scope placements, Reader/TTS route, and MCP chat dock. A 2026-07-17 review of the real Cognition project found that the capabilities remain too form-driven and difficult to discover. The founder accepted <a href="designs/Ghostwriter%20Mockups%202.0.html#ux-proposal-workspace-2-1">Build · Map · Write UX 2.1</a> on 2026-07-18, authorizing Story Trail, Quick Build, Scene Launchpad, Canvas Workbench, Thread Trace, Chapter Aggregates, Scene Focus Stage, Draft Desk, Context Dock, Draft History drawer, and Focus Halo for checkpoints H1–H5.</p>
-      <p><strong>Verification:</strong> UX 2.1 checkpoints H1–H5 are implemented and browser-verified on the feature branch: Story Trail/Quick Build/Launchpad, Draft Desk/Context/History/Focus Halo, Canvas Workbench (tool dock, aggregates, Scene Focus Stage), handoffs/narrow modes, and Reader→Draft caret restore. <code>pnpm verify</code> passes 28 files / 189 tests plus 12 hook-policy checks. Playwright authoring/repair waits on explicit founder verification of this complete outcome (<code>GHOSTWRITER_PLAYWRIGHT_GATE=user-verified</code>). The separate pointer Canvas-card drag journey remains a known post-verification acceptance-audit item. <strong>Live:</strong> backend at <code>https://ghostwriter-backend.fly.dev</code> (<code>/health</code> ok); Lakebase <code>production</code> is migrated through the current checked-in schema.</p>
+      <p>Two active plans on the same branch:</p>
+      <ul>
+        <li><a href="active/2026-07-18-canvas-structure-ux-3/plan.html">Canvas &amp; Structure UX 3.0</a> — Map card chrome (lock/resize/attach/tips/live links).</li>
+        <li><a href="active/2026-07-19-workspace-shell-palette/plan.html">Workspace shell palette</a> — Cursor-like activity rail + ⌘P / ⌘⇧P.</li>
+      </ul>
+      <p>Living design for Map remains <a href="designs/Ghostwriter%20Mockups%203.0.html">Mockups 3.0</a>. Playwright still gated.</p>
     </section>
 
     <section>
-      <h2>Latest completed work</h2>
+      <h2>Done in latest shell slice</h2>
       <ul>
-        <li><a href="archive/2026-07-11-html-planning-harness/plan.html">HTML planning harness</a> established semantic delivery plans, the autonomous work loop, and ADR 0001.</li>
-        <li><a href="archive/2026-07-11-scaffold-foundation/plan.html">Scaffold foundation</a> established pnpm workspaces, strict TypeScript, core, MCP, Expo web, Electron placeholder, verification, and preview deployment through merged PR #2.</li>
-        <li>PR #3 merged the accepted agentic writing blueprint, Story Canvas 2.0 direction, server-authoritative ADR 0002, and living design source into <code>main</code>.</li>
-        <li>PR #4 merged the <a href="archive/2026-07-11-multi-book-domain-kernel/plan.html">multi-book domain kernel</a> (ADR 0003), the brand-aligned client, and the <a href="archive/2026-07-11-backend-lakebase-cicd/plan.html">Lakebase backend + branch-based CI/CD</a> (ADR 0004) into <code>main</code>. Both plans are archived.</li>
-        <li>Checkpoint <code>a73d532</code> is pushed on <code>feat/authenticated-project-crud</code>: Google/Better Auth, writer profiles and ownership, 22 safe metadata commands, the responsive authenticated workspace, migrations, and local real-provider acceptance are green. No PR is open.</li>
-        <li>The founder accepted the <a href="designs/Ghostwriter%20Mockups%202.0.html#ux-proposal-fs-dag">filesystem + DAG UX direction</a>. Its <a href="active/2026-07-11-authenticated-project-crud/ux-proposal-filesystem-dag-nav.html">UX contract</a> and <a href="active/2026-07-11-authenticated-project-crud/feature-delivery-checkpoints.html">autonomous feature checkpoints</a> now govern implementation.</li>
+        <li>Slim 32px glyph activity rail with Structure / Jump / Chat toggles.</li>
+        <li>⌘P manuscript jump; ⌘⇧P command + top MCP chat palette.</li>
+        <li>Resizable structure rail.</li>
       </ul>
     </section>
 
     <section>
-      <h2>Committed foundations</h2>
-      <ul>
-        <li>Responsive real-time web is the primary product; Expo remains the universal client and wrappers add conveniences.</li>
-        <li>Tiptap (ProseMirror) editor, hosted by Expo DOM components on native.</li>
-        <li>GitHub Actions CI/CD; Cloudflare Pages direct upload; protected <code>main</code>.</li>
-        <li>Full novels and multi-book projects share story knowledge and cross-book arcs.</li>
-        <li>Story Canvas and Draft are linked views of the same scenes and story objects.</li>
-        <li>Authors and editors use attributable comments, suggestions, variants, compare/combine, restore, and named editions.</li>
-        <li>Agents propose ideas, edits, and multiple prose versions; humans decide what becomes canonical.</li>
-        <li>ADR 0002 sets online-only, server-authoritative v1 projects with minimal unacknowledged-work recovery and one direct scene editor at a time; full offline and same-scene multi-cursor editing are deferred.</li>
-        <li>ADR 0003 sets normalized project, book, scene, story-knowledge, and edition boundaries; manuscript and Canvas views reference the same stable scene records.</li>
-        <li>ADR 0004 selects Databricks Lakebase Postgres, Drizzle migrations, a Node/Hono backend, and a database branch per pull request as the server-authoritative store.</li>
-        <li>Writer ownership through complete history, export, account exit, platform-neutral core, and MCP parity remains non-negotiable.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h2>Active plans</h2>
-      <ul>
-        <li><a href="active/2026-07-11-authenticated-project-crud/plan.html">Authenticated writing workspace, revisions, and Story Canvas</a> is active on <code>feat/authenticated-project-crud</code>. Phase 1 is pushed; the expanded technical milestone, accepted tree + DAG shell, and UX 2.1 H1–H5 are green locally and waiting on founder product verification before the deferred Playwright acceptance audit, push, and PR.</li>
-        <li>The long-running product/architecture blueprint remains at <a href="active/2026-07-11-agentic-writing-experience/plan.html">agentic writing experience</a>, retaining the experience, technical, agent, roadmap, and visual artifacts plus later platform decisions.</li>
-      </ul>
-      <p><strong>Living design source:</strong> <a href="designs/Ghostwriter%20Mockups%202.0.html">Ghostwriter Mockups 2.0</a> (never archived).</p>
-    </section>
-
-    <section>
-      <h2>Incomplete and next delivery</h2>
-      <p>The product direction is substantially accepted and the backend topology is now decided and deployed. These material decisions remain open:</p>
+      <h2>Incomplete / next</h2>
       <ol>
-        <li>Identity/authentication, safe CRUD, prose/history/recovery, Canvas state, tree/inspector/toasts, drill/workflow lenses, Reader, Split, depth features, and UX 2.1 H1–H5 are implemented locally under ADRs 0005–0009. Remaining work is founder verification of the complete outcome, the deferred Playwright acceptance audit (including pointer Canvas-card drag), any verification follow-ups, expanded milestone commit/push, PR Lakebase/CI, merge-driven release and post-release smoke, then archive.</li>
-        <li>Subscription/billing management.</li>
-        <li>Real-time transport, presence, scene leases, backup/retention/deletion, and remote MCP authorization (backend/database selected in ADR 0004; live-update layer still open).</li>
-        <li>Initial import/export formats; browser access is the accepted primary portability experience.</li>
-        <li>AI provider, credentials, web egress, and local-model posture.</li>
-        <li>Confirmation that marketplace, rights, payments, and studio systems remain outside creation v1.</li>
+        <li><strong>Founder:</strong> hard-refresh — try ⌘P, ⌘⇧P, rail icons, structure drag.</li>
+        <li>Polish (inspector resize, persist structure width, Map-dense jump affordance if missing).</li>
+        <li>Consider splitting shell work onto <code>feat/workspace-shell-palette</code> before PR.</li>
       </ol>
-    </section>
-
-    <section>
-      <h2>Recommended next step</h2>
-      <p>Review the complete Build · Map · Write UX 2.1 outcome on <code>feat/authenticated-project-crud</code> (H1–H5). After founder verification, authorize the deferred Playwright acceptance audit with <code>GHOSTWRITER_PLAYWRIGHT_GATE=user-verified</code>, then commit/push/PR when ready. Do not push, open a PR, merge, or deploy without separate go-ahead.</p>
     </section>
 
     <section>
       <h2>How to resume</h2>
       <ol>
-        <li>Read this document and the living design source; treat ADRs 0002–0004 and the recorded product requirements as accepted.</li>
-        <li>Branch from up-to-date <code>main</code> for new work; never commit to <code>main</code>.</li>
-        <li>Operational specifics (Lakebase resources, secrets, direct-host gotcha, deploy/branch workflows) live in <code>docs/OPERATIONS.md</code>; archived delivery detail is under <code>plans/archive/</code>.</li>
+        <li>Checkout <code>feat/canvas-structure-ux-3</code>; run <code>./scripts/dev-local.sh</code>.</li>
+        <li>Founder verifies shell + Canvas; then polish or Playwright gate.</li>
       </ol>
     </section>
   </main>

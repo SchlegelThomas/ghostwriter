@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Workspace shell · Cursor-like nav</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan</p>
+      <h1>Workspace shell · activity rail + quick jump</h1>
+      <p class="meta"><strong>Status:</strong> active<br>
+        <strong>Branch:</strong> <code>feat/canvas-structure-ux-3</code> (shared until shell branch split)<br>
+        <strong>Owner:</strong> founder + agent</p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Make Ghostwriter’s overall chrome feel like a writing IDE (Cursor-inspired): a slim activity rail, open/close/resizable panels, <strong>⌘P</strong> to jump to any manuscript component, and <strong>⌘⇧P</strong> as the top command / MCP chat surface.</p>
+      <p><strong>Out of scope for first slice:</strong> full Cursor multi-panel workspace persistence, renaming all modes to Build/Map/Write, Playwright (until founder verifies).</p>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ul>
+        <li>Activity rail is glyph-first, denser, with mode + panel toggles (Draft/Canvas/Split/Reader, Structure, Chat, Jump).</li>
+        <li>⌘P / Ctrl+P opens a top quick-jump palette listing books, chapters, scenes, and story records; choosing one selects it and opens Draft for scenes.</li>
+        <li>⌘⇧P / Ctrl+⇧P opens a top command + MCP chat palette (not only a right dock).</li>
+        <li>Structure rail can be drag-resized when expanded; chat top panel height can be drag-resized.</li>
+        <li>Existing Map/Canvas board shortcuts remain; Esc closes palettes.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks</h2>
+      <ol>
+        <li>Pure jump/command index + filter helpers + Vitest.</li>
+        <li>Palette UI component (jump vs command/chat).</li>
+        <li>Wire global shortcuts + rail affordances in <code>AuthenticatedProjectWorkspace</code>.</li>
+        <li>Reposition MCP chat into top command surface; keep rail toggle.</li>
+        <li>Structure width + chat height resize handles.</li>
+        <li>Update handoff / record log; founder browser verify.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li>Unit: jump target indexing + filter ranking.</li>
+        <li>Manual: ⌘P jump to scene; ⌘⇧P send chat; resize structure; Esc dismiss.</li>
+        <li><code>pnpm --filter @ghostwriter/ui exec tsc --noEmit</code> and focused vitest.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p>Update PRODUCT keyboard map when accepted. No ADR unless chat transport changes. Living design: Mockups 3.0 remains Map-authoritative; this plan owns overall shell chrome and may later update Mockups 3.0 app-chrome notes.</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <p><strong>Locked for slice:</strong> ⌘P = manuscript jump; ⌘⇧P = commands + MCP chat at top. Activity rail stays writing modes (D/C/S/R), not a VS Code clone of SCM/Extensions.</p>
+      <p><strong>Open:</strong> whether to split a dedicated <code>feat/workspace-shell-palette</code> branch before PR.</p>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked> Plan accepted direction from founder screenshot</li>
+        <li><input type="checkbox"> Implementation complete</li>
+        <li><input type="checkbox"> Tests and verification complete</li>
+        <li><input type="checkbox"> Docs updated</li>
+        <li><input type="checkbox"> Handoff updated</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

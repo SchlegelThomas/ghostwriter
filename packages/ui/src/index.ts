@@ -11,5 +11,8 @@ export * from "./SelectionInspector.js";
 export * from "./manuscript-selection.js";
 export * from "./split-layout.js";
 export * from "./workspace-structure.js";
+export * from "./map-structure-rail.js";
 export * from "./theme.js";
 export * from "./WorkspaceChatPanel.js";
+export * from "./WorkspaceQuickNav.js";
+export * from "./workspace-quick-nav.js";

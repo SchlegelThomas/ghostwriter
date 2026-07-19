@@ -27,6 +27,7 @@ import {
   canvasFailureDisposition,
   canvasHistoryLabel,
   canvasPositionAfterDrag,
+  canvasWorldPointFromScreen,
   canvasSceneFocus,
   canvasScreenFrame,
   canvasToolInstruction,
@@ -154,38 +155,41 @@ describe("Canvas presentation helpers", () => {
     ).toEqual([near.id, edge.id]);
   });
 
-  it("places new captures in visible slots for wide and narrow Canvas panes", () => {
+  it("places new captures near the viewport center without a column grid", () => {
     const viewport = { x: 100, y: 50, zoom: 1 };
+    const positions = [0, 1, 2, 3].map((index) =>
+      canvasCapturePosition(index, viewport, { width: 900, height: 580 })
+    );
 
-    expect(
-      [0, 1, 2, 3].map((index) =>
-        canvasCapturePosition(index, viewport, { width: 900, height: 580 })
-      )
-    ).toEqual([
-      { x: 148, y: 102 },
-      { x: 438, y: 102 },
-      { x: 728, y: 102 },
-      { x: 148, y: 292 }
-    ]);
+    // Center-ish cluster with distinct offsets — not a left-to-right column ladder.
+    expect(positions[0]!.x).toBeGreaterThan(viewport.x + 100);
+    expect(positions[0]!.x).toBeLessThan(viewport.x + 700);
+    expect(new Set(positions.map((position) => `${position.x},${position.y}`)).size).toBe(
+      4
+    );
+    expect(positions[1]).not.toEqual({
+      x: positions[0]!.x + 290,
+      y: positions[0]!.y
+    });
 
     const compactPosition = canvasCapturePosition(2, viewport, {
       width: 230,
       height: 580
     });
-    const cascadedPosition = canvasCapturePosition(3, viewport, {
-      width: 230,
-      height: 580
-    });
-    expect(compactPosition).toEqual({ x: 148, y: 482 });
-    expect(cascadedPosition).toEqual({ x: 172, y: 126 });
     expect(
       visibleCanvasObjects(
         [object("canvas-object-capture", compactPosition)],
         viewport,
         { width: 230, height: 580 },
-        0
+        80
       )
     ).toHaveLength(1);
+  });
+
+  it("maps screen points back into world space", () => {
+    expect(
+      canvasWorldPointFromScreen({ x: 40, y: 20, zoom: 2 }, 100, 50)
+    ).toEqual({ x: 90, y: 45 });
   });
 
   it("projects scene cards in canonical Draft order with explicit states", () => {
@@ -363,10 +367,10 @@ describe("Canvas presentation helpers", () => {
 
     expect(new Set(instructions).size).toBe(tools.length);
     expect(canvasToolInstruction("select")).toBe(
-      "Select a card, link, or region to reveal its common actions."
+      "Drag cards freely. Drag empty board to pan. Pinch or Ctrl+scroll to zoom."
     );
     expect(canvasToolInstruction("connect")).toBe(
-      "Choose a source card, target, relationship kind, authority, and label."
+      "Drag from a card’s out-handle to a target, or finish the link in Details."
     );
   });
 

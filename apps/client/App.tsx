@@ -93,6 +93,10 @@ import {
   shouldShowDraftAcknowledgement,
   toastReducer
 } from "./src/acknowledgements.js";
+import {
+  pushRecentCanvasAction,
+  type RecentCanvasAction
+} from "./src/canvas-chrome.js";
 import type { ManuscriptSelection } from "@ghostwriter/ui";
 import { sceneRecoveryService } from "./src/scene-recovery.js";
 
@@ -157,6 +161,12 @@ export default function App() {
     useState<CanvasWorkspaceResponse>();
   const [canvasPreference, setCanvasPreference] =
     useState<CanvasPreferenceResponse | null>();
+  const canvasPreferenceSaveGenRef = useRef(0);
+  const [recentCanvasActions, setRecentCanvasActions] = useState<
+    readonly RecentCanvasAction[]
+  >([]);
+  const [canvasHistoryOpen, setCanvasHistoryOpen] = useState(false);
+  const canvasUndoActionRef = useRef<(() => void) | undefined>(undefined);
   const [canvasHistory, setCanvasHistory] = useState<CanvasHistoryResponse>();
   const [canvasHistoryLoading, setCanvasHistoryLoading] = useState(false);
   const [selectedCanvasObjectId, setSelectedCanvasObjectId] =
@@ -284,6 +294,9 @@ export default function App() {
     setCanvasHistory(undefined);
     setCanvasHistoryLoading(false);
     setSelectedCanvasObjectId(undefined);
+    setRecentCanvasActions([]);
+    setCanvasHistoryOpen(false);
+    canvasUndoActionRef.current = undefined;
     setCanvasLoading(false);
     setCanvasBusy(false);
     setCanvasSaveState("saved");
@@ -1148,72 +1161,60 @@ export default function App() {
           disposition === "reload-project-and-board"
             ? "The manuscript changed before this Canvas scene handoff. Ghostwriter created nothing, reloaded both latest views, and left them ready for review."
             : "Story Canvas changed in another request. Ghostwriter applied nothing, reloaded the latest board, and kept the new version ready for review.";
-        setCanvasMessage({
-          kind: "conflict",
-          text: conflictText
-        });
-        showToast(
-          problemToast({
-            id: "canvas-conflict",
+        // Map notifications live in History — do not duplicate as banner + toast.
+        setCanvasMessage(undefined);
+        setRecentCanvasActions((current) =>
+          pushRecentCanvasAction(current, {
+            id: nextToastId("canvas-conflict"),
             title:
               disposition === "reload-project-and-board"
                 ? "Manuscript changed during handoff"
                 : "Canvas changed elsewhere",
             detail: conflictText,
-            now: Date.now(),
-            actionLabel: "Reload Canvas"
-          }),
-          () =>
-            loadCanvas(
-              selectedProject.id,
-              "Latest server-acknowledged Canvas loaded for review."
-            )
+            createdAt: Date.now(),
+            canUndo: false,
+            tone: "warning",
+            actionLabel: "Reload Canvas",
+            actionKind: "reload-canvas"
+          })
         );
         return;
       } catch (reloadCause) {
         setCanvasSaveState("error");
-        setCanvasMessage({
-          kind: "error",
-          text:
-            reloadCause instanceof Error
-              ? `The Canvas conflict was safe, but the latest board could not reload: ${reloadCause.message}`
-              : "The Canvas conflict was safe, but the latest board could not reload."
-        });
-        showToast(
-          problemToast({
-            id: "canvas-save-problem",
+        setCanvasMessage(undefined);
+        setRecentCanvasActions((current) =>
+          pushRecentCanvasAction(current, {
+            id: nextToastId("canvas-save-problem"),
             title: "Canvas conflict needs review",
             detail:
               reloadCause instanceof Error
                 ? reloadCause.message
                 : "The latest Canvas could not reload.",
-            now: Date.now(),
+            createdAt: Date.now(),
+            canUndo: false,
             tone: "error",
-            dismissible: true
+            actionLabel: "Reload Canvas",
+            actionKind: "reload-canvas"
           })
         );
         return;
       }
     }
     setCanvasSaveState("error");
-    setCanvasMessage({
-      kind: "error",
-      text:
-        cause instanceof Error
-          ? `Canvas content was not changed: ${cause.message}`
-          : "Canvas content was not changed. Review the current board and retry."
-    });
-    showToast(
-      problemToast({
-        id: "canvas-save-problem",
+    setCanvasMessage(undefined);
+    setRecentCanvasActions((current) =>
+      pushRecentCanvasAction(current, {
+        id: nextToastId("canvas-save-problem"),
         title: "Canvas change not saved",
         detail:
           cause instanceof Error
             ? cause.message
             : "Review the current board and retry.",
-        now: Date.now(),
+        createdAt: Date.now(),
+        canUndo: false,
         tone: "error",
-        dismissible: true
+        actionLabel: "Reload Canvas",
+        actionKind: "reload-canvas"
       })
     );
   }
@@ -1242,15 +1243,25 @@ export default function App() {
       invalidateCanvasUndo();
       const now = Date.now();
       const id = nextToastId("canvas");
-      const toast = acknowledgementToast({
-        id,
-        title: acknowledgement.title,
-        detail: acknowledgement.detail,
-        actionLabel: acknowledgement.actionLabel,
-        now
-      });
-      canvasUndoToastIdRef.current = id;
-      showToast(toast, () => undoLatestCanvasCommand(id));
+      const canUndo = acknowledgement.actionLabel === "Undo";
+      setRecentCanvasActions((current) =>
+        pushRecentCanvasAction(current, {
+          id,
+          title: acknowledgement.title,
+          detail: acknowledgement.detail,
+          createdAt: now,
+          canUndo
+        })
+      );
+      if (canUndo) {
+        canvasUndoToastIdRef.current = id;
+        canvasUndoActionRef.current = () => {
+          void undoLatestCanvasCommand(id);
+        };
+      } else {
+        canvasUndoToastIdRef.current = undefined;
+        canvasUndoActionRef.current = undefined;
+      }
       if (canvasHistory !== undefined) {
         void loadCanvasHistoryForProject(selectedProject.id);
       }
@@ -1289,19 +1300,24 @@ export default function App() {
       setCanvasSaveState("saved");
       invalidateCanvasUndo();
       if (sourceToastId !== undefined) dismissToast(sourceToastId);
+      canvasUndoToastIdRef.current = undefined;
+      canvasUndoActionRef.current = undefined;
+      const undoNow = Date.now();
+      const undoId = nextToastId("canvas-undo");
+      setRecentCanvasActions((current) =>
+        pushRecentCanvasAction(current, {
+          id: undoId,
+          title: "Canvas action undone",
+          detail:
+            "Draft prose and canonical manuscript order were unchanged.",
+          createdAt: undoNow,
+          canUndo: false
+        })
+      );
       if (canvasHistory !== undefined) {
         void loadCanvasHistoryForProject(selectedProject.id);
       }
       setCanvasMessage(undefined);
-      showToast(
-        acknowledgementToast({
-          id: nextToastId("canvas-undo"),
-          title: "Canvas action undone",
-          detail:
-            "Draft prose and canonical manuscript order were unchanged.",
-          now: Date.now()
-        })
-      );
       if (
         selectedCanvasObjectId !== undefined &&
         !updated.board.objects.some(
@@ -1344,16 +1360,20 @@ export default function App() {
       invalidateCanvasUndo();
       const now = Date.now();
       const id = nextToastId("canvas-restore");
-      const toast = acknowledgementToast({
-        id,
-        title: "Canvas snapshot restored",
-        detail:
-          "The earlier board is current. Draft prose and manuscript order were unchanged.",
-        actionLabel: "Undo",
-        now
-      });
+      setRecentCanvasActions((current) =>
+        pushRecentCanvasAction(current, {
+          id,
+          title: "Canvas snapshot restored",
+          detail:
+            "The earlier board is current. Draft prose and manuscript order were unchanged.",
+          createdAt: now,
+          canUndo: true
+        })
+      );
       canvasUndoToastIdRef.current = id;
-      showToast(toast, () => undoLatestCanvasCommand(id));
+      canvasUndoActionRef.current = () => {
+        void undoLatestCanvasCommand(id);
+      };
       if (
         selectedCanvasObjectId !== undefined &&
         !reloaded.board.objects.some(
@@ -1393,14 +1413,18 @@ export default function App() {
     if (input.selectedObjectId !== undefined) {
       setSelectedCanvasObjectId(input.selectedObjectId ?? undefined);
     }
+    const saveGen = ++canvasPreferenceSaveGenRef.current;
     try {
-      setCanvasPreference(
-        await saveCanvasPreference({
-          projectId: selectedProject.id,
-          ...input
-        })
-      );
+      const saved = await saveCanvasPreference({
+        projectId: selectedProject.id,
+        ...input
+      });
+      // Ignore out-of-order preference responses so a slow save cannot
+      // overwrite a newer pan/zoom the writer already made.
+      if (saveGen !== canvasPreferenceSaveGenRef.current) return;
+      setCanvasPreference(saved);
     } catch (cause) {
+      if (saveGen !== canvasPreferenceSaveGenRef.current) return;
       setCanvasMessage({
         kind: "error",
         text:
@@ -1415,9 +1439,9 @@ export default function App() {
     title: string;
     manuscriptPlacement: CanvasScenePlacementInput;
     canvas: CanvasSceneGeometryInput;
-  }): Promise<boolean> {
+  }): Promise<SceneId | undefined> {
     if (selectedProject === undefined || canvasWorkspace === undefined) {
-      return false;
+      return undefined;
     }
     setCanvasBusy(true);
     setCanvasSaveState("saving");
@@ -1445,18 +1469,19 @@ export default function App() {
       setCanvasMessage(undefined);
       invalidateMetadataUndo();
       invalidateCanvasUndo();
-      showToast(
-        acknowledgementToast({
+      setRecentCanvasActions((current) =>
+        pushRecentCanvasAction(current, {
           id: nextToastId("canvas-scene"),
           title: "Scene created in Canvas and Draft",
           detail: `${result.scene.title} · One acknowledged transaction`,
-          now: Date.now()
+          createdAt: Date.now(),
+          canUndo: false
         })
       );
-      return true;
+      return result.scene.id;
     } catch (cause) {
       await handleCanvasFailure(cause);
-      return false;
+      return undefined;
     } finally {
       setCanvasBusy(false);
     }
@@ -1587,6 +1612,11 @@ export default function App() {
           dispatchToast({ type: "resume", id, now: Date.now() })
         }
         onWorkflowLensChange={handleWorkflowLensChange}
+        canvasHistoryOpen={canvasHistoryOpen}
+        onCanvasHistoryOpenChange={(open) => {
+          setCanvasHistoryOpen(open);
+          if (open) void loadCanvasHistoryForProject(selectedProject.id);
+        }}
         profileDisplayName={writer.profile.displayName}
         project={selectedProject}
         storageAccountId={writer.account.id}
@@ -1597,16 +1627,19 @@ export default function App() {
             drillStack={drillStack}
             history={canvasHistory}
             historyLoading={canvasHistoryLoading}
+            historyOpen={canvasHistoryOpen}
             loading={canvasLoading}
             message={canvasMessage}
             onCommand={runCanvasCommand}
             onCreateScene={createStoryboardScene}
             onDrillIntoChapter={handleDrillIntoChapter}
             onDrillIntoScene={handleDrillIntoScene}
+            onHistoryOpenChange={setCanvasHistoryOpen}
             onLoadHistory={() =>
               loadCanvasHistoryForProject(selectedProject.id)
             }
             onPreferenceChange={persistCanvasPreference}
+            recentActions={recentCanvasActions}
             onReload={() =>
               loadCanvas(
                 selectedProject.id,
@@ -1635,6 +1668,8 @@ export default function App() {
             selectedObjectId={selectedCanvasObjectId}
             selectedSceneId={selectedSceneId}
             workflowLens={workflowLens}
+            onWorkflowLensChange={setWorkflowLens}
+            onDrillBack={handleDrillBack}
             workspace={canvasWorkspace}
           />
         }
