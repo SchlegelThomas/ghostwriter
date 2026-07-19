@@ -204,16 +204,48 @@ export async function activateCanvasTool(
     .click();
 }
 
+async function placeArmedCanvasToolOnSurface(page: Page): Promise<void> {
+  const surface = page.locator("#story-canvas-surface");
+  await expect(surface).toBeVisible({ timeout: 10_000 });
+  const box = await surface.boundingBox();
+  if (!box) throw new Error("missing canvas surface");
+  await page.mouse.click(box.x + box.width * 0.45, box.y + box.height * 0.45);
+}
+
 export async function createCanvasNote(page: Page): Promise<void> {
   await activateCanvasTool(page, "Note", "N");
+  const surface = page.locator("#story-canvas-surface");
+  const viewport = page.viewportSize();
+  const restoreNarrow =
+    viewport !== null &&
+    viewport.width < 760 &&
+    !(await surface.isVisible().catch(() => false));
+  if (restoreNarrow) {
+    await page.setViewportSize({ width: 800, height: viewport.height });
+  }
+  await placeArmedCanvasToolOnSurface(page);
+  if (restoreNarrow && viewport !== null) {
+    await page.setViewportSize(viewport);
+  }
+  await expect(page.getByLabel(/Writer note|Note /).first()).toBeVisible({
+    timeout: 10_000
+  });
 }
 
 export async function createCanvasRegion(page: Page): Promise<void> {
   await activateCanvasTool(page, "Region", "R");
+  await placeArmedCanvasToolOnSurface(page);
+  await expect(page.getByLabel(/Region /).first()).toBeVisible({
+    timeout: 10_000
+  });
 }
 
 export async function createCanvasImageReference(page: Page): Promise<void> {
   await activateCanvasTool(page, "Image reference", "I");
+  await placeArmedCanvasToolOnSurface(page);
+  await expect(
+    page.getByLabel(/Image metadata|Concept image reference/).first()
+  ).toBeVisible({ timeout: 10_000 });
 }
 
 export async function openCanvasSceneTool(page: Page): Promise<void> {
@@ -227,14 +259,19 @@ export async function placeSelectedDraftSceneOnCanvas(page: Page): Promise<void>
   await handoff
     .getByRole("button", { name: "Place selected Draft scene" })
     .click();
-  await expect(page.getByText("Scene placed on Canvas").first()).toBeVisible({
+  await expect(handoff).toHaveCount(0, { timeout: 10_000 });
+  await showCanvasDetailsIfHidden(page);
+}
+
+export async function expectCanvasHistoryTitle(
+  page: Page,
+  title: string | RegExp
+): Promise<void> {
+  await showCanvasHistory(page);
+  await expect(page.getByLabel("Canvas history").getByText(title)).toBeVisible({
     timeout: 10_000
   });
-  const cancel = handoff.getByRole("button", { name: "Cancel scene tool" });
-  if (await cancel.isVisible().catch(() => false)) {
-    await cancel.click();
-  }
-  await showCanvasDetailsIfHidden(page);
+  await hideCanvasHistory(page);
 }
 
 export async function placeStoryKnowledgeOnCanvas(

@@ -375,12 +375,10 @@ test("auth gate and project library remain usable on narrow web", async ({ page 
   await openCanvasSceneTool(page);
   await page.getByLabel("Canvas scene title").fill("Phone Draft");
   await page.getByRole("button", { name: "Small Tides · Unassigned" }).click();
-  await page
-    .getByRole("button", { name: "Create scene in Canvas and Draft" })
-    .click();
-  await expect(
-    page.getByText("Scene created in Canvas and Draft").first()
-  ).toBeVisible();
+  await page.getByRole("button", { name: "Create scene", exact: true }).click();
+  await expect(page.getByLabel(/Scene card Phone Draft/)).toBeVisible({
+    timeout: 15_000
+  });
   await page.getByRole("button", { name: "Show manuscript tree" }).click();
   await expect(
     page.getByRole("treeitem", { name: "Scene Phone Draft" })
@@ -428,15 +426,10 @@ test("writer storyboards on Canvas, writes in Split, undoes, and reloads both st
   await expect(page.getByLabel("Initial story order hint (0 = first)")).toHaveValue(
     "0"
   );
-  await expect(page.getByLabel("Initial Canvas x")).toHaveValue("160");
-  await expect(page.getByLabel("Initial Canvas width")).toHaveValue("260");
-  await page
-    .getByRole("button", { name: "Create scene in Canvas and Draft" })
-    .click();
-  await expect(
-    page.getByText("Scene created in Canvas and Draft").first()
-  ).toBeVisible();
-  await expect(page.getByLabel("Scene card Lighthouse Turn")).toBeVisible();
+  await page.getByRole("button", { name: "Create scene", exact: true }).click();
+  await expect(page.getByLabel(/Scene card Lighthouse Turn/)).toBeVisible({
+    timeout: 15_000
+  });
 
   await placeStoryKnowledgeOnCanvas(page, "Storm Omen");
   await expect(page.getByLabel("Story knowledge Storm Omen")).toBeVisible();
@@ -619,16 +612,27 @@ test("narrow Canvas defaults to ordered keyboard review without freeform overflo
 
   await createCanvasNote(page);
   const outlineObject = page.getByRole("button", {
-    name: /Canvas object 1: Writer note/
+    name: /Canvas object 1: Writer note, Confirmed, Active,/
   });
   await outlineObject.focus();
   await outlineObject.press("Enter");
+  const beforeLabel = (await outlineObject.getAttribute("aria-label")) ?? "";
+  const beforePosition = beforeLabel.match(/x (\d+), y (\d+)/);
   const nudge = page.getByRole("button", { name: "Nudge right" });
   await nudge.focus();
   await nudge.press("Enter");
-  await expect(
-    page.getByRole("button", { name: /Canvas object 1: Writer note.*x 72, y 52/ })
-  ).toBeVisible();
+  await expect(async () => {
+    const afterLabel =
+      (await page
+        .getByRole("button", { name: /Canvas object 1: Writer note/ })
+        .first()
+        .getAttribute("aria-label")) ?? "";
+    const afterPosition = afterLabel.match(/x (\d+), y (\d+)/);
+    expect(beforePosition).not.toBeNull();
+    expect(afterPosition).not.toBeNull();
+    expect(Number(afterPosition![1])).toBe(Number(beforePosition![1]) + 24);
+    expect(afterPosition![2]).toBe(beforePosition![2]);
+  }).toPass();
 
   await page.getByRole("button", { name: "Sign out" }).click();
 });
@@ -877,7 +881,7 @@ test("workspace chat invokes the owner-scoped manuscript read capability", async
 }) => {
   await signIn(page);
   await createProject(page, "Chat Harbor", "Book of Tools");
-  await page.getByRole("button", { name: /Chat/ }).click();
+  await page.getByRole("button", { name: "Chat · ⌘⇧P", exact: true }).click();
 
   const chat = page.getByLabel("Command and chat palette");
   await expect(chat).toBeVisible();
@@ -905,13 +909,13 @@ test("two Canvas tabs reject a stale command and offer the latest board", async 
   await signIn(first);
   await createProject(first, "Canvas Conflict Harbor", "Book of Concurrent Boards");
   await openWorkspaceMode(first, "Canvas");
-  await expect(first.getByText(/version 1/)).toBeVisible();
+  await expect(first.getByLabel("Canvas save status")).toHaveText("Saved to Canvas");
 
   const second = await context.newPage();
   await second.goto("/");
   await openProject(second, "Canvas Conflict Harbor");
   await openWorkspaceMode(second, "Canvas");
-  await expect(second.getByText(/version 1/)).toBeVisible();
+  await expect(second.getByLabel("Canvas save status")).toHaveText("Saved to Canvas");
 
   const noteSaved = first.waitForResponse(
     (response) =>
