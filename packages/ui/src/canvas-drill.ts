@@ -622,7 +622,7 @@ export function workflowLensLabel(lens: CanvasWorkflowLens): string {
 }
 
 export function clampCanvasZoom(zoom: number): number {
-  return Math.min(2.5, Math.max(0.35, zoom));
+  return Math.min(2.5, Math.max(0.12, zoom));
 }
 
 export function cameraViewportForBounds(

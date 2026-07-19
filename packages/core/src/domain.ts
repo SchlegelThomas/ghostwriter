@@ -23,7 +23,8 @@ export type DomainValidationCode =
   | "INCOMPLETE_MANUSCRIPT"
   | "INVALID_VERSION"
   | "INVALID_URL"
-  | "INVALID_CRAFT";
+  | "INVALID_CRAFT"
+  | "VALUE_TOO_LONG";
 
 export class DomainValidationError extends Error {
   readonly code: DomainValidationCode;
@@ -208,6 +209,7 @@ export function createManuscriptChapter(input: ManuscriptChapter): ManuscriptCha
 export type ManuscriptPart = Readonly<{
   id: PartId;
   title: string;
+  summary?: string;
   chapters: readonly ManuscriptChapter[];
 }>;
 
@@ -216,11 +218,16 @@ export function createManuscriptPart(input: ManuscriptPart): ManuscriptPart {
     input.chapters.map((chapter) => chapter.id),
     `Part "${input.id}" chapters`
   );
+  const summary =
+    input.summary === undefined
+      ? undefined
+      : requireText(input.summary, "Part summary");
 
   return Object.freeze({
     id: input.id,
     title: requireText(input.title, "Part title"),
-    chapters: freezeList(input.chapters.map(createManuscriptChapter))
+    chapters: freezeList(input.chapters.map(createManuscriptChapter)),
+    ...(summary === undefined ? {} : { summary })
   });
 }
 
@@ -306,6 +313,8 @@ export type SceneSketch = Readonly<{
   beats?: readonly string[];
   sensoryNotes?: string;
   openQuestions?: string;
+  /** Longer outline / beat detail writing — still not manuscript prose. */
+  detail?: string;
   inkPaths?: readonly SceneSketchInkPath[];
 }>;
 
@@ -426,6 +435,7 @@ export function createSceneSketch(input: SceneSketch): SceneSketch {
     input.openQuestions,
     "Scene sketch open questions"
   );
+  const detail = createOptionalSketchText(input.detail, "Scene sketch detail");
   const beats =
     input.beats === undefined
       ? undefined
@@ -444,6 +454,7 @@ export function createSceneSketch(input: SceneSketch): SceneSketch {
     ...(beats === undefined ? {} : { beats }),
     ...(sensoryNotes === undefined ? {} : { sensoryNotes }),
     ...(openQuestions === undefined ? {} : { openQuestions }),
+    ...(detail === undefined ? {} : { detail }),
     ...(inkPaths === undefined ? {} : { inkPaths })
   });
 

@@ -232,7 +232,13 @@ async function persistBuffer(
 
   for (const book of buffer.books) {
     book.manuscript.parts.forEach((part, partIndex) => {
-      partRows.push({ id: part.id, bookId: book.id, position: partIndex, title: part.title });
+      partRows.push({
+        id: part.id,
+        bookId: book.id,
+        position: partIndex,
+        title: part.title,
+        summary: part.summary ?? null
+      });
 
       part.chapters.forEach((chapter, chapterIndex) => {
         chapterRows.push({
@@ -383,7 +389,13 @@ function replacementRows(records: ProjectRecords): ReplacementRows {
     });
 
     book.manuscript.parts.forEach((part, partIndex) => {
-      partRows.push({ id: part.id, bookId: book.id, position: partIndex, title: part.title });
+      partRows.push({
+        id: part.id,
+        bookId: book.id,
+        position: partIndex,
+        title: part.title,
+        summary: part.summary ?? null
+      });
 
       part.chapters.forEach((chapter, chapterIndex) => {
         chapterRows.push({
@@ -648,7 +660,8 @@ async function persistStableReplacementRows(
         .set({
           bookId: row.bookId,
           position: row.position,
-          title: row.title
+          title: row.title,
+          summary: row.summary
         })
         .where(eq(manuscriptParts.id, row.id));
     } else {
@@ -882,7 +895,14 @@ async function queryBooks(
         });
       }
 
-      parts.push({ id: partId(part.id), title: part.title, chapters });
+      parts.push({
+        id: partId(part.id),
+        title: part.title,
+        chapters,
+        ...(part.summary === null || part.summary === undefined
+          ? {}
+          : { summary: part.summary })
+      });
     }
 
     const unassignedRows = await exec

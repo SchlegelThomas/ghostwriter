@@ -377,6 +377,17 @@ describe("postgres project repository", () => {
       projectId: projectIdValue,
       expectedVersion: navigator.version,
       command: {
+        type: "part.update",
+        bookId: bookId("book-depth"),
+        partId: partId("part-depth"),
+        summary: "Act objectives"
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: projectIdValue,
+      expectedVersion: navigator.version,
+      command: {
         type: "chapter.create",
         bookId: bookId("book-depth"),
         partId: partId("part-depth"),
@@ -470,6 +481,9 @@ describe("postgres project repository", () => {
       OWNER_ACCOUNT_ID,
       projectIdValue
     );
+    expect(reloaded?.books[0]?.parts[0]).toMatchObject({
+      summary: "Act objectives"
+    });
     expect(reloaded?.books[0]?.parts[0]?.chapters[0]).toMatchObject({
       summary: "Folder objectives"
     });

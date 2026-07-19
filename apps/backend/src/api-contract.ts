@@ -133,6 +133,7 @@ const sceneSketch = z
     beats: z.array(z.string().trim().min(1).max(500)).max(40).optional(),
     sensoryNotes: z.string().trim().min(1).max(5_000).optional(),
     openQuestions: z.string().trim().min(1).max(5_000).optional(),
+    detail: z.string().trim().min(1).max(20_000).optional(),
     inkPaths: z.array(sceneSketchInkPath).max(100).optional()
   })
   .refine(
@@ -143,6 +144,7 @@ const sceneSketch = z
       (value.beats !== undefined && value.beats.length > 0) ||
       value.sensoryNotes !== undefined ||
       value.openQuestions !== undefined ||
+      value.detail !== undefined ||
       (value.inkPaths !== undefined && value.inkPaths.length > 0),
     "Sketch must include at least one craft field"
   );
@@ -167,8 +169,30 @@ export const createProjectRequestSchema = z.object({
   firstBookTitle: title
 });
 
+const optionalProfileText = (max: number) =>
+  z.string().trim().max(max).optional();
+
+const writerPublishingSchema = z
+  .object({
+    legalName: optionalProfileText(120),
+    contactEmail: optionalProfileText(200),
+    phone: optionalProfileText(40),
+    addressLine1: optionalProfileText(200),
+    addressLine2: optionalProfileText(200),
+    city: optionalProfileText(100),
+    region: optionalProfileText(100),
+    postalCode: optionalProfileText(40),
+    country: optionalProfileText(100),
+    website: optionalProfileText(300),
+    bio: optionalProfileText(4_000),
+    agentName: optionalProfileText(120),
+    agencyName: optionalProfileText(160)
+  })
+  .strict();
+
 export const updateProfileRequestSchema = z.object({
   displayName,
+  publishing: writerPublishingSchema.nullable().optional(),
   expectedVersion: z.number().int().positive()
 });
 
@@ -219,6 +243,13 @@ const commandSchema = z.discriminatedUnion("type", [
     bookId: id,
     partId: id,
     title
+  }),
+  z.object({
+    type: z.literal("part.update"),
+    bookId: id,
+    partId: id,
+    title: title.optional(),
+    summary: z.string().trim().min(1).max(5_000).nullable().optional()
   }),
   z.object({
     type: z.literal("part.reorder"),
@@ -681,6 +712,7 @@ export function toProjectCommand(command: ParsedCommand): ProjectCommand {
     case "part.create":
       return { ...command, bookId: bookId(command.bookId) };
     case "part.rename":
+    case "part.update":
     case "part.removeEmpty":
       return {
         ...command,

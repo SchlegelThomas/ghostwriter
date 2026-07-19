@@ -44,6 +44,7 @@ export type ProjectNavigatorChapter = Readonly<{
 export type ProjectNavigatorPart = Readonly<{
   id: PartId;
   title: string;
+  summary?: string;
   chapters: readonly ProjectNavigatorChapter[];
 }>;
 
@@ -146,6 +147,7 @@ export function projectNavigatorFromRecords(records: ProjectRecords): ProjectNav
       Object.freeze({
         id: part.id,
         title: part.title,
+        ...(part.summary === undefined ? {} : { summary: part.summary }),
         chapters: freezeList(
           part.chapters.map((chapter) =>
             Object.freeze({

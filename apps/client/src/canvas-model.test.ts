@@ -402,7 +402,7 @@ describe("Canvas presentation helpers", () => {
 
     expect(
       fitCanvasObjects([{ x: 0, y: 0, width: 10_000, height: 10_000 }], { width: 800, height: 600 })
-    ).toEqual({ x: -137, y: -137, zoom: 0.35 });
+    ).toEqual({ x: -400, y: -400, zoom: 0.12 });
   });
 
   it("searches active objects case-insensitively across label, note, and image text", () => {

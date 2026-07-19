@@ -12,28 +12,37 @@ export type WritingAssistRoleId =
   | "worldkeeper"
   | "sketch-partner";
 
+/** Write toolbar companions — Map/Split is left-rail only (C / Split). */
 export const WRITE_COMPOSITION_OPTIONS = Object.freeze([
   Object.freeze({
     id: "page" as const,
     label: "Page",
-    tip: "Page only · Draft"
-  }),
-  Object.freeze({
-    id: "split-map" as const,
-    label: "Map",
-    tip: "Split · Map"
+    tip: "Page · prose only",
+    hint: "Page: full-width prose. Sheet and Place stay closed."
   }),
   Object.freeze({
     id: "split-sheet" as const,
     label: "Sheet",
-    tip: "Split · Character sheet"
+    tip: "Sheet · cast beside prose",
+    hint: "Sheet: cast desire / pressure / voice beside the page — not a second editor."
   }),
   Object.freeze({
     id: "split-backdrop" as const,
-    label: "Bd",
-    tip: "Split · Backdrop"
+    label: "Place",
+    tip: "Place · backdrop beside prose",
+    hint: "Place: scene backdrop media beside the page. Set the URL in Context → Brief."
   })
 ]);
+
+export function compositionHint(composition: WriteComposition): string {
+  if (composition === "split-map") {
+    return "Split: Draft beside Canvas via the left rail (C / Split).";
+  }
+  return (
+    WRITE_COMPOSITION_OPTIONS.find((option) => option.id === composition)
+      ?.hint ?? ""
+  );
+}
 
 export const WRITE_INPUT_OPTIONS = Object.freeze([
   Object.freeze({

@@ -12,7 +12,8 @@ import type {
   ProjectCommand,
   ProjectNavigator,
   SceneId,
-  StoryProjectSummary
+  StoryProjectSummary,
+  WriterPublishingDetails
 } from "@ghostwriter/core";
 import { GHOSTWRITER_CAPABILITIES } from "@ghostwriter/core";
 import {
@@ -199,6 +200,10 @@ export default function App() {
     "idle" | "saving" | "saved" | "error"
   >("idle");
   const [toasts, dispatchToast] = useReducer(toastReducer, []);
+  const [activityHistory, setActivityHistory] = useState<
+    readonly AcknowledgementToast[]
+  >([]);
+  const [activityHistoryOpen, setActivityHistoryOpen] = useState(false);
   const [readerProjection, setReaderProjection] = useState<BookReaderResponse>();
   const [readerLoading, setReaderLoading] = useState(false);
   const [readerError, setReaderError] = useState<string>();
@@ -265,11 +270,24 @@ export default function App() {
   ): void {
     if (action !== undefined) toastActionsRef.current.set(toast.id, action);
     dispatchToast({ type: "push", toast });
+    // History rail keeps a durable feed; floating toasts are no longer shown.
+    setActivityHistory((current) => {
+      const entry: AcknowledgementToast = {
+        ...toast,
+        expiresAt: undefined,
+        pausedRemainingMs: undefined
+      };
+      return [entry, ...current.filter((item) => item.id !== entry.id)].slice(
+        0,
+        40
+      );
+    });
   }
 
   function dismissToast(id: string): void {
     toastActionsRef.current.delete(id);
     dispatchToast({ type: "dismiss", id });
+    setActivityHistory((current) => current.filter((item) => item.id !== id));
   }
 
   function invalidateMetadataUndo(): void {
@@ -736,6 +754,7 @@ export default function App() {
 
   async function saveProfile(input: {
     displayName: string;
+    publishing?: WriterPublishingDetails | null;
     expectedVersion: number;
   }): Promise<void> {
     setBusy(true);
@@ -1620,22 +1639,22 @@ export default function App() {
           if (sceneId !== undefined) void selectWorkspaceScene(sceneId);
         }}
         onSignOut={() => void endSession()}
+        activityHistory={activityHistory}
+        activityHistoryOpen={activityHistoryOpen}
+        onActivityHistoryOpenChange={setActivityHistoryOpen}
         onToastAction={(id) => {
           const action = toastActionsRef.current.get(id);
           if (action !== undefined) void action();
         }}
         onToastDismiss={dismissToast}
-        onToastPause={(id) =>
-          dispatchToast({ type: "pause", id, now: Date.now() })
-        }
-        onToastResume={(id) =>
-          dispatchToast({ type: "resume", id, now: Date.now() })
-        }
         onWorkflowLensChange={handleWorkflowLensChange}
         canvasHistoryOpen={canvasHistoryOpen}
         onCanvasHistoryOpenChange={(open) => {
           setCanvasHistoryOpen(open);
-          if (open) void loadCanvasHistoryForProject(selectedProject.id);
+          if (open) {
+            setActivityHistoryOpen(false);
+            void loadCanvasHistoryForProject(selectedProject.id);
+          }
         }}
         profileDisplayName={writer.profile.displayName}
         project={selectedProject}
@@ -1713,6 +1732,9 @@ export default function App() {
               onContextDockOpenChange={presentation.onContextDockOpenChange}
               onFocusHaloChange={presentation.onFocusHaloChange}
               onHistoryOpenChange={presentation.onHistoryOpenChange}
+              {...(presentation.quickBuild === undefined
+                ? {}
+                : { quickBuild: presentation.quickBuild })}
               onNextScene={
                 nextSceneId === undefined
                   ? undefined
@@ -1755,6 +1777,19 @@ export default function App() {
                     ? {}
                     : { characterSheet: knowledge.characterSheet })
                 }))}
+              linkableCast={selectedProject.storyKnowledge
+                .filter(
+                  (knowledge) =>
+                    knowledge.archivedAt === undefined &&
+                    !knowledge.linkedSceneIds.includes(scene.id)
+                )
+                .map((knowledge) => ({
+                  id: knowledge.id,
+                  label: knowledge.label,
+                  ...(knowledge.characterSheet === undefined
+                    ? {}
+                    : { characterSheet: knowledge.characterSheet })
+                }))}
               sceneId={scene.id}
               scenePosition={context.positionLabel}
               sceneSketch={scene.sketch}
@@ -1767,7 +1802,6 @@ export default function App() {
           );
         }}
         selectedSceneId={selectedSceneId}
-        toasts={toasts}
         workflowLens={workflowLens}
       />
     );

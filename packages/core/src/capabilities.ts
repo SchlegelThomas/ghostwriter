@@ -87,6 +87,12 @@ export const PROJECT_COMMAND_CAPABILITIES: readonly GhostwriterCapability[] =
       "chapter.rename"
     ),
     canonicalCommand(
+      "part.update",
+      "Update manuscript part metadata",
+      "book",
+      "part.update"
+    ),
+    canonicalCommand(
       "chapter.update",
       "Update manuscript chapter metadata",
       "book",

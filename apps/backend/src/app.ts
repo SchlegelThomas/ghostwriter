@@ -303,6 +303,9 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
     const profile = await dependencies.identity.updateWriterProfile({
       accountId: accountId(authSession.account.id),
       displayName: parsed.data.displayName,
+      ...(parsed.data.publishing === undefined
+        ? {}
+        : { publishing: parsed.data.publishing }),
       expectedVersion: parsed.data.expectedVersion
     });
     return context.json({ profile });

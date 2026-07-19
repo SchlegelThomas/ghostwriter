@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import type { ManuscriptSelection } from "./manuscript-selection.js";
 import {
   quickBuildOptions,
+  sceneTimeline,
   storyTrail,
   structureLaunchpad
 } from "./workspace-structure.js";
@@ -357,52 +358,94 @@ describe("structureLaunchpad", () => {
     expect(structureLaunchpad(navigator, unassignedSceneSelection)).toBeUndefined();
   });
 
-  it("describes project totals", () => {
-    expect(structureLaunchpad(navigator, projectSelection)).toEqual({
+  it("describes project totals and lists books to open", () => {
+    const launchpad = structureLaunchpad(navigator, projectSelection);
+    expect(launchpad).toMatchObject({
       eyebrow: "Project structure",
       title: "Trail Harbor",
       description: "1 book · 5 scenes · 2 story records",
       scenes: [],
       moveCandidateCount: 0
     });
+    expect(launchpad?.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "book",
+          title: "Book of Steps",
+          selection: { kind: "book", bookId: book }
+        })
+      ])
+    );
   });
 
   it("describes an empty chapter with storyboard scope", () => {
-    expect(structureLaunchpad(navigator, emptyChapterSelection)).toEqual({
+    const launchpad = structureLaunchpad(navigator, emptyChapterSelection);
+    expect(launchpad).toMatchObject({
       eyebrow: "Empty chapter · ready to shape",
       title: "Empty Cove",
       description:
         "Start with prose, move an existing scene here, or storyboard this chapter on Canvas.",
       scenes: [],
+      entries: [],
       moveCandidateCount: 3,
       storyboardChapter: emptyChapterSelection
     });
   });
 
-  it("lists only active chapter scenes and counts move candidates", () => {
-    const launchpad = structureLaunchpad(navigator, chapterSelection);
-    expect(launchpad).toEqual({
-      eyebrow: "Chapter folder · 2 scenes",
-      title: "First Landing",
-      description: "The crew reaches shore.",
-      scenes: [
-        { id: sceneOne, title: "Step One", status: "drafting" },
-        { id: sceneTwo, title: "Step Two", status: "planned" }
-      ],
-      moveCandidateCount: 1,
-      storyboardChapter: chapterSelection
+  it("uses part summary for launchpad description when present", () => {
+    const navigatorWithPartSummary: ProjectNavigator = {
+      ...navigator,
+      books: [
+        {
+          ...navigator.books[0]!,
+          parts: [
+            {
+              ...navigator.books[0]!.parts[0]!,
+              summary: "The crew's first act on shore."
+            }
+          ]
+        }
+      ]
+    };
+    const launchpad = structureLaunchpad(navigatorWithPartSummary, partSelection);
+    expect(launchpad).toMatchObject({
+      eyebrow: "Part",
+      title: "Act One",
+      description: "The crew's first act on shore."
     });
   });
 
+  it("lists only active chapter scenes and counts move candidates", () => {
+    const launchpad = structureLaunchpad(navigator, chapterSelection);
+    expect(launchpad).toMatchObject({
+      eyebrow: "Chapter folder · 2 scenes",
+      title: "First Landing",
+      description: "The crew reaches shore.",
+      moveCandidateCount: 1,
+      storyboardChapter: chapterSelection
+    });
+    expect(launchpad?.scenes.map((scene) => scene.id)).toEqual([
+      sceneOne,
+      sceneTwo
+    ]);
+    expect(launchpad?.entries.map((entry) => entry.title)).toEqual([
+      "Step One",
+      "Step Two"
+    ]);
+  });
+
   it("describes unassigned buckets with and without active scenes", () => {
-    expect(structureLaunchpad(navigator, unassignedSelection)).toEqual({
+    const launchpad = structureLaunchpad(navigator, unassignedSelection);
+    expect(launchpad).toMatchObject({
       eyebrow: "Unassigned scenes · Book of Steps",
       title: "Ideas waiting for a chapter",
       description:
         "Open a scene to write or move it into the chapter where it belongs.",
-      scenes: [{ id: unassignedScene, title: "Loose Idea", status: "planned" }],
       moveCandidateCount: 2
     });
+    expect(launchpad?.entries.map((entry) => entry.title)).toEqual([
+      "Loose Idea"
+    ]);
 
     const emptyUnassignedBook: ProjectNavigator = {
       ...navigator,
@@ -415,13 +458,26 @@ describe("structureLaunchpad", () => {
     };
     expect(
       structureLaunchpad(emptyUnassignedBook, unassignedSelection)
-    ).toEqual({
+    ).toMatchObject({
       eyebrow: "Unassigned scenes · Book of Steps",
       title: "No loose scenes",
       description:
         "Capture a scene now, then place it in the manuscript when its chapter becomes clear.",
       scenes: [],
+      entries: [],
       moveCandidateCount: 2
     });
   });
 });
+
+describe("sceneTimeline", () => {
+  it("lists sibling scenes for chapter and unassigned folders", () => {
+    expect(
+      sceneTimeline(navigator, chapterSceneSelection).map((item) => item.title)
+    ).toEqual(["Step One", "Step Two"]);
+    expect(
+      sceneTimeline(navigator, unassignedSceneSelection).map((item) => item.title)
+    ).toEqual(["Loose Idea"]);
+  });
+});
+

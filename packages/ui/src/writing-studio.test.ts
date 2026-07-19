@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   companionForComposition,
   compositionFromWorkspaceMode,
+  compositionHint,
   workspaceModeForComposition
 } from "./writing-studio.js";
 
@@ -18,6 +19,13 @@ describe("writing studio composition", () => {
     expect(companionForComposition("split-map")).toBe("none");
     expect(companionForComposition("split-sheet")).toBe("sheet");
     expect(companionForComposition("split-backdrop")).toBe("backdrop");
+  });
+
+  it("explains each composition for the Write toolbar", () => {
+    expect(compositionHint("page")).toMatch(/prose only|Full-width/i);
+    expect(compositionHint("split-map")).toMatch(/Canvas/i);
+    expect(compositionHint("split-sheet")).toMatch(/Character sheet|cast/i);
+    expect(compositionHint("split-backdrop")).toMatch(/backdrop|place/i);
   });
 
   it("reconstructs composition from mode and companion", () => {

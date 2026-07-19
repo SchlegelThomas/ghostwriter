@@ -99,6 +99,18 @@ describe("fittedCanvasCardSize", () => {
       height: 200
     });
   });
+
+  it("keeps authored size under the overview zoom floor", () => {
+    expect(
+      fittedCanvasCardSize(openingSceneCard, { selected: false, zoom: 0.35 })
+    ).toEqual({ width: 160, height: 80 });
+    expect(
+      fittedCanvasCardSize(
+        { ...openingSceneCard, width: 260, height: 160 },
+        { selected: true, zoom: 0.2 }
+      )
+    ).toEqual({ width: 260, height: 160 });
+  });
 });
 
 describe("needsCanvasCardFit", () => {

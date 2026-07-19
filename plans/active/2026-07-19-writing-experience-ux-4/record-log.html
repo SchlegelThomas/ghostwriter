@@ -29,6 +29,69 @@
     </section>
 
     <section>
+      <h2>2026-07-19 — Rail timeline, browse launchpad, Characters</h2>
+      <ul>
+        <li>Rail utilities pinned bottom in inverse order (Chat → Jump → Menu/Structure).</li>
+        <li>Scene timeline on rail replaces Draft prev/next; <strong>K Characters</strong> destination.</li>
+        <li>Launchpads list browsable children (parts/chapters/scenes/records) with descriptions + cast in scope.</li>
+        <li>Sketch modal gains multiline fields + <code>detail</code> outline writing panel (JSON field, no SQL migration).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-19 — Slim Draft chrome + craft modals</h2>
+      <ul>
+        <li>Founder: Draft headers/sketch form stole the page; formatting toolbar open by default.</li>
+        <li>Draft uses Map-density topbar (trail + Add); removed FOCUSED DRAFT hero and manuscript-page heading.</li>
+        <li>Scene ribbon is one 36px toolbar; Write tools stay slim; Sketch + Assist open as modals.</li>
+        <li>Context dock defaults closed; SceneEditor formatting collapsed behind <code>Aa</code>.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-19 — Draft uses shared collapsible manuscript rail</h2>
+      <ul>
+        <li>Founder: manuscript sidebar was not collapsible in Draft.</li>
+        <li><code>structureCollapsible</code> is now <code>!narrow</code> for Draft / Canvas / Split (same Manuscript header, topbar toggle, rail Structure · [, and <code>[</code> shortcut).</li>
+        <li>Collapse choice persists across mode switches; Draft still opens expanded by default.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-19 — Topbar audit, Sheet link, Canvas overview zoom</h2>
+      <ul>
+        <li>Founder: Sign out not far-right; Jump/Chat duplicated vs left rail; Map on Write toolbar; Sheet had no link control; editor not full-bleed; Canvas stuck at 35% with huge cards.</li>
+        <li>Topbar: <code>marginLeft: auto</code> on actions; removed Jump/Chat (rail + shortcuts remain); Sign out is trailing.</li>
+        <li>Write toolbar: removed Map chip (Split is left-rail C / Split only).</li>
+        <li>Draft/Focus: dense column is edge-to-edge (no ScrollView page padding); dropped <code>maxWidth: 920</code>.</li>
+        <li>Sheet: Link / Unlink via <code>storyKnowledge.setSceneLink</code> from companion list.</li>
+        <li>Canvas: min zoom <code>0.12</code>; below fit floor <code>0.65</code> cards keep authored geometry so overview shrinks on screen.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-19 — Trail roles, Add on Write toolbar, composition UX</h2>
+      <ul>
+        <li>Founder: unclear Sheet / Backdrop / Map vs Page; Add crowded the trail; want structure labels on breadcrumbs.</li>
+        <li>Each Story Trail crumb shows a small role annotation (Project / Book / Part / Chapter / Scene…).</li>
+        <li>Draft moves <code>＋ Add</code> onto the Write toolbar; trail stays in the dense topbar without Add.</li>
+        <li><strong>Bd → Place</strong>. Page / Map / Sheet / Place get short live hints under the toolbar.</li>
+        <li>Sheet and Place render as a side companion beside the editor (not a stacked empty band). Empty states open Context; companion <code>Page</code> returns to prose-only.</li>
+        <li>Map still switches workspace to Split (Canvas beside Draft) — distinct from Sheet/Place craft companions.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-19 — Shell polish, history rail, publishing profile, PR</h2>
+      <ul>
+        <li>Sign-in: larger lockup, “Bring your ideas to life”, Continue with Google; library Pen Name + publishing modal (<code>0011_writer_publishing</code>).</li>
+        <li>Floating toasts removed; left-rail History shows acknowledgement feed (Canvas keeps Map history).</li>
+        <li>Structure launchpad header single-row + full-height card; trail current crumb no fill/border; tree keyboard help removed.</li>
+        <li>Founder authorized commit/push/PR/CI babysit for deploy.</li>
+      </ul>
+    </section>
+
+    <section>
       <h2>2026-07-19 — Implementation authorized and shipped for review</h2>
       <ul>
         <li>Branch <code>feat/writing-experience-ux-4</code> from main; D1–D6 locked (browser dictation, craft-only ink, deterministic assist, own branch).</li>

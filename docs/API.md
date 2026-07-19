@@ -24,11 +24,14 @@ require an exact trusted `Origin`. Metadata JSON bodies are limited to 64 KiB an
 
 - `GET /api/me` returns the authenticated account, opaque session metadata, and idempotently
   bootstrapped Ghostwriter writer profile.
-- `PATCH /api/me/profile` accepts `displayName` and `expectedVersion`. A stale profile returns
+- `PATCH /api/me/profile` accepts `displayName`, optional `publishing` (nullable object of optional
+  contact/address/bio/representation strings), and `expectedVersion`. Omitting `publishing` leaves
+  stored publishing details unchanged; `null` clears them. A stale profile returns
   `409 VERSION_CONFLICT`.
 
 Email, display name, and provider image are not authorization keys. Core uses the opaque Better Auth
 user ID as its provider-neutral `AccountId`.
+Publishing contact fields are writer-owned profile data, not authorization.
 
 ## Projects
 
@@ -166,6 +169,7 @@ Manuscript structure:
 
 - `part.create`
 - `part.rename`
+- `part.update` (`title?`, `summary?` with `null` to clear)
 - `part.reorder`
 - `part.removeEmpty`
 - `chapter.create`
@@ -177,7 +181,7 @@ Manuscript structure:
 Scenes:
 
 - `scene.create`
-- `scene.update` (`title?`, `status?`, `summary?`, `povStoryKnowledgeId?`, `backdrop?`, `music?`, `imageRefs?`, `sketch?`; media/sketch fields accept `null` to clear; URLs must be absolute http(s); sketch is craft JSON — purpose/conflict/turn/beats/sensoryNotes/openQuestions/inkPaths — not manuscript prose)
+- `scene.update` (`title?`, `status?`, `summary?`, `povStoryKnowledgeId?`, `backdrop?`, `music?`, `imageRefs?`, `sketch?`; media/sketch fields accept `null` to clear; URLs must be absolute http(s); sketch is craft JSON — purpose/conflict/turn/beats/sensoryNotes/openQuestions/detail/inkPaths — not manuscript prose)
 - `scene.move`
 - `scene.setArchived`
 

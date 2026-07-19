@@ -218,6 +218,33 @@ export function acknowledgementForProjectCommand(
             })
       };
     }
+    case "part.update": {
+      const oldPart = findPart(before, command.bookId, command.partId);
+      const newPart = findPart(after, command.bookId, command.partId);
+      return {
+        title:
+          command.title !== undefined && command.summary === undefined
+            ? "Part renamed"
+            : "Part updated",
+        detail: `${newPart?.title ?? oldPart?.title ?? "Part"} · Saved to project`,
+        ...(oldPart === undefined
+          ? {}
+          : {
+              inverse: {
+                type: "part.update" as const,
+                bookId: command.bookId,
+                partId: command.partId,
+                ...(command.title === undefined
+                  ? {}
+                  : { title: oldPart.title }),
+                ...(command.summary === undefined
+                  ? {}
+                  : { summary: oldPart.summary ?? null })
+              },
+              actionLabel: "Undo" as const
+            })
+      };
+    }
     case "part.reorder":
       return {
         title: "Part order updated",

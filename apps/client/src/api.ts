@@ -238,6 +238,7 @@ export function getCurrentWriter(): Promise<CurrentWriter> {
 
 export function updateWriterProfile(input: {
   displayName: string;
+  publishing?: WriterProfile["publishing"] | null;
   expectedVersion: number;
 }): Promise<Readonly<{ profile: WriterProfile }>> {
   return requestJson("/api/me/profile", jsonRequest("PATCH", input));

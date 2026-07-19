@@ -3,6 +3,7 @@ import {
   chapterId,
   createBook,
   createManuscriptChapter,
+  createManuscriptPart,
   createScene,
   createStoryKnowledge,
   defineProjectRecords,
@@ -90,6 +91,13 @@ export type ProjectCommand =
   | Readonly<{ type: "book.setArchived"; bookId: BookId; archived: boolean }>
   | Readonly<{ type: "part.create"; bookId: BookId; title: string }>
   | Readonly<{ type: "part.rename"; bookId: BookId; partId: PartId; title: string }>
+  | Readonly<{
+      type: "part.update";
+      bookId: BookId;
+      partId: PartId;
+      title?: string;
+      summary?: string | null;
+    }>
   | Readonly<{ type: "part.reorder"; bookId: BookId; partIds: readonly PartId[] }>
   | Readonly<{ type: "part.removeEmpty"; bookId: BookId; partId: PartId }>
   | Readonly<{
@@ -460,6 +468,26 @@ export function applyProjectCommandToRecords(
             ...part,
             title: command.title
           }))
+        })
+      );
+      break;
+    case "part.update":
+      books = updateBook(books, command.bookId, (book) =>
+        createBook({
+          ...updatePart(book, command.partId, (part) => {
+            let updated: ManuscriptPart = {
+              ...part,
+              title: command.title ?? part.title
+            };
+            if (command.summary !== undefined) {
+              const { summary: _ignored, ...withoutSummary } = updated;
+              updated =
+                command.summary === null
+                  ? withoutSummary
+                  : { ...withoutSummary, summary: command.summary };
+            }
+            return createManuscriptPart(updated);
+          })
         })
       );
       break;

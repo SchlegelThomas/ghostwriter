@@ -7,13 +7,17 @@ import type {
   SceneDocumentComparison,
   SceneDocumentV1
 } from "@ghostwriter/editor";
-import type {
-  CharacterSheet,
-  ProjectCommand,
-  SceneSketch
+import {
+  sceneId as toSceneId,
+  storyKnowledgeId as toStoryKnowledgeId,
+  type CharacterSheet,
+  type ProjectCommand,
+  type SceneSketch
 } from "@ghostwriter/core";
 import {
+  companionForComposition,
   ghostwriterTheme,
+  type DraftQuickBuildPresentation,
   type WriteComposition,
   type WriteInputModality
 } from "@ghostwriter/ui";
@@ -25,7 +29,10 @@ import {
   useRef,
   useState
 } from "react";
-import { WritingStudioLayer } from "./WritingStudioLayer.js";
+import {
+  WritingStudioCompanionPane,
+  WritingStudioLayer
+} from "./WritingStudioLayer.js";
 import {
   Pressable,
   StyleSheet,
@@ -91,6 +98,11 @@ export type DraftPanelProps = Readonly<{
     label: string;
     characterSheet?: CharacterSheet;
   }>[];
+  linkableCast?: readonly Readonly<{
+    id: string;
+    label: string;
+    characterSheet?: CharacterSheet;
+  }>[];
   povLabel?: string;
   scenePosition?: string;
   previousSceneTitle?: string;
@@ -102,6 +114,7 @@ export type DraftPanelProps = Readonly<{
   writeComposition?: WriteComposition;
   writeModality?: WriteInputModality;
   assistOpen?: boolean;
+  quickBuild?: DraftQuickBuildPresentation;
   onWriteCompositionChange?(composition: WriteComposition): void;
   onWriteModalityChange?(modality: WriteInputModality): void;
   onAssistOpenChange?(open: boolean): void;
@@ -617,11 +630,12 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
       sceneSketch,
       sceneBackdropUrl,
       sceneBackdropCaption,
-      sceneCast = [],
-      povLabel,
+  sceneCast = [],
+  linkableCast = [],
+  povLabel,
       scenePosition,
-      previousSceneTitle,
-      nextSceneTitle,
+      previousSceneTitle: _previousSceneTitle,
+      nextSceneTitle: _nextSceneTitle,
       contextDockOpen = true,
       focusHalo = false,
       historyOpen = false,
@@ -629,6 +643,7 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
       writeComposition = "page",
       writeModality = "keyboard",
       assistOpen = false,
+      quickBuild,
       onWriteCompositionChange,
       onWriteModalityChange,
       onAssistOpenChange,
@@ -636,8 +651,8 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
       onContextDockOpenChange,
       onFocusHaloChange,
       onHistoryOpenChange,
-      onPreviousScene,
-      onNextScene,
+      onPreviousScene: _onPreviousScene,
+      onNextScene: _onNextScene,
       onAcknowledgement,
       onActivityChange,
       onProblem,
@@ -1578,81 +1593,53 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
         style={[styles.panel, focusHalo && styles.panelFocused]}
       >
         <View accessibilityLabel="Draft scene ribbon" style={styles.sceneRibbon}>
-          <View style={styles.sceneNavigation}>
-            <DraftButton
-              disabled={onPreviousScene === undefined || actionBusy}
-              label={
-                previousSceneTitle === undefined
-                  ? "Previous scene"
-                  : `Previous scene: ${previousSceneTitle}`
-              }
-              onPress={() => onPreviousScene?.()}
-            />
-            <DraftButton
-              disabled={onNextScene === undefined || actionBusy}
-              label={
-                nextSceneTitle === undefined
-                  ? "Next scene"
-                  : `Next scene: ${nextSceneTitle}`
-              }
-              onPress={() => onNextScene?.()}
-            />
-          </View>
           <View style={styles.headingCopy}>
-            <Text style={styles.eyebrow}>
-              {scenePosition ?? "Manuscript scene"}
+            <Text numberOfLines={1} style={styles.ribbonTitle}>
+              {sceneTitle}
             </Text>
-            <Text style={styles.title}>{sceneTitle}</Text>
-            <View style={styles.sceneMetaRow}>
-              <Text style={styles.meta}>{sceneStatus}</Text>
-              <Text style={styles.meta}>POV · {povLabel ?? "Open"}</Text>
-              <Text accessibilityLabel="Draft word count" style={styles.meta}>
-                {wordCount} {wordCount === 1 ? "word" : "words"}
-              </Text>
-              <Text style={styles.meta}>
-                {head === undefined
-                  ? "Loading acknowledged Draft"
-                  : `Draft ${head.workingVersion}`}
-              </Text>
-            </View>
+            <Text numberOfLines={1} style={styles.ribbonMeta}>
+              {[
+                scenePosition ?? "Scene",
+                sceneStatus,
+                `POV · ${povLabel ?? "Open"}`,
+                `${wordCount} ${wordCount === 1 ? "word" : "words"}`,
+                head === undefined ? "Loading" : `v${head.workingVersion}`
+              ].join(" · ")}
+            </Text>
           </View>
-          <View style={styles.statusGroup}>
+          <Text
+            accessibilityLabel="Draft save status"
+            accessibilityLiveRegion="polite"
+            style={[
+              styles.saveStatus,
+              (saveSnapshot?.dirty === true || problem !== undefined) &&
+                styles.saveStatusWarning
+            ]}
+          >
+            {statusText}
+          </Text>
+          {leasePhase === "held" && problem === undefined ? null : (
             <Text
-              accessibilityLabel="Draft save status"
-              accessibilityLiveRegion="polite"
-              style={[
-                styles.saveStatus,
-                (saveSnapshot?.dirty === true || problem !== undefined) &&
-                  styles.saveStatusWarning
-              ]}
+              accessibilityLabel="Draft lease status"
+              style={styles.leaseStatus}
             >
-              {statusText}
+              {leaseStatusText(leasePhase, readOnly, lease)}
             </Text>
-            {leasePhase === "held" && problem === undefined ? null : (
-              <Text
-                accessibilityLabel="Draft lease status"
-                style={styles.leaseStatus}
-              >
-                {leaseStatusText(leasePhase, readOnly, lease)}
-              </Text>
-            )}
-            <View style={styles.sceneRibbonActions}>
-              <DraftButton
-                label={contextDockOpen ? "Hide Context" : "Show Context"}
-                onPress={() =>
-                  onContextDockOpenChange?.(!contextDockOpen)
-                }
-              />
-              <DraftButton
-                label={historyOpen ? "Close History" : "History"}
-                onPress={() => onHistoryOpenChange?.(!historyOpen)}
-              />
-              <DraftButton
-                primary={focusHalo}
-                label={focusHalo ? "Exit focus" : "Focus"}
-                onPress={() => onFocusHaloChange?.(!focusHalo)}
-              />
-            </View>
+          )}
+          <View style={styles.sceneRibbonActions}>
+            <DraftButton
+              label="Context"
+              onPress={() => onContextDockOpenChange?.(!contextDockOpen)}
+            />
+            <DraftButton
+              label="History"
+              onPress={() => onHistoryOpenChange?.(!historyOpen)}
+            />
+            <DraftButton
+              primary={focusHalo}
+              label={focusHalo ? "Exit" : "Focus"}
+              onPress={() => onFocusHaloChange?.(!focusHalo)}
+            />
           </View>
         </View>
 
@@ -1694,7 +1681,6 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
             }
             onAssistOpenChange={(open) => {
               onAssistOpenChange?.(open);
-              if (open) onContextDockOpenChange?.(true);
             }}
             onCommand={onProjectCommand}
             onCompositionChange={(composition) =>
@@ -1707,6 +1693,7 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
             onModalityChange={(modality) => onWriteModalityChange?.(modality)}
             projectId={projectId}
             projectVersion={projectVersion}
+            {...(quickBuild === undefined ? {} : { quickBuild })}
             recentProse={recentProseFromDocument(document)}
             sceneId={sceneId}
             sceneSummary={sceneSummary}
@@ -1804,39 +1791,71 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
             <Text style={styles.loadingText}>Loading Draft…</Text>
           </View>
         ) : (
-          <View style={styles.editorHost}>
-            <View style={styles.manuscriptPageHeading}>
-              <Text style={styles.manuscriptPageEyebrow}>Manuscript page</Text>
-              <Text style={styles.manuscriptPageTitle}>{sceneTitle}</Text>
-              {sceneSummary === undefined ? null : (
-                <Text style={styles.manuscriptPageSummary}>{sceneSummary}</Text>
-              )}
+          <View
+            style={[
+              styles.compositionRow,
+              companionForComposition(writeComposition) !== "none" &&
+                styles.compositionRowSplit
+            ]}
+          >
+            <View
+              style={[
+                styles.editorHost,
+                companionForComposition(writeComposition) !== "none" &&
+                  styles.editorHostBesideCompanion
+              ]}
+            >
+              <SceneEditor
+                ariaLabel={`Draft for ${sceneTitle}`}
+                defaultFormattingToolbarOpen={false}
+                editable={editorIsEditable}
+                insertTextRequest={insertTextRequest}
+                onChange={(nextDocument) => {
+                  setDocument(nextDocument);
+                  const queue = queueRef.current;
+                  const recovery = recoveryRef.current;
+                  if (queue === undefined) return;
+                  if (recovery === undefined) {
+                    queue.enqueue(nextDocument);
+                    return;
+                  }
+                  void recovery.capture(
+                    nextDocument,
+                    queue.getAcknowledgedWorkingVersion()
+                  );
+                }}
+                selectionStorageKey={`ghostwriter:draft-selection:${accountId}:${projectId}:${sceneId}`}
+                style={{
+                  boxSizing: "border-box",
+                  flex: 1,
+                  maxWidth: "100%",
+                  minHeight: 420,
+                  width: "100%"
+                }}
+                value={document}
+              />
             </View>
-            <SceneEditor
-              ariaLabel={`Draft for ${sceneTitle}`}
-              editable={editorIsEditable}
-              insertTextRequest={insertTextRequest}
-              onChange={(nextDocument) => {
-                setDocument(nextDocument);
-                const queue = queueRef.current;
-                const recovery = recoveryRef.current;
-                if (queue === undefined) return;
-                if (recovery === undefined) {
-                  queue.enqueue(nextDocument);
-                  return;
-                }
-                void recovery.capture(
-                  nextDocument,
-                  queue.getAcknowledgedWorkingVersion()
-                );
-              }}
-              selectionStorageKey={`ghostwriter:draft-selection:${accountId}:${projectId}:${sceneId}`}
-              style={{
-                boxSizing: "border-box",
-                maxWidth: "100%",
-                width: "100%"
-              }}
-              value={document}
+            <WritingStudioCompanionPane
+              backdropCaption={sceneBackdropCaption}
+              backdropUrl={sceneBackdropUrl}
+              cast={sceneCast}
+              composition={writeComposition}
+              disabled={readOnly || !editorIsEditable}
+              linkCandidates={linkableCast}
+              onClose={() => onWriteCompositionChange?.("page")}
+              onOpenContext={() => onContextDockOpenChange?.(true)}
+              onSetCastLink={
+                onProjectCommand === undefined
+                  ? undefined
+                  : (memberId, linked) => {
+                      void onProjectCommand({
+                        type: "storyKnowledge.setSceneLink",
+                        storyKnowledgeId: toStoryKnowledgeId(memberId),
+                        sceneId: toSceneId(sceneId),
+                        linked
+                      });
+                    }
+              }
             />
           </View>
         )}
@@ -1894,33 +1913,49 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
 const styles = StyleSheet.create({
   panel: {
     backgroundColor: colors.canvas,
+    flexGrow: 1,
+    minHeight: 0,
     minWidth: 0,
     padding: 4,
     width: "100%"
   },
   panelFocused: {
-    paddingHorizontal: 10
+    paddingHorizontal: 4
   },
   sceneRibbon: {
     alignItems: "center",
-    backgroundColor: colors.paper,
+    backgroundColor: colors.topbar,
     borderColor: colors.line,
-    borderRadius: 9,
+    borderRadius: 8,
     borderWidth: 1,
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    justifyContent: "space-between",
-    marginBottom: 12,
-    padding: 9
+    flexWrap: "nowrap",
+    gap: 8,
+    marginBottom: 6,
+    minHeight: 36,
+    paddingHorizontal: 8,
+    paddingVertical: 4
   },
   sceneNavigation: {
     flexDirection: "row",
-    gap: 4
+    gap: 3
   },
   headingCopy: {
     flex: 1,
     minWidth: 0
+  },
+  ribbonTitle: {
+    color: colors.ink,
+    fontFamily: fonts.story,
+    fontSize: 16,
+    lineHeight: 18
+  },
+  ribbonMeta: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 9,
+    marginTop: 1,
+    textTransform: "capitalize"
   },
   eyebrow: {
     color: colors.kicker,
@@ -1954,21 +1989,19 @@ const styles = StyleSheet.create({
   },
   sceneRibbonActions: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 4,
+    flexWrap: "nowrap",
+    gap: 3,
     justifyContent: "flex-end"
   },
   leaseStatus: {
     color: colors.blue,
     fontFamily: fonts.uiMedium,
-    fontSize: 9,
-    textAlign: "right"
+    fontSize: 9
   },
   saveStatus: {
     color: colors.green,
     fontFamily: fonts.uiSemibold,
-    fontSize: 9,
-    textAlign: "right"
+    fontSize: 9
   },
   saveStatusWarning: {
     color: colors.amber
@@ -2071,41 +2104,34 @@ const styles = StyleSheet.create({
     fontFamily: fonts.uiMedium,
     fontSize: 10
   },
+  compositionRow: {
+    alignItems: "stretch",
+    flexDirection: "column",
+    flexGrow: 1,
+    gap: 8,
+    minHeight: 0,
+    minWidth: 0,
+    width: "100%"
+  },
+  compositionRowSplit: {
+    flexDirection: "row"
+  },
   editorHost: {
-    alignSelf: "center",
+    alignSelf: "stretch",
     backgroundColor: colors.paper,
     borderColor: colors.line,
     borderRadius: 10,
     borderWidth: 1,
-    maxWidth: 820,
+    flex: 1,
+    flexGrow: 1,
+    minHeight: 480,
     minWidth: 0,
     overflow: "hidden",
     width: "100%"
   },
-  manuscriptPageHeading: {
-    paddingBottom: 4,
-    paddingHorizontal: 28,
-    paddingTop: 28
-  },
-  manuscriptPageEyebrow: {
-    color: colors.kicker,
-    fontFamily: fonts.uiSemibold,
-    fontSize: 7,
-    letterSpacing: 1.4,
-    textTransform: "uppercase"
-  },
-  manuscriptPageTitle: {
-    color: colors.ink,
-    fontFamily: fonts.story,
-    fontSize: 30,
-    marginTop: 4
-  },
-  manuscriptPageSummary: {
-    color: colors.muted,
-    fontFamily: fonts.storyItalic,
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 5
+  editorHostBesideCompanion: {
+    flex: 1,
+    width: "auto"
   },
   historyDrawer: {
     backgroundColor: colors.paper,

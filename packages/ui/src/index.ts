@@ -4,6 +4,7 @@ export * from "./AcknowledgementToastHost.js";
 export * from "./canvas-drill.js";
 export * from "./CanvasDrillBar.js";
 export * from "./AuthenticatedProjectWorkspace.js";
+export * from "./CharacterBrowsePanel.js";
 export * from "./ManuscriptTree.js";
 export * from "./ProjectNavigatorScreen.js";
 export * from "./ProjectLibraryScreen.js";

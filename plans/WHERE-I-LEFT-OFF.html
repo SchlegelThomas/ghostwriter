@@ -16,34 +16,38 @@
 
     <section>
       <h2>Current state</h2>
-      <p><a href="active/2026-07-19-writing-experience-ux-4/plan.html">Writing Experience UX 4.0</a> is implemented on its feature branch for founder product review. Living design: <a href="designs/Ghostwriter%20Mockups%204.0.html">Mockups 4.0</a>. <code>pnpm verify</code> green. Playwright still gated.</p>
+      <p>Write epic + structure/cast polish + shell UX polish ship together on <code>feat/writing-experience-ux-4</code>. Founder authorized commit / push / PR / CI babysit.</p>
+      <ul>
+        <li><a href="active/2026-07-19-writing-experience-ux-4/plan.html">Writing Experience UX 4.0</a></li>
+        <li><a href="active/2026-07-19-structure-cast-browse/plan.html">Structure browse · cast · launchpad actions</a></li>
+      </ul>
+      <p>Migrations: <code>0009_writing_craft</code>, <code>0010_part_summary</code>, <code>0011_writer_publishing</code> (apply with owner profile if SP lacks ALTER).</p>
     </section>
 
     <section>
-      <h2>Done for review</h2>
+      <h2>Done for this PR</h2>
       <ul>
-        <li>Writing Studio: composition chips, Assist, Focus, keyboard / dictate / ink.</li>
-        <li>Scene sketch + character sheet persistence (migration 0009) + Split companions.</li>
-        <li>Browser dictation into Tiptap caret.</li>
-        <li>Deterministic writing-assist API + Apply for four roles.</li>
-        <li>Craft-only ink strokes on sketch; ADR 0009; PRODUCT/API/ARCHITECTURE updates.</li>
+        <li>Write studio, sketch/assist, Sheet/Place companions, cast link from Sheet.</li>
+        <li>Structure launchpads, Characters (K), part summaries, collapsible rail, trail roles.</li>
+        <li>Topbar de-dupe (Sign out right; Jump/Chat on rail); History rail (no floating toasts).</li>
+        <li>Canvas overview zoom (min 12%; fit floor 0.65).</li>
+        <li>Publishing profile modal; sign-in lockup polish; structure launchpad full-height chrome.</li>
       </ul>
     </section>
 
     <section>
-      <h2>Incomplete / next</h2>
+      <h2>Incomplete / next after merge</h2>
       <ol>
-        <li><strong>Founder:</strong> hard-refresh Write — exercise Page / Split Map·Sheet·Backdrop, Assist Generate/Apply, Dictate, Ink, Focus, Save sketch.</li>
-        <li>After verification: authorize Playwright gate + PR.</li>
-        <li>Optional polish: richer freehand pointer ink, OpenAI provider when configured.</li>
+        <li>Merge green PR; production deploy applies migrations via CI.</li>
+        <li>Optional later: freehand ink, OpenAI assist provider, Playwright after explicit product gate.</li>
       </ol>
     </section>
 
     <section>
       <h2>How to resume</h2>
       <ol>
-        <li>Checkout <code>feat/writing-experience-ux-4</code>; run <code>./scripts/dev-local.sh</code> (apply DB migration 0009 if needed).</li>
-        <li>Open a project → Draft scene → use Writing Studio toolbar above the manuscript.</li>
+        <li>Checkout <code>feat/writing-experience-ux-4</code>; <code>./scripts/dev-local.sh</code>.</li>
+        <li>If columns missing: <code>DATABRICKS_PROFILE=ghostwriter-owner LAKEBASE_USER='tas9117@gmail.com' ./scripts/lakebase.sh migrate production</code> (unset SP client env first).</li>
       </ol>
     </section>
   </main>

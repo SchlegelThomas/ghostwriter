@@ -96,6 +96,7 @@ export const writerProfiles = pgTable("writer_profiles", {
     .primaryKey()
     .references(() => user.id, { onDelete: "cascade" }),
   displayName: text("display_name").notNull(),
+  publishing: jsonb("publishing"),
   version: integer("version").notNull().default(1),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull()
@@ -274,7 +275,8 @@ export const manuscriptParts = pgTable("manuscript_parts", {
     .notNull()
     .references(() => books.id, { onDelete: "cascade" }),
   position: integer("position").notNull(),
-  title: text("title").notNull()
+  title: text("title").notNull(),
+  summary: text("summary")
 });
 
 export const manuscriptChapters = pgTable("manuscript_chapters", {

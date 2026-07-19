@@ -62,4 +62,38 @@ describe("writer identity services", () => {
       })
     ).rejects.toBeInstanceOf(ProfileConflictError);
   });
+
+  it("stores publishing contact details with the profile", async () => {
+    const profiles = createMemoryWriterProfileRepository();
+    const services = createIdentityServices({
+      profiles,
+      clock: { now: () => "2026-07-19T20:00:00.000Z" }
+    });
+    const id = accountId("account-author");
+    const initial = await services.ensureWriterProfile({
+      accountId: id,
+      providerDisplayName: "Ada"
+    });
+    const updated = await services.updateWriterProfile({
+      accountId: id,
+      displayName: "A. Writer",
+      publishing: {
+        legalName: "Ada Writer",
+        contactEmail: "ada@example.com",
+        city: "Portland",
+        country: "US",
+        agentName: "Sam Agent"
+      },
+      expectedVersion: initial.version
+    });
+
+    expect(updated.displayName).toBe("A. Writer");
+    expect(updated.publishing).toEqual({
+      legalName: "Ada Writer",
+      contactEmail: "ada@example.com",
+      city: "Portland",
+      country: "US",
+      agentName: "Sam Agent"
+    });
+  });
 });

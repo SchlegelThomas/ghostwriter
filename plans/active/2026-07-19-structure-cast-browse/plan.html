@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Structure browse · cast · launchpad actions</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan · Structure / cast</p>
+      <h1>Structure browse, cast relationships, launchpad actions</h1>
+      <p class="meta"><strong>Status:</strong> active — founder authorized 2026-07-19<br>
+        <strong>Branch:</strong> <code>feat/writing-experience-ux-4</code> (continuation of Write review branch)<br>
+        <strong>Owner:</strong> founder + agent<br>
+        <strong>Related:</strong> <a href="../2026-07-19-writing-experience-ux-4/plan.html">Writing Experience UX 4.0</a><br>
+        <strong>Living design:</strong> <a href="../../designs/Ghostwriter%20Mockups%204.0.html">Mockups 4.0</a> + Map chrome from <a href="../../designs/Ghostwriter%20Mockups%203.0.html">Mockups 3.0</a></p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Close the structure-browse gaps called out in Write review: every manuscript scope must be openable with descriptions; launchpad card chips must be real Draft / Reader / Canvas actions; Characters rail must support relationship link editing (not only a list); parts get first-class descriptions like chapters.</p>
+      <p><strong>Out of scope:</strong> freehand ink polish, OpenAI provider wiring, Playwright (until founder verifies the combined Write + structure outcome).</p>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ul>
+        <li>Parts store optional <code>summary</code>; writers can edit it from the part launchpad; navigator shows it.</li>
+        <li>Chapter / scene / part / character launchpad cards expose working <strong>Draft</strong>, <strong>Reader</strong> (scenes), and <strong>Canvas</strong> actions (not decorative labels).</li>
+        <li>Characters rail lists cast; opening a character shows notes/sheet plus add/remove knowledge links (kinds) and linked scenes.</li>
+        <li>Prior Write chrome (slim Draft, sketch modal, rail timeline, pinned utilities) remains coherent.</li>
+        <li><code>pnpm verify</code> green; browser walkthrough recorded; Playwright deferred.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks</h2>
+      <ol>
+        <li>Domain: <code>ManuscriptPart.summary</code> + <code>part.update</code>; capability + API contract.</li>
+        <li>Storage: migration <code>0010</code> on <code>manuscript_parts.summary</code>; Postgres read/write parity.</li>
+        <li>Navigator + launchpad: surface part summaries; description editors on structure launchpads.</li>
+        <li>Launchpad entry actions: Draft / Reader / Canvas press handlers with stopPropagation.</li>
+        <li>Characters browse: relationship graph panel using <code>storyKnowledge.setKnowledgeLink</code> + sheet/notes.</li>
+        <li>Docs: PRODUCT, API, ARCHITECTURE note; record log + WHERE-I-LEFT-OFF.</li>
+        <li>Tests via <code>routine-tests</code>; <code>pnpm verify</code>; founder walkthrough.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li>Core: part.update summary set/clear; knowledge link add/remove unchanged.</li>
+        <li>Storage: migrate-from-empty + part summary round-trip.</li>
+        <li>UI: launchpad action helpers / structure projections.</li>
+        <li>Browser: open part → edit description; character → link/unlink; scene card → Draft/Reader/Canvas.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p>Update PRODUCT (structure browse + Characters), API (<code>part.update</code>, sketch detail already landed). No new ADR unless relationship editing invents a second store — reuse existing story-knowledge link commands. Living design: Mockups 3.0/4.0 structure + cast language; do not regenerate mockup files.</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li><strong>D1</strong> Continue on <code>feat/writing-experience-ux-4</code> so one founder review PR covers Write + structure polish.</li>
+        <li><strong>D2</strong> Part descriptions are optional text summaries (same pattern as chapter), not prose documents.</li>
+        <li><strong>D3</strong> Character “graph” v1 is explicit link CRUD (cast/theme/related…), not a freeform canvas force-graph.</li>
+        <li>Lakebase ALTERs require table-owner migrate (owner profile), same as 0009.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Feature checkpoints</h2>
+      <ol>
+        <li><strong>Part descriptions</strong> — edit a part summary from launchpad; persists and reloads.</li>
+        <li><strong>Launchpad actions</strong> — Draft/Reader/Canvas on cards perform navigation.</li>
+        <li><strong>Character relationships</strong> — from Characters rail, add/remove a knowledge link and see linked scenes.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked disabled> Plan accepted (founder: “do all of that” + harness)</li>
+        <li><input type="checkbox" checked disabled> Part summary domain + migration + API</li>
+        <li><input type="checkbox" checked disabled> Launchpad real actions + description editors</li>
+        <li><input type="checkbox" checked disabled> Characters relationship panel</li>
+        <li><input type="checkbox" checked disabled> Tests + verify + docs/handoff</li>
+        <li><input type="checkbox" disabled> Founder product verification / Playwright gate</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

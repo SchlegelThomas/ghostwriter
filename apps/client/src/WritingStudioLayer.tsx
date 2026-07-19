@@ -10,14 +10,20 @@ import {
   WRITE_COMPOSITION_OPTIONS,
   WRITE_INPUT_OPTIONS,
   WritingAssistPanel,
+  companionForComposition,
+  compositionHint,
   ghostwriterTheme,
+  type QuickBuildOption,
   type WriteComposition,
   type WriteInputModality,
   type WritingAssistRoleId
 } from "@ghostwriter/ui";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Image,
+  Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -31,6 +37,13 @@ export type WritingStudioCastMember = Readonly<{
   id: string;
   label: string;
   characterSheet?: CharacterSheet;
+}>;
+
+export type WritingStudioQuickBuild = Readonly<{
+  open: boolean;
+  options: readonly QuickBuildOption[];
+  onOpenChange(open: boolean): void;
+  onSelect(option: QuickBuildOption): void;
 }>;
 
 export type WritingStudioLayerProps = Readonly<{
@@ -49,12 +62,26 @@ export type WritingStudioLayerProps = Readonly<{
   assistOpen: boolean;
   focusHalo: boolean;
   disabled?: boolean;
+  quickBuild?: WritingStudioQuickBuild;
   onCompositionChange(composition: WriteComposition): void;
   onModalityChange(modality: WriteInputModality): void;
   onAssistOpenChange(open: boolean): void;
   onCommand(command: ProjectCommand): Promise<boolean>;
   onInsertProse(text: string): void;
   onAcknowledgement?(title: string, detail: string): void;
+}>;
+
+export type WritingStudioCompanionPaneProps = Readonly<{
+  composition: WriteComposition;
+  cast: readonly WritingStudioCastMember[];
+  /** Characters (or records) not yet linked to this scene — shown for one-tap link. */
+  linkCandidates?: readonly WritingStudioCastMember[];
+  backdropUrl?: string;
+  backdropCaption?: string;
+  disabled?: boolean;
+  onOpenContext?(): void;
+  onClose?(): void;
+  onSetCastLink?(memberId: string, linked: boolean): void;
 }>;
 
 type SpeechRecognitionLike = {
@@ -80,6 +107,201 @@ function getSpeechRecognitionConstructor():
   return host.SpeechRecognition ?? host.webkitSpeechRecognition;
 }
 
+/** Side companion for Sheet / Place — rendered beside the editor, not above it. */
+export function WritingStudioCompanionPane({
+  composition,
+  cast,
+  linkCandidates = [],
+  backdropUrl,
+  backdropCaption,
+  disabled = false,
+  onOpenContext,
+  onClose,
+  onSetCastLink
+}: WritingStudioCompanionPaneProps) {
+  const companion = companionForComposition(composition);
+  if (companion === "none") return null;
+
+  if (companion === "sheet") {
+    return (
+      <View
+        accessibilityLabel="Character sheet beside page"
+        style={styles.companionPane}
+      >
+        <View style={styles.companionHeader}>
+          <View style={styles.companionHeadingCopy}>
+            <Text style={styles.companionEye}>Sheet</Text>
+            <Text style={styles.companionTitle}>Cast for this scene</Text>
+          </View>
+          {onClose === undefined ? null : (
+            <Pressable
+              accessibilityLabel="Close sheet — back to Page"
+              accessibilityRole="button"
+              onPress={onClose}
+              style={({ pressed }) => [
+                styles.companionClose,
+                pressed && styles.pressed
+              ]}
+            >
+              <Text style={styles.companionCloseText}>Page</Text>
+            </Pressable>
+          )}
+        </View>
+        <ScrollView style={styles.companionScroll}>
+          {cast.length === 0 ? (
+            <View style={styles.companionEmpty}>
+              <Text style={styles.companionBody}>
+                Link a character below. Sheet then keeps desire, pressure, and
+                voice beside the prose.
+              </Text>
+            </View>
+          ) : (
+            cast.map((member) => (
+              <View key={member.id} style={styles.sheetCard}>
+                <View style={styles.sheetCardHeader}>
+                  <Text style={styles.sheetTitle}>{member.label}</Text>
+                  {onSetCastLink === undefined ? null : (
+                    <Pressable
+                      accessibilityLabel={`Unlink ${member.label}`}
+                      accessibilityRole="button"
+                      disabled={disabled}
+                      onPress={() => onSetCastLink(member.id, false)}
+                      style={({ pressed }) => [
+                        styles.sheetLinkButton,
+                        pressed && styles.pressed,
+                        disabled && styles.disabled
+                      ]}
+                    >
+                      <Text style={styles.sheetLinkButtonText}>Unlink</Text>
+                    </Pressable>
+                  )}
+                </View>
+                <Text style={styles.companionBody}>
+                  Desire: {member.characterSheet?.desire ?? "—"}
+                </Text>
+                <Text style={styles.companionBody}>
+                  Pressure: {member.characterSheet?.pressure ?? "—"}
+                </Text>
+                <Text style={styles.companionBody}>
+                  Voice: {member.characterSheet?.voiceNotes ?? "—"}
+                </Text>
+              </View>
+            ))
+          )}
+          {linkCandidates.length === 0 ? (
+            cast.length === 0 ? (
+              <View style={styles.companionEmpty}>
+                <Text style={styles.companionBody}>
+                  No characters in this project yet. Create one from Characters
+                  (K) or Context, then link them here.
+                </Text>
+                {onOpenContext === undefined ? null : (
+                  <Pressable
+                    accessibilityLabel="Open Context"
+                    accessibilityRole="button"
+                    onPress={onOpenContext}
+                    style={({ pressed }) => [
+                      styles.companionAction,
+                      pressed && styles.pressed
+                    ]}
+                  >
+                    <Text style={styles.companionActionText}>Open Context</Text>
+                  </Pressable>
+                )}
+              </View>
+            ) : null
+          ) : (
+            <View style={styles.linkCastSection}>
+              <Text style={styles.companionEye}>Link to this scene</Text>
+              {linkCandidates.map((member) => (
+                <View key={member.id} style={styles.linkCastRow}>
+                  <Text numberOfLines={1} style={styles.linkCastLabel}>
+                    {member.label}
+                  </Text>
+                  <Pressable
+                    accessibilityLabel={`Link ${member.label} to this scene`}
+                    accessibilityRole="button"
+                    disabled={disabled || onSetCastLink === undefined}
+                    onPress={() => onSetCastLink?.(member.id, true)}
+                    style={({ pressed }) => [
+                      styles.companionAction,
+                      pressed && styles.pressed,
+                      (disabled || onSetCastLink === undefined) &&
+                        styles.disabled
+                    ]}
+                  >
+                    <Text style={styles.companionActionText}>Link</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    );
+  }
+
+  return (
+    <View
+      accessibilityLabel="Place backdrop beside page"
+      style={styles.companionPane}
+    >
+      <View style={styles.companionHeader}>
+        <View style={styles.companionHeadingCopy}>
+          <Text style={styles.companionEye}>Place</Text>
+          <Text style={styles.companionTitle}>Scene backdrop</Text>
+        </View>
+        {onClose === undefined ? null : (
+          <Pressable
+            accessibilityLabel="Close place — back to Page"
+            accessibilityRole="button"
+            onPress={onClose}
+            style={({ pressed }) => [
+              styles.companionClose,
+              pressed && styles.pressed
+            ]}
+          >
+            <Text style={styles.companionCloseText}>Page</Text>
+          </Pressable>
+        )}
+      </View>
+      {backdropUrl === undefined || backdropUrl.trim() === "" ? (
+        <View style={styles.companionEmpty}>
+          <Text style={styles.companionBody}>
+            Pin a backdrop URL in Context → Brief. Place keeps that media beside
+            the page while you write.
+          </Text>
+          {onOpenContext === undefined ? null : (
+            <Pressable
+              accessibilityLabel="Open Context to set backdrop"
+              accessibilityRole="button"
+              onPress={onOpenContext}
+              style={({ pressed }) => [
+                styles.companionAction,
+                pressed && styles.pressed
+              ]}
+            >
+              <Text style={styles.companionActionText}>Open Context</Text>
+            </Pressable>
+          )}
+        </View>
+      ) : (
+        <ScrollView style={styles.companionScroll}>
+          <Image
+            accessibilityLabel="Scene backdrop"
+            resizeMode="cover"
+            source={{ uri: backdropUrl }}
+            style={styles.backdropImage}
+          />
+          <Text style={styles.sheetTitle}>
+            {backdropCaption?.trim() || "No caption yet"}
+          </Text>
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
 export function WritingStudioLayer({
   projectId,
   projectVersion,
@@ -96,6 +318,7 @@ export function WritingStudioLayer({
   assistOpen,
   focusHalo,
   disabled = false,
+  quickBuild,
   onCompositionChange,
   onModalityChange,
   onAssistOpenChange,
@@ -115,9 +338,11 @@ export function WritingStudioLayer({
     conflict: sketch?.conflict ?? "",
     turn: sketch?.turn ?? "",
     sensoryNotes: sketch?.sensoryNotes ?? "",
-    openQuestions: sketch?.openQuestions ?? ""
+    openQuestions: sketch?.openQuestions ?? "",
+    detail: sketch?.detail ?? ""
   });
   const [inkPaths, setInkPaths] = useState(sketch?.inkPaths ?? []);
+  const [sketchModalOpen, setSketchModalOpen] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | undefined>(undefined);
   useEffect(() => {
     setDraftSketch({
@@ -125,7 +350,8 @@ export function WritingStudioLayer({
       conflict: sketch?.conflict ?? "",
       turn: sketch?.turn ?? "",
       sensoryNotes: sketch?.sensoryNotes ?? "",
-      openQuestions: sketch?.openQuestions ?? ""
+      openQuestions: sketch?.openQuestions ?? "",
+      detail: sketch?.detail ?? ""
     });
     setInkPaths(sketch?.inkPaths ?? []);
   }, [sceneId, sketch]);
@@ -363,12 +589,36 @@ export function WritingStudioLayer({
     ]
   );
 
-  const companion = useMemo(() => {
-    if (composition === "split-sheet") return "sheet";
-    if (composition === "split-backdrop") return "backdrop";
-    if (composition === "page" && modality === "ink") return "sketch";
-    return composition === "page" ? "none" : "none";
-  }, [composition, modality]);
+  useEffect(() => {
+    if (modality === "ink") setSketchModalOpen(true);
+  }, [modality]);
+
+  const hint = compositionHint(composition);
+
+  const buildSketchPayload = useCallback((): SceneSketch => {
+    return {
+      ...(draftSketch.purpose.trim() === ""
+        ? {}
+        : { purpose: draftSketch.purpose.trim() }),
+      ...(draftSketch.conflict.trim() === ""
+        ? {}
+        : { conflict: draftSketch.conflict.trim() }),
+      ...(draftSketch.turn.trim() === ""
+        ? {}
+        : { turn: draftSketch.turn.trim() }),
+      ...(draftSketch.sensoryNotes.trim() === ""
+        ? {}
+        : { sensoryNotes: draftSketch.sensoryNotes.trim() }),
+      ...(draftSketch.openQuestions.trim() === ""
+        ? {}
+        : { openQuestions: draftSketch.openQuestions.trim() }),
+      ...(draftSketch.detail.trim() === ""
+        ? {}
+        : { detail: draftSketch.detail.trim() }),
+      ...(inkPaths.length === 0 ? {} : { inkPaths }),
+      ...(sketch?.beats === undefined ? {} : { beats: sketch.beats })
+    };
+  }, [draftSketch, inkPaths, sketch?.beats]);
 
   if (focusHalo) {
     return modality === "dictate" ? (
@@ -447,6 +697,25 @@ export function WritingStudioLayer({
         </View>
         <View style={styles.divider} />
         <Pressable
+          accessibilityLabel="Open scene sketch"
+          accessibilityRole="button"
+          onPress={() => setSketchModalOpen(true)}
+          style={({ pressed }) => [
+            styles.chip,
+            sketchModalOpen && styles.chipSelected,
+            pressed && styles.pressed
+          ]}
+        >
+          <Text
+            style={[
+              styles.chipText,
+              sketchModalOpen && styles.chipTextSelected
+            ]}
+          >
+            Sketch
+          </Text>
+        </Pressable>
+        <Pressable
           accessibilityLabel={assistOpen ? "Hide Assist" : "Show Assist"}
           accessibilityRole="button"
           onPress={() => onAssistOpenChange(!assistOpen)}
@@ -460,207 +729,319 @@ export function WritingStudioLayer({
             Assist
           </Text>
         </Pressable>
+        {quickBuild === undefined || quickBuild.options.length === 0 ? null : (
+          <View style={styles.quickBuildWrap}>
+            <Pressable
+              accessibilityLabel="Quick Build: add to the manuscript"
+              accessibilityRole="button"
+              accessibilityState={{ expanded: quickBuild.open }}
+              disabled={disabled}
+              onPress={() => quickBuild.onOpenChange(!quickBuild.open)}
+              style={({ pressed }) => [
+                styles.addChip,
+                quickBuild.open && styles.chipSelected,
+                pressed && styles.pressed,
+                disabled && styles.disabled
+              ]}
+            >
+              <Text
+                style={[
+                  styles.addChipText,
+                  quickBuild.open && styles.chipTextSelected
+                ]}
+              >
+                ＋ Add
+              </Text>
+            </Pressable>
+            {quickBuild.open ? (
+              <View
+                accessibilityLabel="Quick Build options"
+                style={styles.quickBuildMenu}
+              >
+                {quickBuild.options.map((option) => (
+                  <Pressable
+                    accessibilityLabel={option.label}
+                    accessibilityRole="menuitem"
+                    disabled={disabled}
+                    key={option.id}
+                    onPress={() => quickBuild.onSelect(option)}
+                    style={({ pressed }) => [
+                      styles.quickBuildOption,
+                      pressed && styles.pressed,
+                      disabled && styles.disabled
+                    ]}
+                  >
+                    <Text style={styles.quickBuildOptionLabel}>
+                      {option.label}
+                    </Text>
+                    <Text
+                      numberOfLines={2}
+                      style={styles.quickBuildOptionDetail}
+                    >
+                      {option.detail}
+                    </Text>
+                  </Pressable>
+                ))}
+                <Text style={styles.quickBuildHint}>
+                  Titles commit with Enter in the manuscript tree. Escape
+                  cancels.
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        )}
         <Text style={styles.versionHint}>v{projectVersion}</Text>
       </View>
 
+      {hint.trim() === "" ? null : (
+        <Text accessibilityLiveRegion="polite" style={styles.compositionHint}>
+          {hint}
+        </Text>
+      )}
+
       {modality === "dictate" ? (
         <View style={styles.listenChip}>
-          <Text style={styles.listenChipText}>
-            ● Listening — words enter the Draft caret
-          </Text>
+          <Text style={styles.listenChipText}>● Listening</Text>
         </View>
       ) : null}
 
-      <View style={styles.row}>
-        {companion === "sheet" ? (
-          <View accessibilityLabel="Split character sheet" style={styles.companion}>
-            <Text style={styles.companionEye}>Split · Character sheet</Text>
-            {cast.length === 0 ? (
-              <Text style={styles.companionBody}>
-                Link a character to this scene to cast it here.
-              </Text>
-            ) : (
-              cast.map((member) => (
-                <View key={member.id} style={styles.sheetCard}>
-                  <Text style={styles.sheetTitle}>{member.label}</Text>
-                  <Text style={styles.companionBody}>
-                    Desire: {member.characterSheet?.desire ?? "—"}
-                  </Text>
-                  <Text style={styles.companionBody}>
-                    Pressure: {member.characterSheet?.pressure ?? "—"}
-                  </Text>
-                  <Text style={styles.companionBody}>
-                    Voice: {member.characterSheet?.voiceNotes ?? "—"}
-                  </Text>
-                </View>
-              ))
-            )}
-          </View>
-        ) : null}
-
-        {companion === "backdrop" ? (
-          <View accessibilityLabel="Split backdrop" style={styles.companion}>
-            <Text style={styles.companionEye}>Split · Backdrop</Text>
-            {backdropUrl === undefined ? (
-              <Text style={styles.companionBody}>
-                Add a backdrop URL in Context → Brief to pin place media. Sensory
-                notes can still live on the scene sketch.
-              </Text>
-            ) : (
-              <Text style={styles.companionBody}>Backdrop URL set.</Text>
-            )}
-            <Text style={styles.sheetTitle}>
-              {backdropCaption ?? "No caption yet"}
-            </Text>
-          </View>
-        ) : null}
-
-        {assistOpen ? (
-          <View style={styles.assistPane}>
-            <WritingAssistPanel
-              activeRole={activeRole}
-              busy={assistBusy || disabled}
-              onApply={(proposal) => void handleApply(proposal)}
-              onDismiss={(proposal) =>
-                setProposals((current) =>
-                  current.filter((entry) => entry.id !== proposal.id)
-                )
-              }
-              onGenerate={(role) => void handleGenerate(role)}
-              onRoleChange={setActiveRole}
-              proposals={proposals}
-              statusMessage={assistStatus}
-            />
-          </View>
-        ) : null}
-      </View>
-
-      <View accessibilityLabel="Scene sketch craft" style={styles.sketchBlock}>
-        <Text style={styles.companionEye}>Scene sketch</Text>
-        {(
-          [
-            ["purpose", "Purpose"],
-            ["conflict", "Conflict"],
-            ["turn", "Turn"],
-            ["sensoryNotes", "Sensory notes"],
-            ["openQuestions", "Open questions"]
-          ] as const
-        ).map(([key, label]) => (
-          <View key={key} style={styles.field}>
-            <Text style={styles.fieldLabel}>{label}</Text>
-            <TextInput
-              accessibilityLabel={label}
-              editable={!disabled}
-              onChangeText={(value) =>
-                setDraftSketch((current) => ({ ...current, [key]: value }))
-              }
-              placeholder={label}
-              style={styles.input}
-              value={draftSketch[key]}
-            />
-          </View>
-        ))}
-        <Pressable
-          accessibilityLabel="Save scene sketch"
-          accessibilityRole="button"
-          disabled={disabled}
-          onPress={() => {
-            const next: SceneSketch = {
-              ...(draftSketch.purpose.trim() === ""
-                ? {}
-                : { purpose: draftSketch.purpose.trim() }),
-              ...(draftSketch.conflict.trim() === ""
-                ? {}
-                : { conflict: draftSketch.conflict.trim() }),
-              ...(draftSketch.turn.trim() === ""
-                ? {}
-                : { turn: draftSketch.turn.trim() }),
-              ...(draftSketch.sensoryNotes.trim() === ""
-                ? {}
-                : { sensoryNotes: draftSketch.sensoryNotes.trim() }),
-              ...(draftSketch.openQuestions.trim() === ""
-                ? {}
-                : { openQuestions: draftSketch.openQuestions.trim() }),
-              ...(inkPaths.length === 0 ? {} : { inkPaths }),
-              ...(sketch?.beats === undefined ? {} : { beats: sketch.beats })
-            };
-            if (Object.keys(next).length === 0) return;
-            void saveSketch(next);
-          }}
-          style={({ pressed }) => [
-            styles.saveSketch,
-            pressed && styles.pressed,
-            disabled && styles.disabled
-          ]}
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setSketchModalOpen(false)}
+        transparent
+        visible={sketchModalOpen}
+      >
+        <View
+          accessibilityLabel="Scene sketch dialog"
+          accessibilityViewIsModal
+          style={styles.modalRoot}
         >
-          <Text style={styles.saveSketchText}>Save sketch</Text>
-        </Pressable>
-      </View>
-
-      {modality === "ink" ? (
-        <View accessibilityLabel="Sketch ink pad" style={styles.inkPad}>
-          <Text style={styles.companionEye}>Stylus · craft ink</Text>
-          <Text style={styles.inkHint}>
-            Ink lives on the scene sketch only. Add a stroke mark, then keep
-            editing craft fields. Paths saved: {inkPaths.length}
-          </Text>
           <Pressable
-            accessibilityLabel="Add ink stroke to sketch"
+            accessibilityLabel="Dismiss sketch"
             accessibilityRole="button"
-            disabled={disabled}
-            onPress={() => {
-              const nextPaths = [
-                ...inkPaths,
-                {
-                  color: colors.accent,
-                  size: 2,
-                  points: Object.freeze([
-                    Object.freeze({ x: 12 + inkPaths.length * 8, y: 24 }),
-                    Object.freeze({ x: 64 + inkPaths.length * 8, y: 40 }),
-                    Object.freeze({ x: 110 + inkPaths.length * 6, y: 28 })
-                  ])
-                }
-              ];
-              setInkPaths(nextPaths);
-              const next: SceneSketch = {
-                ...(draftSketch.purpose.trim() === ""
-                  ? {}
-                  : { purpose: draftSketch.purpose.trim() }),
-                ...(draftSketch.conflict.trim() === ""
-                  ? {}
-                  : { conflict: draftSketch.conflict.trim() }),
-                ...(draftSketch.turn.trim() === ""
-                  ? {}
-                  : { turn: draftSketch.turn.trim() }),
-                ...(draftSketch.sensoryNotes.trim() === ""
-                  ? {}
-                  : { sensoryNotes: draftSketch.sensoryNotes.trim() }),
-                ...(draftSketch.openQuestions.trim() === ""
-                  ? {}
-                  : { openQuestions: draftSketch.openQuestions.trim() }),
-                inkPaths: nextPaths,
-                ...(sketch?.beats === undefined ? {} : { beats: sketch.beats })
-              };
-              void saveSketch(next);
-            }}
-            style={({ pressed }) => [
-              styles.saveSketch,
-              pressed && styles.pressed,
-              disabled && styles.disabled
-            ]}
-          >
-            <Text style={styles.saveSketchText}>Add ink stroke</Text>
-          </Pressable>
+            onPress={() => setSketchModalOpen(false)}
+            style={styles.modalBackdrop}
+          />
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeadingCopy}>
+                <Text style={styles.companionEye}>Scene craft</Text>
+                <Text style={styles.modalTitle}>Scene sketch</Text>
+                <Text style={styles.modalRule}>
+                  Sketch fields stay off the manuscript page until you apply
+                  them.
+                </Text>
+              </View>
+              <Pressable
+                accessibilityLabel="Close sketch"
+                accessibilityRole="button"
+                onPress={() => setSketchModalOpen(false)}
+                style={({ pressed }) => [
+                  styles.modalClose,
+                  pressed && styles.pressed
+                ]}
+              >
+                <Text style={styles.modalCloseText}>×</Text>
+              </Pressable>
+            </View>
+            <ScrollView
+              contentContainerStyle={styles.modalBody}
+              keyboardShouldPersistTaps="handled"
+              style={styles.modalScroll}
+            >
+              {(
+                [
+                  ["purpose", "Purpose"],
+                  ["conflict", "Conflict"],
+                  ["turn", "Turn"],
+                  ["sensoryNotes", "Sensory notes"],
+                  ["openQuestions", "Open questions"]
+                ] as const
+              ).map(([key, label]) => (
+                <View key={key} style={styles.field}>
+                  <Text style={styles.fieldLabel}>{label}</Text>
+                  <TextInput
+                    accessibilityLabel={label}
+                    editable={!disabled}
+                    multiline
+                    onChangeText={(value) =>
+                      setDraftSketch((current) => ({
+                        ...current,
+                        [key]: value
+                      }))
+                    }
+                    placeholder={label}
+                    style={styles.input}
+                    value={draftSketch[key]}
+                  />
+                </View>
+              ))}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Detail outline</Text>
+                <TextInput
+                  accessibilityLabel="Detail outline"
+                  editable={!disabled}
+                  multiline
+                  onChangeText={(value) =>
+                    setDraftSketch((current) => ({
+                      ...current,
+                      detail: value
+                    }))
+                  }
+                  placeholder="Write the longer sketch / beat detail here. This stays craft-side — not manuscript prose."
+                  style={styles.detailInput}
+                  value={draftSketch.detail}
+                />
+              </View>
+              {modality === "ink" ? (
+                <View accessibilityLabel="Sketch ink pad" style={styles.inkPad}>
+                  <Text style={styles.companionEye}>Stylus · craft ink</Text>
+                  <Text style={styles.inkHint}>
+                    Ink lives on the scene sketch only. Paths saved:{" "}
+                    {inkPaths.length}
+                  </Text>
+                  <Pressable
+                    accessibilityLabel="Add ink stroke to sketch"
+                    accessibilityRole="button"
+                    disabled={disabled}
+                    onPress={() => {
+                      const nextPaths = [
+                        ...inkPaths,
+                        {
+                          color: colors.accent,
+                          size: 2,
+                          points: Object.freeze([
+                            Object.freeze({
+                              x: 12 + inkPaths.length * 8,
+                              y: 24
+                            }),
+                            Object.freeze({
+                              x: 64 + inkPaths.length * 8,
+                              y: 40
+                            }),
+                            Object.freeze({
+                              x: 110 + inkPaths.length * 6,
+                              y: 28
+                            })
+                          ])
+                        }
+                      ];
+                      setInkPaths(nextPaths);
+                      void saveSketch({
+                        ...buildSketchPayload(),
+                        inkPaths: nextPaths
+                      });
+                    }}
+                    style={({ pressed }) => [
+                      styles.saveSketch,
+                      pressed && styles.pressed,
+                      disabled && styles.disabled
+                    ]}
+                  >
+                    <Text style={styles.saveSketchText}>Add ink stroke</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <Pressable
+                accessibilityLabel="Cancel sketch"
+                accessibilityRole="button"
+                onPress={() => setSketchModalOpen(false)}
+                style={({ pressed }) => [
+                  styles.modalSecondary,
+                  pressed && styles.pressed
+                ]}
+              >
+                <Text style={styles.modalSecondaryText}>Close</Text>
+              </Pressable>
+              <Pressable
+                accessibilityLabel="Save scene sketch"
+                accessibilityRole="button"
+                disabled={disabled}
+                onPress={() => {
+                  const next = buildSketchPayload();
+                  if (Object.keys(next).length === 0) {
+                    setSketchModalOpen(false);
+                    return;
+                  }
+                  void saveSketch(next).then(() => setSketchModalOpen(false));
+                }}
+                style={({ pressed }) => [
+                  styles.saveSketch,
+                  pressed && styles.pressed,
+                  disabled && styles.disabled
+                ]}
+              >
+                <Text style={styles.saveSketchText}>Save sketch</Text>
+              </Pressable>
+            </View>
+          </View>
         </View>
-      ) : null}
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => onAssistOpenChange(false)}
+        transparent
+        visible={assistOpen}
+      >
+        <View
+          accessibilityLabel="Writing assist dialog"
+          accessibilityViewIsModal
+          style={styles.modalRoot}
+        >
+          <Pressable
+            accessibilityLabel="Dismiss assist"
+            accessibilityRole="button"
+            onPress={() => onAssistOpenChange(false)}
+            style={styles.modalBackdrop}
+          />
+          <View style={[styles.modalCard, styles.assistModalCard]}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeadingCopy}>
+                <Text style={styles.companionEye}>Writing tools</Text>
+                <Text style={styles.modalTitle}>Assist</Text>
+              </View>
+              <Pressable
+                accessibilityLabel="Close assist"
+                accessibilityRole="button"
+                onPress={() => onAssistOpenChange(false)}
+                style={({ pressed }) => [
+                  styles.modalClose,
+                  pressed && styles.pressed
+                ]}
+              >
+                <Text style={styles.modalCloseText}>×</Text>
+              </Pressable>
+            </View>
+            <View style={styles.assistPane}>
+              <WritingAssistPanel
+                activeRole={activeRole}
+                busy={assistBusy || disabled}
+                onApply={(proposal) => void handleApply(proposal)}
+                onDismiss={(proposal) =>
+                  setProposals((current) =>
+                    current.filter((entry) => entry.id !== proposal.id)
+                  )
+                }
+                onGenerate={(role) => void handleGenerate(role)}
+                onRoleChange={setActiveRole}
+                proposals={proposals}
+                statusMessage={assistStatus}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
-    gap: 8,
-    marginBottom: 8
+    gap: 4,
+    marginBottom: 6
   },
   toolbar: {
     alignItems: "center",
@@ -670,10 +1051,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6,
+    gap: 4,
     minHeight: 36,
-    paddingHorizontal: 8,
-    paddingVertical: 4
+    paddingHorizontal: 6,
+    paddingVertical: 3
   },
   group: {
     flexDirection: "row",
@@ -682,7 +1063,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     backgroundColor: colors.line,
-    height: 22,
+    height: 20,
     marginHorizontal: 2,
     width: 1
   },
@@ -692,10 +1073,10 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: 6,
     borderWidth: 1,
-    height: 28,
+    height: 26,
     justifyContent: "center",
-    minWidth: 28,
-    paddingHorizontal: 8
+    minWidth: 26,
+    paddingHorizontal: 7
   },
   chipSelected: {
     backgroundColor: colors.accentSoft,
@@ -719,43 +1100,160 @@ const styles = StyleSheet.create({
     fontSize: 9,
     marginLeft: "auto"
   },
+  compositionHint: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 10,
+    lineHeight: 14,
+    paddingHorizontal: 2
+  },
+  addChip: {
+    alignItems: "center",
+    backgroundColor: colors.brandDark,
+    borderColor: colors.brandDark,
+    borderRadius: 6,
+    borderWidth: 1,
+    height: 26,
+    justifyContent: "center",
+    paddingHorizontal: 9
+  },
+  addChipText: {
+    color: "#fff",
+    fontFamily: fonts.uiSemibold,
+    fontSize: 10
+  },
+  quickBuildWrap: {
+    position: "relative",
+    zIndex: 40
+  },
+  quickBuildMenu: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 2,
+    maxWidth: 280,
+    minWidth: 220,
+    padding: 6,
+    position: "absolute",
+    right: 0,
+    top: 30,
+    zIndex: 50,
+    ...({
+      boxShadow: "0 8px 24px rgba(28, 22, 16, 0.16)"
+    } as object)
+  },
+  quickBuildOption: {
+    borderRadius: 6,
+    gap: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 6
+  },
+  quickBuildOptionLabel: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 12
+  },
+  quickBuildOptionDetail: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 10,
+    lineHeight: 13
+  },
+  quickBuildHint: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 9,
+    lineHeight: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4
+  },
   listenChip: {
     alignSelf: "flex-start",
     backgroundColor: colors.redSoft,
     borderRadius: 6,
     paddingHorizontal: 8,
-    paddingVertical: 5
+    paddingVertical: 3
   },
   listenChipText: {
     color: colors.red,
     fontFamily: fonts.uiSemibold,
     fontSize: 10
   },
-  row: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
-  },
-  companion: {
+  companionPane: {
     backgroundColor: colors.panel,
     borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
-    flexBasis: 240,
-    flexGrow: 1,
-    gap: 6,
-    maxWidth: 320,
-    padding: 10
-  },
-  assistPane: {
-    backgroundColor: colors.panel,
-    borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
     flexBasis: 280,
-    flexGrow: 1,
-    maxHeight: 420,
-    maxWidth: 360,
+    flexGrow: 0,
+    flexShrink: 0,
+    gap: 8,
+    maxWidth: 320,
+    minHeight: 0,
+    minWidth: 240,
+    overflow: "hidden",
+    padding: 10,
+    width: "34%"
+  },
+  companionHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between"
+  },
+  companionHeadingCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0
+  },
+  companionTitle: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 13
+  },
+  companionClose: {
+    borderColor: colors.line,
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 4
+  },
+  companionCloseText: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 10
+  },
+  companionEmpty: {
+    gap: 10,
+    paddingVertical: 4
+  },
+  companionAction: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.brandDark,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7
+  },
+  companionActionText: {
+    color: "#fff",
+    fontFamily: fonts.uiSemibold,
+    fontSize: 11
+  },
+  companionScroll: {
+    flex: 1,
+    minHeight: 0
+  },
+  backdropImage: {
+    backgroundColor: colors.wash,
+    borderRadius: 8,
+    height: 160,
+    marginBottom: 8,
+    width: "100%"
+  },
+  assistPane: {
+    flex: 1,
+    minHeight: 280,
     overflow: "hidden"
   },
   companionEye: {
@@ -776,21 +1274,54 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
-    gap: 4,
-    padding: 8
+    gap: 2,
+    marginBottom: 6,
+    padding: 6
+  },
+  sheetCardHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "space-between"
   },
   sheetTitle: {
     color: colors.ink,
+    flex: 1,
     fontFamily: fonts.story,
-    fontSize: 16
+    fontSize: 15,
+    minWidth: 0
   },
-  sketchBlock: {
-    backgroundColor: colors.panel,
+  sheetLinkButton: {
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 5,
     borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 3
+  },
+  sheetLinkButtonText: {
+    color: colors.muted,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 10
+  },
+  linkCastSection: {
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
     gap: 6,
-    padding: 10
+    marginTop: 8,
+    paddingTop: 8
+  },
+  linkCastRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between"
+  },
+  linkCastLabel: {
+    color: colors.ink,
+    flex: 1,
+    fontFamily: fonts.uiMedium,
+    fontSize: 12,
+    minWidth: 0
   },
   field: {
     gap: 3
@@ -809,9 +1340,23 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontFamily: fonts.ui,
     fontSize: 13,
-    minHeight: 34,
+    minHeight: 52,
     paddingHorizontal: 8,
-    paddingVertical: 6
+    paddingVertical: 6,
+    textAlignVertical: "top"
+  },
+  detailInput: {
+    borderColor: colors.line,
+    borderRadius: 6,
+    borderWidth: 1,
+    color: colors.ink,
+    fontFamily: fonts.story,
+    fontSize: 15,
+    lineHeight: 22,
+    minHeight: 180,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    textAlignVertical: "top"
   },
   saveSketch: {
     alignSelf: "flex-start",
@@ -831,20 +1376,108 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     gap: 6,
+    marginTop: 4,
     padding: 10
-  },
-  inkSurface: {
-    borderColor: "#d7bd69",
-    borderRadius: 8,
-    borderStyle: "dashed",
-    borderWidth: 1,
-    minHeight: 140,
-    padding: 12
   },
   inkHint: {
     color: "#9a8474",
     fontFamily: fonts.uiMedium,
     fontSize: 12
+  },
+  modalRoot: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+    padding: 20
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(40, 35, 31, 0.45)"
+  },
+  modalCard: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 12,
+    borderWidth: 1,
+    maxHeight: "88%",
+    maxWidth: 520,
+    overflow: "hidden",
+    width: "100%",
+    zIndex: 1
+  },
+  assistModalCard: {
+    maxWidth: 440
+  },
+  modalHeader: {
+    alignItems: "flex-start",
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12
+  },
+  modalHeadingCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0
+  },
+  modalTitle: {
+    color: colors.ink,
+    fontFamily: fonts.story,
+    fontSize: 24
+  },
+  modalRule: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 2
+  },
+  modalClose: {
+    alignItems: "center",
+    borderColor: colors.line,
+    borderRadius: 6,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: "center",
+    width: 28
+  },
+  modalCloseText: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 16,
+    lineHeight: 18
+  },
+  modalScroll: {
+    flexGrow: 0,
+    maxHeight: 420
+  },
+  modalBody: {
+    gap: 8,
+    padding: 16
+  },
+  modalFooter: {
+    alignItems: "center",
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "flex-end",
+    paddingHorizontal: 16,
+    paddingVertical: 12
+  },
+  modalSecondary: {
+    borderColor: colors.line,
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  modalSecondaryText: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 11
   },
   pressed: {
     opacity: 0.72

@@ -11,6 +11,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type CSSProperties,
   type MouseEvent,
   type ReactNode,
@@ -65,6 +66,8 @@ export interface SceneEditorProps {
   readonly selectionStorageKey?: string;
   /** Dictation / assist insert at the current selection (id must change each request). */
   readonly insertTextRequest?: SceneEditorInsertRequest;
+  /** When false (default), formatting controls stay collapsed behind Aa. */
+  readonly defaultFormattingToolbarOpen?: boolean;
 }
 
 interface ToolbarButtonProps {
@@ -89,8 +92,9 @@ const TOOLBAR_STYLE: CSSProperties = {
   borderBottom: "1px solid #d8cdbd",
   display: "flex",
   flexWrap: "wrap",
-  gap: 4,
-  padding: 6,
+  gap: 2,
+  minHeight: 32,
+  padding: "2px 4px",
   position: "sticky",
   top: 0,
   zIndex: 2,
@@ -105,12 +109,12 @@ const TOOLBAR_BUTTON_STYLE: CSSProperties = {
   cursor: "pointer",
   display: "inline-flex",
   font: "inherit",
-  fontSize: 13,
+  fontSize: 12,
   justifyContent: "center",
   lineHeight: 1,
-  minHeight: 30,
-  minWidth: 30,
-  padding: "5px 7px",
+  minHeight: 26,
+  minWidth: 26,
+  padding: "3px 5px",
 };
 
 const ACTIVE_TOOLBAR_BUTTON_STYLE: CSSProperties = {
@@ -288,7 +292,11 @@ export function SceneEditor({
   style,
   selectionStorageKey,
   insertTextRequest,
+  defaultFormattingToolbarOpen = false,
 }: SceneEditorProps) {
+  const [formattingOpen, setFormattingOpen] = useState(
+    defaultFormattingToolbarOpen,
+  );
   const normalizedValue = useMemo(
     () => validateSceneDocumentV1(value),
     [value],
@@ -543,98 +551,110 @@ export function SceneEditor({
         style={TOOLBAR_STYLE}
       >
         <ToolbarButton
-          disabled={controlsDisabled}
-          label="Paragraph"
-          onActivate={() => editor.chain().focus().setParagraph().run()}
-          pressed={currentToolbarState.paragraph}
+          disabled={false}
+          label={formattingOpen ? "Hide formatting" : "Show formatting"}
+          onActivate={() => setFormattingOpen((open) => !open)}
+          pressed={formattingOpen}
         >
-          ¶
+          Aa
         </ToolbarButton>
-        <ToolbarButton
-          disabled={controlsDisabled}
-          label="Heading 1"
-          onActivate={() =>
-            editor.chain().focus().toggleHeading({ level: 1 }).run()
-          }
-          pressed={currentToolbarState.heading1}
-        >
-          H1
-        </ToolbarButton>
-        <ToolbarButton
-          disabled={controlsDisabled}
-          label="Heading 2"
-          onActivate={() =>
-            editor.chain().focus().toggleHeading({ level: 2 }).run()
-          }
-          pressed={currentToolbarState.heading2}
-        >
-          H2
-        </ToolbarButton>
-        <ToolbarButton
-          disabled={controlsDisabled}
-          label="Block quote"
-          onActivate={() =>
-            editor.chain().focus().toggleBlockquote().run()
-          }
-          pressed={currentToolbarState.blockquote}
-        >
-          “”
-        </ToolbarButton>
-        <ToolbarButton
-          disabled={controlsDisabled}
-          label="Scene break"
-          onActivate={() =>
-            editor.chain().focus().setHorizontalRule().run()
-          }
-        >
-          ⁂
-        </ToolbarButton>
-        <ToolbarButton
-          disabled={controlsDisabled}
-          label="Bold"
-          onActivate={() => editor.chain().focus().toggleBold().run()}
-          pressed={currentToolbarState.bold}
-        >
-          <strong>B</strong>
-        </ToolbarButton>
-        <ToolbarButton
-          disabled={controlsDisabled}
-          label="Italic"
-          onActivate={() => editor.chain().focus().toggleItalic().run()}
-          pressed={currentToolbarState.italic}
-        >
-          <em>I</em>
-        </ToolbarButton>
-        <ToolbarButton
-          disabled={controlsDisabled}
-          label="Underline"
-          onActivate={() => editor.chain().focus().toggleUnderline().run()}
-          pressed={currentToolbarState.underline}
-        >
-          <u>U</u>
-        </ToolbarButton>
-        <ToolbarButton
-          disabled={controlsDisabled}
-          label="Strikethrough"
-          onActivate={() => editor.chain().focus().toggleStrike().run()}
-          pressed={currentToolbarState.strike}
-        >
-          <s>S</s>
-        </ToolbarButton>
-        <ToolbarButton
-          disabled={controlsDisabled || !currentToolbarState.canUndo}
-          label="Undo"
-          onActivate={() => editor.chain().focus().undo().run()}
-        >
-          ↶
-        </ToolbarButton>
-        <ToolbarButton
-          disabled={controlsDisabled || !currentToolbarState.canRedo}
-          label="Redo"
-          onActivate={() => editor.chain().focus().redo().run()}
-        >
-          ↷
-        </ToolbarButton>
+        {formattingOpen ? (
+          <>
+            <ToolbarButton
+              disabled={controlsDisabled}
+              label="Paragraph"
+              onActivate={() => editor.chain().focus().setParagraph().run()}
+              pressed={currentToolbarState.paragraph}
+            >
+              ¶
+            </ToolbarButton>
+            <ToolbarButton
+              disabled={controlsDisabled}
+              label="Heading 1"
+              onActivate={() =>
+                editor.chain().focus().toggleHeading({ level: 1 }).run()
+              }
+              pressed={currentToolbarState.heading1}
+            >
+              H1
+            </ToolbarButton>
+            <ToolbarButton
+              disabled={controlsDisabled}
+              label="Heading 2"
+              onActivate={() =>
+                editor.chain().focus().toggleHeading({ level: 2 }).run()
+              }
+              pressed={currentToolbarState.heading2}
+            >
+              H2
+            </ToolbarButton>
+            <ToolbarButton
+              disabled={controlsDisabled}
+              label="Block quote"
+              onActivate={() =>
+                editor.chain().focus().toggleBlockquote().run()
+              }
+              pressed={currentToolbarState.blockquote}
+            >
+              “”
+            </ToolbarButton>
+            <ToolbarButton
+              disabled={controlsDisabled}
+              label="Scene break"
+              onActivate={() =>
+                editor.chain().focus().setHorizontalRule().run()
+              }
+            >
+              ⁂
+            </ToolbarButton>
+            <ToolbarButton
+              disabled={controlsDisabled}
+              label="Bold"
+              onActivate={() => editor.chain().focus().toggleBold().run()}
+              pressed={currentToolbarState.bold}
+            >
+              <strong>B</strong>
+            </ToolbarButton>
+            <ToolbarButton
+              disabled={controlsDisabled}
+              label="Italic"
+              onActivate={() => editor.chain().focus().toggleItalic().run()}
+              pressed={currentToolbarState.italic}
+            >
+              <em>I</em>
+            </ToolbarButton>
+            <ToolbarButton
+              disabled={controlsDisabled}
+              label="Underline"
+              onActivate={() => editor.chain().focus().toggleUnderline().run()}
+              pressed={currentToolbarState.underline}
+            >
+              <u>U</u>
+            </ToolbarButton>
+            <ToolbarButton
+              disabled={controlsDisabled}
+              label="Strikethrough"
+              onActivate={() => editor.chain().focus().toggleStrike().run()}
+              pressed={currentToolbarState.strike}
+            >
+              <s>S</s>
+            </ToolbarButton>
+            <ToolbarButton
+              disabled={controlsDisabled || !currentToolbarState.canUndo}
+              label="Undo"
+              onActivate={() => editor.chain().focus().undo().run()}
+            >
+              ↶
+            </ToolbarButton>
+            <ToolbarButton
+              disabled={controlsDisabled || !currentToolbarState.canRedo}
+              label="Redo"
+              onActivate={() => editor.chain().focus().redo().run()}
+            >
+              ↷
+            </ToolbarButton>
+          </>
+        ) : null}
       </div>
       <EditorContent editor={editor} />
     </div>
