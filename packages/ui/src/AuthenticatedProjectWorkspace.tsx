@@ -5,6 +5,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   useWindowDimensions,
   View
 } from "react-native";
@@ -16,12 +17,12 @@ import type {
   SceneId
 } from "@ghostwriter/core";
 import {
-  AcknowledgementToastHost,
   type AcknowledgementToast
 } from "./AcknowledgementToastHost.js";
 import {
   currentDrillScope,
   drillBreadcrumbs,
+  workflowLensLabel,
   type CanvasDrillScope,
   type CanvasDrillStack,
   type CanvasWorkflowLens
@@ -47,23 +48,49 @@ import {
 } from "./split-layout.js";
 import { ghostwriterTheme } from "./theme.js";
 import {
+  defaultMapStructureRail,
+  mapBoardOwnsViewport,
+  mapStructureQuickBuildVisible,
+  mapStructureRailWidth,
+  toggleMapStructureRail,
+  type MapStructureRailMode
+} from "./map-structure-rail.js";
+import { CharacterBrowsePanel } from "./CharacterBrowsePanel.js";
+import {
+  projectCharacterLaunchpad,
   quickBuildOptions,
+  sceneTimeline,
   storyTrail,
   structureLaunchpad,
   type QuickBuildOption
 } from "./workspace-structure.js";
 import {
-  WorkspaceChatPanel,
   type WorkspaceChatMessage
 } from "./WorkspaceChatPanel.js";
+import {
+  WorkspaceQuickNav,
+  type WorkspacePaletteMode
+} from "./WorkspaceQuickNav.js";
+import {
+  buildWorkspaceJumpTargets,
+  type WorkspaceJumpTarget
+} from "./workspace-quick-nav.js";
 
 export type ProjectWorkspaceMode = "draft" | "canvas" | "split";
+
+export type DraftQuickBuildPresentation = Readonly<{
+  open: boolean;
+  options: readonly QuickBuildOption[];
+  onOpenChange(open: boolean): void;
+  onSelect(option: QuickBuildOption): void;
+}>;
 
 export type DraftWorkspacePresentation = Readonly<{
   contextDockOpen: boolean;
   focusHalo: boolean;
   historyOpen: boolean;
   narrow: boolean;
+  quickBuild?: DraftQuickBuildPresentation;
   onContextDockOpenChange(open: boolean): void;
   onFocusHaloChange(focused: boolean): void;
   onHistoryOpenChange(open: boolean): void;
@@ -77,7 +104,10 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   busy?: boolean;
   allChangesIdle?: boolean;
   error?: string;
-  toasts?: readonly AcknowledgementToast[];
+  /** Acknowledgements for the History rail panel — not floating toasts. */
+  activityHistory?: readonly AcknowledgementToast[];
+  activityHistoryOpen?: boolean;
+  onActivityHistoryOpenChange?(open: boolean): void;
   onBack(): void;
   onRefresh(): void;
   onSignOut(): void;
@@ -87,8 +117,6 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   onOpenReader?(): void;
   onToastAction?(id: string): void;
   onToastDismiss?(id: string): void;
-  onToastPause?(id: string): void;
-  onToastResume?(id: string): void;
   drillStack?: CanvasDrillStack;
   workflowLens?: CanvasWorkflowLens;
   onDrillBack?(): void;
@@ -97,6 +125,8 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
     selection: Extract<ManuscriptSelection, { kind: "chapter" }>
   ): void;
   onWorkflowLensChange?(lens: CanvasWorkflowLens): void;
+  canvasHistoryOpen?: boolean;
+  onCanvasHistoryOpenChange?(open: boolean): void;
   storageAccountId?: string;
   renderCanvas?: ReactNode;
   renderDraft?(
@@ -109,6 +139,10 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
 }>;
 
 const { colors, fonts, shell } = ghostwriterTheme;
+
+const STRUCTURE_WIDTH_MIN = 180;
+const STRUCTURE_WIDTH_MAX = 420;
+const STRUCTURE_WIDTH_DEFAULT = shell.navigatorWidth;
 
 type CollapsedPanel = "tree" | "inspector" | "none";
 
@@ -167,6 +201,7 @@ function RailButton({
 }>) {
   return (
     <Pressable
+      accessibilityLabel={`${glyph} ${label}${selected ? ", selected" : ""}`}
       accessibilityRole="button"
       accessibilityState={{ selected }}
       disabled={disabled}
@@ -177,12 +212,10 @@ function RailButton({
         pressed && styles.pressed,
         disabled && styles.disabled
       ]}
+      {...({ title: label } as object)}
     >
       <Text style={[styles.railGlyph, selected && styles.railTextSelected]}>
         {glyph}
-      </Text>
-      <Text style={[styles.railLabel, selected && styles.railTextSelected]}>
-        {label}
       </Text>
     </Pressable>
   );
@@ -215,7 +248,9 @@ export function AuthenticatedProjectWorkspace({
   busy = false,
   allChangesIdle = false,
   error,
-  toasts = [],
+  activityHistory = [],
+  activityHistoryOpen = false,
+  onActivityHistoryOpenChange,
   onBack,
   onRefresh,
   onSignOut,
@@ -225,14 +260,14 @@ export function AuthenticatedProjectWorkspace({
   onOpenReader,
   onToastAction = () => undefined,
   onToastDismiss = () => undefined,
-  onToastPause = () => undefined,
-  onToastResume = () => undefined,
   drillStack = [{ kind: "project" }],
   workflowLens = "outline",
   onDrillBack = () => undefined,
   onDrillTo = () => undefined,
   onEnterChapter = () => undefined,
   onWorkflowLensChange = () => undefined,
+  canvasHistoryOpen = false,
+  onCanvasHistoryOpenChange,
   storageAccountId,
   renderCanvas,
   renderDraft,
@@ -244,8 +279,11 @@ export function AuthenticatedProjectWorkspace({
   const wide = width >= 1240;
   const narrow = width < 760;
   const [splitRatio, setSplitRatio] = useState(SPLIT_RATIO_DEFAULT);
-  const [chatOpen, setChatOpen] = useState(false);
-  const [contextDockOpen, setContextDockOpen] = useState(true);
+  const [paletteMode, setPaletteMode] = useState<WorkspacePaletteMode>();
+  const [structureWidthPx, setStructureWidthPx] = useState<number>(
+    STRUCTURE_WIDTH_DEFAULT
+  );
+  const [contextDockOpen, setContextDockOpen] = useState(false);
   const [draftDockTab, setDraftDockTab] = useState<
     "brief" | "story" | "canvas" | "history"
   >("brief");
@@ -307,8 +345,62 @@ export function AuthenticatedProjectWorkspace({
     useState<CollapsedPanel>("tree");
   const previousSceneId = useRef(selectedSceneId);
   const canvasVisible = mode === "canvas" || mode === "split";
+  // Same collapsible manuscript rail in Draft, Canvas, and Split (wide layouts).
+  const structureCollapsible = !narrow;
+  const [structureRail, setStructureRail] = useState<MapStructureRailMode>(() =>
+    defaultMapStructureRail(mode, width >= 760)
+  );
+  const mapDense = mapBoardOwnsViewport(mode);
+  // Draft matches Map density: trail in topbar, no hero heading stack.
+  const draftDense = mode === "draft";
+  const surfaceDense = mapDense || draftDense;
   const drillScope = currentDrillScope(drillStack);
   const drillTrail = drillBreadcrumbs(drillStack, project);
+  const structureWidth =
+    structureCollapsible && structureRail === "collapsed"
+      ? mapStructureRailWidth(structureRail, structureCollapsible)
+      : structureCollapsible
+        ? structureWidthPx
+        : shell.navigatorWidth;
+  const quickBuildVisible = mapStructureQuickBuildVisible(mode, structureRail);
+  const structureCollapsed = structureRail === "collapsed";
+  const jumpTargets = useMemo(
+    () => buildWorkspaceJumpTargets(project),
+    [project]
+  );
+  const structureResizeOriginRef = useRef(structureWidthPx);
+
+  const structureResizeResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () =>
+          structureCollapsible && structureRail === "expanded",
+        onMoveShouldSetPanResponder: () =>
+          structureCollapsible && structureRail === "expanded",
+        onPanResponderGrant: () => {
+          structureResizeOriginRef.current = structureWidthPx;
+        },
+        onPanResponderMove: (_event, gesture) => {
+          const next = Math.min(
+            STRUCTURE_WIDTH_MAX,
+            Math.max(
+              STRUCTURE_WIDTH_MIN,
+              structureResizeOriginRef.current + gesture.dx
+            )
+          );
+          setStructureWidthPx(next);
+        }
+      }),
+    [structureCollapsible, structureRail, structureWidthPx]
+  );
+
+  useEffect(() => {
+    // Narrow layouts cannot host the thin rail — force expanded tree.
+    // Wide mode switches keep the writer's collapse choice (same bar everywhere).
+    if (!structureCollapsible) {
+      setStructureRail("expanded");
+    }
+  }, [structureCollapsible]);
 
   useEffect(() => {
     if (!canvasVisible || typeof document === "undefined") return;
@@ -320,6 +412,29 @@ export function AuthenticatedProjectWorkspace({
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [canvasVisible, drillStack.length, onDrillBack]);
+
+  useEffect(() => {
+    if (!structureCollapsible || typeof document === "undefined") return;
+    const handleStructureToggle = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      ) {
+        return;
+      }
+      if (event.key !== "[") return;
+      event.preventDefault();
+      setStructureRail((current) => toggleMapStructureRail(current));
+    };
+    document.addEventListener("keydown", handleStructureToggle);
+    return () =>
+      document.removeEventListener("keydown", handleStructureToggle);
+  }, [structureCollapsible]);
 
   useEffect(() => {
     if (typeof document === "undefined" || !focusHalo) return;
@@ -375,14 +490,23 @@ export function AuthenticatedProjectWorkspace({
   }
 
   const [quickBuildOpen, setQuickBuildOpen] = useState(false);
+  const [railDestination, setRailDestination] = useState<
+    "write" | "characters"
+  >("write");
   const [treeAddRequest, setTreeAddRequest] =
     useState<ManuscriptTreeAddRequest>();
   const quickBuildRequestId = useRef(0);
   const trail = storyTrail(project, selection);
   const quickOptions = quickBuildOptions(project, selection);
-  const launchpad = structureLaunchpad(project, selection);
+  const charactersLens = railDestination === "characters";
+  const launchpad = charactersLens
+    ? projectCharacterLaunchpad(project)
+    : structureLaunchpad(project, selection);
   const launchpadVisible =
-    mode === "draft" && selection.kind !== "scene" && launchpad !== undefined;
+    mode === "draft" &&
+    (charactersLens ||
+      (selection.kind !== "scene" && launchpad !== undefined));
+  const timeline = sceneTimeline(project, selection);
   const resolvedSelection = resolveManuscriptSelection(project, selection);
   const moveCandidates =
     selection.kind === "chapter"
@@ -400,6 +524,7 @@ export function AuthenticatedProjectWorkspace({
     if (typeof document === "undefined") return;
     const handleQuickBuildKey = (event: KeyboardEvent): void => {
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        if (paletteMode !== undefined) return;
         event.preventDefault();
         setQuickBuildOpen((current) => !current);
         return;
@@ -410,7 +535,70 @@ export function AuthenticatedProjectWorkspace({
     };
     document.addEventListener("keydown", handleQuickBuildKey);
     return () => document.removeEventListener("keydown", handleQuickBuildKey);
-  }, []);
+  }, [paletteMode]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const handlePaletteKeys = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement | null;
+      const typingInField =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable === true;
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "p") {
+        return;
+      }
+      // Allow ⌘P / ⌘⇧P even from inputs so jump stays global.
+      event.preventDefault();
+      if (event.shiftKey) {
+        setPaletteMode((current) =>
+          current === "command" ? undefined : "command"
+        );
+        return;
+      }
+      if (typingInField && paletteMode === undefined) {
+        // still open jump — founders expect IDE-style global jump
+      }
+      setPaletteMode((current) => (current === "jump" ? undefined : "jump"));
+    };
+    document.addEventListener("keydown", handlePaletteKeys);
+    return () => document.removeEventListener("keydown", handlePaletteKeys);
+  }, [paletteMode]);
+
+  function applyJumpTarget(target: WorkspaceJumpTarget): void {
+    if (target.toggleJump === true) {
+      setPaletteMode("jump");
+      return;
+    }
+    if (target.toggleChat === true) {
+      setPaletteMode((current) =>
+        current === "command" ? undefined : "command"
+      );
+      return;
+    }
+    if (target.toggleStructure === true) {
+      if (structureCollapsible) {
+        setStructureRail((current) => toggleMapStructureRail(current));
+      } else if (!wide) {
+        setCollapsedPanel((current) =>
+          current === "tree" ? "none" : "tree"
+        );
+      }
+      setPaletteMode(undefined);
+      return;
+    }
+    if (target.selection !== undefined) {
+      chooseSelection(target.selection);
+      if (!wide) setCollapsedPanel("tree");
+    }
+    if (target.mode !== undefined) {
+      onModeChange(target.mode);
+    }
+    if (target.openReader === true) {
+      onOpenReader?.();
+    }
+    setPaletteMode(undefined);
+  }
 
   function dispatchQuickBuild(option: QuickBuildOption): void {
     setQuickBuildOpen(false);
@@ -420,13 +608,6 @@ export function AuthenticatedProjectWorkspace({
       selectionKey: manuscriptSelectionKey(option.parent),
       requestId: quickBuildRequestId.current
     });
-  }
-
-  function openLaunchpadScene(scene: ProjectNavigatorScene): void {
-    const next = sceneSelection(project, scene.id);
-    if (next === undefined) return;
-    chooseSelection(next);
-    onModeChange("draft");
   }
 
   async function moveSceneToLaunchpadChapter(
@@ -689,6 +870,16 @@ export function AuthenticatedProjectWorkspace({
     focusHalo,
     historyOpen: draftDockTab === "history",
     narrow,
+    ...(quickOptions.length > 0 && quickBuildVisible
+      ? {
+          quickBuild: {
+            open: quickBuildOpen,
+            options: quickOptions,
+            onOpenChange: setQuickBuildOpen,
+            onSelect: dispatchQuickBuild
+          }
+        }
+      : {}),
     onContextDockOpenChange: setContextDockOpen,
     onFocusHaloChange: setFocusHalo,
     onHistoryOpenChange: (open) => {
@@ -782,32 +973,183 @@ export function AuthenticatedProjectWorkspace({
     </View>
   );
   const centerTitle = launchpadVisible
-    ? launchpad.title
+    ? (launchpad?.title ?? "Browse structure")
     : drillScope.kind === "scene"
       ? (drillTrail[drillTrail.length - 1]?.label ?? selectedScene?.title)
       : drillScope.kind === "chapter"
         ? (drillTrail[drillTrail.length - 1]?.label ?? "Chapter lens")
         : (selectedScene?.title ?? "Shape the manuscript");
   const centerEyebrow = launchpadVisible
-    ? launchpad.eyebrow
+    ? (launchpad?.eyebrow ?? "Structure")
     : mode === "draft"
       ? "Focused Draft"
       : mode === "canvas"
         ? "Story Canvas"
         : "Draft + Canvas";
 
+  const storyTrailNodes = (
+    <View accessibilityLabel="Story Trail" style={styles.storyTrail}>
+      {trail.map((item, index) => {
+        const current = index === trail.length - 1;
+        const key = manuscriptSelectionKey(item.selection);
+        return (
+          <View key={key} style={styles.storyTrailItem}>
+            {index === 0 ? null : (
+              <Text style={styles.storyTrailDivider}>›</Text>
+            )}
+            <Pressable
+              accessibilityLabel={
+                current
+                  ? `Story Trail, current ${item.role} ${item.label}`
+                  : `Story Trail, go to ${item.role} ${item.label}`
+              }
+              accessibilityRole="button"
+              accessibilityState={{ disabled: current }}
+              disabled={current || busy}
+              onPress={() => chooseSelection(item.selection)}
+              style={({ pressed }) => [
+                styles.storyTrailButton,
+                current && styles.storyTrailCurrent,
+                pressed && styles.pressed
+              ]}
+            >
+              <Text style={styles.storyTrailRole}>{item.role}</Text>
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.storyTrailText,
+                  current && styles.storyTrailTextCurrent
+                ]}
+              >
+                {item.label}
+              </Text>
+            </Pressable>
+          </View>
+        );
+      })}
+    </View>
+  );
+
+  // Map chrome must show Canvas drill scope — not manuscript selection.
+  // Selecting a scene card syncs the tree, but must not look like Enter layer.
+  const mapLocationLabel =
+    drillScope.kind === "project"
+      ? `Project board · ${project.title}`
+      : drillScope.kind === "chapter"
+        ? "Inside chapter lens"
+        : "Inside scene lens";
+
+  const mapScopeTrailNodes = (
+    <View accessibilityLabel="Canvas scope trail" style={styles.mapTrail}>
+      <Text style={styles.mapTrailEyebrow}>{mapLocationLabel}</Text>
+      <View style={styles.storyTrail}>
+        {drillTrail.map((crumb, index) => {
+          const current = index === drillTrail.length - 1;
+          return (
+            <View key={crumb.focusKey} style={styles.storyTrailItem}>
+              {index === 0 ? null : (
+                <Text style={styles.storyTrailDivider}>›</Text>
+              )}
+              <Pressable
+                accessibilityLabel={
+                  current
+                    ? `Canvas scope, current ${crumb.label}`
+                    : `Canvas scope, go to ${crumb.label}`
+                }
+                accessibilityRole="button"
+                accessibilityState={{ disabled: current }}
+                disabled={current || busy}
+                onPress={() => onDrillTo?.(crumb.scope)}
+                style={({ pressed }) => [
+                  styles.storyTrailButton,
+                  current && styles.storyTrailCurrent,
+                  pressed && styles.pressed
+                ]}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.storyTrailText,
+                    current && styles.storyTrailTextCurrent
+                  ]}
+                >
+                  {crumb.label}
+                </Text>
+              </Pressable>
+            </View>
+          );
+        })}
+        {canvasVisible &&
+        selectedScene !== undefined &&
+        drillScope.kind === "project" ? (
+          <View style={styles.storyTrailItem}>
+            <Text style={styles.mapSelectionHint}>
+              · card selected: {selectedScene.title} · Enter to dive
+            </Text>
+          </View>
+        ) : null}
+        {workflowLens !== "outline" ? (
+          <View style={styles.storyTrailItem}>
+            <Text style={styles.mapSelectionHint}>
+              · lens {workflowLensLabel(workflowLens)}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+
   return (
     <View style={styles.screen}>
-      <View style={[styles.topbar, narrow && styles.topbarNarrow]}>
+      <View
+        style={[
+          styles.topbar,
+          surfaceDense && styles.topbarMap,
+          narrow && styles.topbarNarrow
+        ]}
+      >
         <Button disabled={busy} label="← Projects" onPress={onBack} />
+        {structureCollapsible ? (
+          <Pressable
+            accessibilityLabel={
+              structureCollapsed
+                ? "Expand manuscript · ["
+                : "Collapse manuscript · ["
+            }
+            accessibilityRole="button"
+            disabled={busy}
+            onPress={() =>
+              setStructureRail((current) => toggleMapStructureRail(current))
+            }
+            style={({ pressed }) => [
+              styles.structureTopToggle,
+              pressed && styles.pressed,
+              busy && styles.disabled
+            ]}
+          >
+            <Text style={styles.structureTopToggleGlyph}>
+              {structureCollapsed ? "»|" : "|«"}
+            </Text>
+          </Pressable>
+        ) : null}
         <View style={styles.topbarCopy}>
-          <Text numberOfLines={1} style={styles.topbarTitle}>
+          <Text
+            numberOfLines={1}
+            style={[styles.topbarTitle, surfaceDense && styles.topbarTitleMap]}
+          >
             {project.title}
           </Text>
-          <Text numberOfLines={1} style={styles.topbarMeta}>
-            {profileDisplayName} · project version {project.version}
-          </Text>
+          {surfaceDense ? null : (
+            <Text numberOfLines={1} style={styles.topbarMeta}>
+              {profileDisplayName} · project version {project.version}
+            </Text>
+          )}
         </View>
+        {wide && surfaceDense && !focusHalo ? (
+          <View style={styles.topbarTrail}>
+            {canvasVisible ? mapScopeTrailNodes : storyTrailNodes}
+          </View>
+        ) : null}
         <View
           style={[
             styles.topbarActions,
@@ -819,74 +1161,71 @@ export function AuthenticatedProjectWorkspace({
               accessibilityLiveRegion="polite"
               style={styles.aggregateStatus}
             >
-              All changes saved
+              {surfaceDense ? "Saved" : "All changes saved"}
             </Text>
           ) : null}
-          {!wide ? (
+          {surfaceDense ? null : (
             <>
-              <Button
-                label={
-                  collapsedPanel === "tree"
-                    ? "Hide manuscript tree"
-                    : "Show manuscript tree"
-                }
-                onPress={() => {
-                  setCollapsedPanel((current) => {
-                    const next = current === "tree" ? "none" : "tree";
-                    // Medium/narrow: tree and Context Dock are mutually exclusive.
-                    if (next === "tree") setContextDockOpen(false);
-                    return next;
-                  });
-                }}
-                selected={collapsedPanel === "tree"}
-              />
-              <Button
-                label={
-                  draftDeskActive
-                    ? contextDockOpen
-                      ? "Hide Context Dock"
-                      : "Show Context Dock"
-                    : collapsedPanel === "inspector"
-                      ? "Hide inspector"
-                      : "Show inspector"
-                }
-                onPress={() => {
-                  if (draftDeskActive) {
-                    setContextDockOpen((open) => {
-                      const next = !open;
-                      if (next) setCollapsedPanel("none");
-                      return next;
-                    });
-                    return;
-                  }
-                  setCollapsedPanel((current) =>
-                    current === "inspector" ? "none" : "inspector"
-                  );
-                }}
-                selected={
-                  draftDeskActive
-                    ? contextDockOpen
-                    : collapsedPanel === "inspector"
-                }
-              />
+              {!wide ? (
+                <>
+                  <Button
+                    label={
+                      collapsedPanel === "tree"
+                        ? "Hide manuscript tree"
+                        : "Show manuscript tree"
+                    }
+                    onPress={() => {
+                      setCollapsedPanel((current) => {
+                        const next = current === "tree" ? "none" : "tree";
+                        // Medium/narrow: tree and Context Dock are mutually exclusive.
+                        if (next === "tree") setContextDockOpen(false);
+                        return next;
+                      });
+                    }}
+                    selected={collapsedPanel === "tree"}
+                  />
+                  <Button
+                    label={
+                      draftDeskActive
+                        ? contextDockOpen
+                          ? "Hide Context Dock"
+                          : "Show Context Dock"
+                        : collapsedPanel === "inspector"
+                          ? "Hide inspector"
+                          : "Show inspector"
+                    }
+                    onPress={() => {
+                      if (draftDeskActive) {
+                        setContextDockOpen((open) => {
+                          const next = !open;
+                          if (next) setCollapsedPanel("none");
+                          return next;
+                        });
+                        return;
+                      }
+                      setCollapsedPanel((current) =>
+                        current === "inspector" ? "none" : "inspector"
+                      );
+                    }}
+                    selected={
+                      draftDeskActive
+                        ? contextDockOpen
+                        : collapsedPanel === "inspector"
+                    }
+                  />
+                </>
+              ) : null}
+              <Button disabled={busy} label="Refresh" onPress={onRefresh} />
+              {onOpenReader === undefined ? null : (
+                <Button
+                  disabled={busy || selectedSceneId === undefined}
+                  label="Reader"
+                  onPress={onOpenReader}
+                />
+              )}
             </>
-          ) : null}
-          <Button disabled={busy} label="Refresh" onPress={onRefresh} />
-          {onOpenReader === undefined ? null : (
-            <Button
-              disabled={busy || selectedSceneId === undefined}
-              label="Reader"
-              onPress={onOpenReader}
-            />
           )}
-          {onChatSend === undefined ? null : (
-            <Button
-              disabled={busy}
-              label={chatOpen ? "Hide chat" : "Chat"}
-              onPress={() => setChatOpen((current) => !current)}
-              selected={chatOpen}
-            />
-          )}
+          {/* Jump · ⌘P and Chat · ⌘⇧P live on the left rail — not the topbar. */}
           <Button disabled={busy} label="Sign out" onPress={onSignOut} />
         </View>
       </View>
@@ -947,14 +1286,20 @@ export function AuthenticatedProjectWorkspace({
               disabled={busy}
               glyph="D"
               label="Draft"
-              onPress={() => onModeChange("draft")}
-              selected={mode === "draft"}
+              onPress={() => {
+                setRailDestination("write");
+                onModeChange("draft");
+              }}
+              selected={mode === "draft" && !charactersLens}
             />
             <RailButton
               disabled={busy}
               glyph="C"
               label="Canvas"
-              onPress={() => onModeChange("canvas")}
+              onPress={() => {
+                setRailDestination("write");
+                onModeChange("canvas");
+              }}
               selected={mode === "canvas"}
             />
             {wide ? (
@@ -962,7 +1307,10 @@ export function AuthenticatedProjectWorkspace({
                 disabled={busy}
                 glyph="S"
                 label="Split"
-                onPress={() => onModeChange("split")}
+                onPress={() => {
+                  setRailDestination("write");
+                  onModeChange("split");
+                }}
                 selected={mode === "split"}
               />
             ) : null}
@@ -975,156 +1323,266 @@ export function AuthenticatedProjectWorkspace({
                 selected={false}
               />
             )}
+            <RailButton
+              disabled={busy}
+              glyph="K"
+              label="Characters"
+              onPress={() => {
+                setRailDestination("characters");
+                onModeChange("draft");
+                chooseSelection({ kind: "storyKnowledgeRoot" });
+                if (structureCollapsible) setStructureRail("expanded");
+              }}
+              selected={charactersLens}
+            />
+            {timeline.length > 0 && mode === "draft" && !charactersLens ? (
+              <>
+                <View style={styles.railDivider} />
+                <View
+                  accessibilityLabel="Scene timeline"
+                  style={styles.railTimeline}
+                >
+                  {timeline.map((item) => (
+                    <Pressable
+                      accessibilityLabel={`Scene ${item.index} of ${item.total}: ${item.title}`}
+                      accessibilityRole="button"
+                      accessibilityState={{
+                        selected: item.sceneId === selectedSceneId
+                      }}
+                      disabled={busy}
+                      key={item.sceneId}
+                      onPress={() => {
+                        setRailDestination("write");
+                        chooseSelection(item.selection);
+                      }}
+                      style={({ pressed }) => [
+                        styles.railTimelineItem,
+                        item.sceneId === selectedSceneId &&
+                          styles.railTimelineItemSelected,
+                        pressed && styles.pressed,
+                        busy && styles.disabled
+                      ]}
+                      {...({ title: item.title } as object)}
+                    >
+                      <Text
+                        style={[
+                          styles.railTimelineIndex,
+                          item.sceneId === selectedSceneId &&
+                            styles.railTextSelected
+                        ]}
+                      >
+                        {item.index}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            ) : null}
+            <View style={styles.railSpacer} />
+            <RailButton
+              disabled={busy}
+              glyph="◷"
+              label="History"
+              onPress={() => {
+                if (canvasVisible && onCanvasHistoryOpenChange !== undefined) {
+                  onCanvasHistoryOpenChange(!canvasHistoryOpen);
+                  onActivityHistoryOpenChange?.(false);
+                  return;
+                }
+                onActivityHistoryOpenChange?.(!activityHistoryOpen);
+              }}
+              selected={
+                canvasVisible ? canvasHistoryOpen : activityHistoryOpen
+              }
+            />
             {onChatSend === undefined ? null : (
               <RailButton
                 disabled={busy}
-                glyph="M"
-                label="Chat"
-                onPress={() => setChatOpen((current) => !current)}
-                selected={chatOpen}
+                glyph="✦"
+                label="Chat · ⌘⇧P"
+                onPress={() =>
+                  setPaletteMode((current) =>
+                    current === "command" ? undefined : "command"
+                  )
+                }
+                selected={paletteMode === "command"}
               />
             )}
-            <View style={styles.railSpacer} />
-            <Text style={styles.railAuthority}>Tree = order</Text>
+            <RailButton
+              disabled={busy}
+              glyph="⌕"
+              label="Jump · ⌘P"
+              onPress={() =>
+                setPaletteMode((current) =>
+                  current === "jump" ? undefined : "jump"
+                )
+              }
+              selected={paletteMode === "jump"}
+            />
+            <RailButton
+              disabled={busy || !structureCollapsible}
+              glyph="☰"
+              label="Structure · ["
+              onPress={() =>
+                setStructureRail((current) => toggleMapStructureRail(current))
+              }
+              selected={structureCollapsible && structureRail === "expanded"}
+            />
           </View>
         ) : null}
 
         <View
+          {...(structureCollapsible && structureRail === "collapsed"
+            ? { accessibilityLabel: "Collapsed manuscript structure" }
+            : {})}
           style={[
             styles.treeRegion,
-            !wide && styles.collapsedRegion,
+            structureCollapsible &&
+              ({
+                width: structureWidth,
+                transition:
+                  "width 380ms cubic-bezier(0.22, 1, 0.36, 1), background-color 280ms ease"
+              } as object),
+            structureCollapsible &&
+              structureRail === "collapsed" &&
+              styles.treeRegionCollapsed,
+            !wide && !structureCollapsible && styles.collapsedRegion,
             narrow && styles.narrowRegion,
             (focusHalo || (!wide && collapsedPanel !== "tree")) &&
               styles.regionHidden
           ]}
         >
-          {tree}
-        </View>
-
-        <ScrollView
-          contentContainerStyle={[
-            styles.centerContent,
-            narrow && styles.centerContentNarrow
-          ]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator
-          style={styles.center}
-        >
-          {error === undefined ? null : (
-            <View accessibilityRole="alert" style={styles.error}>
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          )}
-          {focusHalo ? null : (
-            <>
-              <View
-                accessibilityLabel="Story Trail"
-                style={styles.storyTrailRow}
-              >
-            <View style={styles.storyTrail}>
-              {trail.map((item, index) => {
-                const current = index === trail.length - 1;
-                const key = manuscriptSelectionKey(item.selection);
-                return (
-                  <View key={key} style={styles.storyTrailItem}>
-                    {index === 0 ? null : (
-                      <Text style={styles.storyTrailDivider}>›</Text>
-                    )}
-                    <Pressable
-                      accessibilityLabel={
-                        current
-                          ? `Story Trail, current scope ${item.label}`
-                          : `Story Trail, go to ${item.label}`
-                      }
-                      accessibilityRole="button"
-                      accessibilityState={{ disabled: current }}
-                      disabled={current || busy}
-                      onPress={() => chooseSelection(item.selection)}
-                      style={({ pressed }) => [
-                        styles.storyTrailButton,
-                        current && styles.storyTrailCurrent,
-                        pressed && styles.pressed
-                      ]}
-                    >
-                      <Text
-                        numberOfLines={1}
-                        style={[
-                          styles.storyTrailText,
-                          current && styles.storyTrailTextCurrent
-                        ]}
-                      >
-                        {item.label}
-                      </Text>
-                    </Pressable>
-                  </View>
-                );
-              })}
-            </View>
-            {quickOptions.length === 0 ? null : (
-              <View style={styles.quickBuild}>
+          {structureCollapsible ? (
+            structureRail === "collapsed" ? (
+              <View style={styles.structureCollapsedRail}>
                 <Pressable
-                  accessibilityLabel="Quick Build: add to the manuscript"
+                  accessibilityLabel="Expand manuscript · ["
                   accessibilityRole="button"
-                  accessibilityState={{ expanded: quickBuildOpen }}
                   disabled={busy}
-                  onPress={() => setQuickBuildOpen((current) => !current)}
+                  onPress={() => setStructureRail("expanded")}
                   style={({ pressed }) => [
-                    styles.quickBuildButton,
-                    quickBuildOpen && styles.buttonSelected,
+                    styles.structureToggle,
                     pressed && styles.pressed,
                     busy && styles.disabled
                   ]}
                 >
-                  <Text style={styles.quickBuildButtonText}>＋ Add</Text>
+                  <Text style={styles.structureToggleGlyph}>»|</Text>
                 </Pressable>
-                {quickBuildOpen ? (
-                  <View
-                    accessibilityLabel="Quick Build options"
-                    style={styles.quickBuildMenu}
+                <Text style={styles.structureCollapsedHint}>Tree</Text>
+              </View>
+            ) : (
+              <View style={styles.structureExpandedShell}>
+                <View style={styles.structureExpandedHeader}>
+                  <Text style={styles.structureExpandedLabel}>Manuscript</Text>
+                  <Pressable
+                    accessibilityLabel="Collapse manuscript · ["
+                    accessibilityRole="button"
+                    disabled={busy}
+                    onPress={() => setStructureRail("collapsed")}
+                    style={({ pressed }) => [
+                      styles.structureToggle,
+                      pressed && styles.pressed,
+                      busy && styles.disabled
+                    ]}
                   >
-                    {quickOptions.map((option) => (
+                    <Text style={styles.structureToggleGlyph}>|«</Text>
+                  </Pressable>
+                </View>
+                {tree}
+              </View>
+            )
+          ) : (
+            tree
+          )}
+          {structureCollapsible && structureRail === "expanded" ? (
+            <View
+              accessibilityLabel="Resize manuscript structure"
+              accessibilityRole="adjustable"
+              {...structureResizeResponder.panHandlers}
+              style={styles.structureResizeHandle}
+            />
+          ) : null}
+        </View>
+
+        {(() => {
+          const centerChrome = focusHalo ? null : (
+            <>
+              {surfaceDense && wide ? null : (
+                <View style={styles.storyTrailRow}>
+                  {storyTrailNodes}
+                  {/* Draft keeps ＋ Add on the Write toolbar so the trail stays slim. */}
+                  {mode === "draft" ||
+                  quickOptions.length === 0 ||
+                  !quickBuildVisible ? null : (
+                    <View style={styles.quickBuild}>
                       <Pressable
-                        accessibilityLabel={option.label}
-                        accessibilityRole="menuitem"
+                        accessibilityLabel="Quick Build: add to the manuscript"
+                        accessibilityRole="button"
+                        accessibilityState={{ expanded: quickBuildOpen }}
                         disabled={busy}
-                        key={option.id}
-                        onPress={() => dispatchQuickBuild(option)}
+                        onPress={() =>
+                          setQuickBuildOpen((current) => !current)
+                        }
                         style={({ pressed }) => [
-                          styles.quickBuildOption,
-                          pressed && styles.pressed
+                          styles.quickBuildButton,
+                          quickBuildOpen && styles.buttonSelected,
+                          pressed && styles.pressed,
+                          busy && styles.disabled
                         ]}
                       >
-                        <Text style={styles.quickBuildOptionLabel}>
-                          {option.label}
-                        </Text>
-                        <Text
-                          numberOfLines={2}
-                          style={styles.quickBuildOptionDetail}
-                        >
-                          {option.detail}
-                        </Text>
+                        <Text style={styles.quickBuildButtonText}>＋ Add</Text>
                       </Pressable>
-                    ))}
-                    <Text style={styles.quickBuildHint}>
-                      Titles commit with Enter in the manuscript tree. Escape
-                      cancels.
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-            )}
-              </View>
-              <View style={styles.centerHeading}>
-                <View style={styles.centerHeadingCopy}>
-                  <Text style={styles.centerEyebrow}>{centerEyebrow}</Text>
-                  <Text style={styles.centerTitle}>{centerTitle}</Text>
+                      {quickBuildOpen ? (
+                        <View
+                          accessibilityLabel="Quick Build options"
+                          style={styles.quickBuildMenu}
+                        >
+                          {quickOptions.map((option) => (
+                            <Pressable
+                              accessibilityLabel={option.label}
+                              accessibilityRole="menuitem"
+                              disabled={busy}
+                              key={option.id}
+                              onPress={() => dispatchQuickBuild(option)}
+                              style={({ pressed }) => [
+                                styles.quickBuildOption,
+                                pressed && styles.pressed
+                              ]}
+                            >
+                              <Text style={styles.quickBuildOptionLabel}>
+                                {option.label}
+                              </Text>
+                              <Text
+                                numberOfLines={2}
+                                style={styles.quickBuildOptionDetail}
+                              >
+                                {option.detail}
+                              </Text>
+                            </Pressable>
+                          ))}
+                          <Text style={styles.quickBuildHint}>
+                            Titles commit with Enter in the manuscript tree.
+                            Escape cancels.
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  )}
                 </View>
-                <Text style={styles.centerRule}>
-                  Tree order is canonical. Canvas relationships never reorder
-                  Draft.
-                </Text>
-              </View>
-              {canvasVisible ? (
+              )}
+              {surfaceDense ? null : (
+                <View style={styles.centerHeading}>
+                  <View style={styles.centerHeadingCopy}>
+                    <Text style={styles.centerEyebrow}>{centerEyebrow}</Text>
+                    <Text style={styles.centerTitle}>{centerTitle}</Text>
+                  </View>
+                  <Text style={styles.centerRule}>
+                    Tree order is canonical. Canvas relationships never reorder
+                    Draft.
+                  </Text>
+                </View>
+              )}
+              {canvasVisible && !mapDense ? (
                 <CanvasDrillBar
                   busy={busy}
                   canvasVisible={canvasVisible}
@@ -1137,11 +1595,13 @@ export function AuthenticatedProjectWorkspace({
                 />
               ) : null}
             </>
-          )}
+          );
+          const workSurface = (
           <View
             ref={splitSurfaceRef}
             style={[
               styles.workSurface,
+              surfaceDense && styles.workSurfaceMap,
               mode === "split" && styles.workSurfaceSplit,
               narrow && styles.workSurfaceNarrow
             ]}
@@ -1186,52 +1646,161 @@ export function AuthenticatedProjectWorkspace({
                     : undefined
                 ]}
               >
-                {launchpadVisible && mode === "draft" ? (
+                {launchpadVisible && mode === "draft" && launchpad !== undefined ? (
                   <View
-                    accessibilityLabel="Scene Launchpad"
+                    accessibilityLabel={
+                      charactersLens ? "Characters browse" : "Scene Launchpad"
+                    }
                     style={styles.launchpad}
                   >
-                    <Text style={styles.launchpadDescription}>
-                      {launchpad.description}
-                    </Text>
-                    <View style={styles.launchpadActions}>
-                      {quickOptions[0] === undefined ? null : (
-                        <Button
-                          disabled={busy}
-                          label={quickOptions[0].label}
-                          onPress={() => {
-                            const first = quickOptions[0];
-                            if (first !== undefined) dispatchQuickBuild(first);
-                          }}
-                          primary
-                        />
-                      )}
-                      {launchpad.storyboardChapter === undefined ? null : (
-                        <Button
-                          disabled={busy}
-                          label="Storyboard on Canvas"
-                          onPress={() => {
-                            const chapter = launchpad.storyboardChapter;
-                            if (chapter === undefined) return;
-                            chooseSelection(chapter);
-                            onEnterChapter(chapter);
-                            onModeChange("canvas");
-                          }}
-                        />
-                      )}
+                    <View style={styles.launchpadHeaderRow}>
+                      <View style={styles.launchpadHeaderCopy}>
+                        <Text style={styles.launchpadEyebrow}>
+                          {launchpad.eyebrow}
+                        </Text>
+                        <Text numberOfLines={1} style={styles.launchpadTitle}>
+                          {launchpad.title}
+                        </Text>
+                        <Text numberOfLines={1} style={styles.launchpadDescription}>
+                          {launchpad.description}
+                        </Text>
+                      </View>
+                      <View style={styles.launchpadActions}>
+                        {quickOptions[0] === undefined ? null : (
+                          <Button
+                            disabled={busy}
+                            label={quickOptions[0].label}
+                            onPress={() => {
+                              const first = quickOptions[0];
+                              if (first !== undefined) dispatchQuickBuild(first);
+                            }}
+                            primary
+                          />
+                        )}
+                        {charactersLens ? (
+                          <Button
+                            disabled={busy}
+                            label="Characters on Canvas"
+                            onPress={() => {
+                              setRailDestination("write");
+                              chooseSelection({ kind: "storyKnowledgeRoot" });
+                              onModeChange("canvas");
+                            }}
+                          />
+                        ) : null}
+                        {launchpad.storyboardChapter === undefined ? null : (
+                          <Button
+                            disabled={busy}
+                            label="Storyboard on Canvas"
+                            onPress={() => {
+                              const chapter = launchpad.storyboardChapter;
+                              if (chapter === undefined) return;
+                              setRailDestination("write");
+                              chooseSelection(chapter);
+                              onEnterChapter(chapter);
+                              onModeChange("canvas");
+                            }}
+                          />
+                        )}
+                      </View>
                     </View>
-                    {launchpad.scenes.length === 0 ? null : (
+                    {(selection.kind === "part" || selection.kind === "chapter") &&
+                    !charactersLens ? (
+                      <View style={styles.launchpadDescriptionEdit}>
+                        <Text style={styles.launchpadSectionTitle}>
+                          Description
+                        </Text>
+                        <TextInput
+                          accessibilityLabel="Structure description"
+                          editable={!busy}
+                          multiline
+                          defaultValue={
+                            selection.kind === "part"
+                              ? (resolvedSelection?.part?.summary ?? "")
+                              : (resolvedSelection?.chapter?.summary ?? "")
+                          }
+                          key={`desc:${manuscriptSelectionKey(selection)}:${
+                            selection.kind === "part"
+                              ? (resolvedSelection?.part?.summary ?? "")
+                              : (resolvedSelection?.chapter?.summary ?? "")
+                          }`}
+                          onEndEditing={(event) => {
+                            const next = event.nativeEvent.text.trim();
+                            if (selection.kind === "part") {
+                              const current =
+                                resolvedSelection?.part?.summary ?? "";
+                              if (next === current) return;
+                              void onCommand({
+                                type: "part.update",
+                                bookId: selection.bookId,
+                                partId: selection.partId,
+                                summary: next === "" ? null : next
+                              });
+                              return;
+                            }
+                            if (selection.kind === "chapter") {
+                              const current =
+                                resolvedSelection?.chapter?.summary ?? "";
+                              if (next === current) return;
+                              void onCommand({
+                                type: "chapter.update",
+                                bookId: selection.bookId,
+                                partId: selection.partId,
+                                chapterId: selection.chapterId,
+                                summary: next === "" ? null : next
+                              });
+                            }
+                          }}
+                          placeholder="Add a short description for this folder"
+                          style={styles.launchpadDescriptionInput}
+                        />
+                      </View>
+                    ) : null}
+                    {selection.kind === "storyKnowledge" &&
+                    resolvedSelection?.knowledge !== undefined ? (
+                      <CharacterBrowsePanel
+                        busy={busy}
+                        knowledge={resolvedSelection.knowledge}
+                        onCommand={onCommand}
+                        onOpenRecord={(storyKnowledgeId) => {
+                          setRailDestination("characters");
+                          chooseSelection({
+                            kind: "storyKnowledge",
+                            storyKnowledgeId
+                          });
+                        }}
+                        onOpenScene={(sceneId) => {
+                          const next = sceneSelection(project, sceneId);
+                          if (next === undefined) return;
+                          setRailDestination("write");
+                          chooseSelection(next);
+                          onModeChange("draft");
+                        }}
+                        project={project}
+                      />
+                    ) : null}
+                    {launchpad.entries.length === 0 ? null : (
                       <View
-                        accessibilityLabel="Scene launch list"
+                        accessibilityLabel="Browse manuscript entries"
                         style={styles.launchpadScenes}
                       >
-                        {launchpad.scenes.map((scene) => (
+                        {launchpad.entries.map((entry) => (
                           <Pressable
-                            accessibilityLabel={`Open scene ${scene.title}`}
+                            accessibilityLabel={`Open ${entry.kind} ${entry.title}`}
                             accessibilityRole="button"
                             disabled={busy}
-                            key={scene.id}
-                            onPress={() => openLaunchpadScene(scene)}
+                            key={entry.id}
+                            onPress={() => {
+                              if (entry.kind === "character") {
+                                setRailDestination("characters");
+                              } else {
+                                setRailDestination("write");
+                              }
+                              chooseSelection(entry.selection);
+                              if (entry.kind === "scene") {
+                                onModeChange("draft");
+                              }
+                            }}
                             style={({ pressed }) => [
                               styles.launchpadScene,
                               pressed && styles.pressed
@@ -1241,15 +1810,207 @@ export function AuthenticatedProjectWorkspace({
                               numberOfLines={1}
                               style={styles.launchpadSceneTitle}
                             >
-                              {scene.title}
+                              {entry.title}
                             </Text>
+                            {entry.description === undefined ? null : (
+                              <Text
+                                numberOfLines={2}
+                                style={styles.launchpadEntryDescription}
+                              >
+                                {entry.description}
+                              </Text>
+                            )}
                             <Text style={styles.launchpadSceneMeta}>
-                              {scene.status} · open in Draft
+                              {entry.kind} · {entry.meta}
                             </Text>
+                            <View style={styles.launchpadEntryActions}>
+                              {entry.kind === "scene" ? (
+                                <>
+                                  <Pressable
+                                    accessibilityLabel={`Draft ${entry.title}`}
+                                    accessibilityRole="button"
+                                    disabled={busy}
+                                    onPress={(event) => {
+                                      event?.stopPropagation?.();
+                                      setRailDestination("write");
+                                      chooseSelection(entry.selection);
+                                      onModeChange("draft");
+                                    }}
+                                    style={({ pressed }) => [
+                                      styles.launchpadEntryActionButton,
+                                      pressed && styles.pressed
+                                    ]}
+                                  >
+                                    <Text style={styles.launchpadEntryAction}>Draft</Text>
+                                  </Pressable>
+                                  {onOpenReader === undefined ? null : (
+                                    <Pressable
+                                      accessibilityLabel={`Read ${entry.title}`}
+                                      accessibilityRole="button"
+                                      disabled={busy}
+                                      onPress={(event) => {
+                                        event?.stopPropagation?.();
+                                        setRailDestination("write");
+                                        chooseSelection(entry.selection);
+                                        onOpenReader();
+                                      }}
+                                      style={({ pressed }) => [
+                                        styles.launchpadEntryActionButton,
+                                        pressed && styles.pressed
+                                      ]}
+                                    >
+                                      <Text style={styles.launchpadEntryAction}>Reader</Text>
+                                    </Pressable>
+                                  )}
+                                  <Pressable
+                                    accessibilityLabel={`Canvas ${entry.title}`}
+                                    accessibilityRole="button"
+                                    disabled={busy}
+                                    onPress={(event) => {
+                                      event?.stopPropagation?.();
+                                      setRailDestination("write");
+                                      chooseSelection(entry.selection);
+                                      onModeChange("canvas");
+                                    }}
+                                    style={({ pressed }) => [
+                                      styles.launchpadEntryActionButton,
+                                      pressed && styles.pressed
+                                    ]}
+                                  >
+                                    <Text style={styles.launchpadEntryAction}>Canvas</Text>
+                                  </Pressable>
+                                </>
+                              ) : entry.kind === "chapter" &&
+                                entry.selection.kind === "chapter" ? (
+                                <>
+                                  <Pressable
+                                    accessibilityLabel={`Open ${entry.title}`}
+                                    accessibilityRole="button"
+                                    disabled={busy}
+                                    onPress={(event) => {
+                                      event?.stopPropagation?.();
+                                      if (entry.selection.kind !== "chapter") {
+                                        return;
+                                      }
+                                      setRailDestination("write");
+                                      chooseSelection(entry.selection);
+                                    }}
+                                    style={({ pressed }) => [
+                                      styles.launchpadEntryActionButton,
+                                      pressed && styles.pressed
+                                    ]}
+                                  >
+                                    <Text style={styles.launchpadEntryAction}>Open</Text>
+                                  </Pressable>
+                                  <Pressable
+                                    accessibilityLabel={`Canvas ${entry.title}`}
+                                    accessibilityRole="button"
+                                    disabled={busy}
+                                    onPress={(event) => {
+                                      event?.stopPropagation?.();
+                                      if (entry.selection.kind !== "chapter") {
+                                        return;
+                                      }
+                                      const chapterSelection = entry.selection;
+                                      setRailDestination("write");
+                                      chooseSelection(chapterSelection);
+                                      onEnterChapter(chapterSelection);
+                                      onModeChange("canvas");
+                                    }}
+                                    style={({ pressed }) => [
+                                      styles.launchpadEntryActionButton,
+                                      pressed && styles.pressed
+                                    ]}
+                                  >
+                                    <Text style={styles.launchpadEntryAction}>Canvas</Text>
+                                  </Pressable>
+                                </>
+                              ) : entry.kind === "character" ? (
+                                <Pressable
+                                  accessibilityLabel={`Open character ${entry.title}`}
+                                  accessibilityRole="button"
+                                  disabled={busy}
+                                  onPress={(event) => {
+                                    event?.stopPropagation?.();
+                                    setRailDestination("characters");
+                                    chooseSelection(entry.selection);
+                                  }}
+                                  style={({ pressed }) => [
+                                    styles.launchpadEntryActionButton,
+                                    pressed && styles.pressed
+                                  ]}
+                                >
+                                  <Text style={styles.launchpadEntryAction}>Sheet · Links</Text>
+                                </Pressable>
+                              ) : (
+                                <Pressable
+                                  accessibilityLabel={`Open ${entry.title}`}
+                                  accessibilityRole="button"
+                                  disabled={busy}
+                                  onPress={(event) => {
+                                    event?.stopPropagation?.();
+                                    setRailDestination("write");
+                                    chooseSelection(entry.selection);
+                                  }}
+                                  style={({ pressed }) => [
+                                    styles.launchpadEntryActionButton,
+                                    pressed && styles.pressed
+                                  ]}
+                                >
+                                  <Text style={styles.launchpadEntryAction}>Open</Text>
+                                </Pressable>
+                              )}
+                            </View>
                           </Pressable>
                         ))}
                       </View>
                     )}
+                    {!charactersLens && launchpad.characters.length > 0 ? (
+                      <View
+                        accessibilityLabel="Characters in this scope"
+                        style={styles.launchpadScenes}
+                      >
+                        <Text style={styles.launchpadSectionTitle}>
+                          Characters in this scope
+                        </Text>
+                        {launchpad.characters.map((character) => (
+                          <Pressable
+                            accessibilityLabel={`Open character ${character.label}`}
+                            accessibilityRole="button"
+                            disabled={busy}
+                            key={character.id}
+                            onPress={() => {
+                              setRailDestination("characters");
+                              chooseSelection(character.selection);
+                            }}
+                            style={({ pressed }) => [
+                              styles.launchpadScene,
+                              pressed && styles.pressed
+                            ]}
+                          >
+                            <Text
+                              numberOfLines={1}
+                              style={styles.launchpadSceneTitle}
+                            >
+                              {character.label}
+                            </Text>
+                            {character.desire === undefined &&
+                            character.description === undefined ? null : (
+                              <Text
+                                numberOfLines={2}
+                                style={styles.launchpadEntryDescription}
+                              >
+                                {character.desire ?? character.description}
+                              </Text>
+                            )}
+                            <Text style={styles.launchpadSceneMeta}>
+                              {character.linkedSceneCount} scenes ·{" "}
+                              {character.linkedRecordCount} links
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    ) : null}
                     {moveCandidates.length === 0 ? null : (
                       <View
                         accessibilityLabel="Move an existing scene here"
@@ -1302,7 +2063,41 @@ export function AuthenticatedProjectWorkspace({
               </View>
             ) : null}
           </View>
-        </ScrollView>
+          );
+          // Dense Draft/Canvas/Split: edge-to-edge column (no ScrollView page padding).
+          if (surfaceDense) {
+            return (
+              <View style={[styles.center, styles.centerMap]}>
+                {error === undefined ? null : (
+                  <View accessibilityRole="alert" style={styles.error}>
+                    <Text style={styles.errorText}>{error}</Text>
+                  </View>
+                )}
+                {centerChrome}
+                {workSurface}
+              </View>
+            );
+          }
+          return (
+            <ScrollView
+              contentContainerStyle={[
+                styles.centerContent,
+                narrow && styles.centerContentNarrow
+              ]}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
+              style={styles.center}
+            >
+              {error === undefined ? null : (
+                <View accessibilityRole="alert" style={styles.error}>
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              )}
+              {centerChrome}
+              {workSurface}
+            </ScrollView>
+          );
+        })()}
 
         <View
           style={[
@@ -1310,6 +2105,7 @@ export function AuthenticatedProjectWorkspace({
             !wide && styles.collapsedRegion,
             narrow && styles.narrowRegion,
             (focusHalo ||
+              mapDense ||
               (draftDeskActive
                 ? !contextDockOpen
                 : !wide && collapsedPanel !== "inspector")) &&
@@ -1319,32 +2115,112 @@ export function AuthenticatedProjectWorkspace({
           {draftDeskActive ? draftContextDock : inspector}
         </View>
 
-        {chatOpen && onChatSend !== undefined ? (
-          <View
-            style={[
-              styles.chatRegion,
-              narrow && styles.narrowRegion
-            ]}
-          >
-            <WorkspaceChatPanel
-              busy={busy}
-              capabilities={chatCapabilities}
-              messages={chatMessages}
-              onClose={() => setChatOpen(false)}
-              onSend={onChatSend}
-              open={chatOpen}
-            />
-          </View>
-        ) : null}
       </View>
 
-      <AcknowledgementToastHost
-        onAction={onToastAction}
-        onDismiss={onToastDismiss}
-        onPause={onToastPause}
-        onResume={onToastResume}
-        toasts={toasts}
-      />
+      {paletteMode === undefined ? null : (
+        <WorkspaceQuickNav
+          chatBusy={busy}
+          chatCapabilities={chatCapabilities}
+          chatMessages={chatMessages}
+          mode={paletteMode}
+          onChatSend={onChatSend}
+          onClose={() => setPaletteMode(undefined)}
+          onPick={applyJumpTarget}
+          targets={jumpTargets}
+        />
+      )}
+
+      {activityHistoryOpen && !canvasVisible ? (
+        <View
+          accessibilityLabel="Notifications and history"
+          style={styles.activityHistoryRoot}
+        >
+          <Pressable
+            accessibilityLabel="Dismiss history"
+            accessibilityRole="button"
+            onPress={() => onActivityHistoryOpenChange?.(false)}
+            style={styles.activityHistoryBackdrop}
+          />
+          <View style={styles.activityHistoryCard}>
+            <View style={styles.activityHistoryHeader}>
+              <Pressable
+                accessibilityLabel="Close history"
+                accessibilityRole="button"
+                onPress={() => onActivityHistoryOpenChange?.(false)}
+                style={({ pressed }) => [
+                  styles.activityHistoryClose,
+                  pressed && styles.pressed
+                ]}
+              >
+                <Text style={styles.activityHistoryCloseText}>×</Text>
+              </Pressable>
+            </View>
+            {activityHistory.length === 0 ? (
+              <View style={styles.activityHistoryEmpty} />
+            ) : (
+              <View style={styles.activityHistoryList}>
+                {activityHistory.map((entry) => (
+                  <View
+                    key={`${entry.id}:${entry.createdAt}`}
+                    style={[
+                      styles.activityHistoryRow,
+                      entry.tone === "success" &&
+                        styles.activityHistoryRowSuccess,
+                      entry.tone === "warning" &&
+                        styles.activityHistoryRowWarning,
+                      entry.tone === "error" && styles.activityHistoryRowError
+                    ]}
+                  >
+                    <View style={styles.activityHistoryCopy}>
+                      <Text style={styles.activityHistoryRowTitle}>
+                        {entry.title}
+                      </Text>
+                      <Text style={styles.activityHistoryRowDetail}>
+                        {entry.detail}
+                      </Text>
+                      <Text style={styles.activityHistoryRowTime}>
+                        {new Date(entry.createdAt).toLocaleTimeString()}
+                      </Text>
+                    </View>
+                    <View style={styles.activityHistoryActions}>
+                      {entry.actionLabel === undefined ? null : (
+                        <Pressable
+                          accessibilityLabel={entry.actionLabel}
+                          accessibilityRole="button"
+                          onPress={() => onToastAction(entry.id)}
+                          style={({ pressed }) => [
+                            styles.activityHistoryAction,
+                            pressed && styles.pressed
+                          ]}
+                        >
+                          <Text style={styles.activityHistoryActionText}>
+                            {entry.actionLabel}
+                          </Text>
+                        </Pressable>
+                      )}
+                      {entry.dismissible === true ? (
+                        <Pressable
+                          accessibilityLabel="Dismiss"
+                          accessibilityRole="button"
+                          onPress={() => onToastDismiss(entry.id)}
+                          style={({ pressed }) => [
+                            styles.activityHistoryAction,
+                            pressed && styles.pressed
+                          ]}
+                        >
+                          <Text style={styles.activityHistoryActionText}>
+                            Dismiss
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -1371,18 +2247,36 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     zIndex: 20
   },
+  topbarMap: {
+    alignItems: "center",
+    gap: 6,
+    minHeight: 52,
+    paddingHorizontal: 8,
+    paddingVertical: 4
+  },
   topbarNarrow: {
     alignItems: "flex-start",
     flexWrap: "wrap"
   },
   topbarCopy: {
-    flex: 1,
+    flexGrow: 0,
+    flexShrink: 1,
+    maxWidth: 140,
     minWidth: 0
+  },
+  topbarTrail: {
+    flex: 1,
+    minWidth: 180,
+    paddingHorizontal: 4
   },
   topbarTitle: {
     color: colors.ink,
     fontFamily: fonts.story,
     fontSize: 21
+  },
+  topbarTitleMap: {
+    fontFamily: fonts.uiSemibold,
+    fontSize: 13
   },
   topbarMeta: {
     color: colors.muted,
@@ -1395,16 +2289,38 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 5,
+    marginLeft: "auto",
     minWidth: 0
   },
   topbarActionsNarrow: {
     flexBasis: "100%",
+    marginLeft: 0,
     width: "100%"
+  },
+  structureTopToggle: {
+    alignItems: "center",
+    borderColor: colors.line,
+    borderRadius: 6,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: "center",
+    minWidth: 28,
+    paddingHorizontal: 6
+  },
+  structureTopToggleGlyph: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 12
   },
   aggregateStatus: {
     color: colors.green,
     fontFamily: fonts.uiSemibold,
     fontSize: 8
+  },
+  centerMap: {
+    flex: 1,
+    minHeight: 0,
+    padding: 0
   },
   button: {
     alignItems: "center",
@@ -1461,27 +2377,27 @@ const styles = StyleSheet.create({
   },
   rail: {
     backgroundColor: colors.rail,
-    gap: 7,
+    gap: 2,
     minHeight: 0,
-    paddingHorizontal: 5,
-    paddingVertical: 9,
-    width: shell.railWidth + 10
+    paddingHorizontal: 2,
+    paddingVertical: 6,
+    width: 32
   },
   railProject: {
     color: "#ffffff",
     fontFamily: fonts.brand,
-    fontSize: 22,
+    fontSize: 13,
     marginBottom: 4,
     textAlign: "center"
   },
   railButton: {
     alignItems: "center",
     borderColor: "transparent",
-    borderRadius: 7,
+    borderRadius: 5,
     borderWidth: 1,
-    gap: 2,
+    height: 28,
     justifyContent: "center",
-    minHeight: 46
+    width: 28
   },
   railButtonSelected: {
     backgroundColor: colors.railActive,
@@ -1490,32 +2406,119 @@ const styles = StyleSheet.create({
   railGlyph: {
     color: colors.railText,
     fontFamily: fonts.uiSemibold,
-    fontSize: 11
-  },
-  railLabel: {
-    color: colors.railText,
-    fontFamily: fonts.uiMedium,
-    fontSize: 7
+    fontSize: 12
   },
   railTextSelected: {
     color: "#ffffff"
   },
+  railDivider: {
+    alignSelf: "center",
+    backgroundColor: "#4a4039",
+    height: 1,
+    marginVertical: 4,
+    width: 16
+  },
   railSpacer: {
     flex: 1
   },
-  railAuthority: {
+  railTimeline: {
+    alignItems: "center",
+    gap: 3,
+    maxHeight: 220,
+    overflow: "hidden",
+    paddingVertical: 2
+  },
+  railTimelineItem: {
+    alignItems: "center",
+    borderColor: "transparent",
+    borderRadius: 5,
+    borderWidth: 1,
+    height: 24,
+    justifyContent: "center",
+    width: 24
+  },
+  railTimelineItemSelected: {
+    backgroundColor: colors.railActive,
+    borderColor: "#63554b"
+  },
+  railTimelineIndex: {
     color: colors.railText,
-    fontFamily: fonts.ui,
-    fontSize: 6,
-    lineHeight: 9,
-    textAlign: "center"
+    fontFamily: fonts.uiSemibold,
+    fontSize: 10
   },
   treeRegion: {
     borderRightColor: colors.line,
     borderRightWidth: 1,
     minHeight: 0,
     minWidth: 0,
-    width: 292
+    overflow: "hidden",
+    position: "relative",
+    width: shell.navigatorWidth
+  },
+  structureResizeHandle: {
+    bottom: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    width: 6,
+    zIndex: 4,
+    ...(typeof document !== "undefined"
+      ? ({ cursor: "ew-resize" } as object)
+      : {})
+  },
+  treeRegionCollapsed: {
+    backgroundColor: colors.wash
+  },
+  structureCollapsedRail: {
+    alignItems: "center",
+    flex: 1,
+    gap: 8,
+    paddingTop: 10,
+    paddingHorizontal: 2
+  },
+  structureExpandedShell: {
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0
+  },
+  structureExpandedHeader: {
+    alignItems: "center",
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 8,
+    paddingVertical: 6
+  },
+  structureExpandedLabel: {
+    color: colors.kicker,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 7,
+    letterSpacing: 1,
+    textTransform: "uppercase"
+  },
+  structureToggle: {
+    alignItems: "center",
+    borderColor: colors.line,
+    borderRadius: 5,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 28,
+    minWidth: 28,
+    paddingHorizontal: 4
+  },
+  structureToggleGlyph: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 11
+  },
+  structureCollapsedHint: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 7,
+    textAlign: "center",
+    transform: [{ rotate: "-90deg" }],
+    width: 48
   },
   inspectorRegion: {
     borderLeftColor: colors.line,
@@ -1691,24 +2694,160 @@ const styles = StyleSheet.create({
   storyTrailDivider: {
     color: colors.muted,
     fontFamily: fonts.ui,
-    fontSize: 9
+    fontSize: 9,
+    marginTop: 10
   },
   storyTrailButton: {
+    alignItems: "flex-start",
     borderColor: "transparent",
     borderRadius: 5,
     borderWidth: 1,
-    maxWidth: 200,
+    flexDirection: "column",
+    gap: 1,
+    maxWidth: 160,
     paddingHorizontal: 5,
-    paddingVertical: 3
+    paddingVertical: 2
   },
-  storyTrailCurrent: {
-    backgroundColor: colors.accentSoft,
-    borderColor: colors.accent
+  storyTrailCurrent: {},
+  storyTrailRole: {
+    color: colors.kicker,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 7,
+    letterSpacing: 0.6,
+    textTransform: "uppercase"
   },
   storyTrailText: {
     color: colors.muted,
     fontFamily: fonts.uiMedium,
-    fontSize: 8
+    fontSize: 9
+  },
+  mapTrail: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0
+  },
+  mapTrailEyebrow: {
+    color: colors.kicker,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 9,
+    letterSpacing: 0.4
+  },
+  mapSelectionHint: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 11,
+    maxWidth: 220,
+    paddingHorizontal: 4
+  },
+  activityHistoryRoot: {
+    ...StyleSheet.absoluteFill,
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
+    padding: 16,
+    zIndex: 80
+  },
+  activityHistoryBackdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(40, 35, 31, 0.28)"
+  },
+  activityHistoryCard: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 10,
+    maxHeight: "88%",
+    maxWidth: 420,
+    overflow: "hidden",
+    padding: 14,
+    width: "100%",
+    zIndex: 2,
+    ...({
+      boxShadow: "0 12px 32px rgba(28, 22, 16, 0.18)"
+    } as object)
+  },
+  activityHistoryHeader: {
+    alignItems: "flex-end",
+    flexDirection: "row",
+    justifyContent: "flex-end"
+  },
+  activityHistoryClose: {
+    alignItems: "center",
+    borderColor: colors.line,
+    borderRadius: 6,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: "center",
+    width: 28
+  },
+  activityHistoryCloseText: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 16
+  },
+  activityHistoryEmpty: {
+    minHeight: 120
+  },
+  activityHistoryList: {
+    gap: 8,
+    overflow: "scroll"
+  },
+  activityHistoryRow: {
+    borderColor: colors.line,
+    borderLeftWidth: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+    padding: 10
+  },
+  activityHistoryRowSuccess: {
+    backgroundColor: "#f8fcf9",
+    borderLeftColor: colors.green
+  },
+  activityHistoryRowWarning: {
+    backgroundColor: colors.amberSoft,
+    borderLeftColor: colors.amber
+  },
+  activityHistoryRowError: {
+    backgroundColor: colors.redSoft,
+    borderLeftColor: colors.red
+  },
+  activityHistoryCopy: {
+    gap: 2
+  },
+  activityHistoryRowTitle: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 11
+  },
+  activityHistoryRowDetail: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 10,
+    lineHeight: 14
+  },
+  activityHistoryRowTime: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 9,
+    marginTop: 2
+  },
+  activityHistoryActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6
+  },
+  activityHistoryAction: {
+    borderColor: colors.line,
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 5
+  },
+  activityHistoryActionText: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 10
   },
   storyTrailTextCurrent: {
     color: colors.accent,
@@ -1786,24 +2925,97 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: 10,
     borderWidth: 1,
-    gap: 12,
-    padding: 18,
+    flex: 1,
+    gap: 10,
+    minHeight: 0,
+    padding: 12,
     width: "100%"
+  },
+  launchpadHeaderRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexShrink: 0,
+    gap: 12,
+    minWidth: 0
+  },
+  launchpadHeaderCopy: {
+    flex: 1,
+    gap: 1,
+    minWidth: 0
+  },
+  launchpadEyebrow: {
+    color: colors.kicker,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 7,
+    letterSpacing: 1.2,
+    textTransform: "uppercase"
+  },
+  launchpadTitle: {
+    color: colors.ink,
+    fontFamily: fonts.story,
+    fontSize: 20
   },
   launchpadDescription: {
     color: colors.muted,
     fontFamily: fonts.ui,
-    fontSize: 9.5,
-    lineHeight: 15,
-    maxWidth: 520
+    fontSize: 9,
+    lineHeight: 13
   },
-  launchpadActions: {
+  launchpadEntryDescription: {
+    color: colors.ink,
+    fontFamily: fonts.ui,
+    fontSize: 9,
+    lineHeight: 13,
+    marginTop: 2
+  },
+  launchpadEntryActions: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 7
+    gap: 6,
+    marginTop: 4
+  },
+  launchpadEntryActionButton: {
+    borderColor: colors.accent,
+    borderRadius: 5,
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 4
+  },
+  launchpadEntryAction: {
+    color: colors.accent,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 8,
+    letterSpacing: 0.4,
+    textTransform: "uppercase"
+  },
+  launchpadDescriptionEdit: {
+    gap: 5
+  },
+  launchpadDescriptionInput: {
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    color: colors.ink,
+    fontFamily: fonts.ui,
+    fontSize: 12,
+    minHeight: 64,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    textAlignVertical: "top"
+  },
+  launchpadActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexShrink: 0,
+    flexWrap: "wrap",
+    gap: 6,
+    justifyContent: "flex-end",
+    marginLeft: "auto"
   },
   launchpadScenes: {
+    flex: 1,
     gap: 5,
+    minHeight: 0,
     minWidth: 0
   },
   launchpadSectionTitle: {
@@ -1871,6 +3083,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
     width: "100%"
   },
+  workSurfaceMap: {
+    alignItems: "stretch",
+    flex: 1,
+    gap: 0,
+    minHeight: 0
+  },
   workSurfaceSplit: {
     alignItems: "stretch",
     gap: 0
@@ -1879,7 +3097,9 @@ const styles = StyleSheet.create({
     flexDirection: "column"
   },
   workSurfacePane: {
+    alignSelf: "stretch",
     flex: 1,
+    minHeight: 0,
     minWidth: 0,
     width: "100%"
   },

@@ -3,6 +3,7 @@ import {
   chapterId,
   createBook,
   createManuscriptChapter,
+  createManuscriptPart,
   createScene,
   createStoryKnowledge,
   defineProjectRecords,
@@ -19,11 +20,13 @@ import {
   type Project,
   type ProjectId,
   type ProjectRecords,
+  type CharacterSheet,
   type Scene,
   type SceneBackdrop,
   type SceneId,
   type SceneImageRef,
   type SceneMusic,
+  type SceneSketch,
   type SceneStatus,
   type StoryKnowledge,
   type StoryKnowledgeAuthority,
@@ -88,6 +91,13 @@ export type ProjectCommand =
   | Readonly<{ type: "book.setArchived"; bookId: BookId; archived: boolean }>
   | Readonly<{ type: "part.create"; bookId: BookId; title: string }>
   | Readonly<{ type: "part.rename"; bookId: BookId; partId: PartId; title: string }>
+  | Readonly<{
+      type: "part.update";
+      bookId: BookId;
+      partId: PartId;
+      title?: string;
+      summary?: string | null;
+    }>
   | Readonly<{ type: "part.reorder"; bookId: BookId; partIds: readonly PartId[] }>
   | Readonly<{ type: "part.removeEmpty"; bookId: BookId; partId: PartId }>
   | Readonly<{
@@ -140,6 +150,7 @@ export type ProjectCommand =
       backdrop?: SceneBackdrop | null;
       music?: SceneMusic | null;
       imageRefs?: readonly SceneImageRef[] | null;
+      sketch?: SceneSketch | null;
     }>
   | Readonly<{
       type: "scene.move";
@@ -163,6 +174,7 @@ export type ProjectCommand =
       authority?: StoryKnowledgeAuthority;
       notes?: string | null;
       aliases?: readonly string[] | null;
+      characterSheet?: CharacterSheet | null;
     }>
   | Readonly<{
       type: "storyKnowledge.setSceneLink";
@@ -459,6 +471,26 @@ export function applyProjectCommandToRecords(
         })
       );
       break;
+    case "part.update":
+      books = updateBook(books, command.bookId, (book) =>
+        createBook({
+          ...updatePart(book, command.partId, (part) => {
+            let updated: ManuscriptPart = {
+              ...part,
+              title: command.title ?? part.title
+            };
+            if (command.summary !== undefined) {
+              const { summary: _ignored, ...withoutSummary } = updated;
+              updated =
+                command.summary === null
+                  ? withoutSummary
+                  : { ...withoutSummary, summary: command.summary };
+            }
+            return createManuscriptPart(updated);
+          })
+        })
+      );
+      break;
     case "part.reorder":
       books = updateBook(books, command.bookId, (book) =>
         createBook({
@@ -649,6 +681,13 @@ export function applyProjectCommandToRecords(
             ? withoutImageRefs
             : { ...withoutImageRefs, imageRefs: command.imageRefs };
       }
+      if (command.sketch !== undefined) {
+        const { sketch: _ignored, ...withoutSketch } = updated;
+        updated =
+          command.sketch === null
+            ? withoutSketch
+            : { ...withoutSketch, sketch: command.sketch };
+      }
       scenes = replaceScene(scenes, command.sceneId, createScene(updated));
       break;
     }
@@ -727,6 +766,13 @@ export function applyProjectCommandToRecords(
           command.aliases === null
             ? withoutAliases
             : { ...withoutAliases, aliases: command.aliases };
+      }
+      if (command.characterSheet !== undefined) {
+        const { characterSheet: _ignored, ...withoutSheet } = updatedFields;
+        updatedFields =
+          command.characterSheet === null
+            ? withoutSheet
+            : { ...withoutSheet, characterSheet: command.characterSheet };
       }
       const updated = createStoryKnowledge(updatedFields);
       storyKnowledge = storyKnowledge.map((record) =>

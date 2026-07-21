@@ -36,10 +36,12 @@ export const ghostwriterTheme = Object.freeze({
     uiSemibold: "GhostwriterUISemibold"
   }),
   shell: Object.freeze({
-    topbarHeight: 52,
-    railWidth: 58,
+    topbarHeight: 40,
+    railWidth: 32,
     navigatorWidth: 252,
-    inspectorWidth: 276
+    structureCollapsedWidth: 32,
+    inspectorWidth: 276,
+    toolRailWidth: 36
   })
 });
 

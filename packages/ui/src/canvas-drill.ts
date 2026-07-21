@@ -11,6 +11,12 @@ import type {
 } from "@ghostwriter/core";
 
 export const CANVAS_CAMERA_TRANSITION_MS = 450;
+
+/** Ease-out cubic for layer camera motion (Mockups 3.0). */
+export function easeOutCubic(progress: number): number {
+  const t = Math.min(1, Math.max(0, progress));
+  return 1 - (1 - t) ** 3;
+}
 export const PROVISIONAL_BEAT_FIXTURE_SOURCE = "fixture:beat:first-turn";
 
 export type CanvasViewport = Readonly<{
@@ -217,7 +223,7 @@ export function drillBreadcrumbs(
       case "project":
         return {
           scope,
-          label: project.title,
+          label: "Map",
           focusKey: "drill-breadcrumb-project"
         };
       case "chapter": {
@@ -227,7 +233,7 @@ export function drillBreadcrumbs(
           ?.chapters.find((candidate) => candidate.id === scope.chapterId);
         return {
           scope,
-          label: chapter?.title ?? "Chapter",
+          label: `Chapter · ${chapter?.title ?? "Untitled"}`,
           focusKey: `drill-breadcrumb-${scope.chapterId}`
         };
       }
@@ -242,7 +248,7 @@ export function drillBreadcrumbs(
           .find((candidate) => candidate.id === scope.sceneId);
         return {
           scope,
-          label: scene?.title ?? "Scene",
+          label: `Scene · ${scene?.title ?? "Untitled"}`,
           focusKey: `drill-breadcrumb-${scope.sceneId}`
         };
       }
@@ -616,7 +622,7 @@ export function workflowLensLabel(lens: CanvasWorkflowLens): string {
 }
 
 export function clampCanvasZoom(zoom: number): number {
-  return Math.min(2.5, Math.max(0.35, zoom));
+  return Math.min(2.5, Math.max(0.12, zoom));
 }
 
 export function cameraViewportForBounds(
@@ -644,9 +650,10 @@ export function cameraViewportForBounds(
 export function interpolateCanvasViewport(
   from: CanvasViewport,
   to: CanvasViewport,
-  progress: number
+  progress: number,
+  ease: (t: number) => number = (t) => t
 ): CanvasViewport {
-  const t = Math.min(1, Math.max(0, progress));
+  const t = ease(Math.min(1, Math.max(0, progress)));
   return {
     x: from.x + (to.x - from.x) * t,
     y: from.y + (to.y - from.y) * t,

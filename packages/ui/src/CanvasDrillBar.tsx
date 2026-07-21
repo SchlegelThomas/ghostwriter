@@ -18,53 +18,28 @@ export type CanvasDrillBarProps = Readonly<{
   drillStack: CanvasDrillStack;
   workflowLens: CanvasWorkflowLens;
   canvasVisible?: boolean;
+  /** Dense Map chrome: single thin row for breadcrumbs + lenses. */
+  compact?: boolean;
   busy?: boolean;
   onDrillBack(): void;
   onDrillTo(scope: CanvasDrillScope): void;
   onWorkflowLensChange(lens: CanvasWorkflowLens): void;
 }>;
 
-function LensButton({
-  label,
-  selected,
-  disabled,
-  onPress
-}: Readonly<{
-  label: string;
-  selected: boolean;
-  disabled?: boolean;
-  onPress(): void;
-}>) {
-  return (
-    <Pressable
-      accessibilityRole="tab"
-      accessibilityState={{ disabled, selected }}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.lensButton,
-        selected && styles.lensButtonSelected,
-        pressed && styles.pressed,
-        disabled && styles.disabled
-      ]}
-    >
-      <Text
-        style={[
-          styles.lensButtonText,
-          selected && styles.lensButtonTextSelected
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
+const LENS_GLYPHS: Readonly<Record<CanvasWorkflowLens, string>> = {
+  outline: "☰",
+  relationships: "⇄",
+  continuity: "◎",
+  "plan-draft": "→",
+  review: "◷"
+};
 
 export function CanvasDrillBar({
   project,
   drillStack,
   workflowLens,
   canvasVisible = true,
+  compact = false,
   busy = false,
   onDrillBack,
   onDrillTo,
@@ -82,7 +57,10 @@ export function CanvasDrillBar({
   if (!canvasVisible) return null;
 
   return (
-    <View accessibilityLabel="Canvas drill and workflow controls" style={styles.bar}>
+    <View
+      accessibilityLabel="Canvas drill and workflow controls"
+      style={[styles.bar, compact && styles.barCompact]}
+    >
       <View style={styles.breadcrumbRow}>
         {canGoBack ? (
           <Pressable
@@ -93,11 +71,12 @@ export function CanvasDrillBar({
             onPress={onDrillBack}
             style={({ pressed }) => [
               styles.backButton,
+              compact && styles.backButtonCompact,
               pressed && styles.pressed,
               busy && styles.disabled
             ]}
           >
-            <Text style={styles.backButtonText}>Back</Text>
+            <Text style={styles.backButtonText}>←</Text>
           </Pressable>
         ) : null}
         <View
@@ -144,15 +123,41 @@ export function CanvasDrillBar({
         accessibilityRole="tablist"
         style={styles.lensRow}
       >
-        {CANVAS_WORKFLOW_LENSES.map((lens) => (
-          <LensButton
-            disabled={busy}
-            key={lens}
-            label={workflowLensLabel(lens)}
-            onPress={() => onWorkflowLensChange(lens)}
-            selected={workflowLens === lens}
-          />
-        ))}
+        {CANVAS_WORKFLOW_LENSES.map((lens) => {
+          const label = workflowLensLabel(lens);
+          return (
+            <Pressable
+              accessibilityLabel={`${label} lens`}
+              accessibilityRole="tab"
+              accessibilityState={{ disabled: busy, selected: workflowLens === lens }}
+              disabled={busy}
+              key={lens}
+              onPress={() => onWorkflowLensChange(lens)}
+              {...({ title: `${label} lens` } as object)}
+              style={({ pressed }) => [
+                compact ? styles.lensIcon : styles.lensButton,
+                workflowLens === lens &&
+                  (compact
+                    ? styles.lensIconSelected
+                    : styles.lensButtonSelected),
+                pressed && styles.pressed,
+                busy && styles.disabled
+              ]}
+            >
+              <Text
+                style={[
+                  compact ? styles.lensIconGlyph : styles.lensButtonText,
+                  workflowLens === lens &&
+                    (compact
+                      ? styles.lensIconGlyphSelected
+                      : styles.lensButtonTextSelected)
+                ]}
+              >
+                {compact ? LENS_GLYPHS[lens] : label}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );
@@ -164,10 +169,23 @@ const styles = StyleSheet.create({
     minWidth: 0,
     width: "100%"
   },
+  barCompact: {
+    alignItems: "center",
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    justifyContent: "space-between",
+    minHeight: 36,
+    paddingHorizontal: 8,
+    paddingVertical: 4
+  },
   breadcrumbRow: {
     alignItems: "center",
     flexDirection: "row",
     flexWrap: "wrap",
+    flexShrink: 1,
     gap: 6,
     minWidth: 0
   },
@@ -180,10 +198,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 5
   },
+  backButtonCompact: {
+    minHeight: 28,
+    minWidth: 28,
+    paddingHorizontal: 6
+  },
   backButtonText: {
     color: colors.ink,
     fontFamily: fonts.uiSemibold,
-    fontSize: 8
+    fontSize: 10
   },
   breadcrumbs: {
     alignItems: "center",
@@ -225,7 +248,7 @@ const styles = StyleSheet.create({
   lensRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 5,
+    gap: 4,
     minWidth: 0
   },
   lensButton: {
@@ -247,6 +270,29 @@ const styles = StyleSheet.create({
     fontSize: 8
   },
   lensButtonTextSelected: {
+    color: colors.accent
+  },
+  lensIcon: {
+    alignItems: "center",
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 6,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: "center",
+    minWidth: 28,
+    paddingHorizontal: 5
+  },
+  lensIconSelected: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent
+  },
+  lensIconGlyph: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 12
+  },
+  lensIconGlyphSelected: {
     color: colors.accent
   },
   pressed: {

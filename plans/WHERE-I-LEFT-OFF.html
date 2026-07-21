@@ -11,77 +11,44 @@
     <header>
       <p class="eyebrow">Session handoff</p>
       <h1>Where we left off</h1>
-      <p><strong>Last updated:</strong> 2026-07-18 · <strong>Current branch:</strong> <code>docs/custom-domain-ghost-writer-studio</code></p>
+      <p><strong>Last updated:</strong> 2026-07-19 · <strong>Current branch:</strong> <code>main</code> (PR #9 merged + production deploys green)</p>
     </header>
 
     <section>
       <h2>Current state</h2>
-      <p>PR #6 merged the authenticated writing workspace and Build · Map · Write UX 2.1 to <code>main</code>. Production web is <code>https://ghost-writer.studio</code> (Cloudflare Pages custom domain on project <code>ghostwriter</code> / host <code>ghostwriter-di2.pages.dev</code>). Backend is <code>https://ghostwriter-backend.fly.dev</code> with <code>BETTER_AUTH_URL=https://ghost-writer.studio</code>.</p>
-      <p><strong>Live:</strong> web at <code>https://ghost-writer.studio</code>; Google callback <code>https://ghost-writer.studio/api/auth/callback/google</code>; backend <code>/health</code> ok; Lakebase <code>production</code> migrated through the current checked-in schema. Branch previews remain on <code>*.ghostwriter-di2.pages.dev</code>.</p>
+      <p>Writing Experience UX 4.0 + structure/cast polish landed via <a href="https://github.com/SchlegelThomas/ghostwriter/pull/9">PR #9</a>. Main CI, Deploy web, and Deploy backend all succeeded after merge.</p>
+      <ul>
+        <li><a href="active/2026-07-19-writing-experience-ux-4/plan.html">Writing Experience UX 4.0</a></li>
+        <li><a href="active/2026-07-19-structure-cast-browse/plan.html">Structure browse · cast · launchpad actions</a></li>
+      </ul>
+      <p>Migrations: <code>0009_writing_craft</code>, <code>0010_part_summary</code>, <code>0011_writer_publishing</code> (apply with owner profile if SP lacks ALTER).</p>
     </section>
 
     <section>
-      <h2>Latest completed work</h2>
+      <h2>Done for this PR</h2>
       <ul>
-        <li><a href="archive/2026-07-11-html-planning-harness/plan.html">HTML planning harness</a> established semantic delivery plans, the autonomous work loop, and ADR 0001.</li>
-        <li><a href="archive/2026-07-11-scaffold-foundation/plan.html">Scaffold foundation</a> established pnpm workspaces, strict TypeScript, core, MCP, Expo web, Electron placeholder, verification, and preview deployment through merged PR #2.</li>
-        <li>PR #3 merged the accepted agentic writing blueprint, Story Canvas 2.0 direction, server-authoritative ADR 0002, and living design source into <code>main</code>.</li>
-        <li>PR #4 merged the <a href="archive/2026-07-11-multi-book-domain-kernel/plan.html">multi-book domain kernel</a> (ADR 0003), the brand-aligned client, and the <a href="archive/2026-07-11-backend-lakebase-cicd/plan.html">Lakebase backend + branch-based CI/CD</a> (ADR 0004) into <code>main</code>. Both plans are archived.</li>
-        <li>Checkpoint <code>a73d532</code> is pushed on <code>feat/authenticated-project-crud</code>: Google/Better Auth, writer profiles and ownership, 22 safe metadata commands, the responsive authenticated workspace, migrations, and local real-provider acceptance are green. No PR is open.</li>
-        <li>The founder accepted the <a href="designs/Ghostwriter%20Mockups%202.0.html#ux-proposal-fs-dag">filesystem + DAG UX direction</a>. Its <a href="active/2026-07-11-authenticated-project-crud/ux-proposal-filesystem-dag-nav.html">UX contract</a> and <a href="active/2026-07-11-authenticated-project-crud/feature-delivery-checkpoints.html">autonomous feature checkpoints</a> now govern implementation.</li>
+        <li>Write studio, sketch/assist, Sheet/Place companions, cast link from Sheet.</li>
+        <li>Structure launchpads, Characters (K), part summaries, collapsible rail, trail roles.</li>
+        <li>Topbar de-dupe (Sign out right; Jump/Chat on rail); History rail (no floating toasts).</li>
+        <li>Canvas overview zoom (min 12%; fit floor 0.65).</li>
+        <li>Publishing profile modal; sign-in lockup polish; structure launchpad full-height chrome.</li>
+        <li>Docs/ADR updates; e2e helpers aligned to History rail + profile modal.</li>
       </ul>
     </section>
 
     <section>
-      <h2>Committed foundations</h2>
-      <ul>
-        <li>Responsive real-time web is the primary product; Expo remains the universal client and wrappers add conveniences.</li>
-        <li>Tiptap (ProseMirror) editor, hosted by Expo DOM components on native.</li>
-        <li>GitHub Actions CI/CD; Cloudflare Pages direct upload; protected <code>main</code>.</li>
-        <li>Full novels and multi-book projects share story knowledge and cross-book arcs.</li>
-        <li>Story Canvas and Draft are linked views of the same scenes and story objects.</li>
-        <li>Authors and editors use attributable comments, suggestions, variants, compare/combine, restore, and named editions.</li>
-        <li>Agents propose ideas, edits, and multiple prose versions; humans decide what becomes canonical.</li>
-        <li>ADR 0002 sets online-only, server-authoritative v1 projects with minimal unacknowledged-work recovery and one direct scene editor at a time; full offline and same-scene multi-cursor editing are deferred.</li>
-        <li>ADR 0003 sets normalized project, book, scene, story-knowledge, and edition boundaries; manuscript and Canvas views reference the same stable scene records.</li>
-        <li>ADR 0004 selects Databricks Lakebase Postgres, Drizzle migrations, a Node/Hono backend, and a database branch per pull request as the server-authoritative store.</li>
-        <li>Writer ownership through complete history, export, account exit, platform-neutral core, and MCP parity remains non-negotiable.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h2>Active plans</h2>
-      <ul>
-        <li><a href="active/2026-07-11-authenticated-project-crud/plan.html">Authenticated writing workspace, revisions, and Story Canvas</a> shipped via PR #6. Remaining: archive the plan when founder confirms post-release smoke on <code>https://ghost-writer.studio</code>, then continue later platform work.</li>
-        <li>The long-running product/architecture blueprint remains at <a href="active/2026-07-11-agentic-writing-experience/plan.html">agentic writing experience</a>, retaining the experience, technical, agent, roadmap, and visual artifacts plus later platform decisions.</li>
-      </ul>
-      <p><strong>Living design source:</strong> <a href="designs/Ghostwriter%20Mockups%202.0.html">Ghostwriter Mockups 2.0</a> (never archived).</p>
-    </section>
-
-    <section>
-      <h2>Incomplete and next delivery</h2>
-      <p>The product direction is substantially accepted and the backend topology is now decided and deployed. These material decisions remain open:</p>
+      <h2>Incomplete / next after merge</h2>
       <ol>
-        <li>Identity/authentication, safe CRUD, prose/history/recovery, Canvas, Reader, Split, depth features, and UX 2.1 H1–H5 shipped under ADRs 0005–0009. Remaining: founder post-release smoke on the studio domain, archive the delivery plan, then later platform work.</li>
-        <li>Subscription/billing management.</li>
-        <li>Real-time transport, presence, scene leases, backup/retention/deletion, and remote MCP authorization (backend/database selected in ADR 0004; live-update layer still open).</li>
-        <li>Initial import/export formats; browser access is the accepted primary portability experience.</li>
-        <li>AI provider, credentials, web egress, and local-model posture.</li>
-        <li>Confirmation that marketplace, rights, payments, and studio systems remain outside creation v1.</li>
+        <li>Land green PR #9; production deploy applies migrations via CI.</li>
+        <li>Optional later: freehand ink, OpenAI assist provider.</li>
       </ol>
-    </section>
-
-    <section>
-      <h2>Recommended next step</h2>
-      <p>Smoke Google sign-in and a short write path on <code>https://ghost-writer.studio</code>, then archive the authenticated-project-crud plan when satisfied. Merge the domain docs branch when ready.</p>
     </section>
 
     <section>
       <h2>How to resume</h2>
       <ol>
-        <li>Read this document and the living design source; treat ADRs 0002–0004 and the recorded product requirements as accepted.</li>
-        <li>Branch from up-to-date <code>main</code> for new work; never commit to <code>main</code>.</li>
-        <li>Operational specifics (Lakebase resources, secrets, direct-host gotcha, deploy/branch workflows) live in <code>docs/OPERATIONS.md</code>; archived delivery detail is under <code>plans/archive/</code>.</li>
+        <li>Checkout <code>feat/writing-experience-ux-4</code>; <code>./scripts/dev-local.sh</code>.</li>
+        <li>If columns missing: <code>DATABRICKS_PROFILE=ghostwriter-owner LAKEBASE_USER='tas9117@gmail.com' ./scripts/lakebase.sh migrate production</code> (unset SP client env first).</li>
       </ol>
     </section>
   </main>

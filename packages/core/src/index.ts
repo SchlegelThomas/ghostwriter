@@ -18,3 +18,4 @@ export * from "./project-services.js";
 export * from "./scene-document-repository.js";
 export * from "./scene-documents.js";
 export * from "./scene-writing-services.js";
+export * from "./writing-assist.js";

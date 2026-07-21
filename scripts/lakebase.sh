@@ -32,7 +32,12 @@ if [ -n "${DATABRICKS_PROFILE:-}" ]; then
 fi
 
 dbx() {
-  databricks "$@" "${PROFILE_ARGS[@]}"
+  # With `set -u`, an empty array expansion can fail on some Bash versions.
+  if [ "${#PROFILE_ARGS[@]}" -gt 0 ]; then
+    databricks "$@" "${PROFILE_ARGS[@]}"
+  else
+    databricks "$@"
+  fi
 }
 
 require_jq() {
@@ -67,6 +72,11 @@ cmd_env() {
   local host
   host="$(dbx postgres get-endpoint "$endpoint" -o json \
     | jq -r '.status.hosts.host // .status.host // .host // empty')"
+  # Local .env already stores the resolved host for the long-running backend.
+  if [ -z "$host" ] && [ -n "${LAKEBASE_HOST:-}" ]; then
+    host="${LAKEBASE_HOST}"
+    echo "Using LAKEBASE_HOST from environment for $endpoint" >&2
+  fi
   if [ -z "$host" ]; then
     echo "Could not resolve endpoint host for $endpoint" >&2
     exit 1

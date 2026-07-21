@@ -69,7 +69,22 @@ canonical local or offline project. See ADR 0005.
   multiple prose variants, but their output stays provisional until an author or authorized
   editor chooses what to apply.
 
-## Current writing milestone — implemented locally 2026-07-12
+## Current writing milestone — Write Experience 4.0 (2026-07-19)
+
+On `feat/writing-experience-ux-4`, writers also get:
+
+- Writing Studio chrome on Draft: Page / Sheet / Place composition (Map/Split is left-rail only), Focus, Assist, keyboard / dictate / ink;
+- Scene Sketch craft fields (and craft-only ink paths) plus character sheet desire/pressure/voice on story knowledge;
+- Sheet and Place as side companions beside Draft (with one-tap cast link/unlink on Sheet);
+- Browser dictation into the live Tiptap caret;
+- Deterministic writing-assist proposals (Scene Partner, Character Coach, Worldkeeper, Sketch Partner) that require explicit Apply;
+- Dense shell: Story Trail role annotations, ＋ Add on the Write toolbar, History on the left rail (no floating acknowledgement toasts);
+- Writer profile publishing details (pen name, legal/contact, mailing address, bio, representation) edited from a pencil modal on the project library;
+- Sign-in gate led by the brand lockup with short “Bring your ideas to life” copy.
+
+Agents still never silent-write canon. OpenAI completion remains optional/unconfigured; proposals are labeled `deterministic-local` until a provider ADR lands.
+
+## Prior writing milestone — implemented locally 2026-07-12
 
 The active branch now proves the first owner-only version of the core promise:
 
@@ -82,13 +97,19 @@ The active branch now proves the first owner-only version of the core promise:
   confirmed or provisional links, personal viewport state, snapshot restore/undo, scope-keyed
   placements per drill layer, and a manuscript-derived spine that exposes drift without reordering
   prose;
+- Parts and chapters carry optional descriptions; structure launchpads list openable children with
+  Draft / Reader / Canvas actions; the Characters rail browses cast sheets and typed knowledge links;
 - Chapters act as named scene folders with objectives/cast notes; scenes may carry URL backdrop,
   music, and image references; story knowledge supports notes, aliases, and typed knowledge links;
 - Reader presents bound-book spreads with optional ElevenLabs voice packs (server-side TTS);
 - An in-app MCP chat dock lists capabilities and can invoke read tools; OpenAI completion waits on
   a configured key;
 - wide web supports spatial writing and tree drag-and-drop; narrow web uses an ordered
-  keyboard/screen-reader Canvas posture instead of pretending freeform drag fits a phone.
+  keyboard/screen-reader Canvas posture instead of pretending freeform drag fits a phone;
+- Map (Canvas) mode defaults to a collapsed ~36px structure rail with `[` / »| expand, icon tool
+  dock with Name · shortcut tooltips, Details hidden until needed, free card drag, Space/Hand pan,
+  out-handle link drag, context menus mirroring tools, and ease-out layer camera on drill (instant
+  when reduced motion is preferred).
 
 This milestone does not yet deliver collaborators, comments/suggestions, real-time subscriptions or
 presence, AI/image generation, binary media hosting (R2), import/export, account exit, permanent

@@ -1,0 +1,1587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ghost-writer · Visual mockups 3.0 — Canvas &amp; Structure</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,500&family=Jost:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #28231f;
+      --muted: #766c63;
+      --line: #d8d0c5;
+      --paper: #fdfcf9;
+      --canvas: #f5f1ea;
+      --panel: #f8f5ef;
+      --brand: #6e3f32;
+      --brand-soft: #f3e7e2;
+      --green: #3f684f;
+      --green-soft: #e7f0e9;
+      --blue: #3f6175;
+      --blue-soft: #e8f0f4;
+      --amber: #80622c;
+      --amber-soft: #f5ecd9;
+      --red: #89514b;
+      --red-soft: #f5e5e3;
+      --shadow: 0 18px 40px rgba(40, 35, 31, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: Jost, ui-sans-serif, system-ui, sans-serif;
+      line-height: 1.45;
+    }
+    a { color: var(--brand); }
+    button, input { font: inherit; }
+    button {
+      cursor: pointer;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 8px;
+      color: var(--ink);
+    }
+    button:focus-visible,
+    a:focus-visible,
+    [tabindex]:focus-visible {
+      outline: 3px solid #9e5e4d;
+      outline-offset: 3px;
+    }
+    .wrap { margin: 0 auto; max-width: 1280px; padding: 56px 24px 96px; }
+    .flag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #2f2a26;
+      color: #fff;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 8px 13px;
+      margin-bottom: 18px;
+    }
+    .flag::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #e8aa90;
+    }
+    .kicker {
+      color: var(--brand);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3 {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-weight: 500;
+      letter-spacing: -.03em;
+      line-height: 1.05;
+      margin: 0 0 12px;
+    }
+    h1 { font-size: clamp(40px, 6vw, 68px); margin-top: 8px; }
+    h2 { font-size: clamp(30px, 4vw, 44px); }
+    h3 { font-size: 26px; }
+    .lede {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 22px;
+      color: #5f554d;
+      max-width: 820px;
+      margin: 0 0 28px;
+    }
+    .note {
+      background: var(--brand-soft);
+      border: 1px solid #e4cfc6;
+      border-radius: 14px;
+      padding: 14px 16px;
+      max-width: 900px;
+      margin-bottom: 28px;
+      font-size: 14px;
+    }
+    .note strong { color: var(--brand); }
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin: 28px 0 40px;
+    }
+    .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: var(--shadow);
+    }
+    .card span {
+      display: block;
+      color: var(--brand);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .card strong {
+      display: block;
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 22px;
+      margin-bottom: 6px;
+    }
+    .card p { margin: 0; color: var(--muted); font-size: 13px; }
+    .section { margin-top: 64px; }
+    .section > .kicker { margin-bottom: 8px; }
+
+    /* Interactive app shell — Map defaults to max board real estate */
+    .app-shell {
+      --rail-w: 36px;
+      --tool-w: 36px;
+      --tree-w: 36px;
+      display: grid;
+      grid-template-columns: var(--rail-w) var(--tree-w) minmax(0, 1fr);
+      min-height: 640px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      overflow: hidden;
+      background: #efe9df;
+      box-shadow: var(--shadow);
+      transition: grid-template-columns .38s cubic-bezier(.22, 1, .36, 1);
+    }
+    .app-shell[data-tree="expanded"] { --tree-w: 252px; }
+    .app-shell[data-tree="collapsed"] { --tree-w: 36px; }
+    .app-shell[data-tree="peek"] { --tree-w: 188px; }
+    .app-shell[data-dock="hidden"] .dock {
+      width: 0;
+      padding: 0;
+      border: 0;
+      opacity: 0;
+      overflow: hidden;
+    }
+    .app-shell[data-dock="hidden"] .board-wrap { grid-template-columns: var(--tool-w) minmax(0, 1fr) 0; }
+    .board-wrap {
+      transition: grid-template-columns .38s cubic-bezier(.22, 1, .36, 1);
+    }
+    .dock {
+      transition: width .38s cubic-bezier(.22, 1, .36, 1), opacity .28s ease, padding .38s ease;
+    }
+
+    .tip {
+      position: relative;
+    }
+    .tip::after {
+      content: attr(data-tip);
+      position: absolute;
+      left: calc(100% + 8px);
+      top: 50%;
+      transform: translateY(-50%);
+      background: #2f2a26;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0;
+      text-transform: none;
+      white-space: nowrap;
+      padding: 6px 9px;
+      border-radius: 8px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .12s ease;
+      z-index: 40;
+      box-shadow: var(--shadow);
+    }
+    .tip:hover::after,
+    .tip:focus-visible::after { opacity: 1; }
+    .tip--below::after {
+      left: 50%;
+      top: calc(100% + 8px);
+      transform: translateX(-50%);
+    }
+
+    .rail {
+      background: #2f2a26;
+      color: #f4eee7;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 8px 2px;
+      align-items: center;
+    }
+    .rail__mark {
+      width: 24px;
+      height: 24px;
+      border-radius: 7px;
+      background: var(--brand);
+      display: grid;
+      place-items: center;
+      font-size: 9px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+    .rail button {
+      width: 28px;
+      height: 28px;
+      border: 0;
+      background: transparent;
+      color: #d8cfc3;
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 7px;
+      padding: 0;
+      transition: background .18s ease, color .18s ease, transform .18s ease;
+    }
+    .rail button:hover { color: #fff; transform: translateY(-1px); }
+    .rail button[aria-current="true"] { background: #4a423c; color: #fff; }
+
+    .tree {
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .tree__head {
+      padding: 8px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .tree__eyebrow { margin: 0; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+    .tree__title { font-family: "Cormorant Garamond", Georgia, serif; font-size: 20px; }
+    .tree__actions { display: flex; gap: 4px; flex-wrap: wrap; }
+    .tree__actions button { padding: 5px 7px; font-size: 11px; }
+    .tree__collapse-only {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 2px;
+    }
+    .app-shell[data-tree="collapsed"] .tree__collapse-only { display: flex; }
+    .app-shell[data-tree="collapsed"] .tree__head { display: none; }
+    .tree__collapse-only button {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      border-radius: 7px;
+      font-size: 13px;
+      transition: background .18s ease, transform .18s ease, box-shadow .18s ease;
+    }
+    .tree__collapse-only button:hover {
+      background: var(--brand-soft);
+      transform: scale(1.06);
+    }
+    .tree__collapse-only .expand-affordance {
+      background: #fff;
+      border: 1px solid var(--line);
+      box-shadow: 0 1px 0 rgba(40, 35, 31, .06);
+    }
+    .tree__collapse-only .expand-affordance:hover {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px rgba(110, 63, 50, .12);
+    }
+    .tree {
+      transition: background .28s ease;
+    }
+    .tree__rows, .tree__head {
+      transition: opacity .28s ease;
+    }
+    .app-shell[data-tree="collapsed"] .tree__rows {
+      opacity: .92;
+    }
+    .btn-primary { background: var(--brand) !important; border-color: var(--brand) !important; color: #fff !important; }
+    .tree__rows { padding: 8px; overflow: auto; flex: 1; }
+    .row {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 14px 16px 1fr auto;
+      gap: 6px;
+      align-items: center;
+      text-align: left;
+      padding: 7px 8px;
+      margin-bottom: 2px;
+      border: 0;
+      background: transparent;
+      border-radius: 8px;
+      font-size: 12px;
+    }
+    .row[aria-current="true"] { background: var(--brand-soft); }
+    .row__meta { color: var(--muted); font-size: 10px; }
+    .app-shell[data-tree="collapsed"] .tree__title,
+    .app-shell[data-tree="collapsed"] .tree__eyebrow,
+    .app-shell[data-tree="collapsed"] .tree__actions,
+    .app-shell[data-tree="collapsed"] .row__name,
+    .app-shell[data-tree="collapsed"] .row__meta { display: none; }
+    .app-shell[data-tree="collapsed"] .row { grid-template-columns: 1fr; justify-items: center; }
+    .app-shell[data-tree="collapsed"] .row span:first-child,
+    .app-shell[data-tree="collapsed"] .row span:nth-child(2) { display: none; }
+    .app-shell[data-tree="collapsed"] .row .glyph { display: block; font-size: 14px; }
+    .glyph { display: none; }
+
+    .work {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: var(--paper);
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(253, 252, 249, .92);
+      min-height: 40px;
+    }
+    .topbar__nav {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      flex: 1;
+    }
+    .icon-btn {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      font-size: 13px;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+    .trail { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 11px; min-width: 0; }
+    .trail button { border: 0; background: transparent; padding: 2px 3px; color: var(--muted); }
+    .trail button:last-of-type { color: var(--ink); font-weight: 600; }
+    .status { color: var(--green); font-size: 10px; font-weight: 700; white-space: nowrap; }
+
+    .board-wrap {
+      flex: 1;
+      display: grid;
+      grid-template-columns: var(--tool-w, 36px) minmax(0, 1fr) 240px;
+      min-height: 0;
+    }
+    .tools {
+      border-right: 1px solid var(--line);
+      background: #faf7f1;
+      padding: 6px 2px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      align-items: center;
+    }
+    .tool {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      border-radius: 7px;
+      color: var(--ink);
+      font-size: 13px;
+      line-height: 1;
+      transition: background .18s ease, color .18s ease, transform .18s ease;
+    }
+    .tool:hover { transform: translateY(-1px); }
+    .tool span { display: none; }
+    .tool[aria-pressed="true"] { background: #2f2a26; color: #fff; }
+    .tool-hint {
+      margin: 0;
+      padding: 5px 10px;
+      font-size: 11px;
+      color: var(--muted);
+      background: var(--amber-soft);
+      border-bottom: 1px solid #e6d7b8;
+    }
+    .board-main { display: flex; flex-direction: column; min-width: 0; min-height: 480px; }
+    .utilities {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: center;
+      padding: 5px 8px;
+      border-bottom: 1px solid var(--line);
+      background: #fbf8f2;
+      min-height: 36px;
+    }
+    .utilities button.icon-btn { width: 28px; height: 28px; }
+    .utilities__label {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-right: 2px;
+    }
+    .utilities__spacer { flex: 1; }
+
+    .shortcuts {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 14px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      font-size: 13px;
+    }
+    .shortcuts th, .shortcuts td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    .shortcuts th {
+      background: var(--panel);
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .shortcuts tr:last-child td { border-bottom: 0; }
+    .shortcuts kbd {
+      display: inline-block;
+      min-width: 1.4em;
+      padding: 2px 6px;
+      border: 1px solid var(--line);
+      border-bottom-width: 2px;
+      border-radius: 6px;
+      background: #fff;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 700;
+      text-align: center;
+    }
+    .nav-compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .nav-compare article {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+    }
+    .nav-compare strong { display: block; margin-bottom: 6px; }
+    .nav-compare p { margin: 0; color: var(--muted); font-size: 13px; }
+    .nav-compare ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+
+    .board {
+      position: relative;
+      flex: 1;
+      min-height: 420px;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(110, 63, 50, .04), transparent 40%),
+        linear-gradient(#efe8dc 1px, transparent 1px) 0 0 / 28px 28px,
+        linear-gradient(90deg, #efe8dc 1px, transparent 1px) 0 0 / 28px 28px,
+        #f3eee5;
+      overflow: hidden;
+      cursor: default;
+      transition:
+        transform .45s cubic-bezier(.22, 1, .36, 1),
+        filter .35s ease;
+    }
+    .board[data-cursor="hand"] { cursor: grab; }
+    .board[data-cursor="connect"] { cursor: crosshair; }
+    .board[data-zoom="in"] {
+      transform: scale(1.1);
+      transform-origin: 32% 38%;
+      filter: contrast(1.02);
+    }
+    .node {
+      transition:
+        left .2s cubic-bezier(.22, 1, .36, 1),
+        top .2s cubic-bezier(.22, 1, .36, 1),
+        box-shadow .2s ease,
+        border-color .2s ease,
+        transform .2s ease,
+        opacity .28s ease;
+    }
+    .node:hover { transform: translateY(-1px); }
+    .edge {
+      transition: opacity .28s ease, width .28s ease;
+    }
+    .selectionbar {
+      transition: left .2s cubic-bezier(.22, 1, .36, 1), top .2s cubic-bezier(.22, 1, .36, 1), opacity .2s ease;
+    }
+    .menu {
+      animation: menuIn .18s cubic-bezier(.22, 1, .36, 1);
+      transform-origin: top left;
+    }
+    @keyframes menuIn {
+      from { opacity: 0; transform: scale(.96) translateY(-4px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .tool-hint {
+      transition: opacity .2s ease, background .2s ease;
+    }
+    .motion-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .motion-card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: var(--shadow);
+    }
+    .motion-card strong {
+      display: block;
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 20px;
+      margin-bottom: 6px;
+    }
+    .motion-card p { margin: 0; color: var(--muted); font-size: 13px; }
+    .motion-card code {
+      font-size: 11px;
+      background: var(--panel);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .board__scope {
+      position: absolute;
+      top: 10px;
+      left: 12px;
+      z-index: 3;
+      background: rgba(253, 252, 249, .92);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .region {
+      position: absolute;
+      left: 48px;
+      top: 56px;
+      width: 420px;
+      height: 260px;
+      border: 1.5px dashed #c7b7a4;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, .28);
+      padding: 10px 12px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      pointer-events: none;
+    }
+    .node {
+      position: absolute;
+      width: 180px;
+      text-align: left;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: #fff;
+      box-shadow: 0 10px 24px rgba(40, 35, 31, .08);
+      z-index: 2;
+    }
+    .node[aria-current="true"] { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(110, 63, 50, .15), 0 10px 24px rgba(40, 35, 31, .08); }
+    .node__type { display: block; font-size: 10px; font-weight: 800; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 4px; }
+    .node__title { display: block; font-family: "Cormorant Garamond", Georgia, serif; font-size: 18px; margin-bottom: 4px; }
+    .node__meta { display: block; font-size: 11px; color: var(--muted); }
+    .node--scene-a { left: 84px; top: 96px; }
+    .node--scene-b { left: 300px; top: 170px; }
+    .node--note { left: 500px; top: 84px; width: 160px; background: #fff8e8; }
+    .node--knowledge { left: 470px; top: 230px; width: 170px; background: var(--blue-soft); }
+    .node--aggregate { left: 120px; top: 120px; width: 200px; background: var(--green-soft); }
+    .handle {
+      position: absolute;
+      right: -6px;
+      top: 50%;
+      width: 12px;
+      height: 12px;
+      margin-top: -6px;
+      border-radius: 50%;
+      background: var(--brand);
+      border: 2px solid #fff;
+      box-shadow: 0 0 0 1px rgba(110, 63, 50, .35);
+    }
+    .edge {
+      position: absolute;
+      height: 2px;
+      background: linear-gradient(90deg, var(--brand), #c48b76);
+      z-index: 1;
+      transform-origin: left center;
+    }
+    .edge__label {
+      position: absolute;
+      top: -18px;
+      left: 30%;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .edge--a { left: 250px; top: 140px; width: 70px; transform: rotate(18deg); }
+    .edge--b { left: 460px; top: 150px; width: 55px; transform: rotate(-12deg); }
+    .edge--c { left: 380px; top: 250px; width: 100px; transform: rotate(-8deg); }
+    .selectionbar {
+      position: absolute;
+      left: 84px;
+      top: 210px;
+      z-index: 4;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      background: #2f2a26;
+      color: #fff;
+      border-radius: 999px;
+      padding: 6px 8px 6px 12px;
+      font-size: 11px;
+    }
+    .selectionbar button {
+      border: 0;
+      background: #4a423c;
+      color: #fff;
+      border-radius: 999px;
+      padding: 5px 8px;
+      font-size: 11px;
+    }
+    .minimap {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      width: 110px;
+      height: 72px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, .85);
+      z-index: 3;
+    }
+    .dock {
+      border-left: 1px solid var(--line);
+      background: var(--panel);
+      padding: 12px;
+      overflow: auto;
+    }
+    .dock__eyebrow { margin: 0; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+    .dock__title { font-family: "Cormorant Garamond", Georgia, serif; font-size: 22px; margin: 4px 0 10px; }
+    .dock-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+    }
+    .dock-row strong { font-weight: 700; }
+    .dock__actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+    .dock__actions button { padding: 7px 9px; font-size: 12px; }
+
+    .menu {
+      position: absolute;
+      z-index: 20;
+      min-width: 210px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 6px;
+      display: none;
+    }
+    .menu[data-open="true"] { display: block; }
+    .menu button {
+      width: 100%;
+      text-align: left;
+      border: 0;
+      background: transparent;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .menu button:hover, .menu button:focus-visible { background: var(--brand-soft); }
+    .menu__sep { height: 1px; background: var(--line); margin: 4px 2px; }
+    .menu kbd {
+      color: var(--muted);
+      font-size: 10px;
+      font-family: inherit;
+    }
+
+    .demo-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .demo-bar strong { font-size: 12px; margin-right: 4px; }
+    .demo-bar button { padding: 7px 10px; font-size: 12px; }
+    .demo-bar button[aria-pressed="true"] { background: #2f2a26; color: #fff; border-color: #2f2a26; }
+
+    .journeys {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 18px;
+    }
+    .journey {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+    .journey ol { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+    .journey li { margin: 6px 0; }
+    .journey li strong { color: var(--ink); }
+    .steps {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .steps span {
+      background: var(--green-soft);
+      color: var(--green);
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .invariant-grid, .state-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .invariant, .state {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+    }
+    .invariant strong, .state strong { display: block; margin-bottom: 6px; }
+    .invariant p, .state span { margin: 0; color: var(--muted); font-size: 13px; }
+
+    .responsive {
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 14px;
+      margin-top: 16px;
+    }
+    .phone {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: #fff;
+      overflow: hidden;
+      min-height: 420px;
+      box-shadow: var(--shadow);
+    }
+    .phone__top { padding: 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
+    .phone__title { font-family: "Cormorant Garamond", Georgia, serif; font-size: 22px; }
+    .phone__tabs { display: flex; gap: 6px; margin-top: 8px; font-size: 11px; }
+    .phone__tabs span { padding: 4px 8px; border-radius: 999px; background: #efe8dc; }
+    .phone__tabs span[aria-current="true"] { background: #2f2a26; color: #fff; }
+    .phone__body { padding: 12px; }
+    .phone__row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 13px;
+    }
+    .phone__sheet {
+      margin: 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      background: var(--amber-soft);
+    }
+
+    .toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 20px 0 8px;
+    }
+    .toc a {
+      text-decoration: none;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    @media (max-width: 980px) {
+      .grid-4, .journeys, .invariant-grid, .state-grid, .responsive, .nav-compare, .motion-grid { grid-template-columns: 1fr; }
+      .board-wrap { grid-template-columns: 36px minmax(0, 1fr); }
+      .dock { display: none; }
+      .tip::after { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .app-shell, .board, .board-wrap, .dock, .node, .edge, .selectionbar, .tool, .rail button, .tree__collapse-only button {
+        transition: none !important;
+        animation: none !important;
+      }
+      .board[data-zoom="in"] { transform: none; filter: none; }
+      .menu { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <span class="flag">Proposed UX 3.0 · design review</span>
+    <p class="kicker">Structure · Map · Layers</p>
+    <h1>Give the Canvas room<br>to behave like a board.</h1>
+    <p class="lede">Map navigation collapses structure by default and hides Details so the board owns the screen. Tools shrink to icons with Name · shortcut tooltips. The full keyboard map stays first-class. Layers keep dive/zoom. Draft remains the only authority for reading order.</p>
+    <div class="note">
+      <strong>Locked for this proposal:</strong> scene creation still requires explicit book + chapter-or-Unassigned before the scene exists.
+      Freeform covers geometry, pan, drag, links, edit, and delete after creation—not provisional Canvas-only scenes.
+      Continues shipped UX 2.1; does not replace <a href="Ghostwriter%20Mockups%202.0.html">Mockups 2.0</a>.
+    </div>
+
+    <nav class="toc" aria-label="Mockups 3.0 sections">
+      <a href="#principles">Principles</a>
+      <a href="#navigation">Navigation &amp; real estate</a>
+      <a href="#motion">Motion &amp; feel</a>
+      <a href="#shell">Interactive shell</a>
+      <a href="#shortcuts">Keyboard map</a>
+      <a href="#workbench">Workbench</a>
+      <a href="#journeys">Journeys</a>
+      <a href="#layers">Layer zoom</a>
+      <a href="#invariants">Invariants</a>
+      <a href="#responsive">Responsive</a>
+    </nav>
+
+    <section class="section" id="principles">
+      <p class="kicker">Principles</p>
+      <h2>Map-first real estate without losing structure.</h2>
+      <div class="grid-4">
+        <article class="card"><span>01</span><strong>Collapse structure</strong><p>Wide Canvas mode shrinks the manuscript tree to glyphs; expand or peek when hierarchy work returns.</p></article>
+        <article class="card"><span>02</span><strong>Board is primary</strong><p>Map defaults to collapsed structure + hidden Details. Chrome is thin; the board owns the viewport.</p></article>
+        <article class="card"><span>03</span><strong>Icon tools + tips</strong><p>Compact icon toolbar and utilities; every control shows name + shortcut in a tooltip.</p></article>
+        <article class="card"><span>04</span><strong>Drag freely</strong><p>Cards and regions move with pointer drag; Hand pans the board; arrows nudge; Fit recenters.</p></article>
+        <article class="card"><span>05</span><strong>Link by gesture</strong><p>Drag from a connection handle to a target, or use Connect (<kbd>L</kbd>) for a staged keyboard path.</p></article>
+        <article class="card"><span>06</span><strong>Layer zoom</strong><p>Double-click enters chapter/region/scene scope with camera zoom; Esc/Back and breadcrumbs exit.</p></article>
+        <article class="card"><span>07</span><strong>Shortcuts stay</strong><p><kbd>V</kbd> <kbd>H</kbd> <kbd>S</kbd> <kbd>N</kbd> <kbd>K</kbd> <kbd>I</kbd> <kbd>R</kbd> <kbd>L</kbd>, Space-to-pan, Escape → Select.</p></article>
+        <article class="card"><span>08</span><strong>Draft owns order</strong><p>Canvas never silently reorders the manuscript. Drift is reviewable; structure moves stay explicit.</p></article>
+      </div>
+    </section>
+
+    <section class="section" id="navigation">
+      <p class="kicker">Navigation updates</p>
+      <h2>Give the board the middle of the screen.</h2>
+      <p class="lede" style="font-size:18px;">Map mode reclaims width from structure and Details. Mode switching, Story Trail, and layer breadcrumbs stay reachable without a permanent wide column.</p>
+      <div class="nav-compare">
+        <article>
+          <strong>2.1 / today (wide Map)</strong>
+          <p>Project rail + wide manuscript tree + board + Details dock compete for width. Tool labels are text-heavy.</p>
+          <ul>
+            <li>Tree often stays expanded while mapping</li>
+            <li>Tool dock shows name + shortcut on every button</li>
+            <li>Utilities are wordy chips</li>
+          </ul>
+        </article>
+        <article>
+          <strong>3.0 Map navigation</strong>
+          <p>Icon project rail (44px) + structure glyph rail (48px, collapsed by default) + board + Details hidden until needed.</p>
+          <ul>
+            <li><kbd>[</kbd> toggles structure; primary affordance is the <strong>»|</strong> expand control on the collapsed rail</li>
+            <li>Story Trail + scope crumbs live in a 40px top bar with a matching structure toggle</li>
+            <li>Quick Build lives on the expanded tree (or ⌘/Ctrl+Enter when structure is open)</li>
+            <li>Mode letters on the project rail stay icon-sized with tooltips</li>
+          </ul>
+        </article>
+      </div>
+      <div class="nav-compare" style="margin-top:12px;">
+        <article>
+          <strong>Structure states</strong>
+          <ul>
+            <li><strong>Collapsed (Map default):</strong> ~36px; expand control <strong>»|</strong> + search + panel icon; scene glyphs optional below</li>
+            <li><strong>Peek:</strong> temporary wider column on hover/focus; eases open/closed</li>
+            <li><strong>Expanded:</strong> full tree + Quick Build; collapse control becomes <strong>|«</strong> or “Collapse [”</li>
+          </ul>
+        </article>
+        <article>
+          <strong>Real-estate budget (wide)</strong>
+          <ul>
+            <li>Project rail ~36px · Structure collapsed ~36px · Tools ~36px</li>
+            <li>Top bar ~40px · Utility strip ~36px · instruction line ~28px</li>
+            <li>Details animates to 0 width when dismissed (Map default)</li>
+            <li>Remaining width/height is the spatial board</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="motion">
+      <p class="kicker">Motion &amp; feel</p>
+      <h2>Quiet animation for people who live in the page.</h2>
+      <p class="lede" style="font-size:18px;">Writers notice cadence. Transitions should feel like turning a page or sliding a desk drawer—never like a dashboard loading. Ease-out curves, short durations, and one motion at a time.</p>
+      <div class="motion-grid">
+        <article class="motion-card">
+          <strong>Structure open / close</strong>
+          <p>Column width eases over ~380ms with <code>cubic-bezier(.22, 1, .36, 1)</code>. Glyphs fade; tree content fades in after width starts. No bounce.</p>
+        </article>
+        <article class="motion-card">
+          <strong>Details dock</strong>
+          <p>Width + opacity ease together so the board gently grows into the freed space. Selection bar repositions with the same soft curve.</p>
+        </article>
+        <article class="motion-card">
+          <strong>Layer zoom</strong>
+          <p>~450ms camera ease into the target; siblings dim. Exit eases back. Prefer transform/opacity only for smoothness.</p>
+        </article>
+        <article class="motion-card">
+          <strong>Tool &amp; hover</strong>
+          <p>Pressed tools and icon hover use 150–180ms color/lift. Tooltips fade in quickly; instruction strip cross-fades copy.</p>
+        </article>
+        <article class="motion-card">
+          <strong>Cards &amp; links</strong>
+          <p>Drag uses live pointer (no lag). On drop, soft settle. New cards scale/fade in (~200ms). Link rubber-band follows the pointer; commit fades the edge in.</p>
+        </article>
+        <article class="motion-card">
+          <strong>Menus &amp; sheets</strong>
+          <p>Context menus scale from 96% with a short fade. Narrow action sheets slide up from the bottom with the same ease-out family.</p>
+        </article>
+        <article class="motion-card">
+          <strong>Acknowledgements</strong>
+          <p>Toasts ease in from the edge and leave without stealing focus. Never animate the caret or remount Draft for shell motion.</p>
+        </article>
+        <article class="motion-card">
+          <strong>Reduced motion</strong>
+          <p>Honor <code>prefers-reduced-motion</code>: instant scope/chrome changes, no zoom claim, no decorative lift. Meaning stays; flourish drops.</p>
+        </article>
+        <article class="motion-card">
+          <strong>One motion rule</strong>
+          <p>Do not stack structure expand + layer zoom + dock open at once. Queue or simplify so the writer’s eye can follow a single story.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="shell">
+      <p class="kicker">Interactive shell</p>
+      <h2>Collapsed-by-default Map + icon Workbench</h2>
+      <p class="lede" style="font-size:18px;margin-bottom:16px;">Hover tools for name + shortcut tooltips. Thin rails use a clear expand control. Toggle structure, Details, context menu, link-drag, and layer zoom—watch the ease. Prototype only.</p>
+
+      <div class="app-shell" id="app" data-tree="collapsed" data-dock="hidden" data-depth="chapter">
+        <aside class="rail" aria-label="Project areas">
+          <div class="rail__mark">gw</div>
+          <button class="tip" type="button" data-tip="Build · hierarchy" aria-label="Build">B</button>
+          <button class="tip" type="button" data-tip="Map · Canvas" aria-label="Map" aria-current="true">M</button>
+          <button class="tip" type="button" data-tip="Write · Draft" aria-label="Write">W</button>
+          <button class="tip" type="button" data-tip="Read · Reader" aria-label="Read">R</button>
+        </aside>
+
+        <aside class="tree" aria-label="Manuscript structure">
+          <div class="tree__collapse-only">
+            <button class="tip expand-affordance" type="button" id="btn-expand-tree" data-tip="Expand manuscript  [" aria-label="Expand manuscript structure">»|</button>
+            <button class="tip" type="button" data-tip="Jump in tree  /" aria-label="Search manuscript">⌕</button>
+          </div>
+          <div class="tree__head">
+            <p class="tree__eyebrow">Manuscript</p>
+            <div class="tree__title">Cognition</div>
+            <div class="tree__actions">
+              <button class="btn-primary" type="button">＋ Add</button>
+              <button type="button" id="btn-collapse-tree" class="tip tip--below" data-tip="Collapse manuscript  [">|« Collapse</button>
+            </div>
+          </div>
+          <div class="tree__rows" role="tree" aria-label="Manuscript tree">
+            <button class="row" type="button" role="treeitem"><span>⌄</span><span>▣</span><span class="row__name">Cognition</span><span class="glyph">▣</span><span class="row__meta">book</span></button>
+            <button class="row" type="button" role="treeitem"><span>⌄</span><span>▾</span><span class="row__name">Intro</span><span class="glyph">▾</span><span class="row__meta">part</span></button>
+            <button class="row" type="button" role="treeitem" aria-current="true"><span>›</span><span>◫</span><span class="row__name">Ray Ray</span><span class="glyph">◫</span><span class="row__meta">ch</span></button>
+            <button class="row" type="button" role="treeitem"><span></span><span>◇</span><span class="row__name">The mirror answers</span><span class="glyph">◇</span><span class="row__meta">sc</span></button>
+            <button class="row" type="button" role="treeitem"><span></span><span>◇</span><span class="row__name">A name in the static</span><span class="glyph">◇</span><span class="row__meta">sc</span></button>
+          </div>
+        </aside>
+
+        <div class="work">
+          <header class="topbar">
+            <div class="topbar__nav">
+              <button class="icon-btn tip tip--below" type="button" id="btn-toggle-structure" data-tip="Toggle manuscript  [" aria-label="Toggle manuscript structure">»|</button>
+              <nav class="trail" aria-label="Story Trail / Canvas breadcrumb">
+                <button type="button" data-depth="project">Cognition</button><span>/</span>
+                <button type="button" data-depth="project">Canvas</button>
+                <span id="crumb-chapter"><span>/</span> <button type="button" data-depth="chapter">Ray Ray</button></span>
+                <span id="crumb-scene" hidden><span>/</span> <button type="button" data-depth="scene">The mirror answers</button></span>
+              </nav>
+            </div>
+            <span class="status">Saved</span>
+          </header>
+
+          <p class="tool-hint" id="tool-hint">Select · V — drag to move · double-click to enter a layer · Esc clears tool</p>
+
+          <div class="board-wrap">
+            <div class="tools" role="toolbar" aria-label="Canvas tool toolbar">
+              <button class="tool tip" type="button" data-tool="select" data-tip="Select · V" aria-label="Select V" aria-pressed="true" title="Select (V)">↖</button>
+              <button class="tool tip" type="button" data-tool="hand" data-tip="Hand / pan · H · hold Space" aria-label="Hand H" aria-pressed="false" title="Hand (H)">✋</button>
+              <button class="tool tip" type="button" data-tool="scene" data-tip="Scene · S · needs placement" aria-label="Scene S" aria-pressed="false" title="Scene (S)">◇</button>
+              <button class="tool tip" type="button" data-tool="note" data-tip="Note · N" aria-label="Note N" aria-pressed="false" title="Note (N)">▱</button>
+              <button class="tool tip" type="button" data-tool="story" data-tip="Story record · K" aria-label="Story K" aria-pressed="false" title="Story record (K)">✦</button>
+              <button class="tool tip" type="button" data-tool="image" data-tip="Image reference · I" aria-label="Image I" aria-pressed="false" title="Image reference (I)">▧</button>
+              <button class="tool tip" type="button" data-tool="region" data-tip="Region · R" aria-label="Region R" aria-pressed="false" title="Region (R)">▢</button>
+              <button class="tool tip" type="button" data-tool="connect" data-tip="Connect · L · or drag handle" aria-label="Connect L" aria-pressed="false" title="Connect (L)">↗</button>
+            </div>
+
+            <div class="board-main">
+              <div class="utilities" role="toolbar" aria-label="Canvas utilities">
+                <span class="utilities__label">Lens</span>
+                <button class="icon-btn tip tip--below" type="button" data-tip="Outline lens" aria-label="Outline lens" aria-pressed="true">☰</button>
+                <button class="icon-btn tip tip--below" type="button" data-tip="Relationships lens" aria-label="Relationships">⇄</button>
+                <button class="icon-btn tip tip--below" type="button" data-tip="Continuity lens" aria-label="Continuity">◎</button>
+                <button class="icon-btn tip tip--below" type="button" data-tip="Plan → Draft" aria-label="Plan to Draft">→</button>
+                <button class="icon-btn tip tip--below" type="button" data-tip="Review lens" aria-label="Review">◷</button>
+                <span class="utilities__spacer"></span>
+                <button class="icon-btn tip tip--below" type="button" data-tip="Jump / search · /" aria-label="Jump">⌕</button>
+                <button class="icon-btn tip tip--below" type="button" data-tip="Fit selection · ⇧1" aria-label="Fit selection">▣</button>
+                <button class="icon-btn tip tip--below" type="button" data-tip="Fit board · ⇧2" aria-label="Fit board">▦</button>
+                <button class="icon-btn tip tip--below" type="button" data-tip="Zoom out · −" aria-label="Zoom out">−</button>
+                <button class="icon-btn tip tip--below" type="button" data-tip="Zoom in · +" aria-label="Zoom in">+</button>
+                <button class="icon-btn tip tip--below" type="button" data-tip="Canvas history" aria-label="History">◷</button>
+                <button class="icon-btn tip tip--below" type="button" data-tip="Spatial / Outline view" aria-label="View mode">◫</button>
+                <button class="icon-btn tip tip--below" type="button" id="btn-toggle-dock" data-tip="Toggle Details · ]" aria-label="Toggle Details">▣</button>
+              </div>
+
+              <div
+                class="board"
+                id="board"
+                data-cursor="select"
+                tabindex="0"
+                aria-label="Spatial Story Canvas prototype"
+              >
+                <div class="board__scope" id="board-scope">Ray Ray chapter lens · Draft order remains canonical</div>
+                <div class="region" id="region-layer">Opening movement · Region · double-click to enter</div>
+
+                <button class="node node--scene-a" type="button" id="node-a" aria-current="true" data-node="scene">
+                  <span class="node__type">Scene · Drafting</span>
+                  <span class="node__title">The mirror answers</span>
+                  <span class="node__meta">Drag freely · handle links out</span>
+                  <span class="handle" title="Drag to link" aria-hidden="true"></span>
+                </button>
+                <button class="node node--scene-b" type="button" id="node-b" data-node="scene">
+                  <span class="node__type">Scene · Planned</span>
+                  <span class="node__title">A name in the static</span>
+                  <span class="node__meta">Drop target for links</span>
+                  <span class="handle" title="Drag to link" aria-hidden="true"></span>
+                </button>
+                <button class="node node--note" type="button" id="node-note" data-node="note">
+                  <span class="node__type">Writer note</span>
+                  <span class="node__title">Hold the explanation</span>
+                  <span class="node__meta">Right-click for actions</span>
+                </button>
+                <button class="node node--knowledge" type="button" id="node-knowledge" data-node="story">
+                  <span class="node__type">World rule</span>
+                  <span class="node__title">Recognition precedes memory</span>
+                  <span class="node__meta">Confirmed</span>
+                </button>
+                <button class="node node--aggregate" type="button" id="node-aggregate" hidden data-node="aggregate">
+                  <span class="node__type">Chapter aggregate</span>
+                  <span class="node__title">Ray Ray</span>
+                  <span class="node__meta">2 scenes · 3 links · Enter ↓</span>
+                </button>
+
+                <div class="edge edge--a" id="edge-a"><span class="edge__label">beat →</span></div>
+                <div class="edge edge--b"><span class="edge__label">pins →</span></div>
+                <div class="edge edge--c" id="edge-c" hidden><span class="edge__label">linking…</span></div>
+
+                <div class="selectionbar" id="selectionbar" role="toolbar" aria-label="Selected object actions">
+                  <strong>The mirror answers</strong>
+                  <button type="button">Open Draft</button>
+                  <button type="button" id="btn-start-link">Link</button>
+                  <button type="button">Forward</button>
+                  <button type="button">Archive</button>
+                  <button type="button">More</button>
+                </div>
+                <div class="minimap" aria-label="Canvas minimap"></div>
+
+                <div class="menu" id="context-menu" role="menu" aria-label="Canvas context menu">
+                  <button type="button" role="menuitem">Create scene… <kbd>S</kbd></button>
+                  <button type="button" role="menuitem">Create note <kbd>N</kbd></button>
+                  <button type="button" role="menuitem">Create region <kbd>R</kbd></button>
+                  <button type="button" role="menuitem">Place story record… <kbd>K</kbd></button>
+                  <div class="menu__sep"></div>
+                  <button type="button" role="menuitem">Open Draft</button>
+                  <button type="button" role="menuitem">Connect from here <kbd>L</kbd></button>
+                  <button type="button" role="menuitem">Enter layer</button>
+                  <div class="menu__sep"></div>
+                  <button type="button" role="menuitem">Bring forward</button>
+                  <button type="button" role="menuitem">Send backward</button>
+                  <button type="button" role="menuitem">Archive…</button>
+                  <button type="button" role="menuitem">Delete link…</button>
+                </div>
+              </div>
+            </div>
+
+            <aside class="dock" id="dock" aria-label="Details dock">
+              <p class="dock__eyebrow">Details · dismissible</p>
+              <div class="dock__title" id="dock-title">The mirror answers</div>
+              <div class="dock-row"><span>Kind</span><strong>Scene card</strong></div>
+              <div class="dock-row"><span>Manuscript home</span><strong>Ray Ray</strong></div>
+              <div class="dock-row"><span>Draft order</span><strong>2 · Aligned</strong></div>
+              <div class="dock-row"><span>Geometry</span><strong>x 164 · y 118</strong></div>
+              <div class="dock-row"><span>Links</span><strong>1 in · 2 out</strong></div>
+              <div class="dock__actions">
+                <button class="btn-primary" type="button">Open Draft</button>
+                <button type="button">Edit label</button>
+                <button type="button">Archive…</button>
+              </div>
+              <p style="margin:14px 0 0;color:var(--muted);font-size:12px;">Scene create still opens the explicit placement sheet (book + chapter / Unassigned) before anything is written.</p>
+            </aside>
+          </div>
+        </div>
+      </div>
+
+      <div class="demo-bar" aria-label="Prototype controls">
+        <strong>Try</strong>
+        <button type="button" id="demo-collapse" aria-pressed="true">Expand structure</button>
+        <button type="button" id="demo-peek" aria-pressed="false">Peek structure</button>
+        <button type="button" id="demo-dock" aria-pressed="false">Show Details</button>
+        <button type="button" id="demo-menu" aria-pressed="false">Show context menu</button>
+        <button type="button" id="demo-link" aria-pressed="false">Preview link drag</button>
+        <button type="button" id="demo-zoom" aria-pressed="false">Layer zoom in</button>
+        <button type="button" id="demo-project" aria-pressed="false">Project aggregates</button>
+      </div>
+    </section>
+
+    <section class="section" id="shortcuts">
+      <p class="kicker">Keyboard map</p>
+      <h2>Every tool tip shows the shortcut.</h2>
+      <p class="lede" style="font-size:18px;">Icons carry the board; the keyboard never becomes a secret path. When focus is on the Canvas surface (or a global Map binding is active), these keys apply. Typing in fields ignores tool letters.</p>
+      <table class="shortcuts">
+        <thead>
+          <tr><th>Area</th><th>Keys</th><th>Action</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Tools</td><td><kbd>V</kbd></td><td>Select — click, drag move, double-click enter layer</td></tr>
+          <tr><td>Tools</td><td><kbd>H</kbd> · hold <kbd>Space</kbd></td><td>Hand — pan the board</td></tr>
+          <tr><td>Tools</td><td><kbd>S</kbd></td><td>Scene — open explicit placement sheet, then place</td></tr>
+          <tr><td>Tools</td><td><kbd>N</kbd></td><td>Note</td></tr>
+          <tr><td>Tools</td><td><kbd>K</kbd></td><td>Story record</td></tr>
+          <tr><td>Tools</td><td><kbd>I</kbd></td><td>Image reference</td></tr>
+          <tr><td>Tools</td><td><kbd>R</kbd></td><td>Region</td></tr>
+          <tr><td>Tools</td><td><kbd>L</kbd></td><td>Connect — or drag a card out-handle</td></tr>
+          <tr><td>Tools</td><td><kbd>Esc</kbd></td><td>Return to Select · cancel gesture/menu · exit scene zoom one level</td></tr>
+          <tr><td>Navigation</td><td><kbd>[</kbd></td><td>Toggle structure rail expand / collapse</td></tr>
+          <tr><td>Navigation</td><td><kbd>]</kbd></td><td>Toggle Details dock</td></tr>
+          <tr><td>Navigation</td><td><kbd>/</kbd></td><td>Jump / search on board (or tree when structure open)</td></tr>
+          <tr><td>Navigation</td><td><kbd>←</kbd> Back focus</td><td>Up one Canvas layer (with breadcrumb)</td></tr>
+          <tr><td>Viewport</td><td><kbd>+</kbd> / <kbd>−</kbd></td><td>Zoom in / out</td></tr>
+          <tr><td>Viewport</td><td><kbd>⇧</kbd><kbd>1</kbd> · <kbd>⇧</kbd><kbd>2</kbd></td><td>Fit selection · Fit board</td></tr>
+          <tr><td>Selection</td><td>Arrow keys</td><td>Nudge selected object</td></tr>
+          <tr><td>Selection</td><td><kbd>⌫</kbd> / Archive menu</td><td>Archive selected object (confirm)</td></tr>
+          <tr><td>Structure</td><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>Enter</kbd></td><td>Quick Build when structure is expanded</td></tr>
+          <tr><td>Context menu</td><td><kbd>⇧</kbd><kbd>F10</kbd> · long-press</td><td>Open menu for focused card / board</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section" id="workbench">
+      <p class="kicker">Workbench chrome</p>
+      <h2>Small icons, loud tooltips, quiet board.</h2>
+      <div class="journeys">
+        <article class="journey">
+          <h3>Edge toolbar (~40px)</h3>
+          <p>Icon-only. Hover/focus tooltip = <em>Name · shortcut</em>. Pressed tool updates the thin instruction strip and board cursor. Escape → Select.</p>
+          <div class="steps">
+            <span>↖ V</span><span>✋ H</span><span>◇ S</span><span>▱ N</span>
+            <span>✦ K</span><span>▧ I</span><span>▢ R</span><span>↗ L</span>
+          </div>
+        </article>
+        <article class="journey">
+          <h3>Utility strip (~36px)</h3>
+          <p>Lenses and viewport as icons with the same tooltip pattern. Details toggles with <kbd>]</kbd> and defaults hidden while mapping.</p>
+        </article>
+        <article class="journey">
+          <h3>Context menu</h3>
+          <p>Right-click empty board, card, region, or link. Long-press on touch. Shortcuts listed in the menu rows. Destructive items confirm.</p>
+          <div class="steps">
+            <span>Empty → Create…</span>
+            <span>Card → Open / Link / Archive</span>
+            <span>Link → Edit / Delete</span>
+          </div>
+        </article>
+        <article class="journey">
+          <h3>Selection bar</h3>
+          <p>Compact floating bar on the selected card. Geometry stays in Details so the board stays clear.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="journeys">
+      <p class="kicker">Full user journeys</p>
+      <h2>Create, link, move, edit, delete—end to end.</h2>
+      <div class="journeys">
+        <article class="journey" id="journey-create-note">
+          <h3>1. Create a note</h3>
+          <ol>
+            <li><strong>Press <kbd>N</kbd></strong> or choose Note in the toolbar / empty-board context menu.</li>
+            <li>Click the board (or accept default under the viewport center).</li>
+            <li>Card appears selected; label focuses for rename.</li>
+            <li>Acknowledgement: “Canvas note created” with Undo.</li>
+          </ol>
+        </article>
+        <article class="journey" id="journey-create-scene">
+          <h3>2. Create a scene (explicit placement)</h3>
+          <ol>
+            <li><strong>Press <kbd>S</kbd></strong> or Create scene from the menu.</li>
+            <li>Sheet asks for <strong>title</strong> and <strong>book · chapter / Unassigned</strong> (required).</li>
+            <li>Optional advanced geometry stays collapsed; defaults fill x/y/size.</li>
+            <li>One acknowledgement creates scene + Draft genesis + Canvas card.</li>
+            <li>Writer can then drag the card freely on the board.</li>
+          </ol>
+        </article>
+        <article class="journey" id="journey-drag">
+          <h3>3. Move freely</h3>
+          <ol>
+            <li>With Select, press-drag a card or region; ghost follows pointer.</li>
+            <li>Release commits <code>canvas.object.move</code>; toast “Canvas object moved”.</li>
+            <li>Hand (<kbd>H</kbd>) or Space-drag pans the viewport without moving objects.</li>
+            <li>Arrow keys / Nudge buttons adjust by a fixed step when selected.</li>
+            <li>Fit board / Fit selection recenters after large moves.</li>
+          </ol>
+        </article>
+        <article class="journey" id="journey-link">
+          <h3>4. Drag a relationship</h3>
+          <ol>
+            <li>Hover a card to reveal the out-handle (or press Link on the selection bar).</li>
+            <li>Drag toward another card; rubber-band preview shows direction.</li>
+            <li>Drop on a valid target → short sheet for kind / authority / optional label.</li>
+            <li>Alternate path: Connect tool (<kbd>L</kbd>) → click source → click target → same sheet.</li>
+            <li>Escape cancels with no mutation.</li>
+          </ol>
+        </article>
+        <article class="journey" id="journey-edit">
+          <h3>5. Edit &amp; archive</h3>
+          <ol>
+            <li>Double-click label or use Details / context menu Edit.</li>
+            <li>Blur or Save commits metadata; prose stays in Draft.</li>
+            <li>Archive from selection bar or menu → confirm → card shows archived/stale treatment.</li>
+            <li>Delete link from link selection or menu → confirm → edge removed; cards remain.</li>
+          </ol>
+        </article>
+        <article class="journey" id="journey-combo">
+          <h3>6. Combo path</h3>
+          <ol>
+            <li>Collapse structure → create note → drag beside scenes.</li>
+            <li>Link note → scene with handle drag.</li>
+            <li>Rearrange both cards; Fit board.</li>
+            <li>Delete the link; keep cards.</li>
+            <li>Double-click chapter aggregate (project lens) → zoom into chapter → Esc back.</li>
+          </ol>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="layers">
+      <p class="kicker">Layers</p>
+      <h2>Double-click zoom, not a stack of forms.</h2>
+      <p class="lede" style="font-size:18px;">Project lens shows Chapter Aggregates. Double-click (or Enter layer) zooms the camera into that scope. Scene depth becomes Focus Stage with Draft handoffs. Reduced motion skips the zoom and changes scope instantly.</p>
+      <div class="journeys">
+        <article class="journey">
+          <h3>Enter</h3>
+          <ol>
+            <li>Project board shows aggregate cards (derived, not new kinds).</li>
+            <li>Double-click aggregate / region / scene card.</li>
+            <li>Breadcrumb gains the scope; board zooms toward the target.</li>
+            <li>Sibling context dims or leaves the viewport.</li>
+          </ol>
+        </article>
+        <article class="journey">
+          <h3>Exit</h3>
+          <ol>
+            <li><kbd>Esc</kbd> or ← Back focuses the parent control.</li>
+            <li>Click a parent breadcrumb crumb.</li>
+            <li>Camera eases out (or snaps if reduced motion).</li>
+            <li>Selection and tool mode restore sanely (Select if Connect was mid-gesture).</li>
+          </ol>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="invariants">
+      <p class="kicker">Invariants</p>
+      <h2>What 3.0 must not break.</h2>
+      <div class="invariant-grid">
+        <article class="invariant"><strong>Manuscript order</strong><p>Tree order stays canonical. Canvas drift is visible; applying reorder needs an explicit structure command.</p></article>
+        <article class="invariant"><strong>Explicit scene home</strong><p>No scene card without book + chapter/Unassigned. Geometry is free after that.</p></article>
+        <article class="invariant"><strong>Version domains</strong><p>Canvas snapshots stay separate from Draft checkpoints. Restoring Canvas never rewrites prose.</p></article>
+        <article class="invariant"><strong>One scene lease</strong><p>Open Draft / Split / Focus Stage use the same scene ID; non-scene selection must not remount Draft.</p></article>
+        <article class="invariant"><strong>Keyboard parity</strong><p>Every toolbar and context-menu action has a keyboard path and announced name.</p></article>
+        <article class="invariant"><strong>Thread Trace</strong><p>Relationship lens remains projection—highlight and ordered text, not a second store.</p></article>
+      </div>
+    </section>
+
+    <section class="section" id="responsive">
+      <p class="kicker">Responsive &amp; accessible</p>
+      <h2>Freeform is a wide privilege.</h2>
+      <div class="responsive">
+        <div class="card">
+          <strong>Wide / medium</strong>
+          <p style="margin-top:8px;color:var(--muted);font-size:13px;">Collapse-to-rail structure, edge toolbar, pointer drag, context menus, dismissible Details. Medium may keep structure as a drawer mutually exclusive with Details.</p>
+          <div class="state-grid" style="margin-top:14px;grid-template-columns:1fr 1fr;">
+            <article class="state"><strong>Wide</strong><span>Board-first · collapsed rail default in Map</span></article>
+            <article class="state"><strong>Medium</strong><span>One secondary surface at a time</span></article>
+          </div>
+        </div>
+        <div class="phone" aria-label="Narrow Canvas ordered mode">
+          <div class="phone__top">
+            <div class="phone__title">Cognition</div>
+            <div class="phone__tabs"><span>Project</span><span>Draft</span><span aria-current="true">Canvas</span><span>Read</span></div>
+          </div>
+          <div class="phone__body">
+            <p style="margin:0 0 8px;color:var(--muted);font-size:12px;">Ordered workbench · no freeform claim</p>
+            <div class="phone__row"><span>◇ The mirror answers</span><b>›</b></div>
+            <div class="phone__row"><span>◇ A name in the static</span><b>›</b></div>
+            <div class="phone__row"><span>▱ Hold the explanation</span><b>›</b></div>
+            <div class="phone__sheet">
+              <strong>Actions sheet</strong>
+              <div class="phone__row"><span>Create note</span><b>N</b></div>
+              <div class="phone__row"><span>Create scene…</span><b>S</b></div>
+              <div class="phone__row"><span>Connect…</span><b>L</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="state-grid" style="margin-top:16px;">
+        <article class="state"><strong>Empty board</strong><span>First-open tip + context menu Create…</span></article>
+        <article class="state"><strong>Connect mid-gesture</strong><span>Rubber band + Escape cancel</span></article>
+        <article class="state"><strong>Invalid drop</strong><span>Why nothing changed, in text</span></article>
+        <article class="state"><strong>Archived / stale</strong><span>Visible treatment; no silent hide</span></article>
+        <article class="state"><strong>Conflict</strong><span>Command applied nothing; board truth offered</span></article>
+        <article class="state"><strong>Reduced motion</strong><span>Scope changes without zoom claim</span></article>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="kicker">Implementation gate</p>
+      <h2>Design first.</h2>
+      <p class="lede" style="font-size:18px;">Product code waits on founder acceptance of this mockup and the delivery plan in <code>plans/active/2026-07-18-canvas-structure-ux-3/</code>. Until then, treat this file as the living Map/structure design source alongside Mockups 2.0 for shipped 2.1 Write flows.</p>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      const app = document.getElementById("app");
+      const board = document.getElementById("board");
+      const hint = document.getElementById("tool-hint");
+      const menu = document.getElementById("context-menu");
+      const scope = document.getElementById("board-scope");
+      const hints = {
+        select: "Select (V) — click a card, drag to move, double-click to enter a layer.",
+        hand: "Hand (H / Space) — drag empty board to pan. Objects stay put.",
+        scene: "Scene (S) — click to open explicit placement (book · chapter / Unassigned), then place the card.",
+        note: "Note (N) — click the board to create a writer note at that point.",
+        story: "Story (K) — choose an active unplaced record, then place it.",
+        image: "Image (I) — place an image reference card; metadata follows in Details.",
+        region: "Region (R) — click-drag or click to create a story region layer.",
+        connect: "Connect (L) — click source, then target; or drag a card handle."
+      };
+
+      const structureToggle = document.getElementById("btn-toggle-structure");
+      function setTree(mode) {
+        app.dataset.tree = mode;
+        const collapsed = mode === "collapsed";
+        const demo = document.getElementById("demo-collapse");
+        demo.setAttribute("aria-pressed", String(collapsed));
+        demo.textContent = collapsed ? "Expand structure" : "Collapse structure";
+        document.getElementById("demo-peek").setAttribute("aria-pressed", String(mode === "peek"));
+        structureToggle.textContent = collapsed ? "»|" : "|«";
+        structureToggle.setAttribute(
+          "data-tip",
+          collapsed ? "Expand manuscript  [" : "Collapse manuscript  ["
+        );
+      }
+
+      function setDock(shown) {
+        app.dataset.dock = shown ? "shown" : "hidden";
+        const demo = document.getElementById("demo-dock");
+        demo.setAttribute("aria-pressed", String(shown));
+        demo.textContent = shown ? "Hide Details" : "Show Details";
+      }
+
+      document.getElementById("btn-collapse-tree").addEventListener("click", () => setTree("collapsed"));
+      document.getElementById("btn-expand-tree").addEventListener("click", () => setTree("expanded"));
+      structureToggle.addEventListener("click", () => {
+        setTree(app.dataset.tree === "collapsed" ? "expanded" : "collapsed");
+      });
+      setTree(app.dataset.tree || "collapsed");
+      document.getElementById("demo-collapse").addEventListener("click", () => {
+        setTree(app.dataset.tree === "collapsed" ? "expanded" : "collapsed");
+      });
+      document.getElementById("demo-peek").addEventListener("click", () => {
+        setTree(app.dataset.tree === "peek" ? "collapsed" : "peek");
+      });
+
+      document.getElementById("btn-toggle-dock").addEventListener("click", () => {
+        setDock(app.dataset.dock === "hidden");
+      });
+      document.getElementById("demo-dock").addEventListener("click", () => {
+        setDock(app.dataset.dock === "hidden");
+      });
+
+      document.querySelectorAll(".tool").forEach((button) => {
+        button.addEventListener("click", () => {
+          document.querySelectorAll(".tool").forEach((el) => el.setAttribute("aria-pressed", "false"));
+          button.setAttribute("aria-pressed", "true");
+          const tool = button.dataset.tool;
+          hint.textContent = hints[tool] || hints.select;
+          board.dataset.cursor = tool === "hand" ? "hand" : tool === "connect" ? "connect" : "select";
+        });
+      });
+
+      function placeMenu(x, y) {
+        const rect = board.getBoundingClientRect();
+        menu.style.left = Math.min(x - rect.left, rect.width - 220) + "px";
+        menu.style.top = Math.min(y - rect.top, rect.height - 280) + "px";
+        menu.dataset.open = "true";
+        document.getElementById("demo-menu").setAttribute("aria-pressed", "true");
+      }
+
+      function closeMenu() {
+        menu.dataset.open = "false";
+        document.getElementById("demo-menu").setAttribute("aria-pressed", "false");
+      }
+
+      board.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        placeMenu(event.clientX, event.clientY);
+      });
+      document.getElementById("demo-menu").addEventListener("click", () => {
+        if (menu.dataset.open === "true") closeMenu();
+        else placeMenu(board.getBoundingClientRect().left + 120, board.getBoundingClientRect().top + 80);
+      });
+      document.addEventListener("click", (event) => {
+        if (!menu.contains(event.target) && event.target.id !== "demo-menu") closeMenu();
+      });
+
+      document.getElementById("demo-link").addEventListener("click", (event) => {
+        const on = event.currentTarget.getAttribute("aria-pressed") !== "true";
+        event.currentTarget.setAttribute("aria-pressed", String(on));
+        document.getElementById("edge-c").hidden = !on;
+        hint.textContent = on
+          ? "Link drag preview — rubber-band from The mirror answers toward A name in the static."
+          : hints.select;
+      });
+      document.getElementById("btn-start-link").addEventListener("click", () => {
+        document.querySelector('.tool[data-tool="connect"]').click();
+        document.getElementById("demo-link").click();
+      });
+
+      function setDepth(depth) {
+        app.dataset.depth = depth;
+        const zooming = depth === "scene";
+        board.dataset.zoom = zooming ? "in" : "out";
+        document.getElementById("crumb-scene").hidden = depth !== "scene";
+        document.getElementById("node-aggregate").hidden = depth !== "project";
+        document.getElementById("node-a").hidden = depth === "project";
+        document.getElementById("node-b").hidden = depth === "project";
+        document.getElementById("node-note").hidden = depth === "project";
+        document.getElementById("node-knowledge").hidden = depth === "project";
+        document.getElementById("region-layer").hidden = depth === "project";
+        document.getElementById("selectionbar").hidden = depth === "project";
+        document.getElementById("edge-a").hidden = depth === "project";
+        scope.textContent =
+          depth === "project"
+            ? "Project lens · Chapter Aggregates · double-click to enter"
+            : depth === "scene"
+              ? "Scene Focus Stage · The mirror answers"
+              : "Ray Ray chapter lens · Draft order remains canonical";
+        document.getElementById("demo-zoom").setAttribute("aria-pressed", String(depth === "scene"));
+        document.getElementById("demo-project").setAttribute("aria-pressed", String(depth === "project"));
+        document.getElementById("dock-title").textContent =
+          depth === "project" ? "Ray Ray aggregate" : depth === "scene" ? "The mirror answers" : "The mirror answers";
+      }
+
+      document.getElementById("demo-zoom").addEventListener("click", () => {
+        setDepth(app.dataset.depth === "scene" ? "chapter" : "scene");
+      });
+      document.getElementById("demo-project").addEventListener("click", () => {
+        setDepth(app.dataset.depth === "project" ? "chapter" : "project");
+      });
+      document.querySelectorAll("[data-depth]").forEach((button) => {
+        button.addEventListener("click", () => setDepth(button.dataset.depth));
+      });
+
+      document.getElementById("node-a").addEventListener("dblclick", () => setDepth("scene"));
+      document.getElementById("node-aggregate").addEventListener("dblclick", () => setDepth("chapter"));
+
+      // Lightweight free-drag prototype for the selected scene card
+      let drag = null;
+      const nodeA = document.getElementById("node-a");
+      nodeA.addEventListener("pointerdown", (event) => {
+        if (board.dataset.cursor === "hand" || board.dataset.cursor === "connect") return;
+        if (event.target.classList.contains("handle")) return;
+        const rect = nodeA.getBoundingClientRect();
+        const boardRect = board.getBoundingClientRect();
+        drag = {
+          offsetX: event.clientX - rect.left,
+          offsetY: event.clientY - rect.top,
+          boardRect
+        };
+        nodeA.setPointerCapture(event.pointerId);
+      });
+      nodeA.addEventListener("pointermove", (event) => {
+        if (!drag) return;
+        const x = event.clientX - drag.boardRect.left - drag.offsetX;
+        const y = event.clientY - drag.boardRect.top - drag.offsetY;
+        nodeA.style.left = Math.max(8, x) + "px";
+        nodeA.style.top = Math.max(36, y) + "px";
+        document.getElementById("selectionbar").style.left = nodeA.style.left;
+        document.getElementById("selectionbar").style.top = Math.min(
+          board.clientHeight - 48,
+          parseFloat(nodeA.style.top) + nodeA.offsetHeight + 8
+        ) + "px";
+      });
+      nodeA.addEventListener("pointerup", () => {
+        drag = null;
+      });
+
+      document.addEventListener("keydown", (event) => {
+        const tag = (event.target && event.target.tagName) || "";
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        if (event.key === "Escape") {
+          closeMenu();
+          document.querySelector('.tool[data-tool="select"]').click();
+          if (app.dataset.depth === "scene") setDepth("chapter");
+        }
+        if (event.key === "[" && !event.metaKey && !event.ctrlKey) {
+          event.preventDefault();
+          setTree(app.dataset.tree === "collapsed" ? "expanded" : "collapsed");
+        }
+        if (event.key === "]" && !event.metaKey && !event.ctrlKey) {
+          event.preventDefault();
+          setDock(app.dataset.dock === "hidden");
+        }
+        const map = { v: "select", h: "hand", s: "scene", n: "note", k: "story", i: "image", r: "region", l: "connect" };
+        const tool = map[event.key.toLowerCase()];
+        if (tool && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          const target = document.querySelector('.tool[data-tool="' + tool + '"]');
+          if (target) target.click();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

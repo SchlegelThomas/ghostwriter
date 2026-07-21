@@ -96,6 +96,7 @@ export const writerProfiles = pgTable("writer_profiles", {
     .primaryKey()
     .references(() => user.id, { onDelete: "cascade" }),
   displayName: text("display_name").notNull(),
+  publishing: jsonb("publishing"),
   version: integer("version").notNull().default(1),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull()
@@ -154,6 +155,7 @@ export const scenes = pgTable("scenes", {
   backdrop: jsonb("backdrop"),
   music: jsonb("music"),
   imageRefs: jsonb("image_refs"),
+  sketch: jsonb("sketch"),
   archivedAt: text("archived_at")
 });
 
@@ -273,7 +275,8 @@ export const manuscriptParts = pgTable("manuscript_parts", {
     .notNull()
     .references(() => books.id, { onDelete: "cascade" }),
   position: integer("position").notNull(),
-  title: text("title").notNull()
+  title: text("title").notNull(),
+  summary: text("summary")
 });
 
 export const manuscriptChapters = pgTable("manuscript_chapters", {
@@ -324,6 +327,7 @@ export const storyKnowledge = pgTable("story_knowledge", {
   authority: text("authority").notNull(),
   notes: text("notes"),
   aliases: jsonb("aliases"),
+  characterSheet: jsonb("character_sheet"),
   archivedAt: text("archived_at")
 });
 

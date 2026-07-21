@@ -818,10 +818,6 @@ export function ManuscriptTree({
           {showArchived ? "Hide archived records" : "Show archived records"}
         </Text>
       </Pressable>
-      <Text style={styles.keyboardHelp}>
-        Arrows navigate · Enter opens · F2 renames · Option/Alt + ↑/↓ reorders ·
-        drag scenes onto chapters
-      </Text>
       <ScrollView
         contentContainerStyle={styles.treeContent}
         keyboardShouldPersistTaps="handled"
@@ -1147,15 +1143,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontFamily: fonts.uiSemibold,
     fontSize: 7
-  },
-  keyboardHelp: {
-    color: colors.muted,
-    flexShrink: 1,
-    fontFamily: fonts.ui,
-    fontSize: 7,
-    lineHeight: 11,
-    marginTop: 7,
-    maxWidth: "100%"
   },
   treeScroll: {
     flex: 1,

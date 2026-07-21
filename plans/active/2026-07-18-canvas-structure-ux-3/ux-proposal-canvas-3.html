@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ghostwriter UX proposal — Canvas &amp; Structure 3.0</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Proposed UX 3.0 direction</p>
+      <h1>Canvas &amp; Structure 3.0</h1>
+      <p class="meta"><strong>Status:</strong> proposed — awaiting founder design acceptance<br>
+        <strong>Branch:</strong> <code>feat/canvas-structure-ux-3</code><br>
+        <strong>Parent plan:</strong> <a href="plan.html">Canvas &amp; Structure UX 3.0</a><br>
+        <strong>Interactive source:</strong> <a href="../../designs/Ghostwriter%20Mockups%203.0.html">Ghostwriter Mockups 3.0</a></p>
+      <p>This supplement continues after shipped Build · Map · Write UX 2.1 (PR #6). It does not reopen Draft Desk. It makes Map mode spatial and discoverable: navigation chrome shrinks so the board owns the viewport, tools are icon-driven with shortcut tooltips, structure collapses by default, and layers keep dive/zoom meaning.</p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Writers should feel they are arranging a board—not filling stacked forms. Map navigation defaults to a thin project rail, collapsed structure glyphs, and Details hidden. Creation happens from a compact icon toolbar (tooltips show name + shortcut), context menus, or the full keyboard map. Relationships can be pulled between cards. Double-click zooms into a layer. Draft remains the authority for reading order; scene creation still names an explicit manuscript home before the scene exists.</p>
+    </section>
+
+    <section>
+      <h2>Concepts</h2>
+      <ul>
+        <li><strong>Map real-estate navigation:</strong> ~36px icon project rail; structure collapsed (~36px) by default with a clear <strong>»|</strong> expand control (and matching <strong>|«</strong> when open); <kbd>[</kbd> toggles; Story Trail in a ~40px top bar.</li>
+        <li><strong>Structure rail:</strong> collapsed / peek / expanded with eased width. Quick Build only when expanded (or ⌘/Ctrl+Enter while open).</li>
+        <li><strong>Icon edge toolbar (~36px):</strong> Select, Hand, Scene, Note, Story, Image, Region, Connect as icons; hover/focus tooltip = Name · shortcut; thin instruction strip under the top bar.</li>
+        <li><strong>Icon utility strip (~36px):</strong> lenses, Jump, Fit, zoom, History, view mode, Details toggle (<kbd>]</kbd>) — all with tooltips.</li>
+        <li><strong>Motion &amp; feel:</strong> soft ease-out (~180–450ms) for structure, Details, layer zoom, menus, and card settle; one primary motion at a time; honor <code>prefers-reduced-motion</code>; never remount Draft for chrome animation.</li>
+        <li><strong>Context menus:</strong> right-click / long-press / ⇧F10; shortcuts listed on rows; parity with toolbar.</li>
+        <li><strong>Free drag:</strong> Select-drag moves objects; Hand/Space pans; keyboard nudge and Fit remain.</li>
+        <li><strong>Link drag:</strong> out-handle rubber-band to a target, plus Connect tool staged flow.</li>
+        <li><strong>Layer zoom:</strong> double-click / Enter layer camera; Esc/Back out; reduced motion snaps.</li>
+        <li><strong>Details dismissed by default</strong> while mapping; geometry and rare metadata live there when shown.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Keyboard map (required in mockup + product)</h2>
+      <ul>
+        <li>Tools: <kbd>V</kbd> <kbd>H</kbd> <kbd>S</kbd> <kbd>N</kbd> <kbd>K</kbd> <kbd>I</kbd> <kbd>R</kbd> <kbd>L</kbd>, hold <kbd>Space</kbd> to pan, <kbd>Esc</kbd> → Select / cancel.</li>
+        <li>Chrome: <kbd>[</kbd> structure, <kbd>]</kbd> Details, <kbd>/</kbd> Jump.</li>
+        <li>Viewport: <kbd>+</kbd>/<kbd>−</kbd> zoom, <kbd>⇧1</kbd> Fit selection, <kbd>⇧2</kbd> Fit board, arrows nudge.</li>
+        <li>Every icon control exposes the same shortcut string in its tooltip and accessible name.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Locked product rules</h2>
+      <ul>
+        <li>Scene create requires title + book · chapter-or-Unassigned before acknowledgement.</li>
+        <li>No provisional Canvas-only scenes in this slice.</li>
+        <li>No silent manuscript reorder from Canvas positions.</li>
+        <li>Canvas and Draft version domains stay separate.</li>
+        <li>Keyboard shortcuts from UX 2.1 remain first-class.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Journeys the mockup must make obvious</h2>
+      <ol>
+        <li>Create note / region / story card / scene (with placement sheet).</li>
+        <li>Free move + pan + nudge + Fit.</li>
+        <li>Connect via handle drag and via Connect tool.</li>
+        <li>Edit label; archive card; delete link with confirm.</li>
+        <li>Collapse structure → create → link → rearrange → delete link → enter chapter → exit.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Implementation sequence after acceptance</h2>
+      <ol>
+        <li>H1 Structure rail</li>
+        <li>H2 Pointer board (drag/pan reliability)</li>
+        <li>H3 Menus &amp; create parity</li>
+        <li>H4 Link drag</li>
+        <li>H5 Layer camera</li>
+        <li>H6 Verify, docs, deferred Playwright after founder product verification</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked disabled> Founder vision captured</li>
+        <li><input type="checkbox" checked disabled> Mockups 3.0 interactive proposal authored</li>
+        <li><input type="checkbox" checked disabled> Delivery plan drafted</li>
+        <li><input type="checkbox" disabled> Founder accepts design</li>
+        <li><input type="checkbox" disabled> Implementation authorized</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

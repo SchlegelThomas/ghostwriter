@@ -1,0 +1,1817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ghost-writer · Visual mockups 4.0 — Writing Experience</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Jost:wght@400;500;600;700;800&family=Parisienne&display=swap" rel="stylesheet">
+  <style>
+    /* Tokens synced from packages/ui/src/theme.ts + live Map/Draft chrome (2026-07-19) */
+    :root {
+      --ink: #28231f;
+      --muted: #766c63;
+      --paper: #fcfaf6;
+      --canvas: #f5f1ea;
+      --panel: #ffffff;
+      --topbar: #fdfcf9;
+      --wash: #f2eee7;
+      --line: #ddd5ca;
+      --document-line: #d8d0c5;
+      --accent: #754535;
+      --accent-soft: #f2e5df;
+      --kicker: #6e3f32;
+      --brand-dark: #2c2a27;
+      --rail: #322c27;
+      --rail-active: #4a4039;
+      --rail-text: #cbbfb4;
+      --board: #eee8df;
+      --note: #fff7dc;
+      --note-line: #d7bd69;
+      --green: #3f684f;
+      --green-soft: #e7f0e9;
+      --blue: #3f6175;
+      --blue-soft: #e8f0f4;
+      --amber: #80622c;
+      --amber-soft: #f5ecd9;
+      --red: #89514b;
+      --red-soft: #f5e5e2;
+      --shadow: 0 2px 5px rgba(29, 21, 15, 0.08);
+      --shadow-float: 0 10px 28px rgba(29, 21, 15, 0.1);
+      --serif: "Cormorant Garamond", Georgia, serif;
+      --sans: Jost, ui-sans-serif, system-ui, sans-serif;
+      --brand-script: Parisienne, "Segoe Script", cursive;
+      --rail-w: 32px;
+      --topbar-map-h: 44px;
+      --topbar-draft-h: 62px;
+      --toolbar-h: 36px;
+      --icon: 28px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-weight: 500;
+      line-height: 1.45;
+    }
+    a { color: var(--accent); }
+    button, input { font: inherit; }
+    button {
+      cursor: pointer;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 6px;
+      color: var(--ink);
+    }
+    button:focus-visible,
+    a:focus-visible,
+    [tabindex]:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .wrap { margin: 0 auto; max-width: 1320px; padding: 40px 20px 88px; }
+    .flag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--brand-dark);
+      color: #fff;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 7px 12px;
+      margin-bottom: 14px;
+    }
+    .flag::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #e8aa90;
+    }
+    .kicker {
+      color: var(--kicker);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      margin: 0 0 8px;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 600;
+      font-size: clamp(36px, 5vw, 56px);
+      line-height: 1.05;
+      margin: 0 0 14px;
+      letter-spacing: -0.02em;
+    }
+    h2 {
+      font-family: var(--serif);
+      font-weight: 600;
+      font-size: clamp(26px, 3vw, 34px);
+      line-height: 1.15;
+      margin: 0 0 10px;
+    }
+    h3 { margin: 0 0 6px; font-size: 14px; font-weight: 700; }
+    .lede {
+      font-size: 17px;
+      color: #4a433c;
+      max-width: 760px;
+      margin: 0 0 18px;
+      font-weight: 400;
+    }
+    .note {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+      box-shadow: var(--shadow);
+      max-width: 920px;
+      font-size: 13px;
+    }
+    .toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 22px 0 0;
+    }
+    .toc a {
+      text-decoration: none;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .toc a:hover { border-color: var(--accent); background: var(--accent-soft); }
+    .section { margin-top: 52px; }
+    .grid-4, .grid-3, .grid-2 {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    @media (max-width: 980px) {
+      .grid-4, .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 640px) {
+      .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px 12px 14px;
+      box-shadow: var(--shadow);
+    }
+    .card > span, .feature header .pill {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .card p, .feature p, .journey li, .matrix td, .matrix th, .invariant p {
+      margin: 0;
+      color: #4f4841;
+      font-size: 13px;
+      font-weight: 400;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+    .pill--keep { background: var(--green-soft); color: var(--green); }
+    .pill--extend { background: var(--blue-soft); color: var(--blue); }
+    .pill--decide { background: var(--amber-soft); color: var(--amber); }
+    .pill--later { background: var(--wash); color: var(--muted); }
+    .pill--proposed { background: var(--accent-soft); color: var(--accent); }
+
+    .matrix {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      margin-top: 14px;
+    }
+    .matrix th, .matrix td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+      font-size: 12px;
+    }
+    .matrix th {
+      background: var(--wash);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .matrix tr:last-child td { border-bottom: 0; }
+
+    /* —— Live app shell frame —— */
+    .app {
+      margin-top: 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--canvas);
+      box-shadow: var(--shadow-float);
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) 28px;
+      height: 720px;
+    }
+    .app[data-density="draft"] { grid-template-rows: auto auto minmax(0, 1fr) 0; }
+    .app[data-density="draft"] .status-bar { display: none; }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: var(--topbar-map-h);
+      padding: 4px 8px;
+      background: var(--topbar);
+      border-bottom: 1px solid var(--line);
+    }
+    .app[data-density="draft"] .topbar {
+      min-height: var(--topbar-draft-h);
+      padding: 8px 12px;
+      gap: 10px;
+    }
+    .topbar__left, .topbar__right, .topbar__trail {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .topbar__trail { flex: 1; justify-content: center; flex-wrap: wrap; }
+    .topbar__btn {
+      height: 28px;
+      padding: 0 8px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 6px;
+      background: var(--panel);
+    }
+    .topbar__title {
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .app[data-density="draft"] .topbar__title {
+      font-family: var(--serif);
+      font-size: 21px;
+      font-weight: 600;
+    }
+    .topbar__meta {
+      display: none;
+      font-size: 8px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .app[data-density="draft"] .topbar__meta { display: block; }
+    .trail-text {
+      font-size: 9px;
+      font-weight: 500;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.35;
+    }
+    .trail-text strong { color: var(--ink); font-weight: 600; }
+    .saved-chip {
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--green);
+      background: var(--green-soft);
+      border-radius: 999px;
+      padding: 4px 8px;
+      white-space: nowrap;
+    }
+    .icon-btn {
+      width: var(--icon);
+      height: var(--icon);
+      padding: 0;
+      display: grid;
+      place-items: center;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      background: var(--panel);
+      color: var(--ink);
+      flex: 0 0 auto;
+    }
+    .icon-btn[aria-pressed="true"],
+    .icon-btn[aria-current="true"] {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .icon-btn.is-live {
+      background: var(--red-soft);
+      border-color: #d7b0ab;
+      color: var(--red);
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-height: var(--toolbar-h);
+      padding: 4px 8px;
+      background: var(--topbar);
+      border-bottom: 1px solid var(--line);
+      overflow-x: auto;
+    }
+    .toolbar__group {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      flex: 0 0 auto;
+    }
+    .toolbar__divider {
+      width: 1px;
+      height: 22px;
+      background: var(--line);
+      margin: 0 2px;
+      flex: 0 0 auto;
+    }
+    .toolbar__spacer { flex: 1; min-width: 8px; }
+    .toolbar__search {
+      width: 120px;
+      height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 0 8px;
+      font-size: 9px;
+      background: var(--panel);
+      color: var(--muted);
+    }
+    .toolbar__label {
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--muted);
+      white-space: nowrap;
+      padding: 0 4px;
+    }
+
+    .body {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: var(--rail-w) 36px minmax(0, 1fr) 280px;
+    }
+    .app[data-structure="expanded"] .body { grid-template-columns: var(--rail-w) 220px minmax(0, 1fr) 280px; }
+    .app[data-assist="hidden"] .body { grid-template-columns: var(--rail-w) 36px minmax(0, 1fr) 0; }
+    .app[data-structure="expanded"][data-assist="hidden"] .body { grid-template-columns: var(--rail-w) 220px minmax(0, 1fr) 0; }
+    .app[data-mode="focus"] .body { grid-template-columns: 0 0 minmax(0, 1fr) 0; }
+    .app[data-mode="focus"] .rail,
+    .app[data-mode="focus"] .structure,
+    .app[data-mode="focus"] .assist { display: none; }
+    .app[data-density="map"] .assist { display: none; }
+    .app[data-density="map"] .body { grid-template-columns: var(--rail-w) 36px minmax(0, 1fr); }
+
+    .rail {
+      background: var(--rail);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 6px 2px;
+    }
+    .rail__brand {
+      font-family: var(--brand-script);
+      color: #fff;
+      font-size: 13px;
+      line-height: 1;
+      margin: 2px 0 6px;
+    }
+    .rail button {
+      width: 28px;
+      height: 28px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--rail-text);
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 0;
+    }
+    .rail button[aria-current="true"] {
+      background: var(--rail-active);
+      border-color: #63554b;
+      color: #fff;
+    }
+    .rail__rule {
+      width: 16px;
+      height: 1px;
+      background: #4a4039;
+      margin: 4px 0;
+    }
+
+    .structure {
+      background: #f8f5ef;
+      border-right: 1px solid var(--line);
+      min-width: 0;
+      overflow: hidden;
+    }
+    .structure__collapsed {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: var(--wash);
+    }
+    .app[data-structure="expanded"] .structure__collapsed { display: none; }
+    .structure__expanded { display: none; height: 100%; }
+    .app[data-structure="expanded"] .structure__expanded { display: flex; flex-direction: column; }
+    .structure__head {
+      padding: 8px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .structure__kicker {
+      margin: 0;
+      font-size: 7px;
+      font-weight: 700;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .structure__title {
+      font-family: var(--serif);
+      font-size: 20px;
+      margin: 2px 0 0;
+    }
+    .structure__rows { padding: 6px; display: grid; gap: 2px; }
+    .structure__row {
+      border: 0;
+      background: transparent;
+      text-align: left;
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .structure__row[aria-current="true"] {
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .center {
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--canvas);
+    }
+    .app[data-density="map"] .center { padding: 0; background: var(--board); }
+    .app[data-density="draft"] .center {
+      padding: 14px;
+      gap: 12px;
+      overflow: auto;
+    }
+
+    .draft-hero { display: none; }
+    .app[data-density="draft"] .draft-hero { display: block; }
+    .draft-hero__eye {
+      margin: 0;
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .draft-hero__title {
+      margin: 4px 0 0;
+      font-family: var(--serif);
+      font-size: 25px;
+      font-weight: 600;
+    }
+    .draft-hero__rule {
+      height: 1px;
+      background: var(--document-line);
+      margin-top: 10px;
+    }
+
+    .workspace {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .app[data-split="map"] .workspace,
+    .app[data-split="sheet"] .workspace,
+    .app[data-split="backdrop"] .workspace {
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+      gap: 8px;
+    }
+    .app[data-density="map"] .workspace {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+    }
+
+    .manuscript {
+      min-width: 0;
+      overflow: auto;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 28px 32px 40px;
+      box-shadow: var(--shadow);
+    }
+    .app[data-density="map"] .manuscript { display: none; }
+    .app[data-mode="focus"] .manuscript {
+      max-width: 820px;
+      margin: 0 auto;
+      border: 0;
+      box-shadow: none;
+      background: transparent;
+    }
+    .scene-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 14px;
+      align-items: flex-start;
+    }
+    .scene-meta h3 {
+      font-family: var(--serif);
+      font-size: 28px;
+      font-weight: 600;
+      margin: 0;
+    }
+    .scene-meta p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
+    .dictation-chip {
+      display: none;
+      margin: 0 0 10px;
+      padding: 5px 9px;
+      border-radius: 6px;
+      background: var(--red-soft);
+      color: var(--red);
+      font-size: 10px;
+      font-weight: 700;
+      width: fit-content;
+    }
+    .app[data-input="dictate"] .dictation-chip { display: inline-flex; gap: 6px; align-items: center; }
+    .prose {
+      font-family: var(--serif);
+      font-size: 19px;
+      line-height: 1.55;
+      max-width: 42rem;
+      color: #2b2622;
+      font-weight: 500;
+    }
+    .prose p { margin: 0 0 0.9em; }
+    .prose .caret {
+      display: inline-block;
+      width: 2px;
+      height: 1em;
+      background: var(--accent);
+      vertical-align: text-bottom;
+      animation: blink 1s steps(1) infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+    .ink-layer {
+      display: none;
+      margin-top: 14px;
+      border: 1px dashed var(--note-line);
+      border-radius: 8px;
+      min-height: 120px;
+      background: var(--note);
+      position: relative;
+    }
+    .ink-layer::before {
+      content: "Stylus / freehand on sketch layer — craft, not manuscript";
+      position: absolute;
+      inset: 12px;
+      color: #9a8474;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .ink-stroke {
+      position: absolute;
+      left: 16%;
+      top: 48%;
+      width: 50%;
+      height: 24px;
+      border-radius: 40%;
+      border: 2px solid rgba(117, 69, 53, .4);
+      transform: rotate(-8deg);
+    }
+    .app[data-input="ink"] .ink-layer { display: block; }
+
+    /* Map board — roomy spacing like live app */
+    .board {
+      display: none;
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      background: var(--board);
+      overflow: hidden;
+    }
+    .app[data-density="map"] .board { display: block; }
+    .app[data-split="map"] .board-split { display: block; }
+    .board-split {
+      display: none;
+      position: relative;
+      min-height: 0;
+      background: var(--board);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .agg {
+      position: absolute;
+      top: 28px;
+      width: 200px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      box-shadow: var(--shadow);
+    }
+    .agg:nth-of-type(1) { left: 36px; }
+    .agg:nth-of-type(2) { left: 260px; }
+    .agg:nth-of-type(3) { left: 484px; }
+    .agg__badge, .node__badge, .region__badge, .chapter-frame__badge {
+      display: block;
+      font-size: 7px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+    .agg__title, .node__title {
+      font-family: var(--serif);
+      font-size: 17px;
+      font-weight: 600;
+      margin: 0;
+    }
+    .agg__meta {
+      margin: 6px 0 0;
+      font-size: 8px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+    .agg__cta {
+      margin: 8px 0 0;
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .region {
+      position: absolute;
+      left: 36px;
+      top: 180px;
+      width: 220px;
+      height: 150px;
+      border: 2px solid var(--accent);
+      border-radius: 8px;
+      background: rgba(117, 69, 53, 0.04);
+      padding: 10px;
+    }
+    .note-card {
+      position: absolute;
+      left: 300px;
+      top: 200px;
+      width: 160px;
+      background: var(--note);
+      border: 1px solid var(--note-line);
+      border-radius: 8px;
+      padding: 10px;
+      box-shadow: var(--shadow);
+    }
+    .note-card .node__badge { color: var(--amber); }
+    .note-card .node__title { font-size: 15px; }
+
+    .chapter-frame {
+      position: absolute;
+      left: 280px;
+      top: 340px;
+      width: 420px;
+      height: 200px;
+      border: 2px dashed var(--accent);
+      border-radius: 10px;
+      background: rgba(117, 69, 53, 0.08);
+      padding: 10px;
+    }
+
+    .node {
+      position: absolute;
+      width: 200px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--accent);
+      border-radius: 8px;
+      padding: 10px 10px 0;
+      box-shadow: var(--shadow);
+      text-align: left;
+    }
+    .node--a { left: 300px; top: 380px; }
+    .node--b { left: 460px; top: 420px; }
+    .node[aria-current="true"] {
+      border: 3px solid var(--kicker);
+      border-top-width: 3px;
+      padding-top: 8px;
+    }
+    .node__detail {
+      margin: 4px 0 8px;
+      font-size: 8px;
+      color: var(--muted);
+      line-height: 1.3;
+    }
+    .node__actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      border-top: 1px solid var(--line);
+      margin: 0 -10px;
+      background: var(--wash);
+      border-radius: 0 0 5px 5px;
+      overflow: hidden;
+    }
+    .node__actions span {
+      text-align: center;
+      padding: 7px 4px;
+      font-size: 9px;
+      font-weight: 700;
+      border-right: 1px solid var(--line);
+    }
+    .node__actions span:last-child { border-right: 0; background: var(--blue-soft); color: var(--blue); }
+    .handle {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      border: 2px solid var(--kicker);
+      background: #fff;
+      border-radius: 50%;
+    }
+    .node[aria-current="true"] .handle--tl { top: -6px; left: -6px; }
+    .node[aria-current="true"] .handle--tr { top: -6px; right: -6px; }
+    .node[aria-current="true"] .handle--bl { bottom: -6px; left: -6px; }
+    .node[aria-current="true"] .handle--br { bottom: -6px; right: -6px; }
+    .node:not([aria-current="true"]) .handle { display: none; }
+
+    .edge {
+      position: absolute;
+      height: 2px;
+      background: var(--accent);
+      transform-origin: left center;
+      pointer-events: none;
+    }
+    .edge--1 {
+      left: 380px;
+      top: 268px;
+      width: 70px;
+      transform: rotate(48deg);
+    }
+    .edge--2 {
+      left: 500px;
+      top: 430px;
+      width: 50px;
+      transform: rotate(18deg);
+    }
+
+    .split-pane {
+      display: none;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: auto;
+      padding: 10px;
+    }
+    .app[data-split="sheet"] .split-pane--sheet,
+    .app[data-split="backdrop"] .split-pane--backdrop { display: block; }
+    .split-pane h4 {
+      margin: 0 0 8px;
+      font-size: 9px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .sheet-block, .backdrop-block {
+      background: var(--wash);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 8px;
+    }
+    .sheet-block h5, .backdrop-block h5 {
+      margin: 0 0 4px;
+      font-family: var(--serif);
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .sheet-block p, .backdrop-block p {
+      margin: 0;
+      font-size: 12px;
+      color: #514942;
+      font-weight: 400;
+    }
+    .backdrop-visual {
+      height: 100px;
+      border-radius: 6px;
+      margin-bottom: 8px;
+      background:
+        linear-gradient(135deg, rgba(63, 97, 117, .35), transparent 55%),
+        linear-gradient(180deg, #1f2a33, #6d5644 70%, #c2a27a);
+    }
+
+    .assist {
+      border-left: 1px solid var(--line);
+      background: var(--panel);
+      overflow: auto;
+      min-width: 0;
+    }
+    .app[data-assist="hidden"] .assist,
+    .app[data-density="map"] .assist { display: none; }
+    .assist__head {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      min-height: 36px;
+    }
+    .assist__title {
+      font-family: var(--serif);
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .assist__body { padding: 8px; display: grid; gap: 8px; }
+    .agent-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: var(--wash);
+      cursor: pointer;
+    }
+    .agent-card[data-active="true"] {
+      background: var(--accent-soft);
+      border-color: #d6b4aa;
+    }
+    .agent-card .status {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .proposal {
+      border: 1px solid #d6b4aa;
+      background: #fff;
+      border-radius: 8px;
+      padding: 10px;
+    }
+    .proposal__actions { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+    .proposal__actions button {
+      padding: 5px 8px;
+      font-size: 10px;
+      font-weight: 600;
+      min-height: 28px;
+    }
+    .btn-primary {
+      background: var(--brand-dark) !important;
+      border-color: var(--brand-dark) !important;
+      color: #fff !important;
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      background: var(--brand-dark);
+      color: #cbbfb4;
+      font-size: 9px;
+      font-weight: 600;
+    }
+
+    .demo-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+    }
+    .demo-controls button {
+      padding: 6px 9px;
+      font-size: 11px;
+      font-weight: 600;
+      min-height: 30px;
+    }
+    .demo-controls button[aria-pressed="true"] {
+      background: var(--brand-dark);
+      border-color: var(--brand-dark);
+      color: #fff;
+    }
+
+    .feature {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      box-shadow: var(--shadow);
+    }
+    .feature header {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: flex-start;
+      margin-bottom: 8px;
+    }
+    .feature ul { margin: 8px 0 0; padding-left: 16px; color: #4f4841; font-size: 13px; font-weight: 400; }
+    .feature li { margin-bottom: 3px; }
+    .journey {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      box-shadow: var(--shadow);
+    }
+    .journey ol { margin: 8px 0 0; padding-left: 16px; }
+    .journey li { margin-bottom: 4px; font-size: 13px; font-weight: 400; }
+    .decision {
+      border-left: 3px solid var(--amber);
+      background: var(--panel);
+      border-radius: 0 8px 8px 0;
+      padding: 12px;
+      box-shadow: var(--shadow);
+    }
+    .invariant {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .invariant strong { display: block; margin-bottom: 4px; font-size: 13px; }
+    .chrome-callout {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+    @media (max-width: 800px) {
+      .chrome-callout { grid-template-columns: 1fr; }
+    }
+    .chrome-callout article {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .chrome-callout strong { display: block; margin-bottom: 4px; }
+    .chrome-callout p { margin: 0; font-size: 12px; color: #4f4841; font-weight: 400; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .prose .caret { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <span class="flag">Proposed UX 4.0 · chrome synced to live app</span>
+    <p class="kicker">Write · Craft · Agents · Modalities</p>
+    <h1>Make writing the hero<br>of Ghostwriter again.</h1>
+    <p class="lede">Concepts from the Write epic stay. Visual chrome now follows the live app: dense dual toolbars, 32px activity rail, Map board with roomy card spacing, and Draft’s calmer center padding — not the older airy mockup shells.</p>
+    <div class="note">
+      <strong>Style source (2026-07-19):</strong> live workspace screenshot + <code>packages/ui/src/theme.ts</code>,
+      Map-dense topbar/toolbar in <code>AuthenticatedProjectWorkspace</code> / <code>StoryCanvasPanel</code>.
+      Concepts: Write studio, craft artifacts, agents, modalities.
+      Map tools remain owned by <a href="Ghostwriter%20Mockups%203.0.html">Mockups 3.0</a>; this file borrows live Map chrome so Split · Map looks honest.
+      Proposal: <code>plans/active/2026-07-19-writing-experience-ux-4/</code>.
+    </div>
+
+    <nav class="toc" aria-label="Mockups 4.0 sections">
+      <a href="#chrome">Live chrome</a>
+      <a href="#studio">Interactive studio</a>
+      <a href="#principles">Principles</a>
+      <a href="#features">Feature catalog</a>
+      <a href="#editor">Editor recommendation</a>
+      <a href="#craft">Craft artifacts</a>
+      <a href="#agents">Writing agents</a>
+      <a href="#splits">Split compositions</a>
+      <a href="#journeys">Journeys</a>
+      <a href="#modalities">Input modalities</a>
+      <a href="#invariants">Invariants</a>
+      <a href="#phases">Epic phases</a>
+      <a href="#decisions">Open decisions</a>
+    </nav>
+
+    <section class="section" id="chrome">
+      <p class="kicker">Live chrome contract</p>
+      <h2>Toolbars dense. Center content breathes on the board.</h2>
+      <div class="chrome-callout">
+        <article>
+          <strong>Map density</strong>
+          <p>44px topbar + 36px icon toolbar. Center padding <em>0</em> — the board owns the viewport. Tools are 28×28 chips, gap 3–6, 1px <code>#ddd5ca</code>.</p>
+        </article>
+        <article>
+          <strong>Draft density</strong>
+          <p>Taller ~62px topbar, serif project title, center padding 14 / gap 12. Manuscript max-width ~820 inside a quiet paper host.</p>
+        </article>
+        <article>
+          <strong>Board spacing</strong>
+          <p>Surface <code>#eee8df</code>. Cards sit with generous world-space gaps (aggregates up top, free cards below). Selected card: 3px kicker border + Draft / Split / Enter action strip.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="studio">
+      <p class="kicker">Interactive studio</p>
+      <h2>Write concepts on live chrome.</h2>
+      <p class="lede" style="font-size:16px;">Toggle Map chrome (current app) vs Write density, then exercise Split companions, Focus, Dictate, and Assist — without inventing a second toolbar language.</p>
+
+      <div class="app" id="studio" data-density="draft" data-structure="collapsed" data-assist="shown" data-split="none" data-mode="write" data-input="keyboard" data-agent="partner">
+        <header class="topbar" aria-label="App topbar">
+          <div class="topbar__left">
+            <button class="topbar__btn" type="button">Projects</button>
+            <div>
+              <div class="topbar__title">Cognition</div>
+              <div class="topbar__meta">Owner · v12</div>
+            </div>
+          </div>
+          <div class="topbar__trail">
+            <p class="trail-text" id="trail-text"><strong>Write</strong> · Fogglass / The mirror answers · lease held</p>
+          </div>
+          <div class="topbar__right">
+            <span class="saved-chip" id="saved-chip">Saved</span>
+            <button class="icon-btn" type="button" title="Jump">⌕</button>
+            <button class="icon-btn" type="button" title="Chat">✦</button>
+            <button class="topbar__btn" type="button">Sign out</button>
+          </div>
+        </header>
+
+        <div class="toolbar" aria-label="Workspace toolbar">
+          <div class="toolbar__group" id="toolbar-map" hidden>
+            <button class="icon-btn" type="button" aria-pressed="true" title="Select">↖</button>
+            <button class="icon-btn" type="button" title="Hand">✋</button>
+            <button class="icon-btn" type="button" title="Scene">◇</button>
+            <button class="icon-btn" type="button" title="Note">▣</button>
+            <button class="icon-btn" type="button" title="Connect">╱</button>
+            <button class="icon-btn" type="button" title="Region">▭</button>
+          </div>
+          <div class="toolbar__group" id="toolbar-write">
+            <button class="icon-btn" type="button" data-split="none" aria-pressed="true" title="Page">Pg</button>
+            <button class="icon-btn" type="button" data-split="map" aria-pressed="false" title="Split Map">Map</button>
+            <button class="icon-btn" type="button" data-split="sheet" aria-pressed="false" title="Split Sheet">Chr</button>
+            <button class="icon-btn" type="button" data-split="backdrop" aria-pressed="false" title="Split Backdrop">Bd</button>
+          </div>
+          <div class="toolbar__divider"></div>
+          <div class="toolbar__group">
+            <button class="icon-btn" type="button" data-input="keyboard" aria-pressed="true" title="Keyboard">Kb</button>
+            <button class="icon-btn" type="button" data-input="dictate" aria-pressed="false" title="Dictate">🎙</button>
+            <button class="icon-btn" type="button" data-input="ink" aria-pressed="false" title="Stylus">✎</button>
+            <button class="icon-btn" type="button" id="btn-focus" aria-pressed="false" title="Focus">▣</button>
+            <button class="icon-btn" type="button" id="btn-assist" aria-pressed="true" title="Assist">]</button>
+          </div>
+          <div class="toolbar__divider" id="toolbar-view-div"></div>
+          <div class="toolbar__group" id="toolbar-view">
+            <button class="icon-btn" type="button" title="Lenses">◎</button>
+            <input class="toolbar__search" value="P /" readonly aria-label="Jump">
+            <button class="icon-btn" type="button" title="Fit">⤢</button>
+            <span class="toolbar__label" id="zoom-label">100%</span>
+            <button class="icon-btn" type="button" title="Zoom out">−</button>
+            <button class="icon-btn" type="button" title="Zoom in">+</button>
+          </div>
+          <div class="toolbar__spacer"></div>
+          <span class="toolbar__label" id="toolbar-status">Write · scene lease</span>
+        </div>
+
+        <div class="body">
+          <aside class="rail" aria-label="Activity rail">
+            <div class="rail__brand">gw</div>
+            <button type="button" aria-current="true" title="Draft">D</button>
+            <button type="button" title="Canvas">C</button>
+            <button type="button" title="Structure">S</button>
+            <button type="button" title="Reader">R</button>
+            <div class="rail__rule"></div>
+            <button type="button" title="Menu">☰</button>
+            <button type="button" title="Jump">⌕</button>
+            <button type="button" title="Chat">✦</button>
+          </aside>
+
+          <aside class="structure" aria-label="Manuscript structure">
+            <div class="structure__collapsed">Structure · [</div>
+            <div class="structure__expanded">
+              <div class="structure__head">
+                <div>
+                  <p class="structure__kicker">Manuscript</p>
+                  <div class="structure__title">Cognition</div>
+                </div>
+                <button class="icon-btn" type="button" id="btn-collapse-structure" title="Collapse">|«</button>
+              </div>
+              <div class="structure__rows">
+                <button class="structure__row" type="button">Book I</button>
+                <button class="structure__row" type="button">Ch · Fogglass</button>
+                <button class="structure__row" type="button" aria-current="true">The mirror answers</button>
+                <button class="structure__row" type="button">Call from tomorrow</button>
+              </div>
+            </div>
+          </aside>
+
+          <section class="center" aria-label="Work surface">
+            <div class="draft-hero">
+              <p class="draft-hero__eye">Scene · Fogglass</p>
+              <h2 class="draft-hero__title">The mirror answers</h2>
+              <div class="draft-hero__rule"></div>
+            </div>
+
+            <div class="workspace">
+              <div class="manuscript">
+                <div class="scene-meta">
+                  <div>
+                    <h3>The mirror answers</h3>
+                    <p>Scene 2 · Guided · same lease as Split / Focus / Assist</p>
+                  </div>
+                  <div class="saved-chip">Saved · acknowledged</div>
+                </div>
+                <div class="dictation-chip" aria-live="polite"><span>●</span> Listening — words enter the caret</div>
+                <div class="prose">
+                  <p>Mara kept the lamp low so the glass would not throw her face back at her. The call had already happened — she could feel the afterimage of her own voice in the room — and still the radio waited like a held breath.</p>
+                  <p>She wrote the time in the log, then stopped. The ink looked too sure.<span class="caret" aria-hidden="true"></span></p>
+                </div>
+                <div class="ink-layer" aria-hidden="true"><div class="ink-stroke"></div></div>
+              </div>
+
+              <div class="board-split" aria-label="Split Map board">
+                <article class="agg" style="top:20px;left:20px;width:160px;">
+                  <span class="agg__badge">Chapter aggregate</span>
+                  <h3 class="agg__title">Eevee</h3>
+                  <p class="agg__meta">2 scenes · 1 placed</p>
+                </article>
+                <div class="note-card" style="left:200px;top:110px;width:140px;">
+                  <span class="node__badge">Writer note</span>
+                  <h3 class="node__title">Keep the lamp</h3>
+                </div>
+                <button class="node node--b" type="button" aria-current="true" style="left:200px;top:220px;width:180px;">
+                  <span class="handle handle--tl"></span><span class="handle handle--tr"></span>
+                  <span class="handle handle--bl"></span><span class="handle handle--br"></span>
+                  <span class="node__badge">Scene card</span>
+                  <h3 class="node__title">The mirror answers</h3>
+                  <p class="node__detail">Aligned · open in Split</p>
+                  <div class="node__actions"><span>Draft</span><span>Split</span><span>Enter</span></div>
+                </button>
+              </div>
+
+              <aside class="split-pane split-pane--sheet" aria-label="Split Character Sheet">
+                <h4>Split · Character sheet</h4>
+                <div class="sheet-block">
+                  <h5>Mara Ellison · Keeper</h5>
+                  <p><strong>Desire:</strong> keep the island lit for one more season.</p>
+                  <p><strong>Pressure:</strong> a future self demands darkness.</p>
+                  <p><strong>Voice:</strong> spare, practical, refuses mysticism until it bruises her.</p>
+                </div>
+              </aside>
+
+              <aside class="split-pane split-pane--backdrop" aria-label="Split Backdrop">
+                <h4>Split · Backdrop</h4>
+                <div class="backdrop-block">
+                  <div class="backdrop-visual" role="img" aria-label="Fogglass keep at dusk"></div>
+                  <h5>Fogglass keep · dusk radio room</h5>
+                  <p>Salt on brass. One lamp. Window black with fog.</p>
+                </div>
+              </aside>
+            </div>
+
+            <div class="board" aria-label="Map board">
+              <article class="agg">
+                <span class="agg__badge">Chapter aggregate</span>
+                <h3 class="agg__title">Day 1</h3>
+                <p class="agg__meta">0 scenes · 0 placed · 0 links</p>
+                <p class="agg__cta">Dive into chapter →</p>
+              </article>
+              <article class="agg">
+                <span class="agg__badge">Chapter aggregate</span>
+                <h3 class="agg__title">Eevee</h3>
+                <p class="agg__meta">2 scenes · 2 placed · 1 link</p>
+                <p class="agg__cta">Dive into chapter →</p>
+              </article>
+              <article class="agg">
+                <span class="agg__badge">Chapter aggregate</span>
+                <h3 class="agg__title">Ray Ray</h3>
+                <p class="agg__meta">1 scene · 0 placed · 0 links</p>
+                <p class="agg__cta">Dive into chapter →</p>
+              </article>
+
+              <div class="region">
+                <span class="region__badge">Region</span>
+                <h3 class="agg__title" style="font-size:15px;">Story Region</h3>
+                <p class="agg__meta">Double-click / Enter to dive</p>
+              </div>
+
+              <div class="note-card">
+                <span class="node__badge">Writer note</span>
+                <h3 class="node__title">Writer note</h3>
+                <p class="node__detail">Pinned thought · not Draft order</p>
+              </div>
+
+              <div class="edge edge--1"></div>
+              <div class="edge edge--2"></div>
+
+              <div class="chapter-frame">
+                <span class="chapter-frame__badge">Chapter · Eevee · open</span>
+                <button class="node node--a" type="button">
+                  <span class="node__badge">Scene card</span>
+                  <h3 class="node__title">Home</h3>
+                  <p class="node__detail">Drafting · aligned</p>
+                </button>
+                <button class="node node--b" type="button" aria-current="true">
+                  <span class="handle handle--tl"></span><span class="handle handle--tr"></span>
+                  <span class="handle handle--bl"></span><span class="handle handle--br"></span>
+                  <span class="node__badge">Scene card</span>
+                  <h3 class="node__title">new scene</h3>
+                  <p class="node__detail">Selected · resize handles</p>
+                  <div class="node__actions"><span>Draft</span><span>Split</span><span>Enter</span></div>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <aside class="assist" aria-label="Assist rail">
+            <div class="assist__head">
+              <div class="assist__title">Assist</div>
+              <button class="icon-btn" type="button" id="btn-hide-assist" title="Hide">×</button>
+            </div>
+            <div class="assist__body">
+              <article class="agent-card" data-agent="partner" data-active="true">
+                <div class="status">Scene Partner · ready</div>
+                <h3>Continue from the held breath</h3>
+                <p style="margin:0;font-size:12px;font-weight:400;color:#4f4841;">Two beat options that force Mara to choose before the next call.</p>
+              </article>
+              <article class="agent-card" data-agent="coach" data-active="false">
+                <div class="status">Character Coach</div>
+                <h3>Test Mara’s agency</h3>
+                <p style="margin:0;font-size:12px;font-weight:400;color:#4f4841;">Sharpen the cost if she obeys the future voice.</p>
+              </article>
+              <article class="agent-card" data-agent="world" data-active="false">
+                <div class="status">Worldkeeper</div>
+                <h3>Backdrop constraint</h3>
+                <p style="margin:0;font-size:12px;font-weight:400;color:#4f4841;">Fog vs. lamp policy — candidate fact.</p>
+              </article>
+              <article class="agent-card" data-agent="sketch" data-active="false">
+                <div class="status">Sketch Partner</div>
+                <h3>Fill the scene sketch</h3>
+                <p style="margin:0;font-size:12px;font-weight:400;color:#4f4841;">Purpose / conflict / turn from current intent.</p>
+              </article>
+              <div class="proposal" id="proposal">
+                <div class="pill pill--proposed" style="margin-bottom:6px;">Proposal · not applied</div>
+                <h3>Variant A · Refuse the silence</h3>
+                <p style="margin:0;font-size:12px;font-weight:400;color:#4f4841;">Mara keys the mic and answers in the present tense — denying the future voice the privilege of going first.</p>
+                <div class="proposal__actions">
+                  <button class="btn-primary" type="button">Compare</button>
+                  <button type="button">Insert as variant</button>
+                  <button type="button">Dismiss</button>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <footer class="status-bar">
+          <span>Spine · 2 · Map owns viewport</span>
+          <span>Saved to Canvas</span>
+        </footer>
+      </div>
+
+      <div class="demo-controls" aria-label="Studio demo controls">
+        <button type="button" id="demo-write" aria-pressed="true">Write density</button>
+        <button type="button" id="demo-map-chrome" aria-pressed="false">Map chrome (live)</button>
+        <button type="button" id="demo-page" aria-pressed="true">Page</button>
+        <button type="button" id="demo-map" aria-pressed="false">Split Map</button>
+        <button type="button" id="demo-sheet" aria-pressed="false">Split Sheet</button>
+        <button type="button" id="demo-backdrop" aria-pressed="false">Split Backdrop</button>
+        <button type="button" id="demo-focus" aria-pressed="false">Focus</button>
+        <button type="button" id="demo-dictate" aria-pressed="false">Dictate</button>
+        <button type="button" id="demo-ink" aria-pressed="false">Stylus</button>
+        <button type="button" id="demo-structure" aria-pressed="false">Expand structure</button>
+        <button type="button" id="demo-coach" aria-pressed="false">Character Coach</button>
+      </div>
+    </section>
+
+    <section class="section" id="principles">
+      <p class="kicker">Principles</p>
+      <h2>A craft studio, not a chat beside a doc.</h2>
+      <div class="grid-4">
+        <article class="card"><span>01</span><strong>Prose is sacred</strong><p>Agents propose; writers apply. No silent overwrite.</p></article>
+        <article class="card"><span>02</span><strong>Craft before polish</strong><p>Sketches, sheets, backdrops help invent — never a second manuscript.</p></article>
+        <article class="card"><span>03</span><strong>One scene lease</strong><p>Draft, Split, Focus, Assist share the same scene ID and save domain.</p></article>
+        <article class="card"><span>04</span><strong>Canvas is a sibling</strong><p>Map stays spatial; Split can show Map/sheet/backdrop beside prose.</p></article>
+        <article class="card"><span>05</span><strong>Modalities are equal</strong><p>Keyboard, dictation, stylus — inspectable text or craft output.</p></article>
+        <article class="card"><span>06</span><strong>Keep Tiptap</strong><p>Canonical scene bodies stay schema-v1 ProseMirror JSON.</p></article>
+        <article class="card"><span>07</span><strong>Agents have jobs</strong><p>Scene Partner, Character Coach, Worldkeeper, Sketch Partner.</p></article>
+        <article class="card"><span>08</span><strong>Match live chrome</strong><p>Write features adopt Map/Draft toolbar density — no parallel UI language.</p></article>
+      </div>
+    </section>
+
+    <section class="section" id="features">
+      <p class="kicker">Feature catalog</p>
+      <h2>What this epic delivers for writers.</h2>
+      <div class="grid-2">
+        <article class="feature">
+          <header>
+            <div>
+              <h3>F1 · Writing Studio</h3>
+              <p>Draft Desk with Focus, Split, Assist — chrome matches live toolbar density.</p>
+            </div>
+            <span class="pill pill--extend">Extend</span>
+          </header>
+          <ul>
+            <li>Composition switcher as 28px toolbar chips (not a second fat ribbon).</li>
+            <li>Focus clears rail/structure/assist; Esc restores layout.</li>
+            <li>Lease + save state in topbar chips, same as Map “Saved”.</li>
+          </ul>
+        </article>
+        <article class="feature">
+          <header>
+            <div>
+              <h3>F2 · Scene Sketch</h3>
+              <p>Beat/intent card with the scene; optional Canvas pin.</p>
+            </div>
+            <span class="pill pill--proposed">New</span>
+          </header>
+          <ul>
+            <li>Purpose, conflict, turn, sensory notes, open questions.</li>
+            <li>Planned craft — not canon prose.</li>
+            <li>Open from Assist, Canvas card, or Structure menu.</li>
+          </ul>
+        </article>
+        <article class="feature">
+          <header>
+            <div>
+              <h3>F3 · Character Sheet</h3>
+              <p>Story-knowledge depth for casting a scene.</p>
+            </div>
+            <span class="pill pill--extend">Extend</span>
+          </header>
+          <ul>
+            <li>Desire, pressure, voice, evidence links.</li>
+            <li>Split · Sheet beside Draft.</li>
+            <li>Character Coach proposes sheet updates.</li>
+          </ul>
+        </article>
+        <article class="feature">
+          <header>
+            <div>
+              <h3>F4 · Backdrop</h3>
+              <p>Place + atmosphere companion; extends scene ambience.</p>
+            </div>
+            <span class="pill pill--extend">Extend</span>
+          </header>
+          <ul>
+            <li>Split shows place notes + mood visual.</li>
+            <li>Canvas can pin the place card.</li>
+            <li>Never auto-inserts setting dumps into prose.</li>
+          </ul>
+        </article>
+        <article class="feature">
+          <header>
+            <div>
+              <h3>F5 · Writing Agents</h3>
+              <p>Bounded roles; Assist rail uses live panel chrome.</p>
+            </div>
+            <span class="pill pill--proposed">New</span>
+          </header>
+          <ul>
+            <li>Scene Partner, Character Coach, Worldkeeper, Sketch Partner.</li>
+            <li>Propose → compare → review → apply → undo.</li>
+          </ul>
+        </article>
+        <article class="feature">
+          <header>
+            <div>
+              <h3>F6 · Input Modalities</h3>
+              <p>Toolbar toggles for keyboard / dictate / stylus.</p>
+            </div>
+            <span class="pill pill--decide">Spike</span>
+          </header>
+          <ul>
+            <li>Dictation → Tiptap insert at caret.</li>
+            <li>Stylus on sketch/ink craft layer.</li>
+            <li>Optional later: ink-to-text proposal.</li>
+          </ul>
+        </article>
+        <article class="feature">
+          <header>
+            <div>
+              <h3>F7 · Split compositions</h3>
+              <p>Page · Map · Sheet · Backdrop — one lease.</p>
+            </div>
+            <span class="pill pill--extend">Extend</span>
+          </header>
+          <ul>
+            <li>Split · Map reuses live board surface + card spacing.</li>
+            <li>Opening from Canvas never remounts unrelated scenes.</li>
+            <li>Narrow web stacks panes.</li>
+          </ul>
+        </article>
+        <article class="feature">
+          <header>
+            <div>
+              <h3>F8 · First-book path</h3>
+              <p>Optional spark → sketch → sheet → first scene.</p>
+            </div>
+            <span class="pill pill--later">Phase B</span>
+          </header>
+          <ul>
+            <li>“Start writing” always available.</li>
+            <li>Guided / Balanced / Minimal.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="editor">
+      <p class="kicker">Editor recommendation</p>
+      <h2>Keep Tiptap. Layer modalities.</h2>
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th>Option</th>
+            <th>Fit</th>
+            <th>Stylus</th>
+            <th>Dictation</th>
+            <th>Call</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Tiptap (current)</strong></td>
+            <td>Schema, IDs, compare, SSR package already in-repo</td>
+            <td>Craft overlay / sketch; strokes out of canon prose by default</td>
+            <td>STT → insert commands; ⌘M</td>
+            <td><span class="pill pill--keep">Keep + extend</span></td>
+          </tr>
+          <tr>
+            <td><strong>Engine replacement</strong></td>
+            <td>Resets trust surface</td>
+            <td>Same custom work</td>
+            <td>Same custom work</td>
+            <td><span class="pill pill--later">Reject</span></td>
+          </tr>
+          <tr>
+            <td><strong>Tiptap Cloud AI</strong></td>
+            <td>Patterns only — Ghostwriter owns propose/apply</td>
+            <td>N/A</td>
+            <td>N/A</td>
+            <td><span class="pill pill--decide">Study only</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section" id="craft">
+      <p class="kicker">Craft artifacts</p>
+      <h2>Sketches, sheets, and backdrops.</h2>
+      <div class="grid-3">
+        <article class="feature">
+          <header><div><h3>Scene Sketch</h3><p>Napkin before the page.</p></div><span class="pill pill--proposed">Craft</span></header>
+          <ul>
+            <li>Purpose · conflict · turn · beats</li>
+            <li>Optional ink pad</li>
+            <li>Canvas may show a Sketch card</li>
+          </ul>
+        </article>
+        <article class="feature">
+          <header><div><h3>Character Sheet</h3><p>Cast with living people.</p></div><span class="pill pill--extend">Knowledge</span></header>
+          <ul>
+            <li>Extends story-knowledge</li>
+            <li>Evidence chips to passages</li>
+            <li>Split · Sheet for active cast</li>
+          </ul>
+        </article>
+        <article class="feature">
+          <header><div><h3>Backdrop</h3><p>Where the scene breathes.</p></div><span class="pill pill--extend">Ambience</span></header>
+          <ul>
+            <li>Place + sensory notes</li>
+            <li>Optional image / music refs</li>
+            <li>Mood strip in Split</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="agents">
+      <p class="kicker">Writing agents</p>
+      <h2>Four roles that help invent and draft.</h2>
+      <div class="grid-2">
+        <article class="card"><span class="pill pill--proposed">Scene Partner</span><h3>Next move</h3><p>Questions, beats, continuation variants against immutable base revision.</p></article>
+        <article class="card"><span class="pill pill--proposed">Character Coach</span><h3>Agency &amp; voice</h3><p>Sheet updates and sharper costs when a character stalls.</p></article>
+        <article class="card"><span class="pill pill--proposed">Worldkeeper</span><h3>Place &amp; consequence</h3><p>Backdrop facts and rule implications.</p></article>
+        <article class="card"><span class="pill pill--proposed">Sketch Partner</span><h3>Intent before prose</h3><p>Notes/ink → editable sketch fields — not scene body.</p></article>
+      </div>
+    </section>
+
+    <section class="section" id="splits">
+      <p class="kicker">Split compositions</p>
+      <h2>One lease. Several companions.</h2>
+      <div class="grid-2">
+        <article class="card"><span>Draft | Map</span><strong>Live board beside prose</strong><p>Same surface color, card spacing, and Draft/Split/Enter strip as Map mode. Canvas version domain stays separate.</p></article>
+        <article class="card"><span>Draft | Sheet</span><strong>Cast in view</strong><p>Active sheets beside the page; sheet edits do not dirty prose version.</p></article>
+        <article class="card"><span>Draft | Backdrop</span><strong>Atmosphere in view</strong><p>Place notes + mood; never covers the caret.</p></article>
+        <article class="card"><span>Focus</span><strong>Page owns viewport</strong><p>Hides rail, structure, assist, split. Active modality chip can remain in the 36px toolbar.</p></article>
+      </div>
+    </section>
+
+    <section class="section" id="journeys">
+      <p class="kicker">Journeys</p>
+      <h2>What the mockup must make obvious.</h2>
+      <div class="grid-2">
+        <article class="journey"><h3>1 · Sketch → first page</h3><ol><li>Create scene with book + chapter home.</li><li>Fill Scene Sketch.</li><li>Optionally pin to Canvas.</li><li>Write; sketch stays one click away.</li></ol></article>
+        <article class="journey"><h3>2 · Cast a scene</h3><ol><li>Pick cast.</li><li>Split · Sheet.</li><li>Character Coach proposes sharper pressure.</li><li>Accept sheet delta; return to prose.</li></ol></article>
+        <article class="journey"><h3>3 · Scene Partner</h3><ol><li>Assign continue-from-caret.</li><li>Two variants vs base revision.</li><li>Compare; insert as variant or dismiss.</li><li>Working draft unchanged until apply.</li></ol></article>
+        <article class="journey"><h3>4 · Dictate</h3><ol><li>Toolbar Dictate (⌘M).</li><li>Speech inserts at caret.</li><li>Stop → keyboard; save stays honest.</li><li>Mic denied shows clear recovery.</li></ol></article>
+        <article class="journey"><h3>5 · Stylus sketch</h3><ol><li>Toolbar Stylus → ink pad.</li><li>Draw on craft layer.</li><li>Sketch Partner may propose typed fields.</li><li>Accept into sketch — not manuscript — unless converted.</li></ol></article>
+        <article class="journey"><h3>6 · Write beside Map</h3><ol><li>Split · Map or Canvas → Split.</li><li>Same scene lease; roomy board spacing.</li><li>Rearrange cards; Draft order unchanged.</li><li>Focus when the board is noise.</li></ol></article>
+      </div>
+    </section>
+
+    <section class="section" id="modalities">
+      <p class="kicker">Input modalities</p>
+      <h2>Keyboard, voice, and hand.</h2>
+      <table class="matrix">
+        <thead>
+          <tr><th>Mode</th><th>Surface</th><th>Persists as</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>Keyboard</strong></td><td>Tiptap</td><td>Scene prose JSON</td><td>Default</td></tr>
+          <tr><td><strong>Dictation</strong></td><td>Tiptap</td><td>Scene prose JSON</td><td>Browser STT first; cloud later</td></tr>
+          <tr><td><strong>Stylus</strong></td><td>Sketch ink pad</td><td>Craft strokes + sketch fields</td><td>Convert-to-text is a proposal</td></tr>
+          <tr><td><strong>Free text capture</strong></td><td>Notes / sketch</td><td>Note or sketch body</td><td>Promote later; no scene lease</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section" id="invariants">
+      <p class="kicker">Invariants</p>
+      <h2>Locked while this design evolves.</h2>
+      <div class="grid-3">
+        <article class="invariant"><strong>One scene lease</strong><p>Draft / Split / Focus / Assist share one editor lease.</p></article>
+        <article class="invariant"><strong>Propose ≠ apply</strong><p>Agents never mutate canon.</p></article>
+        <article class="invariant"><strong>Craft ≠ manuscript</strong><p>Sketches, sheets, backdrops, ink are not reading-order prose.</p></article>
+        <article class="invariant"><strong>Draft owns order</strong><p>Canvas never silently reorders the book.</p></article>
+        <article class="invariant"><strong>Version domains</strong><p>Prose checkpoints ≠ Canvas snapshots ≠ craft revisions.</p></article>
+        <article class="invariant"><strong>One chrome language</strong><p>Write epic reuses live toolbar / rail / card metrics — no parallel design system.</p></article>
+      </div>
+    </section>
+
+    <section class="section" id="phases">
+      <p class="kicker">Epic phases</p>
+      <h2>Ship Write in vertical slices after acceptance.</h2>
+      <div class="grid-2">
+        <article class="card"><span>Phase A</span><strong>Writing Studio chrome</strong><p>Focus, Assist, composition chips on the live 36px toolbar — no new model calls.</p></article>
+        <article class="card"><span>Phase B</span><strong>Craft artifacts</strong><p>Sketch + Sheet depth + Backdrop split, Canvas pins.</p></article>
+        <article class="card"><span>Phase C</span><strong>Dictation v1</strong><p>Browser speech → Tiptap; listening chip in toolbar row.</p></article>
+        <article class="card"><span>Phase D</span><strong>Scene Partner</strong><p>Continuation / beat proposals with compare.</p></article>
+        <article class="card"><span>Phase E</span><strong>Coach + Worldkeeper</strong><p>Sheet and backdrop proposals.</p></article>
+        <article class="card"><span>Phase F</span><strong>Stylus craft</strong><p>Ink pad on sketches; optional convert-to-text.</p></article>
+      </div>
+    </section>
+
+    <section class="section" id="decisions">
+      <p class="kicker">Open decisions</p>
+      <h2>Founder calls before implementation.</h2>
+      <div class="grid-2">
+        <article class="decision"><h3>D1 · Accept Mockups 4.0?</h3><p>Write living design with live-app chrome contract.</p></article>
+        <article class="decision"><h3>D2 · Dictation provider?</h3><p>Browser-first vs managed STT.</p></article>
+        <article class="decision"><h3>D3 · Where does ink live?</h3><p>Recommended: craft-only on Scene Sketch.</p></article>
+        <article class="decision"><h3>D4 · First agent?</h3><p>Recommended: Scene Partner.</p></article>
+        <article class="decision"><h3>D5 · Model/provider posture?</h3><p>Still gated by AI provider ADR.</p></article>
+        <article class="decision"><h3>D6 · Branch sequencing?</h3><p>Park/finish Canvas 3 + shell before Write implementation branch?</p></article>
+      </div>
+      <p class="note" style="margin-top:14px;">
+        <strong>Status:</strong> proposed — chrome restyled from live app for founder review. Product code waits on acceptance.
+      </p>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      const studio = document.getElementById("studio");
+      if (!studio) return;
+
+      const splitButtons = studio.querySelectorAll("[data-split]");
+      const inputButtons = studio.querySelectorAll("[data-input]");
+      const agentCards = studio.querySelectorAll(".agent-card");
+      const proposal = document.getElementById("proposal");
+      const trail = document.getElementById("trail-text");
+      const toolbarStatus = document.getElementById("toolbar-status");
+      const savedChip = document.getElementById("saved-chip");
+      const zoomLabel = document.getElementById("zoom-label");
+      const toolbarMap = document.getElementById("toolbar-map");
+      const toolbarWrite = document.getElementById("toolbar-write");
+      const toolbarView = document.getElementById("toolbar-view");
+      const toolbarViewDiv = document.getElementById("toolbar-view-div");
+
+      function setDensity(density) {
+        studio.dataset.density = density;
+        const map = density === "map";
+        if (toolbarMap) toolbarMap.hidden = !map;
+        if (toolbarWrite) toolbarWrite.hidden = map;
+        if (toolbarView) toolbarView.style.display = map ? "flex" : "none";
+        if (toolbarViewDiv) toolbarViewDiv.style.display = map ? "block" : "none";
+        if (trail) {
+          trail.innerHTML = map
+            ? "<strong>Project board · Cognition</strong> / Map · card selected: new scene · Enter to dive"
+            : "<strong>Write</strong> · Fogglass / The mirror answers · lease held";
+        }
+        if (toolbarStatus) toolbarStatus.textContent = map ? "Saved to Canvas" : "Write · scene lease";
+        if (savedChip) savedChip.textContent = map ? "Saved" : "Saved";
+        if (zoomLabel) zoomLabel.textContent = map ? "35%" : "100%";
+        if (map) {
+          studio.dataset.assist = "hidden";
+          studio.dataset.split = "none";
+          studio.dataset.mode = "write";
+          studio.dataset.structure = "collapsed";
+        } else {
+          studio.dataset.assist = "shown";
+        }
+        syncDemo();
+      }
+
+      function setSplit(split) {
+        if (studio.dataset.density === "map") setDensity("draft");
+        studio.dataset.split = split;
+        studio.dataset.mode = "write";
+        splitButtons.forEach((btn) => {
+          btn.setAttribute("aria-pressed", String(btn.getAttribute("data-split") === split));
+        });
+        syncDemo();
+      }
+
+      function setInput(input) {
+        studio.dataset.input = input;
+        inputButtons.forEach((btn) => {
+          const on = btn.getAttribute("data-input") === input;
+          btn.setAttribute("aria-pressed", String(on));
+          btn.classList.toggle("is-live", on && input === "dictate");
+        });
+        syncDemo();
+      }
+
+      function setAssist(shown) {
+        if (studio.dataset.density === "map") return;
+        studio.dataset.assist = shown ? "shown" : "hidden";
+        document.getElementById("btn-assist")?.setAttribute("aria-pressed", String(shown));
+        syncDemo();
+      }
+
+      function setFocus(on) {
+        if (studio.dataset.density === "map") setDensity("draft");
+        studio.dataset.mode = on ? "focus" : "write";
+        if (on) {
+          studio.dataset.structure = "collapsed";
+          studio.dataset.assist = "hidden";
+          studio.dataset.split = "none";
+        } else {
+          studio.dataset.assist = "shown";
+        }
+        document.getElementById("btn-focus")?.setAttribute("aria-pressed", String(on));
+        syncDemo();
+      }
+
+      function setAgent(agent) {
+        studio.dataset.agent = agent;
+        agentCards.forEach((card) => {
+          card.dataset.active = String(card.getAttribute("data-agent") === agent);
+        });
+        if (!proposal) return;
+        const h = proposal.querySelector("h3");
+        const p = proposal.querySelector("p");
+        if (agent === "coach") {
+          h.textContent = "Sheet delta · sharper cost";
+          p.textContent = "If Mara obeys, she loses the only living room left on the island — the lamp room as chosen home.";
+        } else if (agent === "world") {
+          h.textContent = "Backdrop fact · candidate";
+          p.textContent = "Fogglass policy: lamps stay lit in fog unless the keep itself is under evacuation order.";
+        } else if (agent === "sketch") {
+          h.textContent = "Sketch fields · proposed";
+          p.textContent = "Purpose: force a present-tense answer. Conflict: future voice vs. duty. Turn: Mara refuses silence.";
+        } else {
+          h.textContent = "Variant A · Refuse the silence";
+          p.textContent = "Mara keys the mic and answers in the present tense — denying the future voice the privilege of going first.";
+        }
+        syncDemo();
+      }
+
+      function syncDemo() {
+        const map = {
+          "demo-write": studio.dataset.density === "draft",
+          "demo-map-chrome": studio.dataset.density === "map",
+          "demo-page": studio.dataset.density === "draft" && studio.dataset.split === "none" && studio.dataset.mode !== "focus" && studio.dataset.input === "keyboard",
+          "demo-map": studio.dataset.split === "map",
+          "demo-sheet": studio.dataset.split === "sheet",
+          "demo-backdrop": studio.dataset.split === "backdrop",
+          "demo-focus": studio.dataset.mode === "focus",
+          "demo-dictate": studio.dataset.input === "dictate",
+          "demo-ink": studio.dataset.input === "ink",
+          "demo-structure": studio.dataset.structure === "expanded",
+          "demo-coach": studio.dataset.agent === "coach"
+        };
+        Object.entries(map).forEach(([id, pressed]) => {
+          const el = document.getElementById(id);
+          if (el) el.setAttribute("aria-pressed", String(pressed));
+        });
+      }
+
+      splitButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          setFocus(false);
+          setSplit(btn.getAttribute("data-split") || "none");
+        });
+      });
+      inputButtons.forEach((btn) => {
+        btn.addEventListener("click", () => setInput(btn.getAttribute("data-input") || "keyboard"));
+      });
+      agentCards.forEach((card) => {
+        card.addEventListener("click", () => setAgent(card.getAttribute("data-agent") || "partner"));
+      });
+
+      document.getElementById("btn-collapse-structure")?.addEventListener("click", () => {
+        studio.dataset.structure = "collapsed";
+        syncDemo();
+      });
+      document.getElementById("btn-assist")?.addEventListener("click", () => {
+        setFocus(false);
+        setAssist(studio.dataset.assist !== "shown");
+      });
+      document.getElementById("btn-hide-assist")?.addEventListener("click", () => setAssist(false));
+      document.getElementById("btn-focus")?.addEventListener("click", () => {
+        setFocus(studio.dataset.mode !== "focus");
+      });
+
+      document.getElementById("demo-write")?.addEventListener("click", () => {
+        setDensity("draft");
+        setInput("keyboard");
+        setSplit("none");
+        setAssist(true);
+        setAgent("partner");
+      });
+      document.getElementById("demo-map-chrome")?.addEventListener("click", () => setDensity("map"));
+      document.getElementById("demo-page")?.addEventListener("click", () => {
+        setDensity("draft");
+        setInput("keyboard");
+        setSplit("none");
+        setAssist(true);
+      });
+      document.getElementById("demo-map")?.addEventListener("click", () => { setDensity("draft"); setSplit("map"); });
+      document.getElementById("demo-sheet")?.addEventListener("click", () => { setDensity("draft"); setSplit("sheet"); });
+      document.getElementById("demo-backdrop")?.addEventListener("click", () => { setDensity("draft"); setSplit("backdrop"); });
+      document.getElementById("demo-focus")?.addEventListener("click", () => setFocus(true));
+      document.getElementById("demo-dictate")?.addEventListener("click", () => {
+        setDensity("draft");
+        setInput("dictate");
+      });
+      document.getElementById("demo-ink")?.addEventListener("click", () => {
+        setDensity("draft");
+        setInput("ink");
+      });
+      document.getElementById("demo-structure")?.addEventListener("click", () => {
+        studio.dataset.structure = studio.dataset.structure === "expanded" ? "collapsed" : "expanded";
+        syncDemo();
+      });
+      document.getElementById("demo-coach")?.addEventListener("click", () => {
+        setDensity("draft");
+        setAssist(true);
+        setAgent("coach");
+      });
+
+      setDensity("draft");
+    })();
+  </script>
+</body>
+</html>
