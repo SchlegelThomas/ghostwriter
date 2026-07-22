@@ -102,8 +102,9 @@ ADR 0005 establishes the identity spine used by all real project access:
 - **Better Auth** runs inside the Node/Hono backend with its Drizzle/Postgres adapter and Google as
   the only initial login provider. Auth/session/provider types remain outside `packages/core`.
 - The browser uses opaque database-backed sessions in secure HttpOnly cookies. Cloudflare Pages
-  proxies its same-origin `/api/*` path to Fly; the product does not depend on third-party cookies
-  between `pages.dev` and `fly.dev` or durable browser bearer tokens.
+  proxies its same-origin `/api/*` path to Fly on the production custom domain
+  (`https://ghost-writer.studio`); the product does not depend on third-party cookies between the
+  web origin and `fly.dev` or durable browser bearer tokens.
 - Core owns provider-neutral account/profile, project-membership, and authorization contracts.
   Every query and command receives a server-resolved actor and enforces project scope before
   storage effects. Client-supplied account IDs never grant access.

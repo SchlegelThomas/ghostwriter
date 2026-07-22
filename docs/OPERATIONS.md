@@ -30,10 +30,12 @@ limits never apply.
 
 ### Authentication and same-origin API (ADR 0005)
 
-The public web origin is `https://ghostwriter-di2.pages.dev`. Its Pages Function handles only
-`/api/*` and streams those requests to `https://ghostwriter-backend.fly.dev`; static asset requests
-do not traverse the function. Better Auth therefore sets first-party cookies for the Pages origin
-instead of relying on third-party `pages.dev` → `fly.dev` cookies.
+The public web origin is `https://ghost-writer.studio` (Cloudflare Pages custom domain on the
+`ghostwriter` project; project host `ghostwriter-di2.pages.dev` remains for previews). Its Pages
+Function handles only `/api/*` and streams those requests to
+`https://ghostwriter-backend.fly.dev`; static asset requests do not traverse the function. Better
+Auth therefore sets first-party cookies for the studio origin instead of relying on third-party
+web → `fly.dev` cookies.
 
 The dedicated Google Cloud project is `ghostwriter-app-2026` (display name `Ghostwriter`), owned
 by `tas9117@gmail.com`. Keep consumer OAuth branding and client configuration in this project;
@@ -41,18 +43,19 @@ do not reuse an unrelated Google Cloud project.
 
 Production Google web-client configuration:
 
-- Authorized JavaScript origin: `https://ghostwriter-di2.pages.dev`
+- Authorized JavaScript origins: `https://ghost-writer.studio`,
+  `https://www.ghost-writer.studio`
 - Authorized redirect URI:
-  `https://ghostwriter-di2.pages.dev/api/auth/callback/google`
-- Better Auth public URL: `https://ghostwriter-di2.pages.dev`
-- Trusted origins: canonical Pages host plus
-  `https://*.ghostwriter-di2.pages.dev` for branch preview aliases
+  `https://ghost-writer.studio/api/auth/callback/google`
+- Better Auth public URL: `https://ghost-writer.studio`
+- Trusted origins (Fly `AUTH_TRUSTED_ORIGINS`): canonical studio hosts plus the Pages project
+  host and `https://*.ghostwriter-di2.pages.dev` for branch preview aliases
 
-Branch preview OAuth (`feat-*.ghostwriter-di2.pages.dev`) keeps Google’s redirect on the
-canonical Pages callback (Google has no wildcard redirects). The backend trusts preview
-origins and sets the session cookie on `.ghostwriter-di2.pages.dev` so the alias can use
-the same login. Prefer the stable branch alias URL over one-off `*.pages.dev` hash deploys
-when validating beta builds.
+Google has no wildcard redirects, so OAuth always returns to the studio callback. Authenticated
+product use should prefer `https://ghost-writer.studio`. Branch preview aliases
+(`feat-*.ghostwriter-di2.pages.dev`) remain useful for static/UX review; they are trusted
+origins but do not share the studio session cookie. Prefer the stable branch alias URL over
+one-off `*.pages.dev` hash deploys when validating beta builds.
 
 Local live-provider smoke configuration:
 
@@ -96,8 +99,9 @@ performed manually.
 
 Builds the Expo web export and publishes it to Cloudflare Pages under the current branch
 name. You get a stable preview URL per branch, e.g.
-`https://feat-story-bible.ghostwriter-abc.pages.dev`. Re-running updates the same URL.
-This is what "deploy a dev version" means; agents should run it when asked.
+`https://feat-story-bible.ghostwriter-di2.pages.dev`. Re-running updates the same URL.
+This is what "deploy a dev version" means; agents should run it when asked. Production remains
+`https://ghost-writer.studio`.
 
 ### Production deploy — automatic on merge to main
 
