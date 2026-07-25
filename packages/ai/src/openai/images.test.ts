@@ -50,12 +50,14 @@ describe("generateOpenAiImageForTests", () => {
   });
 
   it("keeps response_format only for legacy DALL·E models", async () => {
-    const fetchImpl = vi.fn(async () =>
-      new Response(JSON.stringify({ data: [{ b64_json: "aGVsbG8=" }] }), {
+    const calls: { init: RequestInit }[] = [];
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ init: init ?? {} });
+      return new Response(JSON.stringify({ data: [{ b64_json: "aGVsbG8=" }] }), {
         status: 200,
         headers: { "Content-Type": "application/json" }
-      })
-    );
+      });
+    });
     await generateOpenAiImageForTests(
       { apiKey: SECRET_KEY, prompt: PROMPT, model: "dall-e-3" },
       {
@@ -63,10 +65,7 @@ describe("generateOpenAiImageForTests", () => {
         fetchImpl: fetchImpl as typeof fetch
       }
     );
-    const body = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body)) as Record<
-      string,
-      unknown
-    >;
+    const body = JSON.parse(String(calls[0]?.init.body)) as Record<string, unknown>;
     expect(body).toMatchObject({
       model: "dall-e-3",
       response_format: "b64_json"

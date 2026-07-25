@@ -247,6 +247,12 @@ Provisioned and wired automatically:
 - Its Postgres role on `production` with `CREATE`/table privileges (migrations can run as the SP).
 - GitHub secrets `DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID`; variables `LAKEBASE_PROJECT_ID`,
   `LAKEBASE_USER` (= SP client id), `LAKEBASE_ENDPOINT_ID`.
+- Drizzle journal objects (`drizzle.__drizzle_migrations` and `__drizzle_migrations_id_seq`) are
+  owned by the founder role (`tas9117@gmail.com`). The SP needs
+  `USAGE, SELECT, UPDATE` on that sequence (and `INSERT` on the journal table) or PR-branch
+  migrates fail with `permission denied for sequence __drizzle_migrations_id_seq` when recording a
+  new migration. Re-grant as owner via the `ghostwriter-owner` Databricks profile if CI hits this
+  again after ownership changes.
 
 Provisioning is complete: `DATABRICKS_CLIENT_SECRET` and `FLY_API_TOKEN` are configured, the Fly
 app is deployed, and the backend authenticates to Lakebase with the service principal. The current
