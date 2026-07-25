@@ -798,7 +798,6 @@ export function AuthenticatedProjectWorkspace({
     }
     chooseSelection({ kind: "project" });
     // coverReviewBookId is the gate; ProjectTitlePage opens the book studio.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coverReviewBookId]);
   // Inbox review is a first-class center workspace — leave Characters framing.
   useEffect(() => {

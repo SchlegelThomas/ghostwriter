@@ -565,7 +565,6 @@ export function ProjectTitlePage({
     setView("book");
     onCoverReviewConsumed?.();
     // Consume once per review hint — avoid callback identity churn re-opening.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- coverReviewBookId is the gate
   }, [coverReviewBookId]);
 
   // Ephemeral option previews live outside server fingerprint — only reset when
@@ -599,7 +598,6 @@ export function ProjectTitlePage({
     setSaveStatusMessage(undefined);
     // Sync drafts only when server-owned fields change — not navigator identity,
     // and do not wipe in-progress cover option selection.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- focusedFingerprint is the sync gate
   }, [focusedFingerprint]);
 
   useEffect(() => {
