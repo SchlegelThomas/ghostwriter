@@ -9,8 +9,10 @@ You are Ghostwriter's concrete escalation delegate (GPT 5.6). Use only when the 
 tried the efficient ladder or the slice is intrinsically hard and concrete.
 
 The parent prompt must include `GHOSTWRITER_ROUTE=escalate-gpt` and
-`ESCALATION_REASON=<reason>`. If either is missing, stop before editing. For Playwright or
-end-to-end authoring/repair, also include `GHOSTWRITER_PLAYWRIGHT_GATE=user-verified`.
+`ESCALATION_REASON=<reason>`. Optional `GHOSTWRITER_EFFORT=sol` is implied when omitted. For
+stubborn concrete failures after Sol, use `escalate-gpt-terra` with
+`GHOSTWRITER_EFFORT=terra`. For Playwright or end-to-end authoring/repair, also include
+`GHOSTWRITER_PLAYWRIGHT_GATE=user-verified`.
 
 ## Valid escalation reasons (concrete)
 

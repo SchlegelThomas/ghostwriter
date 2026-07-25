@@ -31,14 +31,34 @@ const routeMarkerCount = [composerMarker, grokMarker, opusMarker, gptMarker].fil
   Boolean
 ).length;
 
-const composerType = type === "delegate-composer";
+const effortMatch = task.match(/\bGHOSTWRITER_EFFORT=([^\s]+)/u);
+const effort = effortMatch?.[1]?.toLowerCase() ?? null;
+
+const composerFastType = type === "delegate-composer";
+const composerStandardType = type === "delegate-composer-standard";
+const composerType = composerFastType || composerStandardType;
 const grokType = type === "delegate-grok";
 const opusType = type === "escalate-opus";
-const gptType = type === "escalate-gpt";
+const gptSolType = type === "escalate-gpt";
+const gptTerraType = type === "escalate-gpt-terra";
+const gptType = gptSolType || gptTerraType;
 
-const composerModel = /composer[- ]?2\.5/iu.test(model);
-const grokModel = /grok[- ]?4\.5/iu.test(model);
+const composerFamily = /composer[- ]?2\.5/iu.test(model);
+const composerFastModel =
+  composerFamily &&
+  (/fast=true/iu.test(model) || /composer-2\.5-fast\b/iu.test(model));
+const composerStandardModel =
+  composerFamily &&
+  (/fast=false/iu.test(model) ||
+    /composer-2\.5\[\]/u.test(model) ||
+    (!/fast/iu.test(model) && !/composer-2\.5-fast\b/iu.test(model)));
+const grokModel =
+  /grok[- ]?4\.5/iu.test(model) || /cursor-grok-4\.5/iu.test(model);
 const opusModel = /opus/iu.test(model);
+const opusHighModel =
+  opusModel && (/thinking-high/iu.test(model) || /effort=high/iu.test(model));
+const gptSolModel = /gpt[- ]?5\.6/iu.test(model) && /sol/iu.test(model);
+const gptTerraModel = /gpt[- ]?5\.6/iu.test(model) && /terra/iu.test(model);
 const gptModel = /gpt[- ]?5\.6/iu.test(model);
 
 const mutationVerb =
@@ -69,7 +89,7 @@ if (composerType && !composerMarker) {
   respond({
     permission: "deny",
     user_message:
-      "Retry delegate-composer with GHOSTWRITER_ROUTE=composer in its task."
+      "Retry the Composer delegate with GHOSTWRITER_ROUTE=composer (and GHOSTWRITER_EFFORT=standard for delegate-composer-standard)."
   });
   process.exit(0);
 }
@@ -96,7 +116,7 @@ if (gptType && !gptMarker) {
   respond({
     permission: "deny",
     user_message:
-      "Retry escalate-gpt with GHOSTWRITER_ROUTE=escalate-gpt and ESCALATION_REASON=<reason> in its task."
+      "Retry the GPT escalate agent with GHOSTWRITER_ROUTE=escalate-gpt, ESCALATION_REASON=<reason>, and GHOSTWRITER_EFFORT=sol|terra."
   });
   process.exit(0);
 }
@@ -111,11 +131,44 @@ if (looksLikePlaywrightMutation && !playwrightGate) {
 }
 
 if (composerMarker || composerType) {
-  if (!composerModel) {
+  const composerEffort = effort ?? "fast";
+  if (composerEffort !== "fast" && composerEffort !== "standard") {
     respond({
       permission: "deny",
       user_message:
-        "Composer-route Ghostwriter work must use Composer 2.5. Retry with delegate-composer or an explicit Composer 2.5 model."
+        "Composer effort must be GHOSTWRITER_EFFORT=fast or GHOSTWRITER_EFFORT=standard."
+    });
+    process.exit(0);
+  }
+  if (composerFastType && composerEffort !== "fast") {
+    respond({
+      permission: "deny",
+      user_message:
+        "delegate-composer is fast effort. Use delegate-composer-standard with GHOSTWRITER_EFFORT=standard, or omit EFFORT for fast."
+    });
+    process.exit(0);
+  }
+  if (composerStandardType && composerEffort !== "standard") {
+    respond({
+      permission: "deny",
+      user_message:
+        "delegate-composer-standard requires GHOSTWRITER_EFFORT=standard."
+    });
+    process.exit(0);
+  }
+  if (composerEffort === "fast" && !composerFastModel) {
+    respond({
+      permission: "deny",
+      user_message:
+        "Composer fast effort must use Composer 2.5 fast (delegate-composer or composer-2.5[fast=true] / composer-2.5-fast)."
+    });
+    process.exit(0);
+  }
+  if (composerEffort === "standard" && !composerStandardModel) {
+    respond({
+      permission: "deny",
+      user_message:
+        "Composer standard effort must use Composer 2.5 non-fast (delegate-composer-standard or composer-2.5[fast=false])."
     });
     process.exit(0);
   }
@@ -124,11 +177,20 @@ if (composerMarker || composerType) {
 }
 
 if (grokMarker || grokType) {
+  const grokEffort = effort ?? "high-fast";
+  if (grokEffort !== "high-fast") {
+    respond({
+      permission: "deny",
+      user_message:
+        "Grok effort must be GHOSTWRITER_EFFORT=high-fast (default when omitted)."
+    });
+    process.exit(0);
+  }
   if (!grokModel) {
     respond({
       permission: "deny",
       user_message:
-        "Grok-route Ghostwriter work must use Grok 4.5. Retry with delegate-grok or an explicit Grok 4.5 model."
+        "Grok-route Ghostwriter work must use Grok 4.5 (delegate-grok or cursor-grok-4.5-high-fast)."
     });
     process.exit(0);
   }
@@ -145,11 +207,20 @@ if (opusMarker || opusType) {
     });
     process.exit(0);
   }
-  if (!opusModel) {
+  const opusEffort = effort ?? "high";
+  if (opusEffort !== "high") {
     respond({
       permission: "deny",
       user_message:
-        "Creative escalation must use an Opus-class model. Retry with escalate-opus."
+        "Opus effort must be GHOSTWRITER_EFFORT=high (thinking-high / effort=high)."
+    });
+    process.exit(0);
+  }
+  if (!opusHighModel) {
+    respond({
+      permission: "deny",
+      user_message:
+        "Creative escalation must use Opus thinking-high / effort=high (escalate-opus)."
     });
     process.exit(0);
   }
@@ -166,11 +237,52 @@ if (gptMarker || gptType) {
     });
     process.exit(0);
   }
+  const gptEffort = effort ?? "sol";
+  if (gptEffort !== "sol" && gptEffort !== "terra") {
+    respond({
+      permission: "deny",
+      user_message:
+        "GPT effort must be GHOSTWRITER_EFFORT=sol or GHOSTWRITER_EFFORT=terra."
+    });
+    process.exit(0);
+  }
+  if (gptSolType && gptEffort !== "sol") {
+    respond({
+      permission: "deny",
+      user_message:
+        "escalate-gpt is Sol effort. Use escalate-gpt-terra with GHOSTWRITER_EFFORT=terra."
+    });
+    process.exit(0);
+  }
+  if (gptTerraType && gptEffort !== "terra") {
+    respond({
+      permission: "deny",
+      user_message:
+        "escalate-gpt-terra requires GHOSTWRITER_EFFORT=terra."
+    });
+    process.exit(0);
+  }
+  if (gptEffort === "sol" && !gptSolModel) {
+    respond({
+      permission: "deny",
+      user_message:
+        "GPT Sol effort must use gpt-5.6-sol-medium (escalate-gpt)."
+    });
+    process.exit(0);
+  }
+  if (gptEffort === "terra" && !gptTerraModel) {
+    respond({
+      permission: "deny",
+      user_message:
+        "GPT Terra effort must use gpt-5.6-terra-medium (escalate-gpt-terra)."
+    });
+    process.exit(0);
+  }
   if (!gptModel) {
     respond({
       permission: "deny",
       user_message:
-        "Concrete escalation must use GPT 5.6. Retry with escalate-gpt or an explicit GPT 5.6 model."
+        "Concrete escalation must use GPT 5.6. Retry with escalate-gpt or escalate-gpt-terra."
     });
     process.exit(0);
   }
@@ -182,7 +294,7 @@ if (looksLikeDelegatedMutation) {
   respond({
     permission: "deny",
     user_message:
-      "Classify this delegated development/validation task first. Prefer GHOSTWRITER_ROUTE=composer (Composer 2.5) or GHOSTWRITER_ROUTE=grok (Grok 4.5). Escalate to escalate-opus (creative) or escalate-gpt (concrete) only with ESCALATION_REASON."
+      "Classify this delegated development/validation task first. Prefer GHOSTWRITER_ROUTE=composer with GHOSTWRITER_EFFORT=fast|standard, then grok (high-fast). Escalate to escalate-opus (creative, high) or escalate-gpt (concrete, sol|terra) only with ESCALATION_REASON."
   });
   process.exit(0);
 }

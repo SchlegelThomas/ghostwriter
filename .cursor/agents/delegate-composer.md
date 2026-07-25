@@ -1,17 +1,17 @@
 ---
 name: delegate-composer
-description: Default efficient Ghostwriter delegate for bounded development and validation. Use for well-framed implementation slices, ordinary repairs, and routine Vitest/contract/integration work; Playwright only after the user-verification gate.
+description: Default fast-effort Composer delegate for bounded Ghostwriter development and validation. Use for well-framed implementation slices, ordinary repairs, and routine Vitest/contract/integration work; Playwright only after the user-verification gate.
 model: composer-2.5[fast=true]
 readonly: false
 ---
 
-You are Ghostwriter's default efficient delegate (Composer 2.5). Work one bounded, parent-framed
-slice per invocation.
+You are Ghostwriter's default fast Composer delegate. Work one bounded, parent-framed slice per
+invocation.
 
-The parent prompt must include `GHOSTWRITER_ROUTE=composer`. If it does not, stop and ask the
-parent to classify the task before editing. For Playwright or end-to-end authoring/repair, it must
-also include `GHOSTWRITER_PLAYWRIGHT_GATE=user-verified`; otherwise stop without inspecting or
-editing the journey.
+The parent prompt must include `GHOSTWRITER_ROUTE=composer`. Optional
+`GHOSTWRITER_EFFORT=fast` is implied when omitted. For denser Composer work use
+`delegate-composer-standard` with `GHOSTWRITER_EFFORT=standard` instead. For Playwright or
+end-to-end authoring/repair, also include `GHOSTWRITER_PLAYWRIGHT_GATE=user-verified`.
 
 ## Responsibilities
 

@@ -155,7 +155,57 @@ test("denies escalate-gpt with reason on a non-GPT model", async () => {
     },
     "deny"
   );
-  assert.match(result.user_message, /GPT 5\.6/i);
+  assert.match(result.user_message, /gpt-5\.6-sol-medium|GPT 5\.6/i);
+});
+
+test("allows composer standard effort with matching model", async () => {
+  await expectPermission(
+    {
+      task:
+        "GHOSTWRITER_ROUTE=composer GHOSTWRITER_EFFORT=standard Implement the bounded adapter patch.",
+      subagent_type: "delegate-composer-standard",
+      subagent_model: "composer-2.5[fast=false]",
+    },
+    "allow"
+  );
+});
+
+test("denies composer standard effort on a fast model", async () => {
+  const result = await expectPermission(
+    {
+      task:
+        "GHOSTWRITER_ROUTE=composer GHOSTWRITER_EFFORT=standard Implement the bounded adapter patch.",
+      subagent_type: "delegate-composer-standard",
+      subagent_model: "composer-2.5-fast",
+    },
+    "deny"
+  );
+  assert.match(result.user_message, /standard effort/i);
+});
+
+test("allows escalate-gpt terra effort", async () => {
+  await expectPermission(
+    {
+      task:
+        "GHOSTWRITER_ROUTE=escalate-gpt GHOSTWRITER_EFFORT=terra ESCALATION_REASON=parity-failure Repair memory/Postgres parity.",
+      subagent_type: "escalate-gpt-terra",
+      subagent_model: "gpt-5.6-terra-medium",
+    },
+    "allow"
+  );
+});
+
+test("denies escalate-gpt-terra without terra effort", async () => {
+  const result = await expectPermission(
+    {
+      task:
+        "GHOSTWRITER_ROUTE=escalate-gpt ESCALATION_REASON=parity-failure Repair memory/Postgres parity.",
+      subagent_type: "escalate-gpt-terra",
+      subagent_model: "gpt-5.6-terra-medium",
+    },
+    "deny"
+  );
+  assert.match(result.user_message, /GHOSTWRITER_EFFORT=terra/i);
 });
 
 test("denies composer Playwright task without user-verified gate", async () => {

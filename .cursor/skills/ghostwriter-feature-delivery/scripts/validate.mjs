@@ -43,6 +43,8 @@ const requiredSkillText = [
   "Parent owns end-to-end",
   "## Delegation ladder",
   "GHOSTWRITER_ROUTE=composer",
+  "GHOSTWRITER_EFFORT=fast",
+  "GHOSTWRITER_EFFORT=standard",
   "GHOSTWRITER_ROUTE=grok",
   "GHOSTWRITER_ROUTE=escalate-opus ESCALATION_REASON=<reason>",
   "GHOSTWRITER_ROUTE=escalate-gpt ESCALATION_REASON=<reason>",
@@ -65,6 +67,11 @@ const agentRequirements = [
     model: "composer-2.5[fast=true]"
   },
   {
+    path: resolve(repositoryRoot, ".cursor/agents/delegate-composer-standard.md"),
+    name: "delegate-composer-standard",
+    model: "composer-2.5[fast=false]"
+  },
+  {
     path: resolve(repositoryRoot, ".cursor/agents/delegate-grok.md"),
     name: "delegate-grok",
     model: "grok-4.5"
@@ -78,6 +85,11 @@ const agentRequirements = [
     path: resolve(repositoryRoot, ".cursor/agents/escalate-gpt.md"),
     name: "escalate-gpt",
     model: "gpt-5.6-sol-medium"
+  },
+  {
+    path: resolve(repositoryRoot, ".cursor/agents/escalate-gpt-terra.md"),
+    name: "escalate-gpt-terra",
+    model: "gpt-5.6-terra-medium"
   }
 ];
 for (const requirement of agentRequirements) {
@@ -113,7 +125,7 @@ try {
   if (!rule.includes("ghostwriter-feature-delivery")) {
     failures.push("feature-delivery.mdc must reference ghostwriter-feature-delivery.");
   }
-  if (!rule.includes("delegate-composer")) {
+  if (!rule.includes("GHOSTWRITER_EFFORT") && !rule.includes("delegate-composer")) {
     failures.push("feature-delivery.mdc must reference the delegation ladder.");
   }
 } catch {

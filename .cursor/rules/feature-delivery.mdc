@@ -16,6 +16,7 @@ plan.
 
 Do not start product code for a feature or epic until the active plan is truthful and the skill’s
 Start + domain/design audit steps are underway. Keep analysis, planning, breakdown, synthesis, and
-acceptance on the parent; delegate well-framed development and validation through
-`delegate-composer` / `delegate-grok`, escalating to `escalate-opus` (creative) or `escalate-gpt`
-(concrete) only with a recorded reason.
+acceptance on the parent; delegate well-framed development and validation through Composer
+(`fast`/`standard`) then Grok (`high-fast`), escalating to Opus (`high`, creative) or GPT 5.6
+(`sol`/`terra`, concrete) only with a recorded reason. Pick effort with the model variant
+(`GHOSTWRITER_EFFORT`).

@@ -57,8 +57,8 @@ Once the user has accepted a plan, work in repeated, bounded loops:
 2. On the parent, analyze and break the work into bounded slices; fan out read-only research when
    helpful.
 3. Delegate most development and focused validation through the skill’s ladder
-   (`delegate-composer` → `delegate-grok` → `escalate-opus` / `escalate-gpt`); keep one writer per
-   shared version domain.
+   (Composer `fast`/`standard` → Grok → Opus creative / GPT concrete), picking effort with the
+   model variant; keep one writer per shared version domain.
 4. Parent reviews returns, stitches the vertical slice, and owns end-to-end acceptance.
 5. Run targeted checks; fix failures before continuing.
 6. Update the plan, record log, affected docs, and ADRs immediately — not at the end.
@@ -104,11 +104,12 @@ user to run routine commands.
   Playwright before the user has verified the complete planned outcome. After that explicit gate,
   audit existing journeys and add only the smallest high-value acceptance coverage. Route most
   development and validation through the model-pinned project subagents in `.cursor/agents/`, per
-  `.cursor/skills/ghostwriter-feature-delivery/SKILL.md`: `delegate-composer` (Composer 2.5) then
-  `delegate-grok` (Grok 4.5); escalate to `escalate-opus` (creative) or `escalate-gpt` (concrete)
-  only with `ESCALATION_REASON`. The parent owns end-to-end acceptance. Post-gate Playwright prompts
-  must include `GHOSTWRITER_PLAYWRIGHT_GATE=user-verified`; `.cursor/hooks.json` enforces the gate
-  and model routing.
+  `.cursor/skills/ghostwriter-feature-delivery/SKILL.md`: Composer (`fast` then `standard`) then
+  Grok (`high-fast`); escalate to Opus (`high`, creative) or GPT 5.6 (`sol` then `terra`, concrete)
+  only with `ESCALATION_REASON`. Include `GHOSTWRITER_EFFORT` when not using the route default.
+  The parent owns end-to-end acceptance. Post-gate Playwright prompts must include
+  `GHOSTWRITER_PLAYWRIGHT_GATE=user-verified`; `.cursor/hooks.json` enforces the gate, route, and
+  effort/model pairing.
 - Keep branches short-lived; prefer finishing and merging over stacking work.
 
 ## Deployments (CLI-driven — see `docs/OPERATIONS.md`)

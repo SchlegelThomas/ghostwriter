@@ -94,28 +94,34 @@ parallel research or delegates return conflicting findings.
 Cursor cannot switch the parent model mid-session. Route most development and some validation
 through pinned project subagents. Keep analysis and planning on the parent.
 
-| Route | Project subagent | Resolved model | Use when |
-|---|---|---|---|
-| Composer | `delegate-composer` | Composer 2.5 fast | Default for well-framed implementation, ordinary repairs, routine Vitest/contracts/integration, and post-gate Playwright |
-| Grok | `delegate-grok` | Grok 4.5 | Stronger efficient tier when Composer is likely to thrash or already failed with evidence |
-| Escalate Opus | `escalate-opus` | Opus-class | Creative/design-sensitive work that survived the efficient ladder (or is intrinsically creative) |
-| Escalate GPT | `escalate-gpt` | GPT 5.6 | Concrete hard work: races, migrations/parity, contracts/types/protocols, hard validation diagnosis |
+Effort is not a separate Task parameter—choose it with the model variant (slug or
+`model[fast=…]` / `[effort=…]` brackets). The parent picks **route + effort** together.
+
+| Route | Effort | Project subagent | Model pin | Use when |
+|---|---|---|---|---|
+| Composer | `fast` (default) | `delegate-composer` | `composer-2.5[fast=true]` | Default well-framed implementation, ordinary repairs, routine tests, post-gate Playwright |
+| Composer | `standard` | `delegate-composer-standard` | `composer-2.5[fast=false]` | Denser Composer slice after fast thrash, before Grok |
+| Grok | `high-fast` (default) | `delegate-grok` | `grok-4.5` / `cursor-grok-4.5-high-fast` | Stronger efficient tier when Composer fast/standard is insufficient |
+| Escalate Opus | `high` (default) | `escalate-opus` | `claude-opus-5-thinking-high` | Creative/design-sensitive escalation |
+| Escalate GPT | `sol` (default) | `escalate-gpt` | `gpt-5.6-sol-medium` | Concrete escalation (races, migrations, contracts, types) |
+| Escalate GPT | `terra` | `escalate-gpt-terra` | `gpt-5.6-terra-medium` | Stubborn concrete escalation after Sol |
 
 Escalation split:
 
 - **Opus** → creative work (living-design interpretation, design-sensitive UI, product voice).
 - **GPT 5.6** → concrete work (concurrency, migrations, contracts, type/protocol puzzles).
 
-Every delegated task prompt must include exactly one route marker:
+Every delegated task prompt must include exactly one route marker, plus effort when not the
+default:
 
-- `GHOSTWRITER_ROUTE=composer`
-- `GHOSTWRITER_ROUTE=grok`
-- `GHOSTWRITER_ROUTE=escalate-opus ESCALATION_REASON=<reason>`
-- `GHOSTWRITER_ROUTE=escalate-gpt ESCALATION_REASON=<reason>`
+- `GHOSTWRITER_ROUTE=composer` (`GHOSTWRITER_EFFORT=fast` optional default; `GHOSTWRITER_EFFORT=standard` for standard)
+- `GHOSTWRITER_ROUTE=grok` (`GHOSTWRITER_EFFORT=high-fast` optional)
+- `GHOSTWRITER_ROUTE=escalate-opus ESCALATION_REASON=<reason>` (`GHOSTWRITER_EFFORT=high` optional)
+- `GHOSTWRITER_ROUTE=escalate-gpt ESCALATION_REASON=<reason>` (`GHOSTWRITER_EFFORT=sol` optional; `GHOSTWRITER_EFFORT=terra` for Terra)
 
 When named project subagents are unavailable, use a regular Subagent with the matching explicit
-model and the same marker. The project `subagentStart` hook validates the resolved model and denies
-mismatches.
+model variant and the same markers. The project `subagentStart` hook validates route, effort, and
+model together.
 
 Bugbot / security review remain explicit user-ask only.
 

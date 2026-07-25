@@ -59,12 +59,13 @@ Use one copy per observable feature. Keep it in working notes or the active plan
 
 ## Delegation ladder
 
-Prefer `delegate-composer` (Composer 2.5), then `delegate-grok` (Grok 4.5). Escalate only with
-reason: `escalate-opus` for creative/design-sensitive work, `escalate-gpt` for concrete
-races/migrations/contracts/types. Parent owns end-to-end acceptance. Defer Playwright until the
-user verifies the complete outcome.
+Prefer Composer (`fast` → `standard`), then Grok (`high-fast`). Escalate only with reason:
+`escalate-opus` (`high`) for creative work; `escalate-gpt` (`sol` → `terra`) for concrete work.
+Effort is chosen with the model variant (`GHOSTWRITER_EFFORT=…`). Parent owns end-to-end
+acceptance. Defer Playwright until the user verifies the complete outcome.
 
 - Route marker (`composer` / `grok` / `escalate-opus` / `escalate-gpt`):
+- Effort (`fast` / `standard` / `high-fast` / `high` / `sol` / `terra`):
 - Subagent + resolved model:
 - Focused command/result:
 - Composer attempt count:
