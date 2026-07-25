@@ -54,16 +54,20 @@ For meaningful product implementation, read and follow
 Once the user has accepted a plan, work in repeated, bounded loops:
 
 1. Take the next coherent task from the plan.
-2. Fan out read-only research when helpful; keep shared-state edits serial on the parent.
-3. Implement the smallest complete slice, including tests (model-routed per the skill).
-4. Run targeted checks; fix failures before continuing.
-5. Update the plan, record log, affected docs, and ADRs immediately — not at the end.
-6. Reassess acceptance criteria and move to the next task.
+2. On the parent, analyze and break the work into bounded slices; fan out read-only research when
+   helpful.
+3. Delegate most development and focused validation through the skill’s ladder
+   (`delegate-composer` → `delegate-grok` → `escalate-opus` / `escalate-gpt`); keep one writer per
+   shared version domain.
+4. Parent reviews returns, stitches the vertical slice, and owns end-to-end acceptance.
+5. Run targeted checks; fix failures before continuing.
+6. Update the plan, record log, affected docs, and ADRs immediately — not at the end.
+7. Reassess acceptance criteria and move to the next task.
 
 Continue until the plan is complete or a real decision requires the user. Stop and ask before
 making a material product, architecture, cost, security, data-loss, or external-side-effect
-choice not already accepted in the plan. Do not confuse a passing test suite with meeting the
-acceptance criteria.
+choice not already accepted in the plan. Do not confuse a passing test suite—or a green
+subagent—with meeting the acceptance criteria.
 
 ## Documentation and ADRs
 
@@ -98,10 +102,11 @@ user to run routine commands.
   in the same branch — not as a follow-up. During implementation, verify writer-visible work
   directly in a real browser and record the walkthrough; do not author, repair, or repeatedly run
   Playwright before the user has verified the complete planned outcome. After that explicit gate,
-  audit existing journeys and add only the smallest high-value acceptance coverage. Route all new
-  or rewritten tests through the model-pinned project subagents in `.cursor/agents/`, per
-  `.cursor/skills/ghostwriter-feature-delivery/SKILL.md`: `routine-tests` (Composer 2.5 fast)
-  first, and `hard-tests` (Grok 4.5) only for recorded hard escalation. Post-gate Playwright prompts
+  audit existing journeys and add only the smallest high-value acceptance coverage. Route most
+  development and validation through the model-pinned project subagents in `.cursor/agents/`, per
+  `.cursor/skills/ghostwriter-feature-delivery/SKILL.md`: `delegate-composer` (Composer 2.5) then
+  `delegate-grok` (Grok 4.5); escalate to `escalate-opus` (creative) or `escalate-gpt` (concrete)
+  only with `ESCALATION_REASON`. The parent owns end-to-end acceptance. Post-gate Playwright prompts
   must include `GHOSTWRITER_PLAYWRIGHT_GATE=user-verified`; `.cursor/hooks.json` enforces the gate
   and model routing.
 - Keep branches short-lived; prefer finishing and merging over stacking work.

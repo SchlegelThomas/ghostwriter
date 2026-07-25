@@ -27,6 +27,16 @@
         <li>Validator now checks skill name, rule presence, parallel/model/delegated sections, and bans “autonomous” in the skill.</li>
       </ul>
     </article>
+
+    <article>
+      <h2>2026-07-24 — Delegation ladder rename</h2>
+      <p>Founder directed: parent owns end-to-end and spends capacity on analysis/planning/breakdown; most development and some validation go to Composer then Grok; escalate Opus for creative work and GPT 5.6 for concrete work.</p>
+      <ul>
+        <li>Replaced <code>routine-tests</code> / <code>hard-tests</code> with <code>delegate-composer</code>, <code>delegate-grok</code>, <code>escalate-opus</code>, <code>escalate-gpt</code>.</li>
+        <li>Markers are now <code>GHOSTWRITER_ROUTE=composer|grok|escalate-opus|escalate-gpt</code>.</li>
+        <li>Hook renamed to <code>enforce-delegate-model-routing.mjs</code>; covers delegated development/validation, not only tests.</li>
+      </ul>
+    </article>
   </main>
 </body>
 </html>

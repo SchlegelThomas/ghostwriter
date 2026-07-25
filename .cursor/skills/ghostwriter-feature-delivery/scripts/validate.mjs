@@ -40,12 +40,15 @@ for (const link of links) {
 }
 
 const requiredSkillText = [
-  "GHOSTWRITER_TEST_ROUTING=routine",
-  "GHOSTWRITER_TEST_ROUTING=hard ESCALATION_REASON=<reason>",
+  "Parent owns end-to-end",
+  "## Delegation ladder",
+  "GHOSTWRITER_ROUTE=composer",
+  "GHOSTWRITER_ROUTE=grok",
+  "GHOSTWRITER_ROUTE=escalate-opus ESCALATION_REASON=<reason>",
+  "GHOSTWRITER_ROUTE=escalate-gpt ESCALATION_REASON=<reason>",
   "GHOSTWRITER_PLAYWRIGHT_GATE=user-verified",
   "browser walkthrough",
   "## Parallel work",
-  "## Model defaults",
   "## Delegated-task return shape",
   "stop reason"
 ];
@@ -57,14 +60,24 @@ for (const text of requiredSkillText) {
 
 const agentRequirements = [
   {
-    path: resolve(repositoryRoot, ".cursor/agents/routine-tests.md"),
-    name: "routine-tests",
+    path: resolve(repositoryRoot, ".cursor/agents/delegate-composer.md"),
+    name: "delegate-composer",
     model: "composer-2.5[fast=true]"
   },
   {
-    path: resolve(repositoryRoot, ".cursor/agents/hard-tests.md"),
-    name: "hard-tests",
+    path: resolve(repositoryRoot, ".cursor/agents/delegate-grok.md"),
+    name: "delegate-grok",
     model: "grok-4.5"
+  },
+  {
+    path: resolve(repositoryRoot, ".cursor/agents/escalate-opus.md"),
+    name: "escalate-opus",
+    model: "claude-opus-5-thinking-high"
+  },
+  {
+    path: resolve(repositoryRoot, ".cursor/agents/escalate-gpt.md"),
+    name: "escalate-gpt",
+    model: "gpt-5.6-sol-medium"
   }
 ];
 for (const requirement of agentRequirements) {
@@ -81,6 +94,16 @@ for (const requirement of agentRequirements) {
   }
 }
 
+const retiredAgents = ["routine-tests.md", "hard-tests.md"];
+for (const retired of retiredAgents) {
+  try {
+    await access(resolve(repositoryRoot, ".cursor/agents", retired));
+    failures.push(`Retired project subagent must be removed: ${retired}`);
+  } catch {
+    // expected missing
+  }
+}
+
 const rulePath = resolve(repositoryRoot, ".cursor/rules/feature-delivery.mdc");
 try {
   const rule = await readFile(rulePath, "utf8");
@@ -90,13 +113,16 @@ try {
   if (!rule.includes("ghostwriter-feature-delivery")) {
     failures.push("feature-delivery.mdc must reference ghostwriter-feature-delivery.");
   }
+  if (!rule.includes("delegate-composer")) {
+    failures.push("feature-delivery.mdc must reference the delegation ladder.");
+  }
 } catch {
   failures.push(`Required always-applied rule does not exist: ${rulePath}`);
 }
 
 const hookScript = resolve(
   repositoryRoot,
-  ".cursor/hooks/enforce-test-model-routing.mjs"
+  ".cursor/hooks/enforce-delegate-model-routing.mjs"
 );
 try {
   await access(hookScript);
@@ -114,12 +140,12 @@ try {
     !starts.some(
       (entry) =>
         entry?.command ===
-          "node .cursor/hooks/enforce-test-model-routing.mjs" &&
+          "node .cursor/hooks/enforce-delegate-model-routing.mjs" &&
         entry?.failClosed === true
     )
   ) {
     failures.push(
-      ".cursor/hooks.json must fail closed on the test model-routing subagentStart hook."
+      ".cursor/hooks.json must fail closed on the delegate model-routing subagentStart hook."
     );
   }
 } catch {

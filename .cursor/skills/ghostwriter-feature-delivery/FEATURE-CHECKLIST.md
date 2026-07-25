@@ -10,6 +10,13 @@ Use one copy per observable feature. Keep it in working notes or the active plan
 - Refusal/error states:
 - Explicit non-goals:
 
+## Parent frame
+
+- Analysis / plan notes:
+- Bounded slices for delegates:
+- Shared version domains kept serial:
+- End-to-end acceptance owner: parent
+
 ## Domain map
 
 - Canonical objects and IDs:
@@ -50,25 +57,19 @@ Use one copy per observable feature. Keep it in working notes or the active plan
 - Conflicting findings resolved by parent:
 - Shared write targets kept serial:
 
-## Tests
+## Delegation ladder
 
-Route authorship/repair through model-pinned project subagents: `routine-tests` (Composer 2.5
-fast) by default; `hard-tests` (Grok 4.5) only for an intrinsically hard case or after two distinct
-evidence-backed routine attempts. During implementation, use a real-browser walkthrough instead
-of writing Playwright. Defer Playwright until the user explicitly verifies the complete outcome.
+Prefer `delegate-composer` (Composer 2.5), then `delegate-grok` (Grok 4.5). Escalate only with
+reason: `escalate-opus` for creative/design-sensitive work, `escalate-gpt` for concrete
+races/migrations/contracts/types. Parent owns end-to-end acceptance. Defer Playwright until the
+user verifies the complete outcome.
 
-- Core invariants:
-- Repository parity/rollback:
-- Backend auth/validation/conflict:
-- Client state:
-- Wide browser walkthrough:
-- Narrow/accessibility browser walkthrough:
-- Performance or scale fixture:
-- Routing marker (`routine` or `hard`):
+- Route marker (`composer` / `grok` / `escalate-opus` / `escalate-gpt`):
 - Subagent + resolved model:
 - Focused command/result:
-- Composer attempt count (maximum 2):
-- Hard escalation reason/evidence (if any):
+- Composer attempt count:
+- Grok attempt count:
+- Escalation reason/evidence (if any):
 - User verification received:
 - Deferred Playwright audit (`GHOSTWRITER_PLAYWRIGHT_GATE=user-verified`):
 - Full suite run only after user verification and focused green:
@@ -108,6 +109,7 @@ For each Task/subagent:
 - [ ] Prior workflows pass direct browser walkthroughs
 - [ ] Docs and handoff are current
 - [ ] Delegated “parent still owns” items closed
+- [ ] Parent completed end-to-end acceptance (not subagent-green alone)
 
 ## Evidence
 
