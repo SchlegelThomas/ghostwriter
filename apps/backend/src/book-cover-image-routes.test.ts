@@ -6,7 +6,10 @@ import {
   buildBookCoverObjectKey,
   type CaptureObjectStoragePort
 } from "@ghostwriter/core";
-import { clearBookCoverImageJobsForTests } from "./book-cover-image-jobs.js";
+import {
+  clearBookCoverImageJobsForTests,
+  settleBookCoverImageJobsForTests
+} from "./book-cover-image-jobs.js";
 import { createTestProviderKekRuntimeConfig } from "./provider-kek-config.js";
 import { createUnavailableCaptureObjectStorage } from "./r2-capture-object-storage.js";
 import type { ScenePartnerImageGenerator } from "./scene-partner-routes.js";
@@ -65,6 +68,7 @@ async function configureOpenAi(app: Awaited<ReturnType<typeof openSeededApp>>["a
 }
 
 afterEach(async () => {
+  await settleBookCoverImageJobsForTests();
   clearBookCoverImageJobsForTests();
   while (testBackendClosers.length > 0) {
     const close = testBackendClosers.pop();

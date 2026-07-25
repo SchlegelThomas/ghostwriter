@@ -74,6 +74,7 @@ export type BookCoverImageGenerator = (input: Readonly<{
 }>) => Promise<OpenAiImageGenerationResult>;
 
 const jobs = new Map<string, MutableJob>();
+const pendingJobRuns = new Set<Promise<void>>();
 
 function clampCount(count: number | undefined): number {
   if (count === undefined) {
@@ -245,6 +246,18 @@ export function toBookCoverImageJobSnapshot(
 
 export function clearBookCoverImageJobsForTests(): void {
   jobs.clear();
+}
+
+/** Await in-flight async job runners so Vitest can exit hermetically. */
+export async function settleBookCoverImageJobsForTests(): Promise<void> {
+  await Promise.allSettled([...pendingJobRuns]);
+}
+
+export function trackBookCoverImageJobRun(run: Promise<void>): void {
+  pendingJobRuns.add(run);
+  void run.finally(() => {
+    pendingJobRuns.delete(run);
+  });
 }
 
 export async function runBookCoverImageJob(input: Readonly<{

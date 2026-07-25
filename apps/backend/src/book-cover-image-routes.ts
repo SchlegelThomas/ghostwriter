@@ -30,7 +30,8 @@ import {
   createBookCoverImageJob,
   getBookCoverImageJob,
   runBookCoverImageJob,
-  toBookCoverImageJobSnapshot
+  toBookCoverImageJobSnapshot,
+  trackBookCoverImageJobRun
 } from "./book-cover-image-jobs.js";
 import { CaptureObjectStorageError } from "./capture-object-storage-error.js";
 import { providerAgentErrorStatusAndBody } from "./provider-agent-api.js";
@@ -309,13 +310,15 @@ export function registerBookCoverImageRoutes(
           now
         });
 
-        void runBookCoverImageJob({
-          jobId: job.id,
-          generateImage,
-          apiKey,
-          size: COVER_IMAGE_SIZE,
-          now
-        });
+        trackBookCoverImageJobRun(
+          runBookCoverImageJob({
+            jobId: job.id,
+            generateImage,
+            apiKey,
+            size: COVER_IMAGE_SIZE,
+            now
+          })
+        );
 
         return context.json({ jobId: job.id, status: "queued" as const }, 202);
       } catch (error) {
