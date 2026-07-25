@@ -16,11 +16,14 @@ const frontmatter = source.match(/^---\n([\s\S]*?)\n---/u)?.[1] ?? "";
 const name = frontmatter.match(/^name:\s*(.+)$/mu)?.[1]?.trim();
 const description = frontmatter.match(/^description:\s*(.+)$/mu)?.[1]?.trim();
 
-if (name !== "ghostwriter-autonomous-delivery") {
+if (name !== "ghostwriter-feature-delivery") {
   failures.push("Skill name is missing or invalid.");
 }
 if (description === undefined || description.length === 0 || description.length > 1024) {
   failures.push("Skill description must contain 1–1024 characters.");
+}
+if (/\bautonomous\b/iu.test(source)) {
+  failures.push("SKILL.md must not use the word “autonomous”.");
 }
 
 const links = [...source.matchAll(/\[[^\]]+\]\(([^)]+)\)/gu)].map((match) => match[1]);
@@ -40,11 +43,15 @@ const requiredSkillText = [
   "GHOSTWRITER_TEST_ROUTING=routine",
   "GHOSTWRITER_TEST_ROUTING=hard ESCALATION_REASON=<reason>",
   "GHOSTWRITER_PLAYWRIGHT_GATE=user-verified",
-  "browser walkthrough"
+  "browser walkthrough",
+  "## Parallel work",
+  "## Model defaults",
+  "## Delegated-task return shape",
+  "stop reason"
 ];
 for (const text of requiredSkillText) {
   if (!source.includes(text)) {
-    failures.push(`SKILL.md is missing required test-routing text: ${text}`);
+    failures.push(`SKILL.md is missing required guidance text: ${text}`);
   }
 }
 
@@ -72,6 +79,19 @@ for (const requirement of agentRequirements) {
   } catch {
     failures.push(`Required project subagent does not exist: ${requirement.path}`);
   }
+}
+
+const rulePath = resolve(repositoryRoot, ".cursor/rules/feature-delivery.mdc");
+try {
+  const rule = await readFile(rulePath, "utf8");
+  if (!rule.includes("alwaysApply: true")) {
+    failures.push("feature-delivery.mdc must set alwaysApply: true.");
+  }
+  if (!rule.includes("ghostwriter-feature-delivery")) {
+    failures.push("feature-delivery.mdc must reference ghostwriter-feature-delivery.");
+  }
+} catch {
+  failures.push(`Required always-applied rule does not exist: ${rulePath}`);
 }
 
 const hookScript = resolve(

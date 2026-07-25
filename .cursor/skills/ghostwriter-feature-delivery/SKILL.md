@@ -1,19 +1,21 @@
 ---
-name: ghostwriter-autonomous-delivery
-description: Delivers substantial Ghostwriter product features in autonomous vertical loops with planning records, domain and living-design audits, cumulative coherence reviews, verification, and checkpoint commits. Use whenever implementing or refactoring Ghostwriter domain, storage, API, editor, Canvas, UI, or writer workflows.
+name: ghostwriter-feature-delivery
+description: Delivers Ghostwriter product features and epics in vertical checkpoints with planning records, domain and living-design audits, parallel read-only research, model-routed tests, coherence reviews, verification, and checkpoint commits. Use whenever implementing or refactoring Ghostwriter domain, storage, API, editor, Canvas, UI, or writer workflows.
 ---
 
-# Ghostwriter Autonomous Delivery
+# Ghostwriter Feature Delivery
 
 Use this skill for meaningful Ghostwriter implementation. It supplements `AGENTS.md`; repository
 rules, accepted ADRs, and explicit user direction remain authoritative.
+
+Trivial fixes (typos, one-liners) do not need this skill or a plan.
 
 ## Start
 
 1. Read `AGENTS.md`, `plans/WHERE-I-LEFT-OFF.html`, the active plan and record log.
 2. Read `docs/PRODUCT.md`, `docs/ARCHITECTURE.md`, and `docs/OPERATIONS.md` where relevant.
-3. For product, UX, editor, Canvas, reader, or workflow work, read
-   `plans/designs/Ghostwriter Mockups 2.0.html`.
+3. For product, UX, editor, Canvas, reader, or workflow work, read the living design that owns
+   the surface (`plans/designs/Ghostwriter Mockups 2.0.html`, `3.0.html`, or `4.0.html`).
 4. Copy the feature checkpoint from [FEATURE-CHECKLIST.md](FEATURE-CHECKLIST.md) into working notes.
 5. Make the plan truthful before product code: intent, acceptance, tasks, tests, docs/ADR impact,
    risks, and todos.
@@ -50,23 +52,59 @@ State which source is authoritative when design language conflicts with ADRs. Ne
 Canvas order is manuscript order, that browser recovery is offline storage, or that a proposal is
 canonical.
 
+## Parallel work
+
+Parallelize reading and bounded test authorship. Serialize anything that mutates shared canonical
+state.
+
+| Work | Parallel? | Who / model |
+|---|---|---|
+| Read-only codebase, design, or ADR digs | Yes — fan out early | `explore` (fast) |
+| Independent inventories that do not share write targets | Yes | `explore` or scoped Task |
+| Living-design vs architecture conflict scan | Yes with research | Parent synthesizes |
+| Core → storage → API → UI for one checkpoint | No — serial inside-out | Parent |
+| Two checkpoints that touch the same canonical rows/versions | No | Parent |
+| New or rewritten tests | Yes across layers after parent frames each | `routine-tests` / `hard-tests` |
+| Coherence review, browser walkthrough framing, docs truth | No | Parent |
+| Single failing CI check diagnosis | Optional one-shot | `ci-investigator` |
+
+Do not run two writers against the same files or version domains. Parent owns synthesis when
+parallel research returns conflicting findings.
+
+## Model defaults
+
+Cursor cannot switch the parent model mid-session. Route cost-sensitive work through pinned
+project subagents or explicit models.
+
+| Task class | Default | Escalate |
+|---|---|---|
+| Feature design, domain, binding, coherence, user-facing decisions | Parent (current session model) | Stay on parent |
+| Multi-file discovery / “where does X live?” | `explore`, fast | Parent if findings conflict |
+| Routine Vitest, contracts, integration, post-gate Playwright | `routine-tests` → Composer 2.5 fast | — |
+| Hard races, parity, a11y, or two failed routine repairs | `hard-tests` → Grok 4.5 | With `ESCALATION_REASON` |
+| Bugbot / security review | Only on explicit user ask | Existing review subagents |
+
+Do not add parallel product-implementation subagents for the same checkpoint. Implementation and
+coherence stay on the parent.
+
 ## Implement inside-out
 
 For each checkpoint:
 
 1. Update the active plan/record with the selected outcome and any decision.
-2. Implement core types, invariants, commands/queries, and repository ports.
-3. Implement memory and Postgres adapters plus forward migration when persistence changes.
-4. Bind authenticated backend contracts with bounded payloads and stable content-free errors.
-5. Bind client state and UI from the living design; preserve keyboard and screen-reader parity.
-6. Update capabilities and MCP parity/exception records.
-7. Add targeted unit, contract, integration, and state tests via the **test authorship routing**
+2. Fan out read-only research when the domain map is unclear; synthesize before editing.
+3. Implement core types, invariants, commands/queries, and repository ports.
+4. Implement memory and Postgres adapters plus forward migration when persistence changes.
+5. Bind authenticated backend contracts with bounded payloads and stable content-free errors.
+6. Bind client state and UI from the living design; preserve keyboard and screen-reader parity.
+7. Update capabilities and MCP parity/exception records.
+8. Add targeted unit, contract, integration, and state tests via the **test authorship routing**
    below.
-8. Walk the observable outcome in a real browser and record what was exercised.
-9. Run the checkpoint verification ladder.
-10. Perform the cumulative coherence review.
-11. Update docs and the record log immediately.
-12. If commits are authorized, create one conventional checkpoint commit.
+9. Walk the observable outcome in a real browser and record what was exercised.
+10. Run the checkpoint verification ladder.
+11. Perform the cumulative coherence review.
+12. Update docs and the record log immediately.
+13. If commits are authorized, create one conventional checkpoint commit.
 
 Never let a transport mutate canonical tables around core policy. Never route prose autosave,
 project metadata, and Canvas gestures through one coarse version.
@@ -75,8 +113,8 @@ project metadata, and Canvas gestures through one coarse version.
 
 When a checkpoint needs new or materially rewritten tests (Vitest unit/integration, repository
 contracts, backend route suites, or post-acceptance Playwright journeys), do **not** author or
-repeatedly repair them inline in the parent agent. Cursor cannot switch the parent model
-automatically; deterministic routing happens by delegating to a model-pinned project subagent:
+repeatedly repair them inline in the parent agent. Deterministic routing happens by delegating to
+a model-pinned project subagent:
 
 | Route | Project subagent | Resolved model | Use when |
 |---|---|---|---|
@@ -129,6 +167,22 @@ Parent agent remains responsible for:
 Keep the parent on implementation, coherence, and docs. Prefer one bounded test subagent per layer
 or journey rather than a sprawling “write all tests” prompt.
 
+## Delegated-task return shape
+
+Every Task or project subagent must return:
+
+- outcome attempted;
+- files touched (or none);
+- evidence (focused command + result, or walkthrough notes);
+- open risks / what the parent must still do;
+- stop reason (`done`, `blocked`, or `escalate`).
+
+The parent may not check a plan todo or claim a checkpoint until:
+
+1. checklist domains for that checkpoint are addressed or listed as explicit non-goals;
+2. applicable verification-ladder steps have evidence in the record log;
+3. every delegated “parent still owns” item is closed or explicitly deferred with a reason.
+
 ## Cumulative coherence review
 
 After every feature, review the whole built product—not only the new diff:
@@ -179,7 +233,7 @@ Update alongside implementation:
 Preserve the living design. Additive proposals require explicit user direction and remain labeled
 until accepted.
 
-## Autonomous decisions and check-ins
+## When to proceed vs check in
 
 Proceed without interruption for reversible choices inside accepted plans and ADRs. Use existing
 patterns and the smallest coherent implementation.
@@ -223,5 +277,7 @@ A checkpoint is done only when:
 - domain/storage/API/client tests pass;
 - prior features remain coherent;
 - docs and plan truth match the implementation;
+- delegated return items the parent still owned are closed;
+- verification-ladder evidence is recorded for applicable steps;
 - no new diagnostics or secret artifacts exist;
 - the checkpoint is committed when authorized.

@@ -45,13 +45,17 @@ plans. They are durable inputs, not active plans, and are never archived with a 
   ADRs, security rules, and the active plan still govern implementation. Surface conflicts rather
   than silently choosing one source.
 
-## Autonomous delivery loop
+## Feature delivery loop
 
-Once the user has accepted a plan, work independently in repeated, bounded loops:
+For meaningful product implementation, read and follow
+`.cursor/skills/ghostwriter-feature-delivery/SKILL.md` (also required by
+`.cursor/rules/feature-delivery.mdc`). Trivial fixes do not need the skill.
+
+Once the user has accepted a plan, work in repeated, bounded loops:
 
 1. Take the next coherent task from the plan.
-2. Read the local code and documentation it affects.
-3. Implement the smallest complete slice, including tests.
+2. Fan out read-only research when helpful; keep shared-state edits serial on the parent.
+3. Implement the smallest complete slice, including tests (model-routed per the skill).
 4. Run targeted checks; fix failures before continuing.
 5. Update the plan, record log, affected docs, and ADRs immediately — not at the end.
 6. Reassess acceptance criteria and move to the next task.
@@ -80,7 +84,8 @@ acceptance criteria.
 
 ## Git workflow
 
-This repo is git- and CLI-driven. Agents are expected to drive git, not avoid it.
+This repo is git- and CLI-driven. Prefer running git and project CLIs directly over asking the
+user to run routine commands.
 
 - **Never commit directly to `main`.** All work lands via PR with green CI.
 - **One plan = one feature branch.** When you start a plan, branch from up-to-date `main`
@@ -95,7 +100,7 @@ This repo is git- and CLI-driven. Agents are expected to drive git, not avoid it
   Playwright before the user has verified the complete planned outcome. After that explicit gate,
   audit existing journeys and add only the smallest high-value acceptance coverage. Route all new
   or rewritten tests through the model-pinned project subagents in `.cursor/agents/`, per
-  `.cursor/skills/ghostwriter-autonomous-delivery/SKILL.md`: `routine-tests` (Composer 2.5 fast)
+  `.cursor/skills/ghostwriter-feature-delivery/SKILL.md`: `routine-tests` (Composer 2.5 fast)
   first, and `hard-tests` (Grok 4.5) only for recorded hard escalation. Post-gate Playwright prompts
   must include `GHOSTWRITER_PLAYWRIGHT_GATE=user-verified`; `.cursor/hooks.json` enforces the gate
   and model routing.

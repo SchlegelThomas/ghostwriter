@@ -1,0 +1,18 @@
+---
+description: Require the Ghostwriter feature-delivery skill for features and epics
+alwaysApply: true
+---
+
+# Feature delivery
+
+Before implementing or refactoring Ghostwriter domain, storage, API, editor, Canvas, UI, or
+writer workflows, read and follow
+`.cursor/skills/ghostwriter-feature-delivery/SKILL.md`.
+
+That skill governs vertical checkpoints, parallel read-only research, model-routed tests,
+coherence review, verification, and documentation. Trivial fixes (typos, one-liners) are exempt
+and do not need a plan.
+
+Do not start product code for a feature or epic until the active plan is truthful and the skill’s
+Start + domain/design audit steps are underway. Keep implementation and coherence on the parent;
+fan out explore/research and model-pinned test subagents per the skill.

@@ -44,6 +44,12 @@ Use one copy per observable feature. Keep it in working notes or the active plan
 - Capability registry:
 - MCP binding or explicit exception:
 
+## Parallel research
+
+- Fan-out digs launched (paths/questions):
+- Conflicting findings resolved by parent:
+- Shared write targets kept serial:
+
 ## Tests
 
 Route authorship/repair through model-pinned project subagents: `routine-tests` (Composer 2.5
@@ -66,6 +72,16 @@ of writing Playwright. Defer Playwright until the user explicitly verifies the c
 - User verification received:
 - Deferred Playwright audit (`GHOSTWRITER_PLAYWRIGHT_GATE=user-verified`):
 - Full suite run only after user verification and focused green:
+
+## Delegated work
+
+For each Task/subagent:
+
+- Outcome attempted:
+- Files touched:
+- Evidence:
+- Parent still owns:
+- Stop reason (`done` / `blocked` / `escalate`):
 
 ## Documentation
 
@@ -91,6 +107,7 @@ of writing Playwright. Defer Playwright until the user explicitly verifies the c
 - [ ] Capabilities/MCP exceptions are truthful
 - [ ] Prior workflows pass direct browser walkthroughs
 - [ ] Docs and handoff are current
+- [ ] Delegated “parent still owns” items closed
 
 ## Evidence
 

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Feature delivery harness</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan</p>
+      <h1>Feature delivery harness</h1>
+      <p class="meta"><strong>Status:</strong> active<br>
+        <strong>Branch:</strong> <code>chore/feature-delivery-harness</code><br>
+        <strong>Owner:</strong> founder + agent</p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Tighten the Cursor delivery harness so feature and epic work always follows the project skill, uses parallel read-only work and model-pinned test routes well, and finishes checkpoints completely—without agentic process jargon.</p>
+      <p><strong>Out of scope:</strong> product features, new implementation subagents, extra fail-closed hooks beyond the existing test-routing hook.</p>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ul>
+        <li>Skill renamed to <code>ghostwriter-feature-delivery</code> with plain wording (no “autonomous” framing in titles/instructions).</li>
+        <li>Always-applied Cursor rule requires the skill for feature/epic implementation (trivial fixes exempt).</li>
+        <li>Skill documents parallel work, model defaults, delegated return shape, and Done gates.</li>
+        <li><code>AGENTS.md</code> points at the skill for the delivery loop; test routing paths stay enforced.</li>
+        <li>Skill validator and checklist match the new name and required guidance.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks</h2>
+      <ol>
+        <li>Create plan/record; branch from main.</li>
+        <li>Rename skill directory and rewrite SKILL.md / FEATURE-CHECKLIST.md.</li>
+        <li>Add <code>.cursor/rules/feature-delivery.mdc</code>.</li>
+        <li>Update <code>AGENTS.md</code>, validator, and active path references.</li>
+        <li>Validate skill; update handoff.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li>Run <code>node .cursor/skills/ghostwriter-feature-delivery/scripts/validate.mjs</code>.</li>
+        <li>Confirm existing test-routing hook still referenced and present.</li>
+        <li>No product <code>pnpm verify</code> required (harness/docs only).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p>Update <code>AGENTS.md</code>, skill files, Cursor rule, and handoff. No ADR. Living design: not applicable.</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li><strong>Rename path:</strong> accepted — <code>ghostwriter-feature-delivery</code> with reference updates.</li>
+        <li><strong>Enforcement:</strong> always-applied rule only; no new hooks for “skill was read.”</li>
+        <li><strong>Implementation stays on parent:</strong> no routine-impl subagent in this pass.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked disabled> Plan accepted and branch created</li>
+        <li><input type="checkbox" checked disabled> Skill renamed and rewritten</li>
+        <li><input type="checkbox" checked disabled> Always-applied rule added</li>
+        <li><input type="checkbox" checked disabled> AGENTS.md + references updated</li>
+        <li><input type="checkbox" checked disabled> Validator green; handoff updated</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
