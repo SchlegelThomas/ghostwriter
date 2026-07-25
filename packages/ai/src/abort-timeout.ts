@@ -38,10 +38,6 @@ export function combineAbortWithTimeout(
           finish("timeout");
         }, timeoutMs)
       : undefined;
-  // Allow Node to exit if a caller forgets dispose() after a successful call.
-  if (timer !== undefined && typeof timer.unref === "function") {
-    timer.unref();
-  }
 
   const onCombinedAbort = () => {
     if (timer !== undefined) {
