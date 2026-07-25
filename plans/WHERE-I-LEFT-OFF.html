@@ -11,44 +11,42 @@
     <header>
       <p class="eyebrow">Session handoff</p>
       <h1>Where we left off</h1>
-      <p><strong>Last updated:</strong> 2026-07-19 · <strong>Current branch:</strong> <code>main</code> (PR #9 merged + production deploys green)</p>
+      <p><strong>Last updated:</strong> 2026-07-24 · <strong>Current branch:</strong> <code>chore/feature-delivery-harness</code></p>
     </header>
 
     <section>
       <h2>Current state</h2>
-      <p>Writing Experience UX 4.0 + structure/cast polish landed via <a href="https://github.com/SchlegelThomas/ghostwriter/pull/9">PR #9</a>. Main CI, Deploy web, and Deploy backend all succeeded after merge.</p>
+      <p>Harness updates on <code>chore/feature-delivery-harness</code> / <a href="https://github.com/SchlegelThomas/ghostwriter/pull/11">PR #11</a>, including the Composer→Grok→Opus/GPT delegation ladder. Product backlog after PR #9 is unchanged.</p>
       <ul>
-        <li><a href="active/2026-07-19-writing-experience-ux-4/plan.html">Writing Experience UX 4.0</a></li>
-        <li><a href="active/2026-07-19-structure-cast-browse/plan.html">Structure browse · cast · launchpad actions</a></li>
+        <li><a href="active/2026-07-24-feature-delivery-harness/plan.html">Feature delivery harness</a></li>
       </ul>
-      <p>Migrations: <code>0009_writing_craft</code>, <code>0010_part_summary</code>, <code>0011_writer_publishing</code> (apply with owner profile if SP lacks ALTER).</p>
+      <p>Last product ship on <code>main</code>: Writing Experience UX 4.0 + structure/cast polish via <a href="https://github.com/SchlegelThomas/ghostwriter/pull/9">PR #9</a>.</p>
     </section>
 
     <section>
-      <h2>Done for this PR</h2>
+      <h2>Done for this harness pass</h2>
       <ul>
-        <li>Write studio, sketch/assist, Sheet/Place companions, cast link from Sheet.</li>
-        <li>Structure launchpads, Characters (K), part summaries, collapsible rail, trail roles.</li>
-        <li>Topbar de-dupe (Sign out right; Jump/Chat on rail); History rail (no floating toasts).</li>
-        <li>Canvas overview zoom (min 12%; fit floor 0.65).</li>
-        <li>Publishing profile modal; sign-in lockup polish; structure launchpad full-height chrome.</li>
-        <li>Docs/ADR updates; e2e helpers aligned to History rail + profile modal.</li>
+        <li>Skill renamed to <code>ghostwriter-feature-delivery</code>; agentic wording stripped from titles/instructions.</li>
+        <li>Always-applied rule <code>.cursor/rules/feature-delivery.mdc</code>.</li>
+        <li>Skill sections: parallel work, model defaults, delegated return shape, Done gates.</li>
+        <li><code>AGENTS.md</code> delivery loop points at the skill.</li>
       </ul>
     </section>
 
     <section>
-      <h2>Incomplete / next after merge</h2>
+      <h2>Incomplete / next</h2>
       <ol>
-        <li>Land green PR #9; production deploy applies migrations via CI.</li>
-        <li>Optional later: freehand ink, OpenAI assist provider.</li>
+        <li>Validate skill; commit when authorized; open PR if desired.</li>
+        <li>Resume product work from post–PR #9 backlog (optional freehand ink, OpenAI assist provider).</li>
       </ol>
     </section>
 
     <section>
       <h2>How to resume</h2>
       <ol>
-        <li>Checkout <code>feat/writing-experience-ux-4</code>; <code>./scripts/dev-local.sh</code>.</li>
-        <li>If columns missing: <code>DATABRICKS_PROFILE=ghostwriter-owner LAKEBASE_USER='tas9117@gmail.com' ./scripts/lakebase.sh migrate production</code> (unset SP client env first).</li>
+        <li>Checkout <code>chore/feature-delivery-harness</code>.</li>
+        <li>Read <a href="active/2026-07-24-feature-delivery-harness/plan.html">the harness plan</a> and <code>.cursor/skills/ghostwriter-feature-delivery/SKILL.md</code>.</li>
+        <li>Run <code>node .cursor/skills/ghostwriter-feature-delivery/scripts/validate.mjs</code>.</li>
       </ol>
     </section>
   </main>

@@ -3,7 +3,7 @@
   "hooks": {
     "subagentStart": [
       {
-        "command": "node .cursor/hooks/enforce-test-model-routing.mjs",
+        "command": "node .cursor/hooks/enforce-delegate-model-routing.mjs",
         "timeout": 5,
         "failClosed": true
       }

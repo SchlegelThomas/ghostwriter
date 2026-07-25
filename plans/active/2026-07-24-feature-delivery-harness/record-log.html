@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Feature delivery harness — record log</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Record log</p>
+      <h1>Feature delivery harness</h1>
+    </header>
+
+    <article>
+      <h2>2026-07-24 — Plan accepted</h2>
+      <p>Founder accepted harness recommendations: mandatory skill for features/epics, parallel-work matrix, careful model defaults, delegated completeness contract, and plain wording with skill rename to <code>ghostwriter-feature-delivery</code>. Branch <code>chore/feature-delivery-harness</code>.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-24 — Harness updates landed locally</h2>
+      <ul>
+        <li>Renamed skill directory; rewrote <code>SKILL.md</code> and <code>FEATURE-CHECKLIST.md</code>.</li>
+        <li>Added always-applied <code>.cursor/rules/feature-delivery.mdc</code>.</li>
+        <li>Updated <code>AGENTS.md</code> feature delivery loop and active plan skill pointers.</li>
+        <li>Validator now checks skill name, rule presence, parallel/model/delegated sections, and bans “autonomous” in the skill.</li>
+      </ul>
+    </article>
+
+    <article>
+      <h2>2026-07-24 — Effort variants on the ladder</h2>
+      <p>Extended routing so the parent chooses effort with the model variant via <code>GHOSTWRITER_EFFORT</code> (Cursor has no separate Task effort knob). Added <code>delegate-composer-standard</code> and <code>escalate-gpt-terra</code>; hook validates route + effort + model together.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-24 — Delegation ladder rename</h2>
+      <p>Founder directed: parent owns end-to-end and spends capacity on analysis/planning/breakdown; most development and some validation go to Composer then Grok; escalate Opus for creative work and GPT 5.6 for concrete work.</p>
+      <ul>
+        <li>Replaced <code>routine-tests</code> / <code>hard-tests</code> with <code>delegate-composer</code>, <code>delegate-grok</code>, <code>escalate-opus</code>, <code>escalate-gpt</code>.</li>
+        <li>Markers are now <code>GHOSTWRITER_ROUTE=composer|grok|escalate-opus|escalate-gpt</code>.</li>
+        <li>Hook renamed to <code>enforce-delegate-model-routing.mjs</code>; covers delegated development/validation, not only tests.</li>
+      </ul>
+    </article>
+  </main>
+</body>
+</html>
+

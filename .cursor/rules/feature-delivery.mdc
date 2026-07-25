@@ -1,0 +1,22 @@
+---
+description: Require the Ghostwriter feature-delivery skill for features and epics
+alwaysApply: true
+---
+
+# Feature delivery
+
+Before implementing or refactoring Ghostwriter domain, storage, API, editor, Canvas, UI, or
+writer workflows, read and follow
+`.cursor/skills/ghostwriter-feature-delivery/SKILL.md`.
+
+That skill governs vertical checkpoints, parent-owned end-to-end acceptance, parallel research,
+Composer/Grok delegation for most development, expensive Opus/GPT escalation, coherence review,
+verification, and documentation. Trivial fixes (typos, one-liners) are exempt and do not need a
+plan.
+
+Do not start product code for a feature or epic until the active plan is truthful and the skill’s
+Start + domain/design audit steps are underway. Keep analysis, planning, breakdown, synthesis, and
+acceptance on the parent; delegate well-framed development and validation through Composer
+(`fast`/`standard`) then Grok (`high-fast`), escalating to Opus (`high`, creative) or GPT 5.6
+(`sol`/`terra`, concrete) only with a recorded reason. Pick effort with the model variant
+(`GHOSTWRITER_EFFORT`).
