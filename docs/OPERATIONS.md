@@ -174,8 +174,9 @@ export, and deploys it to the Pages production environment. No manual production
 
 ### CI — every PR and push to main
 
-`.github/workflows/ci.yml` runs `pnpm verify` (typecheck + lint + test). Merging requires
-green CI. Both workflows are guarded to no-op until the monorepo is scaffolded
+`.github/workflows/ci.yml` runs `pnpm verify` (typecheck + lint + unit/integration tests only).
+Playwright browser journeys (`pnpm test:e2e`) stay local and are not required for merge. Merging
+requires green CI. Both workflows are guarded to no-op until the monorepo is scaffolded
 (they check for `package.json`), so they won't fail on docs-only work in the meantime.
 
 Storage and backend tests run against **PGlite** (in-process Postgres), so `pnpm verify` needs no
