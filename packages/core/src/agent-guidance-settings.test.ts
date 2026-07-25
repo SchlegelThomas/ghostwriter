@@ -38,6 +38,49 @@ import type { AccountId } from "./identity.js";
 import type { DomainIdKind, IdGenerator } from "./project-repository.js";
 
 const OWNER = accountId("account-guidance-owner");
+
+const BASE64_ALPHABET =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/** Platform-neutral base64 helpers — avoid Node `Buffer` in core typecheck. */
+function utf8ToBase64(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let output = "";
+  for (let index = 0; index < bytes.length; index += 3) {
+    const a = bytes[index] ?? 0;
+    const b = bytes[index + 1];
+    const c = bytes[index + 2];
+    const triple =
+      (a << 16) |
+      ((b ?? 0) << 8) |
+      (c ?? 0);
+    output += BASE64_ALPHABET[(triple >> 18) & 63];
+    output += BASE64_ALPHABET[(triple >> 12) & 63];
+    output += b === undefined ? "=" : BASE64_ALPHABET[(triple >> 6) & 63];
+    output += c === undefined ? "=" : BASE64_ALPHABET[triple & 63];
+  }
+  return output;
+}
+
+function base64ToUtf8(value: string): string {
+  const cleaned = value.replace(/=+$/u, "");
+  const bytes: number[] = [];
+  for (let index = 0; index < cleaned.length; index += 4) {
+    const enc1 = BASE64_ALPHABET.indexOf(cleaned[index] ?? "");
+    const enc2 = BASE64_ALPHABET.indexOf(cleaned[index + 1] ?? "");
+    const enc3 = BASE64_ALPHABET.indexOf(cleaned[index + 2] ?? "A");
+    const enc4 = BASE64_ALPHABET.indexOf(cleaned[index + 3] ?? "A");
+    const triple = (enc1 << 18) | (enc2 << 12) | (enc3 << 6) | enc4;
+    bytes.push((triple >> 16) & 255);
+    if (cleaned[index + 2] !== undefined && cleaned[index + 2] !== "=") {
+      bytes.push((triple >> 8) & 255);
+    }
+    if (cleaned[index + 3] !== undefined && cleaned[index + 3] !== "=") {
+      bytes.push(triple & 255);
+    }
+  }
+  return new TextDecoder().decode(Uint8Array.from(bytes));
+}
 const STRANGER = accountId("account-guidance-stranger");
 const NOW = "2026-07-24T22:00:00.000Z";
 const OPENAI_KEY = `sk-${"a".repeat(40)}`;
@@ -95,16 +138,17 @@ function createFakeCrypto(): ProviderCredentialCryptoPort & {
       });
       return Object.freeze({
         kekVersion: "kek-v1",
-        ciphertextB64: Buffer.from(payload, "utf8").toString("base64"),
-        ivB64: Buffer.from("0123456789abcdef").toString("base64"),
-        authTagB64: Buffer.from("abcdef0123456789").toString("base64")
+        ciphertextB64: utf8ToBase64(payload),
+        ivB64: utf8ToBase64("0123456789abcdef"),
+        authTagB64: utf8ToBase64("abcdef0123456789")
       });
     },
     async decrypt(input) {
       decryptCalls.push(input);
-      const payload = JSON.parse(
-        Buffer.from(input.material.ciphertextB64, "base64").toString("utf8")
-      ) as { aad: string; plaintext: string };
+      const payload = JSON.parse(base64ToUtf8(input.material.ciphertextB64)) as {
+        aad: string;
+        plaintext: string;
+      };
       if (payload.aad !== providerCredentialAad(input)) {
         throw new ProviderCredentialCryptoContextError();
       }
@@ -559,8 +603,8 @@ describe("provider credential envelope factory", () => {
         version: 1,
         kekVersion: "kek-v1",
         ciphertextB64: "not base64 spaces",
-        ivB64: Buffer.from("0123456789abcdef").toString("base64"),
-        authTagB64: Buffer.from("abcdef0123456789").toString("base64"),
+        ivB64: utf8ToBase64("0123456789abcdef"),
+        authTagB64: utf8ToBase64("abcdef0123456789"),
         maskedHint: "…1234",
         validationState: "unvalidated",
         createdAt: NOW,
