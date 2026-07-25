@@ -19,6 +19,8 @@ export type WorkspaceJumpTarget = Readonly<{
   selection?: ManuscriptSelection;
   mode?: WorkspaceSurfaceMode;
   openReader?: boolean;
+  openCapture?: boolean;
+  openInbox?: boolean;
   toggleStructure?: boolean;
   toggleChat?: boolean;
   toggleJump?: boolean;
@@ -87,6 +89,20 @@ export function buildWorkspaceJumpTargets(
       title: "Quick Jump",
       subtitle: "Jump to book components · ⌘P",
       toggleJump: true
+    },
+    {
+      id: "action:capture",
+      kind: "panel",
+      title: "New Capture",
+      subtitle: "Quick capture without hierarchy",
+      openCapture: true
+    },
+    {
+      id: "action:inbox",
+      kind: "panel",
+      title: "Open Inbox",
+      subtitle: "Acknowledged captures",
+      openInbox: true
     }
   ];
 

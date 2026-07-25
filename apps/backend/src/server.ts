@@ -8,9 +8,13 @@ const runtime = createBackendRuntime(config);
 const app = createApp({
   services: runtime.services,
   writing: runtime.writing,
+  captures: runtime.captures,
+  captureAttachments: runtime.captureAttachments,
+  capturePromotions: runtime.capturePromotions,
   canvas: runtime.canvas,
   reader: runtime.reader,
   identity: runtime.identity,
+  agentProvider: runtime.agentProvider,
   auth: runtime.auth,
   allowedOrigins: config.auth.trustedOrigins
 });

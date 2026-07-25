@@ -63,7 +63,16 @@ export type DomainIdKind =
   | "sceneVariant"
   | "canvasObject"
   | "canvasLink"
-  | "canvasRevision";
+  | "canvasRevision"
+  | "capture"
+  | "captureRevision"
+  | "captureDocumentBlock"
+  | "attachment"
+  | "playbook"
+  | "contextReceipt"
+  | "agentRun"
+  | "agentProposal"
+  | "mcpGrant";
 
 export interface IdGenerator {
   create(kind: DomainIdKind): string;

@@ -8,6 +8,9 @@ import type {
   CanvasRevisionId,
   CanvasRevisionMetadata,
   CanvasViewportPreference,
+  CaptureAttachmentAllowedMime,
+  CaptureAttachmentRefusalCode,
+  CaptureAttachmentState,
   ChapterId,
   ProjectCommand,
   ProjectNavigator,
@@ -125,6 +128,90 @@ export type SceneRequestScope = Readonly<{
   sceneId: string;
 }>;
 
+export type CaptureSourceModality = "text" | "dictation";
+
+export type CaptureStatus = "draft" | "ready" | "integrated" | "archived";
+
+export type CaptureIntegrationProvenanceResponse = Readonly<{
+  integrationRevisionId: string;
+  integratedSceneId: string;
+  integratedAt: string;
+  integratedByAccountId: string;
+}>;
+
+export type CaptureHeadResponse = Readonly<{
+  captureId: string;
+  projectId: string;
+  status: CaptureStatus;
+  sourceModality: CaptureSourceModality;
+  workingVersion: number;
+  document: SceneDocumentV1;
+  contentHash: string;
+  genesisRevisionId: string;
+  authorAccountId: string;
+  updatedByAccountId: string;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt?: string;
+}> &
+  Partial<CaptureIntegrationProvenanceResponse>;
+
+export type CaptureSummaryResponse = Readonly<{
+  captureId: string;
+  projectId: string;
+  status: CaptureStatus;
+  sourceModality: CaptureSourceModality;
+  workingVersion: number;
+  authorAccountId: string;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt?: string;
+}> &
+  Partial<CaptureIntegrationProvenanceResponse>;
+
+export type CaptureRequestScope = Readonly<{
+  projectId: string;
+  captureId: string;
+}>;
+
+export type { CaptureAttachmentAllowedMime, CaptureAttachmentRefusalCode, CaptureAttachmentState };
+
+export type CaptureAttachmentSummaryResponse = Readonly<{
+  attachmentId: string;
+  captureId: string;
+  projectId: string;
+  state: CaptureAttachmentState;
+  displayFilename: string;
+  declaredContentType: CaptureAttachmentAllowedMime;
+  declaredByteSize: number;
+  createdAt: string;
+  updatedAt: string;
+  readyContentType?: CaptureAttachmentAllowedMime;
+  actualByteSize?: number;
+  pendingExpiresAt?: string;
+  refusalCode?: CaptureAttachmentRefusalCode;
+  readyAt?: string;
+  deletedAt?: string;
+}>;
+
+export type CaptureAttachmentPresignedUrlResponse = Readonly<{
+  url: string;
+  expiresAt: string;
+}>;
+
+export type CaptureAttachmentInitUploadResponse = Readonly<{
+  attachment: CaptureAttachmentSummaryResponse;
+  upload: CaptureAttachmentPresignedUrlResponse;
+  uploadHeaders: Readonly<{ "Content-Type": string }>;
+}>;
+
+export type CaptureAttachmentDownloadUrlResponse = Readonly<{
+  download: CaptureAttachmentPresignedUrlResponse;
+}>;
+
+export type CaptureAttachmentRequestScope = CaptureRequestScope &
+  Readonly<{ attachmentId: string }>;
+
 export type CanvasBoardResponse = CanvasBoard;
 export type CanvasObjectResponse = CanvasBoard["objects"][number];
 export type CanvasLinkResponse = CanvasBoard["links"][number];
@@ -172,6 +259,19 @@ export type CanvasSceneHandoffResponse = Readonly<{
   sceneDocumentHead: SceneHeadResponse;
   navigator: ProjectNavigator;
   canvas: CanvasWorkspaceResponse;
+}>;
+
+export type PromoteCaptureManuscriptPlacementInput = CanvasScenePlacementInput;
+
+export type PromoteCaptureCanvasInput = CanvasSceneGeometryInput &
+  Readonly<{ expectedCanvasVersion: number }>;
+
+export type PromoteCaptureToSceneResponse = Readonly<{
+  captureHead: CaptureHeadResponse;
+  scene: Scene;
+  sceneDocumentHead: SceneHeadResponse;
+  navigator: ProjectNavigator;
+  canvas?: CanvasWorkspaceResponse;
 }>;
 
 export class GhostwriterApiError extends Error {
@@ -222,7 +322,7 @@ async function requestJson<Output>(
 }
 
 function jsonRequest(
-  method: "POST" | "PUT" | "PATCH",
+  method: "POST" | "PUT" | "PATCH" | "DELETE",
   body?: unknown
 ): RequestInit {
   return {
@@ -550,6 +650,166 @@ export function restoreSceneRevision(
   );
 }
 
+function capturePath(
+  projectId: string,
+  captureId?: string,
+  resource?: "body" | "archive" | "promote"
+): string {
+  const base = `/api/projects/${encodeURIComponent(projectId)}/captures`;
+  if (captureId === undefined) return base;
+  const scoped = `${base}/${encodeURIComponent(captureId)}`;
+  if (resource === undefined) return scoped;
+  return `${scoped}/${resource}`;
+}
+
+export async function createCapture(input: {
+  projectId: string;
+  sourceModality?: CaptureSourceModality;
+}): Promise<CaptureHeadResponse> {
+  const init =
+    input.sourceModality === undefined || input.sourceModality === "text"
+      ? ({ method: "POST" } satisfies RequestInit)
+      : jsonRequest("POST", { sourceModality: input.sourceModality });
+  const result = await requestJson<Readonly<{ head: CaptureHeadResponse }>>(
+    capturePath(input.projectId),
+    init
+  );
+  return result.head;
+}
+
+export async function listCaptures(
+  projectId: string,
+  includeArchived = false
+): Promise<readonly CaptureSummaryResponse[]> {
+  const result = await requestJson<
+    Readonly<{ captures: CaptureSummaryResponse[] }>
+  >(
+    `${capturePath(projectId)}${includeArchived ? "?includeArchived=true" : ""}`
+  );
+  return result.captures;
+}
+
+export async function getCapture(
+  input: CaptureRequestScope
+): Promise<CaptureHeadResponse> {
+  const result = await requestJson<Readonly<{ head: CaptureHeadResponse }>>(
+    capturePath(input.projectId, input.captureId)
+  );
+  return result.head;
+}
+
+export async function saveCaptureDocument(
+  input: CaptureRequestScope &
+    Readonly<{
+      expectedWorkingVersion: number;
+      document: SceneDocumentV1;
+    }>
+): Promise<CaptureHeadResponse> {
+  const result = await requestJson<Readonly<{ head: CaptureHeadResponse }>>(
+    capturePath(input.projectId, input.captureId, "body"),
+    jsonRequest("PATCH", {
+      expectedWorkingVersion: input.expectedWorkingVersion,
+      document: input.document
+    })
+  );
+  return result.head;
+}
+
+export async function setCaptureArchived(
+  input: CaptureRequestScope & Readonly<{ archived: boolean }>
+): Promise<CaptureHeadResponse> {
+  const result = await requestJson<Readonly<{ head: CaptureHeadResponse }>>(
+    capturePath(input.projectId, input.captureId, "archive"),
+    jsonRequest("POST", { archived: input.archived })
+  );
+  return result.head;
+}
+
+export function promoteCaptureToScene(
+  input: CaptureRequestScope &
+    Readonly<{
+      expectedCaptureWorkingVersion: number;
+      expectedCaptureContentHash: string;
+      expectedProjectVersion: number;
+      title: string;
+      manuscriptPlacement: PromoteCaptureManuscriptPlacementInput;
+      canvas?: PromoteCaptureCanvasInput;
+    }>
+): Promise<PromoteCaptureToSceneResponse> {
+  return requestJson(
+    capturePath(input.projectId, input.captureId, "promote"),
+    jsonRequest("POST", {
+      expectedCaptureWorkingVersion: input.expectedCaptureWorkingVersion,
+      expectedCaptureContentHash: input.expectedCaptureContentHash,
+      expectedProjectVersion: input.expectedProjectVersion,
+      title: input.title,
+      manuscriptPlacement: input.manuscriptPlacement,
+      ...(input.canvas === undefined ? {} : { canvas: input.canvas })
+    })
+  );
+}
+
+function captureAttachmentsPath(projectId: string, captureId: string): string {
+  return `${capturePath(projectId, captureId)}/attachments`;
+}
+
+function captureAttachmentItemPath(
+  scope: CaptureAttachmentRequestScope,
+  resource?: "finalize" | "download"
+): string {
+  const base = `${captureAttachmentsPath(scope.projectId, scope.captureId)}/${encodeURIComponent(scope.attachmentId)}`;
+  if (resource === undefined) return base;
+  return `${base}/${resource}`;
+}
+
+export function initCaptureAttachmentUpload(input: CaptureRequestScope &
+  Readonly<{
+    displayFilename: string;
+    declaredContentType: string;
+    declaredByteSize: number;
+    clientSha256: string;
+  }>): Promise<CaptureAttachmentInitUploadResponse> {
+  return requestJson(
+    `${captureAttachmentsPath(input.projectId, input.captureId)}/init`,
+    jsonRequest("POST", {
+      displayFilename: input.displayFilename,
+      declaredContentType: input.declaredContentType,
+      declaredByteSize: input.declaredByteSize,
+      clientSha256: input.clientSha256
+    })
+  );
+}
+
+export function finalizeCaptureAttachmentUpload(
+  scope: CaptureAttachmentRequestScope
+): Promise<Readonly<{ attachment: CaptureAttachmentSummaryResponse }>> {
+  return requestJson(
+    captureAttachmentItemPath(scope, "finalize"),
+    jsonRequest("POST", {})
+  );
+}
+
+export async function listCaptureAttachments(
+  scope: CaptureRequestScope
+): Promise<readonly CaptureAttachmentSummaryResponse[]> {
+  const result = await requestJson<
+    Readonly<{ attachments: CaptureAttachmentSummaryResponse[] }>
+  >(captureAttachmentsPath(scope.projectId, scope.captureId));
+  return result.attachments;
+}
+
+export function getCaptureAttachmentDownloadUrl(
+  scope: CaptureAttachmentRequestScope
+): Promise<CaptureAttachmentDownloadUrlResponse> {
+  return requestJson(captureAttachmentItemPath(scope, "download"));
+}
+
+export function deleteCaptureAttachment(
+  scope: CaptureAttachmentRequestScope
+): Promise<Readonly<{ attachment: CaptureAttachmentSummaryResponse }>> {
+  return requestJson(captureAttachmentItemPath(scope), { method: "DELETE" });
+}
+
 export type ReaderVoicePack = "default" | "narrative" | "noir" | "soft";
 
 export type SynthesizeReaderSpeechResponse = Readonly<{
@@ -640,5 +900,425 @@ export function requestWritingAssist(input: Readonly<{
         : { backdropCaption: input.backdropCaption }),
       ...(input.cast === undefined ? {} : { cast: input.cast })
     })
+  );
+}
+
+export type OpenAiProviderStatusResponse =
+  | Readonly<{ configured: false; callsDisabled: boolean }>
+  | Readonly<{
+      configured: true;
+      callsDisabled: boolean;
+      provider: string;
+      version: number;
+      maskedHint: string;
+      validationState: string;
+      createdAt: string;
+      updatedAt: string;
+      validatedAt?: string;
+    }>;
+
+export type AgentModelId = "gpt-5.6-luna" | "gpt-5.6-terra" | "gpt-5.6-sol";
+
+export type AgentWorkflowId =
+  | "scene-partner.capture-reflection"
+  | "sketch-partner.craft-fields"
+  | "character-coach.sheet-fields"
+  | "worldkeeper.backdrop-fields";
+
+export type ContextReceiptResponse = Readonly<{
+  id: string;
+  projectId: string;
+  workflowId: string;
+  workflowVersion: string;
+  model: AgentModelId;
+  receiptHash: string;
+  createdAt: string;
+  resources: readonly Readonly<{
+    resourceClass: string;
+    captureId: string;
+    workingVersion: number;
+    contentHash: string;
+    inclusionReason: string;
+    providerTextCharCount: number;
+    providerTextHash: string;
+  }>[];
+  maxOutputTokens: number;
+  wallClockSeconds: number;
+  outputSchemaId: string;
+  targetSceneId?: string;
+  targetStoryKnowledgeId?: string;
+}>;
+
+export type AgentRunResponse = Readonly<{
+  id: string;
+  projectId: string;
+  status: string;
+  workflowId: string;
+  receiptId: string;
+  receiptHash: string;
+  model: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  terminalDiagnosticCode?: string;
+  providerResponseId?: string;
+}>;
+
+export type CaptureReflectionPayloadResponse = Readonly<{
+  schemaId: "capture-reflection-v1";
+  summary: string;
+  questions: readonly string[];
+  possibleStoryJobs: readonly Readonly<{
+    label: string;
+    rationale: string;
+  }>[];
+}>;
+
+export type SketchFieldsPayloadResponse = Readonly<{
+  schemaId: "sketch-fields-v1";
+  purpose?: string;
+  conflict?: string;
+  turn?: string;
+  sensoryNotes?: string;
+  openQuestions?: string;
+  detail?: string;
+}>;
+
+export type CharacterSheetPayloadResponse = Readonly<{
+  schemaId: "character-sheet-v1";
+  storyKnowledgeId: string;
+  desire?: string;
+  pressure?: string;
+  voiceNotes?: string;
+}>;
+
+export type BackdropFieldsPayloadResponse = Readonly<{
+  schemaId: "backdrop-fields-v1";
+  sceneId?: string;
+  caption?: string;
+  sensoryNotesFallback?: string;
+}>;
+
+export type AgentProposalPayloadResponse =
+  | CaptureReflectionPayloadResponse
+  | SketchFieldsPayloadResponse
+  | CharacterSheetPayloadResponse
+  | BackdropFieldsPayloadResponse;
+
+export type AgentOutputSchemaId =
+  | "capture-reflection-v1"
+  | "sketch-fields-v1"
+  | "character-sheet-v1"
+  | "backdrop-fields-v1";
+
+export type AgentProposalResponse = Readonly<{
+  id: string;
+  projectId: string;
+  runId: string;
+  receiptId: string;
+  status: string;
+  outputSchemaId: AgentOutputSchemaId;
+  payload: AgentProposalPayloadResponse;
+  contentHash: string;
+  baseCaptureId: string;
+  baseCaptureWorkingVersion: number;
+  baseCaptureContentHash: string;
+  createdAt: string;
+  updatedAt: string;
+}>;
+
+export type AgentProposalSummaryResponse = Readonly<{
+  id: string;
+  projectId: string;
+  runId: string;
+  status: string;
+  outputSchemaId: AgentOutputSchemaId;
+  contentHash: string;
+  baseCaptureId: string;
+  createdAt: string;
+  updatedAt: string;
+}>;
+
+export type StartCaptureReflectionResponse =
+  | Readonly<{
+      kind: "ready";
+      run: AgentRunResponse;
+      proposal: AgentProposalResponse;
+    }>
+  | Readonly<{
+      kind: "stale" | "failed" | "canceled";
+      run: AgentRunResponse;
+    }>;
+
+function agentProjectPath(projectId: string, suffix: string): string {
+  return `/api/projects/${encodeURIComponent(projectId)}/agent/${suffix}`;
+}
+
+export function getOpenAiProviderStatus(): Promise<OpenAiProviderStatusResponse> {
+  return requestJson("/api/me/provider/openai");
+}
+
+export function setOpenAiProviderCredential(input: Readonly<{
+  apiKey: string;
+  expectedVersion?: number;
+}>): Promise<OpenAiProviderStatusResponse> {
+  return requestJson(
+    "/api/me/provider/openai",
+    jsonRequest("PUT", {
+      apiKey: input.apiKey,
+      ...(input.expectedVersion === undefined
+        ? {}
+        : { expectedVersion: input.expectedVersion })
+    })
+  );
+}
+
+export function deleteOpenAiProviderCredential(input: Readonly<{
+  expectedVersion: number;
+}>): Promise<OpenAiProviderStatusResponse> {
+  return requestJson(
+    "/api/me/provider/openai",
+    jsonRequest("DELETE", {
+      expectedVersion: input.expectedVersion
+    })
+  );
+}
+
+export function validateOpenAiProviderCredential(input: Readonly<{
+  expectedVersion: number;
+}>): Promise<OpenAiProviderStatusResponse> {
+  return requestJson(
+    "/api/me/provider/openai/validate",
+    jsonRequest("POST", { expectedVersion: input.expectedVersion })
+  );
+}
+
+export function skipAiCollaborationSetup(input?: Readonly<{
+  expectedVersion?: number;
+}>): Promise<
+  Readonly<{
+    configured: true;
+    profile: Readonly<{
+      version: number;
+      setupSkipped: boolean;
+      updatedAt: string;
+    }>;
+  }>
+> {
+  return requestJson(
+    "/api/me/ai-collaboration",
+    jsonRequest("PATCH", {
+      skipSetup: true,
+      ...(input?.expectedVersion === undefined
+        ? {}
+        : { expectedVersion: input.expectedVersion })
+    })
+  );
+}
+
+export async function previewCaptureReflectionContext(input: Readonly<{
+  projectId: string;
+  captureId: string;
+  model?: AgentModelId;
+  workflowId?: AgentWorkflowId;
+  sceneId?: string;
+  storyKnowledgeId?: string;
+}>): Promise<ContextReceiptResponse> {
+  const response = await requestJson<Readonly<{ receipt: ContextReceiptResponse }>>(
+    agentProjectPath(input.projectId, "context-preview"),
+    jsonRequest("POST", {
+      captureId: input.captureId,
+      ...(input.model === undefined ? {} : { model: input.model }),
+      ...(input.workflowId === undefined ? {} : { workflowId: input.workflowId }),
+      ...(input.sceneId === undefined ? {} : { sceneId: input.sceneId }),
+      ...(input.storyKnowledgeId === undefined
+        ? {}
+        : { storyKnowledgeId: input.storyKnowledgeId })
+    })
+  );
+  return response.receipt;
+}
+
+export async function startCaptureReflectionRun(input: Readonly<{
+  projectId: string;
+  receiptId: string;
+  expectedReceiptHash: string;
+}>): Promise<StartCaptureReflectionResponse> {
+  const response = await requestJson<
+    | Readonly<{
+        kind: "ready";
+        run: AgentRunResponse;
+        proposal: AgentProposalResponse;
+      }>
+    | Readonly<{
+        kind: "stale" | "failed" | "canceled";
+        run: AgentRunResponse;
+      }>
+  >(
+    agentProjectPath(input.projectId, "runs"),
+    jsonRequest("POST", {
+      receiptId: input.receiptId,
+      expectedReceiptHash: input.expectedReceiptHash
+    })
+  );
+  return response;
+}
+
+export async function getAgentRun(input: Readonly<{
+  projectId: string;
+  runId: string;
+}>): Promise<AgentRunResponse> {
+  const response = await requestJson<Readonly<{ run: AgentRunResponse }>>(
+    agentProjectPath(input.projectId, `runs/${encodeURIComponent(input.runId)}`)
+  );
+  return response.run;
+}
+
+export async function cancelAgentRun(input: Readonly<{
+  projectId: string;
+  runId: string;
+}>): Promise<AgentRunResponse> {
+  const response = await requestJson<Readonly<{ run: AgentRunResponse }>>(
+    agentProjectPath(
+      input.projectId,
+      `runs/${encodeURIComponent(input.runId)}/cancel`
+    ),
+    jsonRequest("POST", {})
+  );
+  return response.run;
+}
+
+export async function listAgentProposals(
+  projectId: string
+): Promise<readonly AgentProposalSummaryResponse[]> {
+  const response = await requestJson<
+    Readonly<{ proposals: readonly AgentProposalSummaryResponse[] }>
+  >(agentProjectPath(projectId, "proposals"));
+  return response.proposals;
+}
+
+export async function getAgentProposal(input: Readonly<{
+  projectId: string;
+  proposalId: string;
+}>): Promise<AgentProposalResponse> {
+  const response = await requestJson<Readonly<{ proposal: AgentProposalResponse }>>(
+    agentProjectPath(
+      input.projectId,
+      `proposals/${encodeURIComponent(input.proposalId)}`
+    )
+  );
+  return response.proposal;
+}
+
+export async function rejectAgentProposal(input: Readonly<{
+  projectId: string;
+  proposalId: string;
+}>): Promise<AgentProposalResponse> {
+  const response = await requestJson<Readonly<{ proposal: AgentProposalResponse }>>(
+    agentProjectPath(
+      input.projectId,
+      `proposals/${encodeURIComponent(input.proposalId)}/reject`
+    ),
+    jsonRequest("POST", {})
+  );
+  return response.proposal;
+}
+
+export type ApplyAgentProposalNewSceneInput = Readonly<{
+  projectId: string;
+  proposalId: string;
+  mode: "new-scene";
+  title: string;
+  bookId: string;
+  chapterId?: string;
+  placeOnCanvas?: boolean;
+  expectedProjectVersion: number;
+  expectedCanvasVersion?: number;
+  expectedProposalContentHash: string;
+}>;
+
+export type ApplyAgentProposalNamedVariantInput = Readonly<{
+  projectId: string;
+  proposalId: string;
+  mode: "named-variant";
+  sceneId: string;
+  variantName: string;
+  expectedWorkingVersion: number;
+  sessionId: string;
+  expectedProposalContentHash: string;
+}>;
+
+export type ApplyAgentProposalCraftFieldsInput = Readonly<{
+  projectId: string;
+  proposalId: string;
+  mode: "craft-fields";
+  expectedProjectVersion: number;
+  expectedProposalContentHash: string;
+}>;
+
+export type ApplyAgentProposalInput =
+  | ApplyAgentProposalNewSceneInput
+  | ApplyAgentProposalNamedVariantInput
+  | ApplyAgentProposalCraftFieldsInput;
+
+export type ApplyAgentProposalNewSceneResponse = Readonly<{
+  mode: "new-scene";
+  proposal: AgentProposalResponse;
+  scene: Readonly<{ id: string; title: string; projectId: string }>;
+  sceneDocumentHead: Readonly<{
+    sceneId: string;
+    projectId: string;
+    workingVersion: number;
+    contentHash: string;
+  }>;
+  captureHead: CaptureHeadResponse;
+  navigator: unknown;
+}>;
+
+export type ApplyAgentProposalNamedVariantResponse = Readonly<{
+  mode: "named-variant";
+  proposal: AgentProposalResponse;
+  head: Readonly<{
+    sceneId: string;
+    projectId: string;
+    workingVersion: number;
+    contentHash: string;
+  }>;
+  revision: Readonly<{
+    id: string;
+    sceneId: string;
+    origin: string;
+    reason: string;
+    contentHash: string;
+  }>;
+  variant: Readonly<{
+    id: string;
+    sceneId: string;
+    name: string;
+    revisionId: string;
+  }>;
+}>;
+
+export type ApplyAgentProposalCraftFieldsResponse = Readonly<{
+  mode: "craft-fields";
+  proposal: AgentProposalResponse;
+  navigator: unknown;
+}>;
+
+export type ApplyAgentProposalResponse =
+  | ApplyAgentProposalNewSceneResponse
+  | ApplyAgentProposalNamedVariantResponse
+  | ApplyAgentProposalCraftFieldsResponse;
+
+export async function applyAgentProposal(
+  input: ApplyAgentProposalInput
+): Promise<ApplyAgentProposalResponse> {
+  const { projectId, proposalId, ...body } = input;
+  return requestJson<ApplyAgentProposalResponse>(
+    agentProjectPath(
+      projectId,
+      `proposals/${encodeURIComponent(proposalId)}/apply`
+    ),
+    jsonRequest("POST", body)
   );
 }

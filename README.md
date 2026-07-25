@@ -21,6 +21,7 @@ writer's project directly.
 | `plans/WHERE-I-LEFT-OFF.html` | Current state and next step |
 | `plans/README.html` | Rich planning system and delivery loop |
 | `plans/designs/Ghostwriter Mockups 2.0.html` | Living Story Canvas and writing-experience design source |
+| `plans/designs/Ghostwriter Mockups 5.0.html` | Proposed Capture, Inbox, story-integration, and first-agent living design |
 | `docs/adr/README.md` | How durable architecture decisions are recorded |
 
 ## Working on this repo

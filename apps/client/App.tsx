@@ -20,6 +20,11 @@ import {
   AccountGateScreen,
   AuthenticatedProjectWorkspace,
   BookReaderPanel,
+  aggregateProjectChangesIdle,
+  captureReturnStateFromScene,
+  captureShellChangesIdle,
+  finalizeCaptureShellActivityOnClose,
+  scheduleCaptureFocusRestore,
   drillBack,
   drillIntoChapter,
   drillIntoScene,
@@ -36,6 +41,8 @@ import {
   type WriteComposition,
   type WriteInputModality,
   type WorkspaceChatMessage,
+  type CaptureReturnState,
+  type InboxWorkspacePresentation,
   workspaceModeForComposition
 } from "@ghostwriter/ui";
 import { useFonts } from "expo-font";
@@ -69,6 +76,7 @@ import {
   getProject,
   GhostwriterApiError,
   listProjects,
+  promoteCaptureToScene,
   releaseSceneLease,
   restoreCanvasRevision,
   saveCanvasPreference,
@@ -103,6 +111,33 @@ import {
 } from "./src/canvas-chrome.js";
 import type { ManuscriptSelection } from "@ghostwriter/ui";
 import { sceneRecoveryService } from "./src/scene-recovery.js";
+import {
+  CaptureComposerPanel,
+  type CaptureComposerHandle
+} from "./src/CaptureComposerPanel.js";
+import { CaptureModalShell } from "./src/CaptureModalShell.js";
+import { InboxPanel } from "./src/InboxPanel.js";
+import {
+  captureRecoveryService
+} from "./src/capture-recovery.js";
+import type {
+  CaptureComposerAcknowledgementEvent,
+  CaptureComposerActivity,
+  CaptureComposerProblemEvent
+} from "./src/capture-composer.js";
+import type {
+  CaptureHandoffPromoteInput
+} from "./src/capture-handoff.js";
+import {
+  acknowledgementCopyForCapturePromotion,
+  handoffTargetShouldAbortAfterDraftPrepFailed,
+  installCapturePromotionState
+} from "./src/capture-handoff.js";
+import type {
+  InboxPanelAcknowledgementEvent,
+  InboxPanelActivity,
+  InboxPanelProblemEvent
+} from "./src/inbox-panel.js";
 
 type AppPhase = "loading" | "signedOut" | "library" | "project";
 
@@ -223,6 +258,317 @@ export default function App() {
   const metadataUndoToastIdRef = useRef<string | undefined>(undefined);
   const canvasUndoToastIdRef = useRef<string | undefined>(undefined);
   const lastDraftAcknowledgementAtRef = useRef<number | undefined>(undefined);
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [activeCaptureId, setActiveCaptureId] = useState<string | undefined>();
+  const [inboxSelectedCaptureId, setInboxSelectedCaptureId] = useState<
+    string | undefined
+  >();
+  const [captureComposerReadOnly, setCaptureComposerReadOnly] = useState(false);
+  const captureComposerRef = useRef<CaptureComposerHandle>(null);
+  const captureReturnStateRef = useRef<CaptureReturnState | undefined>(
+    undefined
+  );
+  const pendingCaptureFocusRestoreRef = useRef<
+    CaptureReturnState | undefined
+  >(undefined);
+  const captureActivityRef = useRef<CaptureComposerActivity>("idle");
+  const captureProblemWhileClosedRef = useRef(false);
+  const [captureActivity, setCaptureActivity] =
+    useState<CaptureComposerActivity>("idle");
+  const [captureProblemWhileClosed, setCaptureProblemWhileClosed] =
+    useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [inboxActivity, setInboxActivity] =
+    useState<InboxPanelActivity>("idle");
+  const [inboxRefreshSignal, setInboxRefreshSignal] = useState(0);
+
+  function focusTargetFromDocument():
+    | CaptureReturnState["focusTarget"]
+    | undefined {
+    if (typeof document === "undefined") return undefined;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && typeof active.focus === "function") {
+      return { focus: () => active.focus() };
+    }
+    return undefined;
+  }
+
+  async function flushCaptureIfOpen(): Promise<void> {
+    if (!captureOpen || captureComposerRef.current === null) return;
+    try {
+      await captureComposerRef.current.flush();
+    } catch {
+      // Exit paths continue when Capture flush fails; recovery stays explicit.
+    }
+  }
+
+  function handleCaptureActivityChange(
+    activity: CaptureComposerActivity
+  ): void {
+    captureActivityRef.current = activity;
+    setCaptureActivity(activity);
+    if (activity === "problem") {
+      captureProblemWhileClosedRef.current = true;
+      setCaptureProblemWhileClosed(true);
+    } else if (activity === "idle") {
+      captureProblemWhileClosedRef.current = false;
+      setCaptureProblemWhileClosed(false);
+    }
+  }
+
+  function handleCaptureProblemResolved(id: string): void {
+    dismissToast(id);
+  }
+
+  function bumpInboxRefresh(): void {
+    setInboxRefreshSignal((signal) => signal + 1);
+  }
+
+  function openCaptureComposer(
+    captureId?: string,
+    options?: Readonly<{ readOnly?: boolean }>
+  ): void {
+    captureReturnStateRef.current = captureReturnStateFromScene(
+      selectedSceneId,
+      focusTargetFromDocument()
+    );
+    setCaptureComposerReadOnly(options?.readOnly === true);
+    setActiveCaptureId(captureId);
+    setCaptureOpen(true);
+  }
+
+  async function closeCaptureComposer(): Promise<void> {
+    await flushCaptureIfOpen();
+    const restore = captureReturnStateRef.current;
+    captureReturnStateRef.current = undefined;
+    pendingCaptureFocusRestoreRef.current = restore;
+    const finalized = finalizeCaptureShellActivityOnClose(
+      captureActivityRef.current,
+      captureProblemWhileClosedRef.current
+    );
+    captureActivityRef.current = finalized.activity;
+    captureProblemWhileClosedRef.current = finalized.problemWhileClosed;
+    setCaptureActivity(finalized.activity);
+    setCaptureProblemWhileClosed(finalized.problemWhileClosed);
+    setCaptureOpen(false);
+    setActiveCaptureId(undefined);
+    setCaptureComposerReadOnly(false);
+  }
+
+  async function openInboxWorkspace(): Promise<void> {
+    if (inboxOpen) return;
+    const draftIsVisible =
+      workspaceMode === "draft" || workspaceMode === "split";
+    if (draftIsVisible) {
+      setBusy(true);
+      try {
+        await prepareCurrentDraftForExit();
+      } finally {
+        setBusy(false);
+      }
+    }
+    setInboxOpen(true);
+  }
+
+  function closeInboxWorkspace(): void {
+    setInboxOpen(false);
+    if (workspaceMode === "draft" || workspaceMode === "split") {
+      setDraftMountVersion((version) => version + 1);
+    }
+  }
+
+  async function ensureCanvasVersionForHandoff(): Promise<number | undefined> {
+    if (selectedProject === undefined) return undefined;
+    if (canvasWorkspace !== undefined) {
+      return canvasWorkspace.board.version;
+    }
+    try {
+      const loaded = await getCanvasBoard(selectedProject.id);
+      setCanvasWorkspace(loaded);
+      setCanvasSaveState("saved");
+      setCanvasMessage(undefined);
+      dismissToast("canvas-conflict");
+      dismissToast("canvas-save-problem");
+      return loaded.board.version;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function handleCapturePromote(input: CaptureHandoffPromoteInput) {
+    if (selectedProject === undefined) {
+      throw new Error("Capture handoff requires an open project.");
+    }
+    const response = await promoteCaptureToScene({
+      projectId: selectedProject.id,
+      captureId: input.captureId,
+      expectedCaptureWorkingVersion: input.expectedCaptureWorkingVersion,
+      expectedCaptureContentHash: input.expectedCaptureContentHash,
+      expectedProjectVersion: input.expectedProjectVersion,
+      title: input.title,
+      manuscriptPlacement: input.manuscriptPlacement,
+      ...(input.canvas === undefined ? {} : { canvas: input.canvas })
+    });
+    const installed = installCapturePromotionState(response);
+    setSelectedProject(installed.navigator);
+    selectedProjectRef.current = installed.navigator;
+    if (installed.canvasWorkspace !== undefined) {
+      setCanvasWorkspace(installed.canvasWorkspace);
+      setCanvasSaveState("saved");
+      setCanvasMessage(undefined);
+      dismissToast("canvas-conflict");
+      dismissToast("canvas-save-problem");
+    }
+    setSaveState("saved");
+    dismissToast("project-conflict");
+    dismissToast("project-save-problem");
+    bumpInboxRefresh();
+    const acknowledgement = acknowledgementCopyForCapturePromotion(response);
+    showToast(
+      acknowledgementToast({
+        id: nextToastId("capture-promote"),
+        title: acknowledgement.title,
+        detail: acknowledgement.detail,
+        now: Date.now()
+      })
+    );
+    return response;
+  }
+
+  async function openHandoffTargetScene(
+    sceneId: SceneId,
+    targetMode: "draft" | "split"
+  ): Promise<void> {
+    const needsDraftPrep =
+      workspaceMode === "draft" || workspaceMode === "split";
+    if (needsDraftPrep) {
+      setBusy(true);
+      let draftPrepFailed = false;
+      try {
+        await prepareCurrentDraftForExit();
+      } catch (cause) {
+        draftPrepFailed = true;
+        handleError(
+          cause,
+          "Ghostwriter could not prepare Draft before opening the integrated scene."
+        );
+      } finally {
+        setBusy(false);
+      }
+      if (handoffTargetShouldAbortAfterDraftPrepFailed(draftPrepFailed)) {
+        return;
+      }
+    }
+
+    setBusy(true);
+    try {
+      closeInboxWorkspace();
+      setSelectedSceneId(sceneId);
+      setSelectedCanvasObjectId(
+        canvasWorkspace?.board.objects.find(
+          (object) =>
+            object.sceneId === sceneId && object.archivedAt === undefined
+        )?.id
+      );
+      await changeWorkspaceMode(targetMode);
+    } catch (cause) {
+      handleError(cause, "Ghostwriter could not open the integrated scene.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleCaptureAcknowledgement(
+    event: CaptureComposerAcknowledgementEvent
+  ): void {
+    bumpInboxRefresh();
+    showToast(
+      acknowledgementToast({
+        id: nextToastId(`capture-${event.kind}`),
+        title: event.title,
+        detail: `${event.detail} · Saved to project`,
+        now: Date.now()
+      })
+    );
+  }
+
+  function handleCaptureProblem(problem: CaptureComposerProblemEvent): void {
+    captureProblemWhileClosedRef.current = true;
+    setCaptureProblemWhileClosed(true);
+    showToast(
+      problemToast({
+        id: problem.id,
+        title: problem.title,
+        detail: problem.detail,
+        tone: problem.tone,
+        now: Date.now()
+      })
+    );
+  }
+
+  function handleInboxAcknowledgement(
+    event: InboxPanelAcknowledgementEvent
+  ): void {
+    bumpInboxRefresh();
+    showToast(
+      acknowledgementToast({
+        id: nextToastId(`inbox-${event.kind}`),
+        title: event.title,
+        detail: event.detail,
+        now: Date.now()
+      })
+    );
+  }
+
+  function handleInboxProblem(problem: InboxPanelProblemEvent): void {
+    showToast(
+      problemToast({
+        id: problem.id,
+        title: problem.title,
+        detail: problem.detail,
+        tone: problem.tone,
+        now: Date.now()
+      })
+    );
+  }
+
+  function resetCaptureInboxShell(): void {
+    setCaptureOpen(false);
+    setActiveCaptureId(undefined);
+    setInboxSelectedCaptureId(undefined);
+    setCaptureComposerReadOnly(false);
+    captureReturnStateRef.current = undefined;
+    pendingCaptureFocusRestoreRef.current = undefined;
+    captureActivityRef.current = "idle";
+    captureProblemWhileClosedRef.current = false;
+    setCaptureActivity("idle");
+    setCaptureProblemWhileClosed(false);
+    setInboxOpen(false);
+    setInboxActivity("idle");
+    setInboxRefreshSignal(0);
+  }
+
+  useEffect(() => {
+    if (captureOpen) return;
+    const restore = pendingCaptureFocusRestoreRef.current;
+    if (restore === undefined) return;
+    pendingCaptureFocusRestoreRef.current = undefined;
+    let frame = 0;
+    let cancelled = false;
+    scheduleCaptureFocusRestore(restore, (run) => {
+      if (typeof requestAnimationFrame === "undefined") {
+        if (!cancelled) run();
+        return;
+      }
+      frame = requestAnimationFrame(() => {
+        if (!cancelled) run();
+      });
+    });
+    return () => {
+      cancelled = true;
+      if (frame !== 0) cancelAnimationFrame(frame);
+    };
+  }, [captureOpen]);
 
   useEffect(() => {
     void bootstrap();
@@ -341,6 +687,7 @@ export default function App() {
       setDraftActivity("idle");
       resetCanvasState();
       clearAcknowledgements();
+      resetCaptureInboxShell();
       setPhase("signedOut");
       setError("Your session ended. Sign in again to continue.");
       return;
@@ -401,10 +748,12 @@ export default function App() {
     setError(undefined);
     try {
       const accountId = writer?.account.id;
+      await flushCaptureIfOpen();
       await prepareCurrentDraftForExit();
       await signOut();
       if (accountId !== undefined) {
         await sceneRecoveryService.clearAccount(accountId);
+        await captureRecoveryService.clearAccount(accountId);
       }
       setWriter(undefined);
       setProjects([]);
@@ -416,6 +765,7 @@ export default function App() {
       setDraftActivity("idle");
       resetCanvasState();
       clearAcknowledgements();
+      resetCaptureInboxShell();
       setPhase("signedOut");
     } catch (cause) {
       handleError(cause, "Ghostwriter could not sign out.");
@@ -440,6 +790,7 @@ export default function App() {
       setDraftActivity("idle");
       resetCanvasState();
       setSaveState("saved");
+      resetCaptureInboxShell();
       setPhase("project");
     } catch (cause) {
       handleError(cause, "Ghostwriter could not open the project.");
@@ -504,6 +855,7 @@ export default function App() {
       setDraftActivity("idle");
       resetCanvasState();
       setSaveState("saved");
+      resetCaptureInboxShell();
       setPhase("project");
       const now = Date.now();
       showToast(
@@ -813,6 +1165,8 @@ export default function App() {
   async function leaveProject(): Promise<void> {
     setBusy(true);
     setError(undefined);
+    await flushCaptureIfOpen();
+    resetCaptureInboxShell();
     await prepareCurrentDraftForExit();
     setReaderProjection(undefined);
     setReaderError(undefined);
@@ -942,6 +1296,7 @@ export default function App() {
     nextMode: ProjectWorkspaceMode
   ): Promise<void> {
     if (nextMode === workspaceMode || selectedProject === undefined) return;
+    if (inboxOpen) closeInboxWorkspace();
     const draftIsVisible =
       workspaceMode === "draft" || workspaceMode === "split";
     const draftWillBeVisible = nextMode === "draft" || nextMode === "split";
@@ -961,6 +1316,7 @@ export default function App() {
 
   async function selectWorkspaceScene(sceneId: SceneId): Promise<void> {
     if (sceneId === selectedSceneId) return;
+    if (inboxOpen) closeInboxWorkspace();
     if (workspaceMode === "draft" || workspaceMode === "split") {
       setBusy(true);
       await prepareCurrentDraftForExit();
@@ -1031,6 +1387,7 @@ export default function App() {
 
   async function openReader(): Promise<void> {
     if (selectedProject === undefined || selectedSceneId === undefined) return;
+    if (inboxOpen) closeInboxWorkspace();
     const bookId = bookIdForScene(selectedProject, selectedSceneId);
     if (bookId === undefined) {
       setReaderError("Choose a scene in a book to open Reader.");
@@ -1612,15 +1969,58 @@ export default function App() {
     }
 
     return (
+      <>
       <AuthenticatedProjectWorkspace
-        allChangesIdle={
-          saveState === "saved" &&
-          canvasSaveState === "saved" &&
-          draftActivity === "idle" &&
-          !busy &&
-          !canvasBusy
-        }
+        allChangesIdle={aggregateProjectChangesIdle({
+          projectSaveIdle: saveState === "saved",
+          canvasSaveIdle: canvasSaveState === "saved",
+          draftActivityIdle: draftActivity === "idle",
+          captureActivityIdle: captureShellChangesIdle({
+            modalOpen: captureOpen,
+            activity: captureActivity,
+            problemWhileClosed: captureProblemWhileClosed
+          }),
+          inboxActivityIdle: !inboxOpen || inboxActivity === "idle",
+          shellBusy: busy,
+          canvasBusy
+        })}
         busy={busy}
+        captureOpen={captureOpen}
+        inboxOpen={inboxOpen}
+        onCloseInbox={closeInboxWorkspace}
+        onOpenCapture={(captureId) => openCaptureComposer(captureId)}
+        onOpenInbox={() => void openInboxWorkspace()}
+        renderInbox={(presentation: InboxWorkspacePresentation) => (
+          <InboxPanel
+            canvasVersion={canvasWorkspace?.board.version}
+            compact={presentation.compact}
+            ensureCanvasVersion={() => ensureCanvasVersionForHandoff()}
+            onAcknowledgement={handleInboxAcknowledgement}
+            onActivityChange={setInboxActivity}
+            onOpenCapture={(captureId) => openCaptureComposer(captureId)}
+            onOpenDraft={(sceneId) =>
+              void openHandoffTargetScene(sceneId as SceneId, "draft")
+            }
+            {...(presentation.compact
+              ? {}
+              : {
+                  onOpenSplit: (sceneId) =>
+                    void openHandoffTargetScene(sceneId as SceneId, "split")
+                })}
+            onProblem={handleInboxProblem}
+            onProblemResolved={dismissToast}
+            onPromote={(input) => handleCapturePromote(input)}
+            onSelectCapture={setInboxSelectedCaptureId}
+            onViewSourceCapture={(captureId) =>
+              openCaptureComposer(captureId, { readOnly: true })
+            }
+            project={selectedProject}
+            projectId={selectedProject.id}
+            projectVersion={selectedProject.version}
+            refreshSignal={inboxRefreshSignal}
+            selectedCaptureId={inboxSelectedCaptureId}
+          />
+        )}
         chatCapabilities={GHOSTWRITER_CAPABILITIES}
         chatMessages={chatMessages}
         drillStack={drillStack}
@@ -1804,6 +2204,26 @@ export default function App() {
         selectedSceneId={selectedSceneId}
         workflowLens={workflowLens}
       />
+      <CaptureModalShell
+        onRequestClose={() => void closeCaptureComposer()}
+        onShow={() => captureComposerRef.current?.focus()}
+        visible={captureOpen}
+      >
+        <CaptureComposerPanel
+          accountId={writer.account.id}
+          captureId={activeCaptureId}
+          readOnly={captureComposerReadOnly}
+          onAcknowledgement={handleCaptureAcknowledgement}
+          onActivityChange={handleCaptureActivityChange}
+          onCaptureReady={(captureId) => setActiveCaptureId(captureId)}
+          onClose={() => void closeCaptureComposer()}
+          onProblem={handleCaptureProblem}
+          onProblemResolved={handleCaptureProblemResolved}
+          projectId={selectedProject.id}
+          ref={captureComposerRef}
+        />
+      </CaptureModalShell>
+      </>
     );
   }
 

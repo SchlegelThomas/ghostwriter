@@ -84,6 +84,30 @@ On `feat/writing-experience-ux-4`, writers also get:
 
 Agents still never silent-write canon. OpenAI completion remains optional/unconfigured; proposals are labeled `deterministic-local` until a provider ADR lands.
 
+## Current writing milestone — Capture to Story (implemented locally 2026-07-24)
+
+On `feat/capture-to-story-agents`, writers can Capture first and integrate with consent:
+
+- open Capture from Project, Draft, Canvas, or narrow web without choosing hierarchy first;
+- write scene-compatible rich prose with browser dictation; attach bounded private images, recorded
+  audio, PDF, and plain text (Cloudflare R2 when configured; prose Capture still works without it);
+- review Captures in a durable Inbox; promote losslessly to a new Scene with optional same-ID
+  Canvas placement, or keep the source as inspectable provenance;
+- connect an OpenAI BYOK key under progressive setup (Capture never requires AI); preview a
+  server-assembled context receipt before egress; optional collaboration preferences and
+  declarative playbooks refine goals without granting tools or canonical authority;
+- Scene Partner reflects on a Capture (summary, questions, story jobs) and can apply as a new Scene
+  or a named scene variant that leaves the live working draft unchanged until apply;
+- Sketch Partner, Character Coach, and Worldkeeper propose typed craft deltas applied only through
+  existing scene/story-knowledge commands;
+- project-scoped MCP grants can read granted Captures and submit Capture-reflection proposals into
+  the same Inbox; external clients cannot apply canon or retrieve credentials.
+
+Agents still never silent-write canon. Mockups 5.0, ADR 0010, and ADR 0011 govern the design.
+Repository verification is green (712 unit/integration tests). Real-browser founder acceptance,
+live R2/KEK provisioning, and post-gate Playwright remain pending before calling this shipped on
+production.
+
 ## Prior writing milestone — implemented locally 2026-07-12
 
 The active branch now proves the first owner-only version of the core promise:

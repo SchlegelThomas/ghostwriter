@@ -2,53 +2,39 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   BELLWETHER_FIXTURE,
   BELLWETHER_FIXTURE_NAVIGATOR,
-  BELLWETHER_FIXTURE_PROJECT_ID,
-  accountId,
-  createBookReaderServices,
-  createCanvasServices,
-  createProjectMembership,
-  createGhostwriterServices,
-  createIdentityServices,
-  createMemoryWriterProfileRepository,
-  createSceneWritingServices
+  BELLWETHER_FIXTURE_PROJECT_ID
 } from "@ghostwriter/core";
-import {
-  createPostgresCanvasRepository,
-  createPostgresCanvasSceneCreationUnitOfWork,
-  createPostgresProjectRepository,
-  createPostgresSceneDocumentRepository,
-  seedProject,
-  toRepositoryDatabase
-} from "@ghostwriter/storage";
-import {
-  createPgliteDatabase,
-  migratePgliteRepositoryDatabase
-} from "@ghostwriter/storage/pglite";
-import { user } from "@ghostwriter/storage";
-import { createApp } from "./app.js";
 import type { AuthGateway, AuthenticatedSession } from "./auth.js";
+import {
+  createSeededBackendApp,
+  fakeBackendAuth,
+  testBackendClosers,
+  TEST_BACKEND_ORIGIN,
+  TEST_BACKEND_SESSION
+} from "./test-backend-app.js";
 
-const closers: Array<() => Promise<void>> = [];
-const TEST_ORIGIN = "https://app.example.test";
+const TEST_ORIGIN = TEST_BACKEND_ORIGIN;
+const TEST_SESSION = TEST_BACKEND_SESSION;
+
+function captureDocumentWith(text: string, blockId = "block-capture-api-1") {
+  return {
+    schemaVersion: 1,
+    document: {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          attrs: { id: blockId },
+          content: [{ type: "text", text }]
+        }
+      ]
+    }
+  };
+}
 const SCENE_ID = "scene-arrival-at-bellwether";
-const TEST_SESSION: AuthenticatedSession = {
-  account: {
-    id: "account-test",
-    name: "Test Writer",
-    email: "writer@example.test",
-    emailVerified: true
-  },
-  session: {
-    id: "session-test",
-    expiresAt: "2026-07-18T19:00:00.000Z"
-  }
-};
 
 function fakeAuth(session: AuthenticatedSession | null = TEST_SESSION): AuthGateway {
-  return {
-    handler: () => Response.json({ auth: "handled" }),
-    getSession: async () => session
-  };
+  return fakeBackendAuth(session);
 }
 
 function switchableAuth(initial: AuthenticatedSession) {
@@ -65,89 +51,19 @@ function switchableAuth(initial: AuthenticatedSession) {
 }
 
 afterEach(async () => {
-  while (closers.length > 0) {
-    const close = closers.pop();
+  while (testBackendClosers.length > 0) {
+    const close = testBackendClosers.pop();
     if (close !== undefined) await close();
   }
 });
 
-async function seededApp(auth: AuthGateway = fakeAuth()) {
-  const { db, close } = createPgliteDatabase();
-  closers.push(close);
-  await migratePgliteRepositoryDatabase(db);
-  await db.insert(user).values({
-    id: TEST_SESSION.account.id,
-    name: TEST_SESSION.account.name,
-    email: TEST_SESSION.account.email,
-    emailVerified: true
-  });
-  const repositoryDatabase = toRepositoryDatabase(db);
-  const repository = createPostgresProjectRepository(repositoryDatabase);
-  const sceneDocuments =
-    createPostgresSceneDocumentRepository(repositoryDatabase);
-  const canvases = createPostgresCanvasRepository(repositoryDatabase);
-  await seedProject(repository, BELLWETHER_FIXTURE);
-  await repository.transaction((writer) => {
-    writer.insertProjectMembership(
-      createProjectMembership({
-        projectId: BELLWETHER_FIXTURE_PROJECT_ID,
-        accountId: accountId(TEST_SESSION.account.id),
-        role: "owner",
-        createdAt: "2026-07-11T19:00:00.000Z"
-      })
-    );
-  });
-  let nextId = 0;
-  const ids = {
-    create: (kind: string) => {
-      nextId += 1;
-      return `${kind}-test-${nextId}`;
-    }
-  };
-  const services = createGhostwriterServices({
-    projects: repository,
-    ids,
-    clock: { now: () => "2026-07-11T19:00:00.000Z" }
-  });
-  const writing = createSceneWritingServices({
-    projects: repository,
-    sceneDocuments,
-    ids,
-    clock: { now: () => "2026-07-11T19:00:00.000Z" }
-  });
-  const canvas = createCanvasServices({
-    projects: repository,
-    canvases,
-    sceneDocuments,
-    sceneCreation:
-      createPostgresCanvasSceneCreationUnitOfWork(repositoryDatabase),
-    ids,
-    clock: { now: () => "2026-07-11T19:00:00.000Z" }
-  });
-  const reader = createBookReaderServices({
-    projects: repository,
-    sceneDocuments,
-    canvases
-  });
-  const identity = createIdentityServices({
-    profiles: createMemoryWriterProfileRepository(),
-    clock: { now: () => "2026-07-11T19:00:00.000Z" }
-  });
-
-  return createApp({
-    services,
-    writing,
-    canvas,
-    reader,
-    identity,
-    auth,
-    allowedOrigins: [TEST_ORIGIN]
-  });
+async function seededApp(...args: Parameters<typeof createSeededBackendApp>) {
+  return createSeededBackendApp(...args);
 }
 
 describe("backend app", () => {
   it("reports health", async () => {
-    const app = await seededApp();
+    const { app } = await seededApp();
     const response = await app.request("/health");
 
     expect(response.status).toBe(200);
@@ -155,7 +71,7 @@ describe("backend app", () => {
   });
 
   it("mounts the authentication handler", async () => {
-    const app = await seededApp();
+    const { app } = await seededApp();
     const response = await app.request("/api/auth/test");
 
     expect(response.status).toBe(200);
@@ -163,7 +79,7 @@ describe("backend app", () => {
   });
 
   it("rejects protected requests without a session", async () => {
-    const app = await seededApp(fakeAuth(null));
+    const { app } = await seededApp(fakeAuth(null));
     const response = await app.request(
       `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/navigator`
     );
@@ -173,7 +89,7 @@ describe("backend app", () => {
   });
 
   it("idempotently bootstraps the signed-in writer profile", async () => {
-    const app = await seededApp();
+    const { app } = await seededApp();
     const first = await app.request("/api/me");
     const second = await app.request("/api/me");
 
@@ -192,7 +108,7 @@ describe("backend app", () => {
   });
 
   it("updates the writer profile with origin and version checks", async () => {
-    const app = await seededApp();
+    const { app } = await seededApp();
     const me = await (await app.request("/api/me")).json();
     const response = await app.request("/api/me/profile", {
       method: "PATCH",
@@ -213,7 +129,7 @@ describe("backend app", () => {
   });
 
   it("lists and creates writer-owned projects", async () => {
-    const app = await seededApp();
+    const { app } = await seededApp();
     const before = await app.request("/api/projects");
     expect(before.status).toBe(200);
     await expect(before.json()).resolves.toMatchObject({
@@ -248,7 +164,7 @@ describe("backend app", () => {
   });
 
   it("runs an owner-scoped read capability and keeps optional Reader voice explicit", async () => {
-    const app = await seededApp();
+    const { app } = await seededApp();
     const chat = await app.request("/api/workspace/chat", {
       method: "POST",
       headers: {
@@ -281,7 +197,7 @@ describe("backend app", () => {
   });
 
   it("executes typed commands and rejects stale writes", async () => {
-    const app = await seededApp();
+    const { app } = await seededApp();
     const renamed = await app.request(
       `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/commands`,
       {
@@ -323,7 +239,7 @@ describe("backend app", () => {
   });
 
   it("serves guarded Canvas commands, history, preference, and undo", async () => {
-    const app = await seededApp();
+    const { app } = await seededApp();
     const basePath = `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/canvas`;
     const initial = await app.request(basePath);
     expect(initial.status).toBe(200);
@@ -437,7 +353,7 @@ describe("backend app", () => {
   });
 
   it("atomically creates a Draft scene from explicit Canvas placement", async () => {
-    const app = await seededApp();
+    const { app } = await seededApp();
     const basePath = `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/canvas`;
     await app.request(basePath);
     const created = await app.request(`${basePath}/scenes`, {
@@ -519,7 +435,7 @@ describe("backend app", () => {
   });
 
   it("rejects unbounded Canvas payloads and arbitrary image fetch metadata", async () => {
-    const app = await seededApp();
+    const { app } = await seededApp();
     const path =
       `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/canvas/commands`;
     const arbitraryFetch = await app.request(path, {
@@ -589,7 +505,7 @@ describe("backend app", () => {
 
   it("ensures, leases, saves, and reloads a scene document from Postgres", async () => {
     const auth = switchableAuth(TEST_SESSION);
-    const app = await seededApp(auth.gateway);
+    const { app } = await seededApp(auth.gateway);
     const basePath =
       `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/scenes/${SCENE_ID}`;
     const workspace = await app.request(`${basePath}/workspace`);
@@ -685,7 +601,7 @@ describe("backend app", () => {
 
   it("checkpoints, names, compares, lists, and restores immutable scene history", async () => {
     const auth = switchableAuth(TEST_SESSION);
-    const app = await seededApp(auth.gateway);
+    const { app } = await seededApp(auth.gateway);
     const basePath =
       `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/scenes/${SCENE_ID}`;
     const workspace = await (
@@ -945,7 +861,7 @@ describe("backend app", () => {
   });
 
   it("rejects malformed and oversized scene documents without echoing prose", async () => {
-    const app = await seededApp();
+    const { app } = await seededApp();
     const basePath =
       `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/scenes/${SCENE_ID}`;
     const malformed = await app.request(`${basePath}/body`, {
@@ -985,8 +901,742 @@ describe("backend app", () => {
     });
   });
 
+  it("creates, lists, saves, archives, and protects capture routes", async () => {
+    const basePath = `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/captures`;
+    const unauthenticated = await (
+      await seededApp(fakeAuth(null))
+    ).app.request(basePath, {
+      method: "POST",
+      headers: { origin: TEST_ORIGIN }
+    });
+    expect(unauthenticated.status).toBe(401);
+    await expect(unauthenticated.json()).resolves.toMatchObject({
+      code: "UNAUTHENTICATED"
+    });
+
+    const { app } = await seededApp();
+    const untrusted = await app.request(basePath, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({})
+    });
+    expect(untrusted.status).toBe(403);
+    await expect(untrusted.json()).resolves.toMatchObject({
+      code: "UNTRUSTED_ORIGIN"
+    });
+
+    const created = await app.request(basePath, {
+      method: "POST",
+      headers: { origin: TEST_ORIGIN }
+    });
+    expect(created.status).toBe(201);
+    const createdBody = await created.json();
+    expect(createdBody.head).toMatchObject({
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+      sourceModality: "text",
+      workingVersion: 1,
+      status: "draft"
+    });
+    const captureIdValue = createdBody.head.captureId as string;
+
+    const emptyList = await app.request(basePath);
+    expect(emptyList.status).toBe(200);
+    await expect(emptyList.json()).resolves.toEqual({ captures: [] });
+
+    const loaded = await app.request(`${basePath}/${captureIdValue}`);
+    expect(loaded.status).toBe(200);
+    await expect(loaded.json()).resolves.toMatchObject({
+      head: { captureId: captureIdValue, workingVersion: 1 }
+    });
+
+    const document = captureDocumentWith("Capture prose for the inbox.");
+    const saved = await app.request(`${basePath}/${captureIdValue}/body`, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        origin: TEST_ORIGIN
+      },
+      body: JSON.stringify({ expectedWorkingVersion: 1, document })
+    });
+    expect(saved.status).toBe(200);
+    await expect(saved.json()).resolves.toMatchObject({
+      head: { workingVersion: 2, document }
+    });
+
+    const listed = await app.request(basePath);
+    expect(listed.status).toBe(200);
+    const listedBody = await listed.json();
+    expect(listedBody.captures).toEqual([
+      expect.objectContaining({
+        captureId: captureIdValue,
+        workingVersion: 2
+      })
+    ]);
+    expect(listedBody.captures[0]).not.toHaveProperty("document");
+
+    const stale = await app.request(`${basePath}/${captureIdValue}/body`, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        origin: TEST_ORIGIN
+      },
+      body: JSON.stringify({
+        expectedWorkingVersion: 1,
+        document: captureDocumentWith("Stale.", "block-stale")
+      })
+    });
+    expect(stale.status).toBe(409);
+    await expect(stale.json()).resolves.toMatchObject({
+      code: "CAPTURE_VERSION_CONFLICT"
+    });
+
+    const malformed = await app.request(`${basePath}/${captureIdValue}/body`, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        origin: TEST_ORIGIN
+      },
+      body: JSON.stringify({
+        expectedWorkingVersion: 2,
+        document: {
+          schemaVersion: 1,
+          document: { type: "doc", content: [] }
+        }
+      })
+    });
+    expect(malformed.status).toBe(422);
+    await expect(malformed.json()).resolves.toEqual({
+      error: "Invalid capture document.",
+      code: "INVALID_CAPTURE_DOCUMENT"
+    });
+
+    const { app: otherApp } = await seededApp(
+      fakeAuth({
+        account: {
+          id: "account-other",
+          name: "Other Writer",
+          email: "other@example.test",
+          emailVerified: true
+        },
+        session: {
+          id: "session-other",
+          expiresAt: "2026-07-18T19:00:00.000Z"
+        }
+      })
+    );
+    const nonOwner = await otherApp.request(`${basePath}/${captureIdValue}`);
+    expect(nonOwner.status).toBe(404);
+    await expect(nonOwner.json()).resolves.toMatchObject({
+      code: "CAPTURE_NOT_FOUND"
+    });
+
+    const wrongProject = await app.request(
+      `/api/projects/project-not-here/captures/${captureIdValue}`
+    );
+    expect(wrongProject.status).toBe(404);
+    await expect(wrongProject.json()).resolves.toMatchObject({
+      code: "CAPTURE_NOT_FOUND"
+    });
+
+    const archived = await app.request(`${basePath}/${captureIdValue}/archive`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: TEST_ORIGIN
+      },
+      body: JSON.stringify({ archived: true })
+    });
+    expect(archived.status).toBe(200);
+    await expect(archived.json()).resolves.toMatchObject({
+      head: { status: "archived", archivedAt: expect.any(String) }
+    });
+
+    const hidden = await app.request(basePath);
+    await expect(hidden.json()).resolves.toEqual({ captures: [] });
+    const withArchived = await app.request(`${basePath}?includeArchived=true`);
+    await expect(withArchived.json()).resolves.toEqual({
+      captures: [
+        expect.objectContaining({
+          captureId: captureIdValue,
+          status: "archived"
+        })
+      ]
+    });
+
+    const restored = await app.request(`${basePath}/${captureIdValue}/archive`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: TEST_ORIGIN
+      },
+      body: JSON.stringify({ archived: false })
+    });
+    expect(restored.status).toBe(200);
+    await expect(restored.json()).resolves.toMatchObject({
+      head: { status: "draft" }
+    });
+
+    await app.request(`${basePath}/${captureIdValue}/archive`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: TEST_ORIGIN
+      },
+      body: JSON.stringify({ archived: true })
+    });
+    const archivedSave = await app.request(`${basePath}/${captureIdValue}/body`, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        origin: TEST_ORIGIN
+      },
+      body: JSON.stringify({
+        expectedWorkingVersion: 2,
+        document: captureDocumentWith("Should not apply.", "block-archived")
+      })
+    });
+    expect(archivedSave.status).toBe(409);
+    await expect(archivedSave.json()).resolves.toMatchObject({
+      code: "CAPTURE_NOT_EDITABLE"
+    });
+
+    const oversized = await app.request(`${basePath}/${captureIdValue}/body`, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        origin: TEST_ORIGIN
+      },
+      body: JSON.stringify({
+        expectedWorkingVersion: 2,
+        document: "x".repeat(2 * 1_024 * 1_024)
+      })
+    });
+    expect(oversized.status).toBe(413);
+    await expect(oversized.json()).resolves.toMatchObject({
+      code: "PAYLOAD_TOO_LARGE"
+    });
+  });
+
+  it("promotes captures into scenes with guarded optimistic concurrency", async () => {
+    const { app } = await seededApp();
+    const projectPath = `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}`;
+    const basePath = `${projectPath}/captures`;
+    const signalBookId = BELLWETHER_FIXTURE.project.bookIds[0];
+    const lowTideChapterId = "chapter-low-tide";
+
+    const { app: unauthApp } = await seededApp(fakeAuth(null));
+    const unauthenticated = await unauthApp.request(
+      `${basePath}/capture-test/promote`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+        body: JSON.stringify({})
+      }
+    );
+    expect(unauthenticated.status).toBe(401);
+
+    const untrusted = await app.request(`${basePath}/capture-test/promote`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({})
+    });
+    expect(untrusted.status).toBe(403);
+    await expect(untrusted.json()).resolves.toMatchObject({
+      code: "UNTRUSTED_ORIGIN"
+    });
+
+    const created = await app.request(basePath, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({ sourceModality: "text" })
+    });
+    const createdBody = await created.json();
+    const captureIdValue = createdBody.head.captureId as string;
+    const promotePath = `${basePath}/${captureIdValue}/promote`;
+
+    const emptyPromote = await app.request(promotePath, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({
+        expectedCaptureWorkingVersion: 1,
+        expectedCaptureContentHash: createdBody.head.contentHash,
+        expectedProjectVersion: 1,
+        title: "Should not promote",
+        manuscriptPlacement: { kind: "unassigned", bookId: signalBookId }
+      })
+    });
+    expect(emptyPromote.status).toBe(409);
+    await expect(emptyPromote.json()).resolves.toMatchObject({
+      code: "CAPTURE_NOT_PROMOTABLE"
+    });
+
+    const prose = "Exact capture prose for promotion.";
+    const saved = await app.request(`${basePath}/${captureIdValue}/body`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({
+        expectedWorkingVersion: 1,
+        document: captureDocumentWith(prose, "block-promote-exact")
+      })
+    });
+    const savedBody = await saved.json();
+    const captureHead = savedBody.head as {
+      workingVersion: number;
+      contentHash: string;
+      document: unknown;
+    };
+
+    const navigatorBefore = await app.request(`${projectPath}/navigator`);
+    const navigatorBeforeBody = await navigatorBefore.json();
+    const sceneCountBefore = navigatorBeforeBody.totals.scenes as number;
+
+    const unassignedPromote = await app.request(promotePath, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({
+        expectedCaptureWorkingVersion: captureHead.workingVersion,
+        expectedCaptureContentHash: captureHead.contentHash,
+        expectedProjectVersion: 1,
+        title: "From the inbox",
+        manuscriptPlacement: { kind: "unassigned", bookId: signalBookId }
+      })
+    });
+    expect(unassignedPromote.status).toBe(201);
+    const unassignedBody = await unassignedPromote.json();
+    expect(unassignedBody).toMatchObject({
+      captureHead: {
+        status: "integrated",
+        integratedSceneId: unassignedBody.scene.id,
+        integrationRevisionId: expect.any(String),
+        integratedAt: expect.any(String),
+        integratedByAccountId: TEST_SESSION.account.id
+      },
+      scene: { title: "From the inbox", bookId: signalBookId },
+      sceneDocumentHead: {
+        workingVersion: 1,
+        document: captureHead.document
+      },
+      navigator: { version: 2 }
+    });
+    expect(unassignedBody.sceneDocumentHead.document.document.content?.[0]).toMatchObject(
+      { attrs: { id: "block-promote-exact" } }
+    );
+    expect(unassignedBody).not.toHaveProperty("canvas");
+
+    const listedAfterPromote = await app.request(basePath);
+    expect(listedAfterPromote.status).toBe(200);
+    const listedAfterPromoteBody = await listedAfterPromote.json();
+    expect(listedAfterPromoteBody.captures).toEqual([
+      expect.objectContaining({
+        captureId: captureIdValue,
+        status: "integrated",
+        integratedSceneId: unassignedBody.scene.id,
+        integrationRevisionId: unassignedBody.captureHead.integrationRevisionId,
+        integratedAt: unassignedBody.captureHead.integratedAt,
+        integratedByAccountId: TEST_SESSION.account.id
+      })
+    ]);
+    expect(listedAfterPromoteBody.captures[0]).not.toHaveProperty("document");
+
+    const integratedAgain = await app.request(promotePath, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({
+        expectedCaptureWorkingVersion: unassignedBody.captureHead.workingVersion,
+        expectedCaptureContentHash: unassignedBody.captureHead.contentHash,
+        expectedProjectVersion: 2,
+        title: "Again",
+        manuscriptPlacement: { kind: "unassigned", bookId: signalBookId }
+      })
+    });
+    expect(integratedAgain.status).toBe(409);
+    await expect(integratedAgain.json()).resolves.toMatchObject({
+      code: "CAPTURE_NOT_PROMOTABLE"
+    });
+
+    const captureMissingBoard = await app.request(basePath, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({ sourceModality: "text" })
+    });
+    const captureMissingBoardBody = await captureMissingBoard.json();
+    const captureMissingBoardId = captureMissingBoardBody.head.captureId as string;
+    await app.request(`${basePath}/${captureMissingBoardId}/body`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({
+        expectedWorkingVersion: 1,
+        document: captureDocumentWith("Missing board.", "block-missing-board")
+      })
+    });
+    const loadedMissingBoard = await app.request(`${basePath}/${captureMissingBoardId}`);
+    const loadedMissingBoardBody = await loadedMissingBoard.json();
+    const missingBoard = await app.request(
+      `${basePath}/${captureMissingBoardId}/promote`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+        body: JSON.stringify({
+          expectedCaptureWorkingVersion: loadedMissingBoardBody.head.workingVersion,
+          expectedCaptureContentHash: loadedMissingBoardBody.head.contentHash,
+          expectedProjectVersion: 2,
+          title: "Missing board",
+          manuscriptPlacement: { kind: "unassigned", bookId: signalBookId },
+          canvas: {
+            expectedCanvasVersion: 1,
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 120,
+            z: 1
+          }
+        })
+      }
+    );
+    expect(missingBoard.status).toBe(404);
+    await expect(missingBoard.json()).resolves.toMatchObject({
+      code: "CANVAS_NOT_FOUND"
+    });
+
+    const captureTwo = await app.request(basePath, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({ sourceModality: "text" })
+    });
+    const captureTwoBody = await captureTwo.json();
+    const captureTwoId = captureTwoBody.head.captureId as string;
+    const savedTwo = await app.request(`${basePath}/${captureTwoId}/body`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({
+        expectedWorkingVersion: 1,
+        document: captureDocumentWith("Chapter promotion prose.", "block-chapter-promo")
+      })
+    });
+    const savedTwoBody = await savedTwo.json();
+
+    await app.request(`${projectPath}/canvas`);
+    const chapterPromote = await app.request(`${basePath}/${captureTwoId}/promote`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({
+        expectedCaptureWorkingVersion: savedTwoBody.head.workingVersion,
+        expectedCaptureContentHash: savedTwoBody.head.contentHash,
+        expectedProjectVersion: 2,
+        title: "Chapter promotion",
+        manuscriptPlacement: {
+          kind: "chapter",
+          bookId: signalBookId,
+          chapterId: lowTideChapterId
+        },
+        canvas: {
+          expectedCanvasVersion: 1,
+          x: 120,
+          y: 80,
+          width: 240,
+          height: 160,
+          z: 3,
+          storyOrderHint: 5
+        }
+      })
+    });
+    expect(chapterPromote.status).toBe(201);
+    const chapterBody = await chapterPromote.json();
+    expect(chapterBody).toMatchObject({
+      scene: { title: "Chapter promotion", bookId: signalBookId },
+      canvas: {
+        board: {
+          version: 2,
+          objects: [
+            expect.objectContaining({
+              kind: "scene-card",
+              sceneId: chapterBody.scene.id,
+              storyOrderHint: 5
+            })
+          ]
+        },
+        spine: expect.objectContaining({ canvasVersion: 2 })
+      }
+    });
+    expect(chapterBody.scene.id).toBe(chapterBody.captureHead.integratedSceneId);
+
+    const captureThree = await app.request(basePath, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({ sourceModality: "text" })
+    });
+    const captureThreeBody = await captureThree.json();
+    const captureThreeId = captureThreeBody.head.captureId as string;
+    await app.request(`${basePath}/${captureThreeId}/body`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({
+        expectedWorkingVersion: 1,
+        document: captureDocumentWith("Stale checks.", "block-stale-promo")
+      })
+    });
+    const loadedThree = await app.request(`${basePath}/${captureThreeId}`);
+    const loadedThreeBody = await loadedThree.json();
+    const stalePromotePath = `${basePath}/${captureThreeId}/promote`;
+    const staleVersion = await app.request(stalePromotePath, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({
+        expectedCaptureWorkingVersion: 1,
+        expectedCaptureContentHash: loadedThreeBody.head.contentHash,
+        expectedProjectVersion: 3,
+        title: "Stale version",
+        manuscriptPlacement: { kind: "unassigned", bookId: signalBookId }
+      })
+    });
+    expect(staleVersion.status).toBe(409);
+    await expect(staleVersion.json()).resolves.toMatchObject({
+      code: "CAPTURE_VERSION_CONFLICT"
+    });
+
+    const staleHash = await app.request(stalePromotePath, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({
+        expectedCaptureWorkingVersion: loadedThreeBody.head.workingVersion,
+        expectedCaptureContentHash: "0".repeat(64),
+        expectedProjectVersion: 3,
+        title: "Stale hash",
+        manuscriptPlacement: { kind: "unassigned", bookId: signalBookId }
+      })
+    });
+    expect(staleHash.status).toBe(409);
+    await expect(staleHash.json()).resolves.toMatchObject({
+      code: "CAPTURE_CONTENT_CHANGED"
+    });
+
+    const staleProject = await app.request(stalePromotePath, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({
+        expectedCaptureWorkingVersion: loadedThreeBody.head.workingVersion,
+        expectedCaptureContentHash: loadedThreeBody.head.contentHash,
+        expectedProjectVersion: 1,
+        title: "Stale project",
+        manuscriptPlacement: { kind: "unassigned", bookId: signalBookId }
+      })
+    });
+    expect(staleProject.status).toBe(409);
+    await expect(staleProject.json()).resolves.toMatchObject({
+      code: "VERSION_CONFLICT"
+    });
+
+    const captureFour = await app.request(basePath, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({ sourceModality: "text" })
+    });
+    const captureFourBody = await captureFour.json();
+    const captureFourId = captureFourBody.head.captureId as string;
+    await app.request(`${basePath}/${captureFourId}/body`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({
+        expectedWorkingVersion: 1,
+        document: captureDocumentWith("Canvas stale.", "block-canvas-stale")
+      })
+    });
+    const loadedFour = await app.request(`${basePath}/${captureFourId}`);
+    const loadedFourBody = await loadedFour.json();
+    await app.request(`${projectPath}/canvas`);
+    const staleCanvas = await app.request(`${basePath}/${captureFourId}/promote`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({
+        expectedCaptureWorkingVersion: loadedFourBody.head.workingVersion,
+        expectedCaptureContentHash: loadedFourBody.head.contentHash,
+        expectedProjectVersion: 3,
+        title: "Stale canvas",
+        manuscriptPlacement: { kind: "unassigned", bookId: signalBookId },
+        canvas: {
+          expectedCanvasVersion: 99,
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 120,
+          z: 1
+        }
+      })
+    });
+    expect(staleCanvas.status).toBe(409);
+    await expect(staleCanvas.json()).resolves.toMatchObject({
+      code: "CANVAS_VERSION_CONFLICT"
+    });
+
+    const navigatorAfterStale = await app.request(`${projectPath}/navigator`);
+    const navigatorAfterStaleBody = await navigatorAfterStale.json();
+    expect(navigatorAfterStaleBody.totals.scenes).toBe(sceneCountBefore + 2);
+
+    const captureSix = await app.request(basePath, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({ sourceModality: "text" })
+    });
+    const captureSixBody = await captureSix.json();
+    const captureSixId = captureSixBody.head.captureId as string;
+    await app.request(`${basePath}/${captureSixId}/body`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({
+        expectedWorkingVersion: 1,
+        document: captureDocumentWith("Archived promote.", "block-archived-promo")
+      })
+    });
+    const loadedSix = await app.request(`${basePath}/${captureSixId}`);
+    const loadedSixBody = await loadedSix.json();
+    await app.request(`${basePath}/${captureSixId}/archive`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({ archived: true })
+    });
+    const archivedPromote = await app.request(`${basePath}/${captureSixId}/promote`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({
+        expectedCaptureWorkingVersion: loadedSixBody.head.workingVersion,
+        expectedCaptureContentHash: loadedSixBody.head.contentHash,
+        expectedProjectVersion: 3,
+        title: "Archived",
+        manuscriptPlacement: { kind: "unassigned", bookId: signalBookId }
+      })
+    });
+    expect(archivedPromote.status).toBe(409);
+    await expect(archivedPromote.json()).resolves.toMatchObject({
+      code: "CAPTURE_NOT_PROMOTABLE"
+    });
+
+    const { app: otherApp } = await seededApp(
+      fakeAuth({
+        account: {
+          id: "account-other-promote",
+          name: "Other",
+          email: "other-promote@example.test",
+          emailVerified: true
+        },
+        session: {
+          id: "session-other-promote",
+          expiresAt: "2026-07-18T19:00:00.000Z"
+        }
+      })
+    );
+    const nonOwner = await otherApp.request(promotePath, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({
+        expectedCaptureWorkingVersion: 2,
+        expectedCaptureContentHash: captureHead.contentHash,
+        expectedProjectVersion: 3,
+        title: "Non-owner",
+        manuscriptPlacement: { kind: "unassigned", bookId: signalBookId }
+      })
+    });
+    expect(nonOwner.status).toBe(404);
+    await expect(nonOwner.json()).resolves.toMatchObject({
+      code: "CAPTURE_NOT_FOUND"
+    });
+
+    const malformed = await app.request(stalePromotePath, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({
+        expectedCaptureWorkingVersion: loadedThreeBody.head.workingVersion,
+        expectedCaptureContentHash: "not-a-hash",
+        expectedProjectVersion: 3,
+        title: "Bad hash",
+        manuscriptPlacement: { kind: "unassigned", bookId: signalBookId }
+      })
+    });
+    expect(malformed.status).toBe(400);
+    await expect(malformed.json()).resolves.toMatchObject({
+      code: "INVALID_REQUEST"
+    });
+
+    const invalidPlacement = await app.request(stalePromotePath, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({
+        expectedCaptureWorkingVersion: loadedThreeBody.head.workingVersion,
+        expectedCaptureContentHash: loadedThreeBody.head.contentHash,
+        expectedProjectVersion: 3,
+        title: "Bad chapter",
+        manuscriptPlacement: {
+          kind: "chapter",
+          bookId: signalBookId,
+          chapterId: "chapter-missing"
+        }
+      })
+    });
+    expect(invalidPlacement.status).toBe(404);
+    await expect(invalidPlacement.json()).resolves.toMatchObject({
+      code: "RECORD_NOT_FOUND"
+    });
+
+    const oversized = await app.request(stalePromotePath, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: TEST_ORIGIN,
+        "content-length": String(70_000)
+      },
+      body: "x".repeat(70_000)
+    });
+    expect(oversized.status).toBe(413);
+    await expect(oversized.json()).resolves.toMatchObject({
+      code: "PAYLOAD_TOO_LARGE"
+    });
+
+    const captureSeven = await app.request(basePath, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({ sourceModality: "text" })
+    });
+    const captureSevenBody = await captureSeven.json();
+    const captureSevenId = captureSevenBody.head.captureId as string;
+    await app.request(`${basePath}/${captureSevenId}/body`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+      body: JSON.stringify({
+        expectedWorkingVersion: 1,
+        document: captureDocumentWith("Concurrent.", "block-concurrent-promo")
+      })
+    });
+    const loadedSeven = await app.request(`${basePath}/${captureSevenId}`);
+    const loadedSevenBody = await loadedSeven.json();
+    const concurrentPath = `${basePath}/${captureSevenId}/promote`;
+    const concurrentBody = JSON.stringify({
+      expectedCaptureWorkingVersion: loadedSevenBody.head.workingVersion,
+      expectedCaptureContentHash: loadedSevenBody.head.contentHash,
+      expectedProjectVersion: 3,
+      title: "Concurrent winner",
+      manuscriptPlacement: { kind: "unassigned", bookId: signalBookId }
+    });
+    const [first, second] = await Promise.all([
+      app.request(concurrentPath, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+        body: concurrentBody
+      }),
+      app.request(concurrentPath, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+        body: concurrentBody
+      })
+    ]);
+    const statuses = [first.status, second.status].sort();
+    expect(statuses).toEqual([201, 409]);
+    const loser = first.status === 409 ? first : second;
+    await expect(loser.json()).resolves.toMatchObject({
+      code: "CAPTURE_NOT_PROMOTABLE"
+    });
+  });
+
   it("requires a trusted origin for canonical mutations", async () => {
-    const app = await seededApp();
+    const { app } = await seededApp();
     const response = await app.request("/api/projects", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1000,7 +1650,7 @@ describe("backend app", () => {
   });
 
   it("does not disclose another account's project", async () => {
-    const app = await seededApp(
+    const { app } = await seededApp(
       fakeAuth({
         account: {
           id: "account-other",
@@ -1093,7 +1743,7 @@ describe("backend app", () => {
   });
 
   it("serves the project navigator from Postgres", async () => {
-    const app = await seededApp();
+    const { app } = await seededApp();
     const response = await app.request(
       `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/navigator`
     );
@@ -1103,14 +1753,14 @@ describe("backend app", () => {
   });
 
   it("returns 404 for an unknown project", async () => {
-    const app = await seededApp();
+    const { app } = await seededApp();
     const response = await app.request("/api/projects/project-not-here/navigator");
 
     expect(response.status).toBe(404);
   });
 
   it("serves a bounded book reader projection without taking a scene lease", async () => {
-    const app = await seededApp();
+    const { app } = await seededApp();
     const bookId = BELLWETHER_FIXTURE_NAVIGATOR.books[0]!.id;
     const response = await app.request(
       `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/books/${bookId}/reader?pinSceneId=${SCENE_ID}`
@@ -1143,7 +1793,7 @@ describe("backend app", () => {
 
   it("does not disclose unknown books to non-owners", async () => {
     const auth = switchableAuth(TEST_SESSION);
-    const app = await seededApp(auth.gateway);
+    const { app } = await seededApp(auth.gateway);
     const bookId = BELLWETHER_FIXTURE_NAVIGATOR.books[0]!.id;
     auth.use({
       ...TEST_SESSION,

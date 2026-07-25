@@ -41,7 +41,16 @@ const ids = () =>
     sceneVariant: [],
     canvasObject: [],
     canvasLink: [],
-    canvasRevision: []
+    canvasRevision: [],
+    capture: [],
+    captureRevision: [],
+    captureDocumentBlock: [],
+    attachment: [],
+    playbook: [],
+    contextReceipt: [],
+    agentRun: [],
+    agentProposal: [],
+    mcpGrant: []
   });
 
 async function setup() {

@@ -224,6 +224,127 @@ export const sceneVariants = pgTable(
   ]
 );
 
+/**
+ * Capture genesis inserts revision and head in one transaction. `capture_revisions.capture_id` and
+ * `captures.genesis_revision_id` reference each other; migration 0013 enforces both with
+ * DEFERRABLE INITIALLY DEFERRED constraints checked at commit.
+ */
+export const captureRevisions = pgTable(
+  "capture_revisions",
+  {
+    id: text("id").primaryKey(),
+    captureId: text("capture_id")
+      .notNull()
+      .references((): AnyPgColumn => captures.captureId, { onDelete: "restrict" }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "restrict" }),
+    parentRevisionId: text("parent_revision_id").references(
+      (): AnyPgColumn => captureRevisions.id,
+      { onDelete: "restrict" }
+    ),
+    schemaVersion: integer("schema_version").notNull(),
+    document: jsonb("document").notNull(),
+    contentHash: text("content_hash").notNull(),
+    actorAccountId: text("actor_account_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    origin: text("origin").notNull(),
+    reason: text("reason").notNull(),
+    createdAt: text("created_at").notNull()
+  },
+  (table) => [
+    index("capture_revisions_capture_id_index").on(table.captureId),
+    index("capture_revisions_project_id_index").on(table.projectId),
+    index("capture_revisions_capture_hash_index").on(
+      table.captureId,
+      table.contentHash
+    )
+  ]
+);
+
+export const captureAttachments = pgTable(
+  "capture_attachments",
+  {
+    attachmentId: text("attachment_id").primaryKey(),
+    captureId: text("capture_id")
+      .notNull()
+      .references(() => captures.captureId, { onDelete: "restrict" }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "restrict" }),
+    state: text("state").notNull(),
+    displayFilename: text("display_filename").notNull(),
+    declaredContentType: text("declared_content_type").notNull(),
+    readyContentType: text("ready_content_type"),
+    declaredByteSize: integer("declared_byte_size").notNull(),
+    actualByteSize: integer("actual_byte_size"),
+    clientSha256: text("client_sha256").notNull(),
+    serverSha256: text("server_sha256"),
+    objectKey: text("object_key").notNull(),
+    pendingExpiresAt: text("pending_expires_at"),
+    refusalCode: text("refusal_code"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    readyAt: text("ready_at"),
+    deletedAt: text("deleted_at")
+  },
+  (table) => [
+    uniqueIndex("capture_attachments_object_key_unique").on(table.objectKey),
+    index("capture_attachments_capture_id_index").on(table.captureId),
+    index("capture_attachments_project_id_index").on(table.projectId),
+    index("capture_attachments_state_index").on(table.state),
+    index("capture_attachments_pending_expires_at_index").on(table.pendingExpiresAt)
+  ]
+);
+
+export const captures = pgTable(
+  "captures",
+  {
+    captureId: text("capture_id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "restrict" }),
+    status: text("status").notNull(),
+    sourceModality: text("source_modality").notNull(),
+    workingVersion: integer("working_version").notNull().default(1),
+    schemaVersion: integer("schema_version").notNull(),
+    document: jsonb("document").notNull(),
+    contentHash: text("content_hash").notNull(),
+    genesisRevisionId: text("genesis_revision_id")
+      .notNull()
+      .references(() => captureRevisions.id, { onDelete: "restrict" }),
+    authorAccountId: text("author_account_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    updatedByAccountId: text("updated_by_account_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    archivedAt: text("archived_at"),
+    integrationRevisionId: text("integration_revision_id").references(
+      (): AnyPgColumn => captureRevisions.id,
+      { onDelete: "restrict" }
+    ),
+    integratedSceneId: text("integrated_scene_id").references(() => scenes.id, {
+      onDelete: "restrict"
+    }),
+    integratedAt: text("integrated_at"),
+    integratedByAccountId: text("integrated_by_account_id").references(
+      () => user.id,
+      { onDelete: "restrict" }
+    )
+  },
+  (table) => [
+    index("captures_project_id_index").on(table.projectId),
+    index("captures_integration_revision_id_index").on(
+      table.integrationRevisionId
+    ),
+    index("captures_integrated_scene_id_index").on(table.integratedSceneId)
+  ]
+);
+
 export const sceneDocuments = pgTable(
   "scene_documents",
   {
@@ -571,6 +692,195 @@ export const canvasRevisions = pgTable(
   ]
 );
 
+export const providerCredentials = pgTable(
+  "provider_credentials",
+  {
+    accountId: text("account_id")
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    version: integer("version").notNull(),
+    kekVersion: text("kek_version").notNull(),
+    ciphertextB64: text("ciphertext_b64").notNull(),
+    ivB64: text("iv_b64").notNull(),
+    authTagB64: text("auth_tag_b64").notNull(),
+    maskedHint: text("masked_hint").notNull(),
+    validationState: text("validation_state").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    validatedAt: text("validated_at")
+  },
+  (table) => [index("provider_credentials_kek_version_index").on(table.kekVersion)]
+);
+
+export const aiCollaborationProfiles = pgTable("ai_collaboration_profiles", {
+  accountId: text("account_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  setupSkipped: boolean("setup_skipped").notNull(),
+  posture: text("posture"),
+  boundaries: text("boundaries"),
+  updatedAt: text("updated_at").notNull()
+});
+
+export const projectAgentInstructions = pgTable("project_agent_instructions", {
+  projectId: text("project_id")
+    .primaryKey()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  body: text("body").notNull(),
+  contentHash: text("content_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull()
+});
+
+export const projectPlaybooks = pgTable(
+  "project_playbooks",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    name: text("name").notNull(),
+    enabled: boolean("enabled").notNull(),
+    trigger: text("trigger").notNull(),
+    allowedContextClasses: jsonb("allowed_context_classes").notNull(),
+    outputSchemaId: text("output_schema_id").notNull(),
+    guidance: text("guidance").notNull(),
+    guidanceHash: text("guidance_hash").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    archivedAt: text("archived_at")
+  },
+  (table) => [
+    index("project_playbooks_project_id_index").on(table.projectId),
+    index("project_playbooks_archived_at_index").on(table.archivedAt)
+  ]
+);
+
+export const contextReceipts = pgTable(
+  "context_receipts",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    payload: jsonb("payload").notNull(),
+    receiptHash: text("receipt_hash").notNull(),
+    createdAt: text("created_at").notNull()
+  },
+  (table) => [
+    index("context_receipts_project_id_created_at_index").on(
+      table.projectId,
+      table.createdAt
+    )
+  ]
+);
+
+export const agentRuns = pgTable(
+  "agent_runs",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    initiatorAccountId: text("initiator_account_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    receiptId: text("receipt_id")
+      .notNull()
+      .references(() => contextReceipts.id, { onDelete: "restrict" }),
+    workflowId: text("workflow_id").notNull(),
+    workflowVersion: text("workflow_version").notNull(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    receiptHash: text("receipt_hash").notNull(),
+    status: text("status").notNull(),
+    providerResponseId: text("provider_response_id"),
+    tokenUsage: jsonb("token_usage"),
+    terminalDiagnosticCode: text("terminal_diagnostic_code"),
+    cancelRequestedAt: text("cancel_requested_at"),
+    completedAt: text("completed_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull()
+  },
+  (table) => [
+    index("agent_runs_project_id_created_at_index").on(table.projectId, table.createdAt),
+    index("agent_runs_project_id_status_index").on(table.projectId, table.status)
+  ]
+);
+
+export const agentProposals = pgTable(
+  "agent_proposals",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    runId: text("run_id")
+      .notNull()
+      .references(() => agentRuns.id, { onDelete: "restrict" }),
+    receiptId: text("receipt_id")
+      .notNull()
+      .references(() => contextReceipts.id, { onDelete: "restrict" }),
+    baseCaptureId: text("base_capture_id")
+      .notNull()
+      .references(() => captures.captureId, { onDelete: "restrict" }),
+    status: text("status").notNull(),
+    outputSchemaId: text("output_schema_id").notNull(),
+    payload: jsonb("payload").notNull(),
+    contentHash: text("content_hash").notNull(),
+    baseCaptureWorkingVersion: integer("base_capture_working_version").notNull(),
+    baseCaptureContentHash: text("base_capture_content_hash").notNull(),
+    decisionActorAccountId: text("decision_actor_account_id").references(() => user.id, {
+      onDelete: "restrict"
+    }),
+    decidedAt: text("decided_at"),
+    appliedActorAccountId: text("applied_actor_account_id").references(() => user.id, {
+      onDelete: "restrict"
+    }),
+    appliedAt: text("applied_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull()
+  },
+  (table) => [
+    index("agent_proposals_project_id_created_at_index").on(
+      table.projectId,
+      table.createdAt
+    ),
+    index("agent_proposals_run_id_index").on(table.runId),
+    index("agent_proposals_base_capture_id_index").on(table.baseCaptureId)
+  ]
+);
+
+export const mcpGrants = pgTable(
+  "mcp_grants",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    captureIds: jsonb("capture_ids").notNull(),
+    tools: jsonb("tools").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    tokenHint: text("token_hint").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    revokedAt: text("revoked_at")
+  },
+  (table) => [
+    uniqueIndex("mcp_grants_token_hash_unique").on(table.tokenHash),
+    index("mcp_grants_project_id_created_at_index").on(table.projectId, table.createdAt),
+    index("mcp_grants_account_id_index").on(table.accountId)
+  ]
+);
+
 export const editions = pgTable("editions", {
   id: text("id").primaryKey(),
   projectId: text("project_id")
@@ -620,6 +930,9 @@ export const ghostwriterSchema = {
   scenes,
   sceneRevisions,
   sceneVariants,
+  captureRevisions,
+  captures,
+  captureAttachments,
   sceneDocuments,
   sceneEditingLeases,
   manuscriptParts,
@@ -635,6 +948,14 @@ export const ghostwriterSchema = {
   canvasScopePlacements,
   canvasViewportPreferences,
   canvasRevisions,
+  providerCredentials,
+  aiCollaborationProfiles,
+  projectAgentInstructions,
+  projectPlaybooks,
+  contextReceipts,
+  agentRuns,
+  agentProposals,
+  mcpGrants,
   editions,
   editionSceneRevisions,
   booksRelations,

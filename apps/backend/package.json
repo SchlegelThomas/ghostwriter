@@ -10,9 +10,11 @@
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.6.23",
+    "@ghostwriter/ai": "workspace:*",
     "@ghostwriter/core": "workspace:*",
     "@ghostwriter/storage": "workspace:*",
     "@hono/node-server": "^2.0.8",
+    "aws4fetch": "1.0.20",
     "better-auth": "^1.6.23",
     "hono": "^4.12.29",
     "zod": "^4.4.3"

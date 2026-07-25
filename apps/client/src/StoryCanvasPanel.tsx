@@ -93,7 +93,6 @@ import {
 import {
   availableCanvasStoryKnowledge,
   canvasChapterAggregates,
-  canonicalIndexForCanvasHandoff,
   canvasCapturePosition,
   canvasCanonicalReferenceState,
   canvasDriftLabel,
@@ -113,6 +112,11 @@ import {
   type CanvasViewport,
   type CanvasViewportSize
 } from "./canvas-model.js";
+import {
+  listManuscriptHandoffChoices,
+  manuscriptHandoffStoryOrderHintText,
+  resolveManuscriptHandoffPlacement
+} from "./manuscript-handoff-placement.js";
 
 const { colors, fonts } = ghostwriterTheme;
 const OBJECT_NUDGE = 24;
@@ -2660,26 +2664,7 @@ export function StoryCanvasPanel({
 
   function chooseScenePlacement(value: string): void {
     setScenePlacement(value);
-    const [bookIdValue, chapterIdValue] = value.split("::");
-    const book = project.books.find((candidate) => candidate.id === bookIdValue);
-    if (book === undefined) {
-      setSceneStoryOrderHint("");
-      return;
-    }
-    const placement: CanvasScenePlacementInput =
-      chapterIdValue === "unassigned"
-        ? { kind: "unassigned", bookId: book.id }
-        : {
-            kind: "chapter",
-            bookId: book.id,
-            chapterId: book.parts
-              .flatMap((part) => part.chapters)
-              .find((chapter) => chapter.id === chapterIdValue)!.id
-          };
-    const canonicalIndex = canonicalIndexForCanvasHandoff(project, placement);
-    setSceneStoryOrderHint(
-      canonicalIndex === undefined ? "" : String(canonicalIndex)
-    );
+    setSceneStoryOrderHint(manuscriptHandoffStoryOrderHintText(project, value));
   }
 
   function updateSurfaceSize(event: LayoutChangeEvent): void {
@@ -2902,14 +2887,16 @@ export function StoryCanvasPanel({
   async function submitSceneHandoff(
     options: Readonly<{ openSplit?: boolean }> = {}
   ): Promise<void> {
-    const [bookIdValue, chapterIdValue] = scenePlacement.split("::");
-    const book = project.books.find((candidate) => candidate.id === bookIdValue);
+    const manuscriptPlacement = resolveManuscriptHandoffPlacement(
+      project,
+      scenePlacement
+    );
     const position = defaultPosition();
     const width = parseFinite(sceneWidth) ?? 260;
     const height = parseFinite(sceneHeight) ?? 160;
     const storyOrderHint = parseStoryOrderHint(sceneStoryOrderHint);
     if (
-      book === undefined ||
+      manuscriptPlacement === undefined ||
       storyOrderHint === undefined ||
       width <= 0 ||
       height <= 0 ||
@@ -2917,16 +2904,6 @@ export function StoryCanvasPanel({
     ) {
       return;
     }
-    const manuscriptPlacement: CanvasScenePlacementInput =
-      chapterIdValue === "unassigned"
-        ? { kind: "unassigned", bookId: book.id }
-        : {
-            kind: "chapter",
-            bookId: book.id,
-            chapterId: book.parts
-              .flatMap((part) => part.chapters)
-              .find((chapter) => chapter.id === chapterIdValue)!.id
-          };
     const createdSceneId = await onCreateScene({
       title: sceneTitle.trim(),
       manuscriptPlacement,
@@ -4055,34 +4032,15 @@ export function StoryCanvasPanel({
             Explicit book and chapter-or-Unassigned placement
           </Text>
           <View style={styles.choiceRow}>
-            {project.books
-              .filter((book) => book.archivedAt === undefined)
-              .flatMap((book) => [
-                <CanvasButton
-                  disabled={busy}
-                  key={`${book.id}::unassigned`}
-                  label={`${book.title} · Unassigned`}
-                  onPress={() =>
-                    chooseScenePlacement(`${book.id}::unassigned`)
-                  }
-                  selected={scenePlacement === `${book.id}::unassigned`}
-                />,
-                ...book.parts.flatMap((part) =>
-                  part.chapters.map((chapter) => (
-                    <CanvasButton
-                      disabled={busy}
-                      key={`${book.id}::${chapter.id}`}
-                      label={`${book.title} · ${chapter.title}`}
-                      onPress={() =>
-                        chooseScenePlacement(`${book.id}::${chapter.id}`)
-                      }
-                      selected={
-                        scenePlacement === `${book.id}::${chapter.id}`
-                      }
-                    />
-                  ))
-                )
-              ])}
+            {listManuscriptHandoffChoices(project).map((choice) => (
+              <CanvasButton
+                disabled={busy}
+                key={choice.key}
+                label={choice.label}
+                onPress={() => chooseScenePlacement(choice.key)}
+                selected={scenePlacement === choice.key}
+              />
+            ))}
           </View>
           <Field
             disabled={busy}

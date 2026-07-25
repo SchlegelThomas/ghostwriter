@@ -85,6 +85,48 @@
       "when": 1784495000000,
       "tag": "0011_writer_publishing",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1784500000000,
+      "tag": "0012_capture_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1784505000000,
+      "tag": "0013_capture_integration",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1784510000000,
+      "tag": "0014_capture_attachments",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1784515000000,
+      "tag": "0015_provider_credentials_and_agent_guidance",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1784520000000,
+      "tag": "0016_agent_receipts_runs_and_proposals",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1784525000000,
+      "tag": "0017_mcp_grants",
+      "breakpoints": true
     }
   ]
 }

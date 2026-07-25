@@ -18,7 +18,7 @@ database with Drizzle migrations, a Node/Hono service, and a database branch per
 | Browser API | Cloudflare Pages Function → Fly.io | Same-origin `/api/*` keeps auth cookies first-party and streams to the fixed backend |
 | Mobile builds (later) | Expo EAS free tier | ~30 builds/month free; EAS Update for OTA fixes |
 | Desktop distribution (later) | GitHub Releases | electron-builder artifacts attached by Actions, free |
-| MCP server | Runs locally (stdio) | No hosting needed; distribute via `npx` when it stabilizes |
+| MCP server | Runs locally (stdio) | Fixture navigator by default; scoped grant tools use injectable grant services / optional `GHOSTWRITER_MCP_GRANT_TOKEN` for local parity. Production remote MCP OAuth remains later. |
 
 Expected future costs are Lakebase/Fly usage beyond their available tiers and Apple's $99/yr
 developer account once iOS device/TestFlight builds start. Cloudflare Pages is used in
@@ -84,6 +84,53 @@ tool-invoke only.
 callback, so required CI uses the hermetic identity boundary; a real Google login is a separate
 local or production acceptance check. The test identity server refuses to start unless
 `GHOSTWRITER_E2E=1` and is never part of the production entry point.
+
+### Capture media implemented locally; R2 provisioning pending
+
+ADR 0010 and ADR 0011 accept the following boundaries for the active Capture-to-Story epic. They
+are not required by the shipped product until release. The private-object adapter, metadata
+migration, direct-upload client, memory fake, and refusal tests are implemented locally; no bucket,
+credentials, Fly secrets, or deployment were created in this branch:
+
+- Private Cloudflare R2 stores Capture attachment bytes. Fly holds `R2_ACCOUNT_ID`,
+  `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME`, authorizes every object
+  operation, and issues short-lived single-object URLs. Required CI uses a memory object-store fake.
+- Writer OpenAI keys are encrypted in Lakebase under a versioned AES-GCM envelope. Root keys such as
+  `GHOSTWRITER_PROVIDER_KEK_V1` live only as Fly secrets; they are distinct from an optional
+  Ghostwriter-operated `OPENAI_API_KEY`.
+- Root-key rotation deploys an overlapping new version, rewraps or replaces safe envelopes, then
+  retires the old key. Suspected compromise disables provider calls, deletes affected envelopes,
+  requires writer key re-entry, and triggers notification.
+- Pending uploads expire after 24 hours. Archived and exited-account attachments remain until an
+  explicit purge workflow; operations and product copy must not claim account exit erased them.
+- Logs, metrics, audits, errors, and exports never contain provider keys, raw Capture prose, or
+  attachment bytes.
+
+R2 uses the S3-compatible endpoint with pinned `aws4fetch` SigV4 signing. Browser PUTs bind the
+exact `Content-Type`; finalize performs a server-signed bounded GET and hashes/detects actual bytes.
+The private bucket CORS policy must list exact origins—R2 does not accept wildcard preview origins:
+
+```json
+[
+  {
+    "AllowedOrigins": [
+      "https://ghost-writer.studio",
+      "https://www.ghost-writer.studio",
+      "http://localhost:8081",
+      "http://localhost:8787"
+    ],
+    "AllowedMethods": ["PUT", "GET", "HEAD"],
+    "AllowedHeaders": ["Content-Type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Add each stable branch-preview origin explicitly when media upload is required there; do not use
+`https://*.ghostwriter-di2.pages.dev`. Missing R2 configuration selects a content-free unavailable
+adapter: Capture prose/Inbox remain usable while media init/download returns
+`ATTACHMENT_STORAGE_UNAVAILABLE`.
 
 Validated locally on 2026-07-12 against a temporary migrated Lakebase branch: real Google consent,
 durable account/profile bootstrap, project creation and reload, and sign-out with zero remaining

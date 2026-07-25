@@ -75,6 +75,13 @@ import {
   buildWorkspaceJumpTargets,
   type WorkspaceJumpTarget
 } from "./workspace-quick-nav.js";
+import {
+  inboxTakesCenterWorkspace,
+  NARROW_CAPTURE_TAB_LABEL,
+  NARROW_INBOX_TAB_LABEL,
+  workspaceNavigationClosesInbox,
+  type WorkspaceShellNavigationAction
+} from "./workspace-capture-shell.js";
 
 export type ProjectWorkspaceMode = "draft" | "canvas" | "split";
 
@@ -94,6 +101,10 @@ export type DraftWorkspacePresentation = Readonly<{
   onContextDockOpenChange(open: boolean): void;
   onFocusHaloChange(focused: boolean): void;
   onHistoryOpenChange(open: boolean): void;
+}>;
+
+export type InboxWorkspacePresentation = Readonly<{
+  compact: boolean;
 }>;
 
 export type AuthenticatedProjectWorkspaceProps = Readonly<{
@@ -133,6 +144,12 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
     scene: ProjectNavigatorScene | undefined,
     presentation: DraftWorkspacePresentation
   ): ReactNode;
+  inboxOpen?: boolean;
+  captureOpen?: boolean;
+  renderInbox?(presentation: InboxWorkspacePresentation): ReactNode;
+  onOpenInbox?(): void;
+  onCloseInbox?(): void;
+  onOpenCapture?(captureId?: string): void;
   chatCapabilities?: readonly GhostwriterCapability[];
   chatMessages?: readonly WorkspaceChatMessage[];
   onChatSend?(message: string): Promise<void> | void;
@@ -271,6 +288,12 @@ export function AuthenticatedProjectWorkspace({
   storageAccountId,
   renderCanvas,
   renderDraft,
+  inboxOpen = false,
+  captureOpen = false,
+  renderInbox,
+  onOpenInbox,
+  onCloseInbox,
+  onOpenCapture,
   chatCapabilities = [],
   chatMessages = [],
   onChatSend
@@ -278,6 +301,31 @@ export function AuthenticatedProjectWorkspace({
   const { width } = useWindowDimensions();
   const wide = width >= 1240;
   const narrow = width < 760;
+  const centerShowsInbox =
+    inboxTakesCenterWorkspace(inboxOpen) && renderInbox !== undefined;
+  const inboxPresentation: InboxWorkspacePresentation = { compact: narrow };
+
+  function closeInboxForNavigation(
+    action: WorkspaceShellNavigationAction
+  ): void {
+    if (!inboxOpen || !workspaceNavigationClosesInbox(action)) return;
+    onCloseInbox?.();
+  }
+
+  function requestModeChange(next: ProjectWorkspaceMode): void {
+    closeInboxForNavigation("mode-change");
+    onModeChange(next);
+  }
+
+  function requestOpenReader(): void {
+    closeInboxForNavigation("reader");
+    onOpenReader?.();
+  }
+
+  function handleProjectBack(): void {
+    closeInboxForNavigation("project-back");
+    onBack();
+  }
   const [splitRatio, setSplitRatio] = useState(SPLIT_RATIO_DEFAULT);
   const [paletteMode, setPaletteMode] = useState<WorkspacePaletteMode>();
   const [structureWidthPx, setStructureWidthPx] = useState<number>(
@@ -448,8 +496,8 @@ export function AuthenticatedProjectWorkspace({
   }, [focusHalo]);
 
   useEffect(() => {
-    if (!wide && mode === "split") onModeChange("draft");
-  }, [mode, onModeChange, wide]);
+    if (!wide && mode === "split") requestModeChange("draft");
+  }, [mode, wide]);
 
   useEffect(() => {
     if (mode !== "draft" || selectedSceneId === undefined) {
@@ -485,6 +533,7 @@ export function AuthenticatedProjectWorkspace({
   }, [project, selectedSceneId, selection]);
 
   function chooseSelection(next: ManuscriptSelection): void {
+    closeInboxForNavigation("manuscript-selection");
     setSelection(next);
     if (next.kind === "scene") onSelectedSceneIdChange(next.sceneId);
   }
@@ -566,6 +615,16 @@ export function AuthenticatedProjectWorkspace({
   }, [paletteMode]);
 
   function applyJumpTarget(target: WorkspaceJumpTarget): void {
+    if (target.openCapture === true) {
+      onOpenCapture?.();
+      setPaletteMode(undefined);
+      return;
+    }
+    if (target.openInbox === true) {
+      onOpenInbox?.();
+      setPaletteMode(undefined);
+      return;
+    }
     if (target.toggleJump === true) {
       setPaletteMode("jump");
       return;
@@ -592,10 +651,10 @@ export function AuthenticatedProjectWorkspace({
       if (!wide) setCollapsedPanel("tree");
     }
     if (target.mode !== undefined) {
-      onModeChange(target.mode);
+      requestModeChange(target.mode);
     }
     if (target.openReader === true) {
-      onOpenReader?.();
+      requestOpenReader();
     }
     setPaletteMode(undefined);
   }
@@ -825,12 +884,12 @@ export function AuthenticatedProjectWorkspace({
       onEnterChapter={(next) => {
         chooseSelection(next);
         onEnterChapter(next);
-        if (mode !== "canvas" && mode !== "split") onModeChange("canvas");
+        if (mode !== "canvas" && mode !== "split") requestModeChange("canvas");
       }}
       onMoveScene={moveScene}
       onOpenScene={(next) => {
         chooseSelection(next);
-        onModeChange("draft");
+        requestModeChange("draft");
         if (!wide) {
           setCollapsedPanel("none");
           setContextDockOpen(false);
@@ -956,9 +1015,9 @@ export function AuthenticatedProjectWorkspace({
             Open Canvas or Split from the project rail to review spatial
             placement and directed links for this same canonical scene.
           </Text>
-          <Button label="Open Canvas" onPress={() => onModeChange("canvas")} />
+          <Button label="Open Canvas" onPress={() => requestModeChange("canvas")} />
           {wide ? (
-            <Button label="Open Split" onPress={() => onModeChange("split")} />
+            <Button label="Open Split" onPress={() => requestModeChange("split")} />
           ) : null}
         </View>
       ) : (
@@ -1108,7 +1167,7 @@ export function AuthenticatedProjectWorkspace({
           narrow && styles.topbarNarrow
         ]}
       >
-        <Button disabled={busy} label="← Projects" onPress={onBack} />
+        <Button disabled={busy} label="← Projects" onPress={handleProjectBack} />
         {structureCollapsible ? (
           <Pressable
             accessibilityLabel={
@@ -1220,7 +1279,7 @@ export function AuthenticatedProjectWorkspace({
                 <Button
                   disabled={busy || selectedSceneId === undefined}
                   label="Reader"
-                  onPress={onOpenReader}
+                  onPress={requestOpenReader}
                 />
               )}
             </>
@@ -1248,7 +1307,7 @@ export function AuthenticatedProjectWorkspace({
             onPress={() => {
               setCollapsedPanel("none");
               setContextDockOpen(false);
-              onModeChange("draft");
+              requestModeChange("draft");
             }}
             selected={mode === "draft" && collapsedPanel === "none"}
           />
@@ -1256,15 +1315,29 @@ export function AuthenticatedProjectWorkspace({
             label="Canvas"
             onPress={() => {
               setCollapsedPanel("none");
-              onModeChange("canvas");
+              requestModeChange("canvas");
             }}
             selected={mode === "canvas" && collapsedPanel === "none"}
           />
+          {onOpenCapture === undefined ? null : (
+            <Button
+              label={NARROW_CAPTURE_TAB_LABEL}
+              onPress={() => onOpenCapture()}
+              selected={captureOpen}
+            />
+          )}
+          {onOpenInbox === undefined ? null : (
+            <Button
+              label={NARROW_INBOX_TAB_LABEL}
+              onPress={() => onOpenInbox()}
+              selected={inboxOpen}
+            />
+          )}
           {onOpenReader === undefined ? null : (
             <Button
               disabled={busy || selectedSceneId === undefined}
               label="Reader"
-              onPress={onOpenReader}
+              onPress={requestOpenReader}
             />
           )}
         </View>
@@ -1288,7 +1361,7 @@ export function AuthenticatedProjectWorkspace({
               label="Draft"
               onPress={() => {
                 setRailDestination("write");
-                onModeChange("draft");
+                requestModeChange("draft");
               }}
               selected={mode === "draft" && !charactersLens}
             />
@@ -1298,7 +1371,7 @@ export function AuthenticatedProjectWorkspace({
               label="Canvas"
               onPress={() => {
                 setRailDestination("write");
-                onModeChange("canvas");
+                requestModeChange("canvas");
               }}
               selected={mode === "canvas"}
             />
@@ -1309,7 +1382,7 @@ export function AuthenticatedProjectWorkspace({
                 label="Split"
                 onPress={() => {
                   setRailDestination("write");
-                  onModeChange("split");
+                  requestModeChange("split");
                 }}
                 selected={mode === "split"}
               />
@@ -1319,8 +1392,26 @@ export function AuthenticatedProjectWorkspace({
                 disabled={busy || selectedSceneId === undefined}
                 glyph="R"
                 label="Reader"
-                onPress={onOpenReader}
+                onPress={requestOpenReader}
                 selected={false}
+              />
+            )}
+            {onOpenCapture === undefined ? null : (
+              <RailButton
+                disabled={busy}
+                glyph="＋"
+                label="Capture"
+                onPress={() => onOpenCapture()}
+                selected={captureOpen}
+              />
+            )}
+            {onOpenInbox === undefined ? null : (
+              <RailButton
+                disabled={busy}
+                glyph="◎"
+                label="Inbox"
+                onPress={() => onOpenInbox()}
+                selected={inboxOpen}
               />
             )}
             <RailButton
@@ -1329,7 +1420,7 @@ export function AuthenticatedProjectWorkspace({
               label="Characters"
               onPress={() => {
                 setRailDestination("characters");
-                onModeChange("draft");
+                requestModeChange("draft");
                 chooseSelection({ kind: "storyKnowledgeRoot" });
                 if (structureCollapsible) setStructureRail("expanded");
               }}
@@ -1606,6 +1697,15 @@ export function AuthenticatedProjectWorkspace({
               narrow && styles.workSurfaceNarrow
             ]}
           >
+            {centerShowsInbox ? (
+              <View
+                key="inbox"
+                style={[styles.workSurfacePane, { flex: 1 }]}
+              >
+                {renderInbox?.(inboxPresentation)}
+              </View>
+            ) : (
+              <>
             {canvasVisible ? (
               <View
                 key="canvas"
@@ -1684,7 +1784,7 @@ export function AuthenticatedProjectWorkspace({
                             onPress={() => {
                               setRailDestination("write");
                               chooseSelection({ kind: "storyKnowledgeRoot" });
-                              onModeChange("canvas");
+                              requestModeChange("canvas");
                             }}
                           />
                         ) : null}
@@ -1698,7 +1798,7 @@ export function AuthenticatedProjectWorkspace({
                               setRailDestination("write");
                               chooseSelection(chapter);
                               onEnterChapter(chapter);
-                              onModeChange("canvas");
+                              requestModeChange("canvas");
                             }}
                           />
                         )}
@@ -1774,7 +1874,7 @@ export function AuthenticatedProjectWorkspace({
                           if (next === undefined) return;
                           setRailDestination("write");
                           chooseSelection(next);
-                          onModeChange("draft");
+                          requestModeChange("draft");
                         }}
                         project={project}
                       />
@@ -1798,7 +1898,7 @@ export function AuthenticatedProjectWorkspace({
                               }
                               chooseSelection(entry.selection);
                               if (entry.kind === "scene") {
-                                onModeChange("draft");
+                                requestModeChange("draft");
                               }
                             }}
                             style={({ pressed }) => [
@@ -1834,7 +1934,7 @@ export function AuthenticatedProjectWorkspace({
                                       event?.stopPropagation?.();
                                       setRailDestination("write");
                                       chooseSelection(entry.selection);
-                                      onModeChange("draft");
+                                      requestModeChange("draft");
                                     }}
                                     style={({ pressed }) => [
                                       styles.launchpadEntryActionButton,
@@ -1852,7 +1952,7 @@ export function AuthenticatedProjectWorkspace({
                                         event?.stopPropagation?.();
                                         setRailDestination("write");
                                         chooseSelection(entry.selection);
-                                        onOpenReader();
+                                        requestOpenReader();
                                       }}
                                       style={({ pressed }) => [
                                         styles.launchpadEntryActionButton,
@@ -1870,7 +1970,7 @@ export function AuthenticatedProjectWorkspace({
                                       event?.stopPropagation?.();
                                       setRailDestination("write");
                                       chooseSelection(entry.selection);
-                                      onModeChange("canvas");
+                                      requestModeChange("canvas");
                                     }}
                                     style={({ pressed }) => [
                                       styles.launchpadEntryActionButton,
@@ -1915,7 +2015,7 @@ export function AuthenticatedProjectWorkspace({
                                       setRailDestination("write");
                                       chooseSelection(chapterSelection);
                                       onEnterChapter(chapterSelection);
-                                      onModeChange("canvas");
+                                      requestModeChange("canvas");
                                     }}
                                     style={({ pressed }) => [
                                       styles.launchpadEntryActionButton,
@@ -2062,6 +2162,8 @@ export function AuthenticatedProjectWorkspace({
                 )}
               </View>
             ) : null}
+              </>
+            )}
           </View>
           );
           // Dense Draft/Canvas/Split: edge-to-edge column (no ScrollView page padding).

@@ -139,7 +139,9 @@ describe("buildWorkspaceJumpTargets", () => {
     expect(targetIds(targetsByKind(targets, "panel"))).toEqual([
       "panel:structure",
       "panel:chat",
-      "panel:jump"
+      "panel:jump",
+      "action:capture",
+      "action:inbox"
     ]);
   });
 

@@ -15,7 +15,8 @@ Trivial fixes (typos, one-liners) do not need this skill or a plan.
 1. Read `AGENTS.md`, `plans/WHERE-I-LEFT-OFF.html`, the active plan and record log.
 2. Read `docs/PRODUCT.md`, `docs/ARCHITECTURE.md`, and `docs/OPERATIONS.md` where relevant.
 3. For product, UX, editor, Canvas, reader, or workflow work, read the living design that owns
-   the surface (`plans/designs/Ghostwriter Mockups 2.0.html`, `3.0.html`, or `4.0.html`).
+   the surface (`plans/designs/Ghostwriter Mockups 2.0.html`, `3.0.html`, `4.0.html`, or
+   `5.0.html`).
 4. Copy the feature checkpoint from [FEATURE-CHECKLIST.md](FEATURE-CHECKLIST.md) into working notes.
 5. Make the plan truthful before product code: intent, acceptance, tasks, tests, docs/ADR impact,
    risks, and todos.

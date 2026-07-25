@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@ghostwriter/core": "workspace:*",
+    "@ghostwriter/editor": "workspace:*",
     "@modelcontextprotocol/sdk": "latest",
     "tsx": "latest",
     "zod": "latest"

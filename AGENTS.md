@@ -10,7 +10,8 @@ agents via MCP.
 2. For product, UX, editor, Story Canvas, or workflow work, read the relevant living design:
    `plans/designs/Ghostwriter Mockups 2.0.html` (shipped Write/Canvas baseline),
    `plans/designs/Ghostwriter Mockups 3.0.html` (Map/structure),
-   `plans/designs/Ghostwriter Mockups 4.0.html` (Write studio / craft / agents — proposed).
+ `plans/designs/Ghostwriter Mockups 4.0.html` (Write studio / craft / agents — proposed), or
+ `plans/designs/Ghostwriter Mockups 5.0.html` (Capture / Inbox / story integration / first agents — proposed).
 3. If the user has not already directed the work, summarize **Done / Incomplete / Next** and
    ask whether to resume or start new work. Do not assume pickup.
 4. For product context read `docs/PRODUCT.md`; for technical context read
@@ -36,7 +37,8 @@ plans. They are durable inputs, not active plans, and are never archived with a 
 
 - Living designs under `plans/designs/` split by concern: Mockups 2.0 (shipped Write/Canvas),
   Mockups 3.0 (Map/structure), Mockups 4.0 (Write studio, craft artifacts, writing agents,
-  modalities). Read the file that owns the surface you are changing.
+  modalities), and Mockups 5.0 (Capture, Inbox, coherent story integration, BYOK agents,
+  propose-only MCP). Read the file that owns the surface you are changing.
 - Preserve user-authored design files. Do not replace, relocate, flatten, or regenerate them unless
   the user explicitly asks. The design file may be iterated outside the current implementation plan.
 - When a living design changes, update the active plan's scope/acceptance criteria and record log

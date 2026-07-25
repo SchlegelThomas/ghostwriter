@@ -18,7 +18,7 @@ import {
   type WriteInputModality,
   type WritingAssistRoleId
 } from "@ghostwriter/ui";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Image,
   Modal,
@@ -30,6 +30,7 @@ import {
   View
 } from "react-native";
 import { requestWritingAssist } from "./api.js";
+import { useDictationSpeechRecognition } from "./useDictationSpeechRecognition.js";
 
 const { colors, fonts } = ghostwriterTheme;
 
@@ -83,29 +84,6 @@ export type WritingStudioCompanionPaneProps = Readonly<{
   onClose?(): void;
   onSetCastLink?(memberId: string, linked: boolean): void;
 }>;
-
-type SpeechRecognitionLike = {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null;
-  onerror: (() => void) | null;
-  onend: (() => void) | null;
-  start(): void;
-  stop(): void;
-};
-
-function getSpeechRecognitionConstructor():
-  | (new () => SpeechRecognitionLike)
-  | undefined {
-  if (typeof window === "undefined") return undefined;
-  const host = window as Window &
-    Readonly<{
-      SpeechRecognition?: new () => SpeechRecognitionLike;
-      webkitSpeechRecognition?: new () => SpeechRecognitionLike;
-    }>;
-  return host.SpeechRecognition ?? host.webkitSpeechRecognition;
-}
 
 /** Side companion for Sheet / Place — rendered beside the editor, not above it. */
 export function WritingStudioCompanionPane({
@@ -343,7 +321,15 @@ export function WritingStudioLayer({
   });
   const [inkPaths, setInkPaths] = useState(sketch?.inkPaths ?? []);
   const [sketchModalOpen, setSketchModalOpen] = useState(false);
-  const recognitionRef = useRef<SpeechRecognitionLike | undefined>(undefined);
+  const stopDictation = useCallback(() => {
+    onModalityChange("keyboard");
+  }, [onModalityChange]);
+  useDictationSpeechRecognition({
+    active: modality === "dictate",
+    onInsertProse,
+    onStopDictation: stopDictation,
+    setAssistStatus
+  });
   useEffect(() => {
     setDraftSketch({
       purpose: sketch?.purpose ?? "",
@@ -355,66 +341,6 @@ export function WritingStudioLayer({
     });
     setInkPaths(sketch?.inkPaths ?? []);
   }, [sceneId, sketch]);
-
-  useEffect(() => {
-    return () => {
-      recognitionRef.current?.stop();
-      recognitionRef.current = undefined;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (modality !== "dictate") {
-      recognitionRef.current?.stop();
-      recognitionRef.current = undefined;
-      return;
-    }
-    const Ctor = getSpeechRecognitionConstructor();
-    if (Ctor === undefined) {
-      setAssistStatus("Dictation is unavailable in this browser.");
-      onModalityChange("keyboard");
-      return;
-    }
-    const recognition = new Ctor();
-    recognition.continuous = true;
-    recognition.interimResults = false;
-    recognition.lang = "en-US";
-    recognition.onresult = (event) => {
-      const result = event.results[event.results.length - 1];
-      const transcript = result?.[0]?.transcript?.trim();
-      if (transcript !== undefined && transcript.length > 0) {
-        onInsertProse(`${transcript} `);
-      }
-    };
-    recognition.onerror = () => {
-      setAssistStatus("Dictation stopped — microphone permission or engine error.");
-      onModalityChange("keyboard");
-    };
-    recognition.onend = () => {
-      if (modality === "dictate") {
-        // Keep listening until the writer leaves dictate mode.
-        try {
-          recognition.start();
-        } catch {
-          onModalityChange("keyboard");
-        }
-      }
-    };
-    recognitionRef.current = recognition;
-    try {
-      recognition.start();
-      setAssistStatus("Listening — speech enters the Draft caret.");
-    } catch {
-      setAssistStatus("Could not start dictation.");
-      onModalityChange("keyboard");
-    }
-    return () => {
-      recognition.onresult = null;
-      recognition.onerror = null;
-      recognition.onend = null;
-      recognition.stop();
-    };
-  }, [modality, onInsertProse, onModalityChange]);
 
   const saveSketch = useCallback(
     async (next: SceneSketch) => {

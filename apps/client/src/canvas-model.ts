@@ -79,18 +79,8 @@ export type CanvasSceneFocus = Readonly<{
   outboundLinks: number;
 }>;
 
-export type CanvasHandoffPlacement =
-  | Readonly<{
-      kind: "chapter";
-      bookId: BookId;
-      chapterId: ChapterId;
-      position?: number;
-    }>
-  | Readonly<{
-      kind: "unassigned";
-      bookId: BookId;
-      position?: number;
-    }>;
+export type { ManuscriptHandoffPlacement as CanvasHandoffPlacement } from "./manuscript-handoff-placement.js";
+export { canonicalIndexForCanvasHandoff } from "./manuscript-handoff-placement.js";
 
 /** Low enough for board overview; card fit no longer holds constant screen size below ~0.65. */
 export const CANVAS_VIEW_MIN_ZOOM = 0.12;
@@ -409,42 +399,6 @@ export function availableCanvasStoryKnowledge(
     (knowledge) =>
       knowledge.archivedAt === undefined && !placedKnowledgeIds.has(knowledge.id)
   );
-}
-
-export function canonicalIndexForCanvasHandoff(
-  project: ProjectNavigator,
-  placement: CanvasHandoffPlacement
-): number | undefined {
-  let canonicalIndex = 0;
-  for (const book of project.books) {
-    for (const part of book.parts) {
-      for (const chapter of part.chapters) {
-        if (
-          placement.kind === "chapter" &&
-          placement.bookId === book.id &&
-          placement.chapterId === chapter.id
-        ) {
-          const position = placement.position ?? chapter.scenes.length;
-          return Number.isSafeInteger(position) &&
-            position >= 0 &&
-            position <= chapter.scenes.length
-            ? canonicalIndex + position
-            : undefined;
-        }
-        canonicalIndex += chapter.scenes.length;
-      }
-    }
-    if (placement.kind === "unassigned" && placement.bookId === book.id) {
-      const position = placement.position ?? book.unassignedScenes.length;
-      return Number.isSafeInteger(position) &&
-        position >= 0 &&
-        position <= book.unassignedScenes.length
-        ? canonicalIndex + position
-        : undefined;
-    }
-    canonicalIndex += book.unassignedScenes.length;
-  }
-  return undefined;
 }
 
 export function preferredCanvasSceneId(

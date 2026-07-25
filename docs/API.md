@@ -95,6 +95,87 @@ Unknown scenes, cross-project scene IDs, and projects owned by another account a
 the client. Revision IDs from another scene are treated as missing. History metadata includes
 content hashes and attribution but not stored documents.
 
+## Capture and Inbox foundation
+
+Capture is a project-owned, explicitly noncanonical rich document with its own working version. It
+reuses the scene-compatible editor schema but is not a Scene, does not require manuscript placement
+or a scene lease, and does not advance project, scene, or Canvas versions.
+
+- `POST /api/projects/{projectId}/captures` accepts an optional `sourceModality` (`text` or
+  `dictation`, default `text`) and creates an acknowledged empty Capture plus immutable genesis
+  provenance.
+- `GET /api/projects/{projectId}/captures` returns nonempty active Capture summaries without document
+  bodies. `?includeArchived=true` also includes nonempty archived Captures.
+- `GET /api/projects/{projectId}/captures/{captureId}` returns the acknowledged working head,
+  document, content hash, genesis revision ID, actor metadata, status, and timestamps.
+- `PATCH /api/projects/{projectId}/captures/{captureId}/body` accepts
+  `expectedWorkingVersion` plus a strict schema-versioned document. It has the same separate 2 MiB
+  JSON limit as scene prose. A stale version applies nothing.
+- `POST /api/projects/{projectId}/captures/{captureId}/archive` accepts
+  `{ "archived": true | false }`. Archived and integrated Captures are read-only.
+- `POST /api/projects/{projectId}/captures/{captureId}/promote` accepts exact Capture working
+  version and content hash, project version, a writer-authored scene title, explicit chapter or
+  Unassigned placement, and optional Canvas version/geometry. One transaction snapshots an
+  immutable Capture integration revision, creates the canonical scene with the Capture prose as its
+  `capture-promotion` genesis, optionally places a same-ID Canvas card, and marks the source Capture
+  integrated/read-only. The response returns the acknowledged Capture head, scene/document head,
+  navigator, and optional Canvas board/spine. Any Capture, project, Canvas, placement, or persistence
+  conflict applies none of those effects.
+
+Only project owners may use these routes in the current owner-only release. Unknown, unauthorized,
+cross-project, and account-mismatched IDs return non-disclosing `404 CAPTURE_NOT_FOUND`. Invalid
+documents return `422 INVALID_CAPTURE_DOCUMENT`; stale saves return
+`409 CAPTURE_VERSION_CONFLICT`; archived/integrated mutation returns
+`409 CAPTURE_NOT_EDITABLE`; promotion additionally uses `CAPTURE_CONTENT_CHANGED` and
+`CAPTURE_NOT_PROMOTABLE`; archived projects reject Capture mutation.
+
+The current Inbox center workspace projects Capture summaries and deterministic integration
+receipts without owning duplicate prose. Agent runs and proposals join that projection through the
+agent routes below; attachments remain separate private object references.
+
+### MCP grants (propose-only)
+
+Owners mint project-scoped opaque grant tokens for external MCP clients. Grants carry Capture and
+tool allowlists, expiry, and revocation. Tokens are returned once on create; only a SHA-256 hash is
+stored. Missing, expired, revoked, and unauthorized grant access share non-disclosing `404 NOT_FOUND`.
+
+- `GET /api/projects/{projectId}/mcp-grants` lists grant summaries for the project (no token material).
+- `POST /api/projects/{projectId}/mcp-grants` accepts `captureIds`, `tools` (closed enum of Capture
+  reflection MCP tools), and `expiresAt`, then returns `{ grant, token }`.
+- `DELETE /api/projects/{projectId}/mcp-grants/{grantId}` revokes a grant.
+
+External MCP tools under a grant may discover the grant, read one granted Capture plain summary,
+assemble a Capture reflection receipt, and propose via the same core preview+start path as the UI.
+They cannot apply proposals, read credentials, mutate grants, or enumerate unauthorized projects.
+Production remote MCP OAuth remains later; local/tests inject grant services with
+`GHOSTWRITER_MCP_GRANT_TOKEN` or an in-process runtime.
+
+### Capture attachments
+
+Capture attachments are private object references outside ProseMirror and project JSON. Control
+routes are authenticated through Fly; upload/download bytes use short-lived single-object R2 URLs.
+
+- `POST /api/projects/{projectId}/captures/{captureId}/attachments/init` accepts display filename,
+  allowlisted declared content type, declared byte size, and client SHA-256. It transactionally
+  reserves count/project quota and returns a pending summary, 15-minute PUT URL, and the exact
+  signed `Content-Type` header.
+- `POST /api/projects/{projectId}/captures/{captureId}/attachments/{attachmentId}/finalize` accepts
+  an empty object. Fly re-reads the bounded private object, computes SHA-256, detects its actual
+  type, and returns either ready or a durable refused summary. The API never trusts ETag or a
+  client-supplied finalize checksum.
+- `GET /api/projects/{projectId}/captures/{captureId}/attachments` returns pending, ready, refused,
+  and deleted metadata/tombstones without object keys, checksums, signed URLs, or bytes.
+- `GET /api/projects/{projectId}/captures/{captureId}/attachments/{attachmentId}/download` returns
+  a five-minute GET URL only for ready content.
+- `DELETE /api/projects/{projectId}/captures/{captureId}/attachments/{attachmentId}` removes the
+  object and returns a retained deleted tombstone.
+
+Init/finalize requires a draft/ready Capture; authenticated list/download/delete remains available
+for archived/integrated source review. Accepted limits are 10 active items per Capture and 200 MiB
+per project, with 8 MiB images, 15 MiB audio, and 5 MiB PDF/plain text. Pending uploads expire after
+24 hours. Unsupported, oversized, quota, expiry, unavailable-storage, and non-disclosing not-found
+responses use stable `ATTACHMENT_*` codes. Attachments never promote into scene prose or Canvas.
+
 ## Writing assist
 
 - `POST /api/projects/{projectId}/writing-assist` accepts a role (`scene-partner`,
@@ -217,7 +298,9 @@ export semantics.
 - `401 UNAUTHENTICATED`
 - `403 UNTRUSTED_ORIGIN`
 - `404 PROJECT_NOT_FOUND` or `RECORD_NOT_FOUND`
+- `404 CAPTURE_NOT_FOUND`
 - `409 VERSION_CONFLICT` or `UNSAFE_REMOVAL`
+- `409 CAPTURE_VERSION_CONFLICT` or `CAPTURE_NOT_EDITABLE`
 - `404 CANVAS_NOT_FOUND` or `CANVAS_REVISION_NOT_FOUND`
 - `409 CANVAS_VERSION_CONFLICT`
 - `404 REVISION_NOT_FOUND`

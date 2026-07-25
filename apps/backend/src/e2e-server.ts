@@ -3,14 +3,21 @@ import { serve } from "@hono/node-server";
 import {
   createBookReaderServices,
   createCanvasServices,
+  createCaptureServices,
+  createCaptureAttachmentServices,
+  createCapturePromotionServices,
   createGhostwriterServices,
   createIdentityServices,
+  createMemoryCaptureObjectStorage,
   createSceneWritingServices,
   type DomainIdKind
 } from "@ghostwriter/core";
 import {
   createPostgresCanvasRepository,
   createPostgresCanvasSceneCreationUnitOfWork,
+  createPostgresCaptureAttachmentRepository,
+  createPostgresCaptureDocumentRepository,
+  createPostgresCaptureScenePromotionUnitOfWork,
   createPostgresProjectRepository,
   createPostgresSceneDocumentRepository,
   createPostgresWriterProfileRepository,
@@ -23,6 +30,7 @@ import {
 } from "@ghostwriter/storage/pglite";
 import { createApp } from "./app.js";
 import type { AuthGateway, AuthenticatedSession } from "./auth.js";
+import { createTestAgentProviderRuntime } from "./agent-provider-runtime.js";
 
 if (process.env.GHOSTWRITER_E2E !== "1") {
   throw new Error("The hermetic E2E server requires GHOSTWRITER_E2E=1.");
@@ -95,6 +103,8 @@ await db.insert(user).values(account);
 const repositoryDatabase = toRepositoryDatabase(db);
 const projects = createPostgresProjectRepository(repositoryDatabase);
 const sceneDocuments = createPostgresSceneDocumentRepository(repositoryDatabase);
+const captureDocuments =
+  createPostgresCaptureDocumentRepository(repositoryDatabase);
 const canvases = createPostgresCanvasRepository(repositoryDatabase);
 const profiles = createPostgresWriterProfileRepository(repositoryDatabase);
 const clock = { now: () => new Date().toISOString() };
@@ -107,6 +117,28 @@ const services = createGhostwriterServices({
 const writing = createSceneWritingServices({
   projects,
   sceneDocuments,
+  ids,
+  clock
+});
+const captures = createCaptureServices({
+  projects,
+  captureDocuments,
+  ids,
+  clock
+});
+const captureAttachments = createCaptureAttachmentServices({
+  projects,
+  captureDocuments,
+  attachments: createPostgresCaptureAttachmentRepository(repositoryDatabase),
+  objectStorage: createMemoryCaptureObjectStorage(),
+  ids,
+  clock
+});
+const capturePromotions = createCapturePromotionServices({
+  projects,
+  captureDocuments,
+  canvases,
+  promotion: createPostgresCaptureScenePromotionUnitOfWork(repositoryDatabase),
   ids,
   clock
 });
@@ -125,12 +157,26 @@ const reader = createBookReaderServices({
   canvases
 });
 const identity = createIdentityServices({ profiles, clock });
+const agentProvider = createTestAgentProviderRuntime({
+  db: repositoryDatabase,
+  projects,
+  captureDocuments,
+  ids,
+  clock,
+  kekConfig: undefined,
+  capturePromotions,
+  sceneDocuments
+});
 const app = createApp({
   services,
   writing,
+  captures,
+  captureAttachments,
+  capturePromotions,
   canvas,
   reader,
   identity,
+  agentProvider,
   auth: e2eAuthGateway(),
   allowedOrigins: [appOrigin]
 });

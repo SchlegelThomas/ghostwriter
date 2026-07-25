@@ -11,42 +11,45 @@
     <header>
       <p class="eyebrow">Session handoff</p>
       <h1>Where we left off</h1>
-      <p><strong>Last updated:</strong> 2026-07-24 · <strong>Current branch:</strong> <code>chore/feature-delivery-harness</code></p>
+      <p><strong>Last updated:</strong> 2026-07-24 · <strong>Current branch:</strong> <code>feat/capture-to-story-agents</code></p>
     </header>
 
     <section>
       <h2>Current state</h2>
-      <p>Harness updates on <code>chore/feature-delivery-harness</code> / <a href="https://github.com/SchlegelThomas/ghostwriter/pull/11">PR #11</a>, including the Composer→Grok→Opus/GPT delegation ladder. Product backlog after PR #9 is unchanged.</p>
+      <p>Capture to Story is implemented on the feature branch through checkpoints 0–7. Repository verification is green. Founder real-browser acceptance, live R2/KEK provisioning, and post-gate Playwright remain open.</p>
       <ul>
-        <li><a href="active/2026-07-24-feature-delivery-harness/plan.html">Feature delivery harness</a></li>
+        <li><a href="active/2026-07-24-capture-to-story-agents/plan.html">Capture to Story plan</a></li>
+        <li><a href="designs/Ghostwriter%20Mockups%205.0.html">Mockups 5.0</a></li>
+        <li><a href="../docs/adr/0010-capture-inbox-media-and-promotion.md">ADR 0010</a> · <a href="../docs/adr/0011-byok-context-proposals-playbooks-and-mcp-grants.md">ADR 0011</a></li>
       </ul>
-      <p>Last product ship on <code>main</code>: Writing Experience UX 4.0 + structure/cast polish via <a href="https://github.com/SchlegelThomas/ghostwriter/pull/9">PR #9</a>.</p>
     </section>
 
     <section>
-      <h2>Done for this harness pass</h2>
+      <h2>Done for this implementation pass</h2>
       <ul>
-        <li>Skill renamed to <code>ghostwriter-feature-delivery</code>; agentic wording stripped from titles/instructions.</li>
-        <li>Always-applied rule <code>.cursor/rules/feature-delivery.mdc</code>.</li>
-        <li>Skill sections: parallel work, model defaults, delegated return shape, Done gates.</li>
-        <li><code>AGENTS.md</code> delivery loop points at the skill.</li>
+        <li>Capture prose/dictation, Inbox, deterministic promote, mixed-media attachments.</li>
+        <li>OpenAI BYOK, progressive AI setup, playbooks, context receipts, Scene Partner reflection + apply (new scene / named variant).</li>
+        <li>Sketch Partner, Character Coach, Worldkeeper typed craft apply.</li>
+        <li>Scoped MCP grants with propose-only Capture reflection tools.</li>
+        <li><code>pnpm verify</code>: 712 tests + 17 routing-hook tests green.</li>
       </ul>
     </section>
 
     <section>
       <h2>Incomplete / next</h2>
       <ol>
-        <li>Validate skill; commit when authorized; open PR if desired.</li>
-        <li>Resume product work from post–PR #9 backlog (optional freehand ink, OpenAI assist provider).</li>
+        <li>Founder browser walkthrough of Capture → Inbox → agent → apply at wide and narrow.</li>
+        <li>Provision R2 + provider KEK for live media/BYOK when authorized to deploy secrets.</li>
+        <li>After founder verifies the complete outcome: focused Playwright, then PR.</li>
       </ol>
     </section>
 
     <section>
       <h2>How to resume</h2>
       <ol>
-        <li>Checkout <code>chore/feature-delivery-harness</code>.</li>
-        <li>Read <a href="active/2026-07-24-feature-delivery-harness/plan.html">the harness plan</a> and <code>.cursor/skills/ghostwriter-feature-delivery/SKILL.md</code>.</li>
-        <li>Run <code>node .cursor/skills/ghostwriter-feature-delivery/scripts/validate.mjs</code>.</li>
+        <li>Checkout <code>feat/capture-to-story-agents</code>.</li>
+        <li>Read the plan, record log, Mockups 5.0, and ADRs 0010/0011.</li>
+        <li>Exercise Capture/Inbox/agents in a real browser and record feedback.</li>
       </ol>
     </section>
   </main>
