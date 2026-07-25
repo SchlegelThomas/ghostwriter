@@ -95,13 +95,156 @@ Unknown scenes, cross-project scene IDs, and projects owned by another account a
 the client. Revision IDs from another scene are treated as missing. History metadata includes
 content hashes and attribution but not stored documents.
 
+## Capture and Inbox foundation
+
+Capture is a project-owned, explicitly noncanonical rich document with its own working version. It
+reuses the scene-compatible editor schema but is not a Scene, does not require manuscript placement
+or a scene lease, and does not advance project, scene, or Canvas versions.
+
+- `POST /api/projects/{projectId}/captures` accepts an optional `sourceModality` (`text` or
+  `dictation`, default `text`) and creates an acknowledged empty Capture plus immutable genesis
+  provenance.
+- `GET /api/projects/{projectId}/captures` returns nonempty active Capture summaries without document
+  bodies. `?includeArchived=true` also includes nonempty archived Captures.
+- `GET /api/projects/{projectId}/captures/{captureId}` returns the acknowledged working head,
+  document, content hash, genesis revision ID, actor metadata, status, and timestamps.
+- `PATCH /api/projects/{projectId}/captures/{captureId}/body` accepts
+  `expectedWorkingVersion` plus a strict schema-versioned document. It has the same separate 2 MiB
+  JSON limit as scene prose. A stale version applies nothing.
+- `POST /api/projects/{projectId}/captures/{captureId}/archive` accepts
+  `{ "archived": true | false }`. Archived and integrated Captures are read-only.
+- `POST /api/projects/{projectId}/captures/{captureId}/promote` accepts exact Capture working
+  version and content hash, project version, a writer-authored scene title, explicit chapter or
+  Unassigned placement, and optional Canvas version/geometry. One transaction snapshots an
+  immutable Capture integration revision, creates the canonical scene with the Capture prose as its
+  `capture-promotion` genesis, optionally places a same-ID Canvas card, and marks the source Capture
+  integrated/read-only. The response returns the acknowledged Capture head, scene/document head,
+  navigator, and optional Canvas board/spine. Any Capture, project, Canvas, placement, or persistence
+  conflict applies none of those effects.
+
+Only project owners may use these routes in the current owner-only release. Unknown, unauthorized,
+cross-project, and account-mismatched IDs return non-disclosing `404 CAPTURE_NOT_FOUND`. Invalid
+documents return `422 INVALID_CAPTURE_DOCUMENT`; stale saves return
+`409 CAPTURE_VERSION_CONFLICT`; archived/integrated mutation returns
+`409 CAPTURE_NOT_EDITABLE`; promotion additionally uses `CAPTURE_CONTENT_CHANGED` and
+`CAPTURE_NOT_PROMOTABLE`; archived projects reject Capture mutation.
+
+The current Inbox center workspace projects Capture summaries and deterministic integration
+receipts without owning duplicate prose. Agent runs and proposals join that projection through the
+agent routes below; attachments remain separate private object references.
+
+### MCP grants (propose-only)
+
+Owners mint project-scoped opaque grant tokens for external MCP clients. Grants carry Capture and
+tool allowlists, expiry, and revocation. Tokens are returned once on create; only a SHA-256 hash is
+stored. Missing, expired, revoked, and unauthorized grant access share non-disclosing `404 NOT_FOUND`.
+
+- `GET /api/projects/{projectId}/mcp-grants` lists grant summaries for the project (no token material).
+- `POST /api/projects/{projectId}/mcp-grants` accepts `captureIds`, `tools` (closed enum of Capture
+  reflection MCP tools), and `expiresAt`, then returns `{ grant, token }`.
+- `DELETE /api/projects/{projectId}/mcp-grants/{grantId}` revokes a grant.
+
+External MCP tools under a grant may discover the grant, read one granted Capture plain summary,
+assemble a Capture reflection receipt, and propose via the same core preview+start path as the UI.
+They cannot apply proposals, read credentials, mutate grants, or enumerate unauthorized projects.
+Production remote MCP OAuth remains later; local/tests inject grant services with
+`GHOSTWRITER_MCP_GRANT_TOKEN` or an in-process runtime.
+
+### Capture attachments
+
+Capture attachments are private object references outside ProseMirror and project JSON. Control
+routes are authenticated through Fly; upload/download bytes use short-lived single-object R2 URLs.
+
+- `POST /api/projects/{projectId}/captures/{captureId}/attachments/init` accepts display filename,
+  allowlisted declared content type, declared byte size, and client SHA-256. It transactionally
+  reserves count/project quota and returns a pending summary, 15-minute PUT URL, and the exact
+  signed `Content-Type` header.
+- `POST /api/projects/{projectId}/captures/{captureId}/attachments/{attachmentId}/finalize` accepts
+  an empty object. Fly re-reads the bounded private object, computes SHA-256, detects its actual
+  type, and returns either ready or a durable refused summary. The API never trusts ETag or a
+  client-supplied finalize checksum.
+- `GET /api/projects/{projectId}/captures/{captureId}/attachments` returns pending, ready, refused,
+  and deleted metadata/tombstones without object keys, checksums, signed URLs, or bytes.
+- `GET /api/projects/{projectId}/captures/{captureId}/attachments/{attachmentId}/download` returns
+  a five-minute GET URL only for ready content.
+- `DELETE /api/projects/{projectId}/captures/{captureId}/attachments/{attachmentId}` removes the
+  object and returns a retained deleted tombstone.
+
+Init/finalize requires a draft/ready Capture; authenticated list/download/delete remains available
+for archived/integrated source review. Accepted limits are 10 active items per Capture and 200 MiB
+per project, with 8 MiB images, 15 MiB audio, and 5 MiB PDF/plain text. Pending uploads expire after
+24 hours. Unsupported, oversized, quota, expiry, unavailable-storage, and non-disclosing not-found
+responses use stable `ATTACHMENT_*` codes. Attachments never promote into scene prose or Canvas.
+
+## Provider credentials and agent guidance (BYOK)
+
+Writer OpenAI keys are encrypted at rest under a versioned Fly-held KEK. Routes never return plaintext
+keys. Missing, invalid, and unconfigured provider states use stable codes without echoing secrets.
+
+- `GET /api/me/provider/openai` returns configuration status (present/validated metadata only).
+- `PUT /api/me/provider/openai` stores or replaces the encrypted key after validation.
+- `DELETE /api/me/provider/openai` removes the stored key.
+- `POST /api/me/provider/openai/validate` revalidates the stored key without returning it.
+- `GET` / `PATCH /api/me/ai-collaboration` read/update optional collaboration preferences.
+- `GET` / `PATCH /api/projects/{projectId}/agent-instructions` project-level guidance text.
+- Playbooks: `GET` / `POST /api/projects/{projectId}/playbooks`,
+  `PATCH` / `DELETE /api/projects/{projectId}/playbooks/{playbookId}` — declarative, non-authoritative
+  goal refinements (ADR 0011).
+
+## Agent runs and proposals
+
+Typed noncanonical runs/proposals (context receipts, Capture reflection, craft partners):
+
+- `POST /api/projects/{projectId}/agent/context-preview` assembles an inspectable receipt.
+- `POST /api/projects/{projectId}/agent/runs` starts a run from a receipt + workflow.
+- `GET /api/projects/{projectId}/agent/runs` and `.../runs/{runId}` list/read run status.
+- `POST /api/projects/{projectId}/agent/runs/{runId}/cancel` cancels a run.
+- `GET /api/projects/{projectId}/agent/proposals` and `.../proposals/{proposalId}` list/read.
+- Apply / reject proposal routes accept the exact proposal hash; only first-party human sessions
+  apply. Core revalidates every version and applies all effects or none.
+
+Scene Partner Capture chat (BYOK structured turn, propose-only until promote/variant apply):
+
+- `POST /api/projects/{projectId}/captures/{captureId}/scene-partner/turns`
+- `POST /api/projects/{projectId}/captures/{captureId}/scene-partner/images` (optional illustration
+  preview; does not write manuscript canon)
+
+## Workspace Agent chat
+
+- `POST /api/workspace/chat` accepts project/selection context, optional capability id, and Agent
+  dock prefs (`mode`: `chat` | `plan` | `agent`; model + effort). When `capabilityId` is a read
+  capability (e.g. `project.navigator.read`), the server invokes that tool. Otherwise, with a valid
+  BYOK key, it returns assistant text from `completeStructured` using server-assembled navigator
+  context. Without a key, the route returns a friendly unconfigured response (no silent failure
+  wall). Chat never mutates manuscript canon.
+
+## Book covers (Title Page)
+
+`book.update` may set optional `cover` `{ concept?, notes?, imageUrl? }`. `imageUrl` must be an
+absolute http(s) locator (applied covers use a stable `https://ghostwriter.cover/...` form). Data
+URIs are rejected. Concept/notes persist in Lakebase; bitmap bytes live only in private object
+storage after Apply.
+
+- `POST /api/projects/{projectId}/books/{bookId}/cover/images` — sync single preview (BYOK /
+  hermetic fake); does not persist.
+- `POST /api/projects/{projectId}/books/{bookId}/cover/images/jobs` — start async multi-option job
+  (default 3 portrait `1024x1536` via `gpt-image-1`); optional iteration notes.
+- `GET /api/projects/{projectId}/books/{bookId}/cover/images/jobs/{jobId}` — poll job status/options.
+- `POST /api/projects/{projectId}/books/{bookId}/cover/images/apply` — write PNG to object storage and
+  `book.update` the locator; requires storage configured (hermetic memory fake in E2E).
+- `GET /api/projects/{projectId}/books/{bookId}/cover/download` — short-lived display URL (or hermetic
+  data URI) for the applied locator.
+
+Jobs are in-process for v1 (not a durable queue). History may acknowledge when options are ready.
+
 ## Writing assist
 
 - `POST /api/projects/{projectId}/writing-assist` accepts a role (`scene-partner`,
   `character-coach`, `worldkeeper`, `sketch-partner`), scene context, optional sketch/cast/
   backdrop caption, and optional recent prose excerpt. It returns inspectable proposals labeled
-  `deterministic-local` in v1. Proposals never mutate the project; Apply is a separate client
-  action through `scene.update`, `storyKnowledge.update`, or Draft caret insert.
+  `deterministic-local` when no provider path is used. Proposals never mutate the project; Apply is
+  a separate client action through `scene.update`, `storyKnowledge.update`, or Draft caret insert.
+  Live Scene Partner Capture turns use the Scene Partner routes above.
 
 ## Story Canvas
 
@@ -161,7 +304,8 @@ Project:
 Books:
 
 - `book.create`
-- `book.update`
+- `book.update` (`title?`, `status?`, `cover?` with optional `concept` / `notes` / `imageUrl`;
+  `null` cover clears; http(s) `imageUrl` only — no data URIs)
 - `book.reorder`
 - `book.setArchived`
 
@@ -217,7 +361,9 @@ export semantics.
 - `401 UNAUTHENTICATED`
 - `403 UNTRUSTED_ORIGIN`
 - `404 PROJECT_NOT_FOUND` or `RECORD_NOT_FOUND`
+- `404 CAPTURE_NOT_FOUND`
 - `409 VERSION_CONFLICT` or `UNSAFE_REMOVAL`
+- `409 CAPTURE_VERSION_CONFLICT` or `CAPTURE_NOT_EDITABLE`
 - `404 CANVAS_NOT_FOUND` or `CANVAS_REVISION_NOT_FOUND`
 - `409 CANVAS_VERSION_CONFLICT`
 - `404 REVISION_NOT_FOUND`

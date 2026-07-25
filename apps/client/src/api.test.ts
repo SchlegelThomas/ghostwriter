@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { blockId, type SceneDocumentV1 } from "@ghostwriter/editor";
-import { bookId, canvasObjectId, canvasRevisionId } from "@ghostwriter/core";
+import { bookId, canvasObjectId, canvasRevisionId, chapterId } from "@ghostwriter/core";
 import {
   acquireSceneLease,
   compareSceneRevisions,
+  createCapture,
   createSceneFromCanvas,
   createSceneCheckpoint,
   createSceneVariant,
@@ -11,22 +12,41 @@ import {
   getCanvasBoard,
   getCanvasHistory,
   getCanvasPreference,
+  getCapture,
   getSceneHistory,
   getSceneWorkspace,
+  deleteCaptureAttachment,
+  finalizeCaptureAttachmentUpload,
+  getCaptureAttachmentDownloadUrl,
   GhostwriterApiError,
+  initCaptureAttachmentUpload,
+  listCaptureAttachments,
+  listCaptures,
+  promoteCaptureToScene,
   releaseSceneLease,
   renewSceneLease,
   restoreCanvasRevision,
   restoreSceneRevision,
+  saveCaptureDocument,
   saveCanvasPreference,
   saveSceneDocument,
+  setCaptureArchived,
   signOut,
-  undoCanvas
+  undoCanvas,
+  getOpenAiProviderStatus,
+  previewCaptureReflectionContext,
+  startCaptureReflectionRun,
+  rejectAgentProposal,
+  applyAgentProposal
 } from "./api.js";
 
 const sceneScope = {
   projectId: "project / draft",
   sceneId: "scene / opening"
+} as const;
+const captureScope = {
+  projectId: "project / draft",
+  captureId: "capture / inbox"
 } as const;
 const document: SceneDocumentV1 = {
   schemaVersion: 1,
@@ -41,6 +61,30 @@ const document: SceneDocumentV1 = {
     ]
   }
 };
+const captureHead = {
+  captureId: captureScope.captureId,
+  projectId: captureScope.projectId,
+  status: "draft",
+  sourceModality: "text",
+  workingVersion: 1,
+  document,
+  contentHash: "c".repeat(64),
+  genesisRevisionId: "capture-revision-genesis",
+  authorAccountId: "account-writer",
+  updatedByAccountId: "account-writer",
+  createdAt: "2026-07-12T18:00:00.000Z",
+  updatedAt: "2026-07-12T18:00:00.000Z"
+} as const;
+const captureSummary = {
+  captureId: captureHead.captureId,
+  projectId: captureHead.projectId,
+  status: captureHead.status,
+  sourceModality: captureHead.sourceModality,
+  workingVersion: captureHead.workingVersion,
+  authorAccountId: captureHead.authorAccountId,
+  createdAt: captureHead.createdAt,
+  updatedAt: captureHead.updatedAt
+} as const;
 const head = {
   sceneId: sceneScope.sceneId,
   projectId: sceneScope.projectId,
@@ -678,5 +722,772 @@ describe("Ghostwriter API client", () => {
         message: "The scene is being edited elsewhere."
       })
     );
+  });
+
+  it("creates a capture with the default text modality without a JSON body", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({ head: captureHead }, { status: 201 })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(createCapture({ projectId: captureScope.projectId })).resolves.toEqual(
+      captureHead
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects/project%20%2F%20draft/captures",
+      {
+        credentials: "include",
+        headers: { accept: "application/json" },
+        method: "POST"
+      }
+    );
+  });
+
+  it("loads a capture from encoded project and capture paths", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ head: captureHead }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getCapture(captureScope)).resolves.toEqual(captureHead);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects/project%20%2F%20draft/captures/capture%20%2F%20inbox",
+      {
+        credentials: "include",
+        headers: { accept: "application/json" }
+      }
+    );
+  });
+
+  it("requests archived captures only when includeArchived is true", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ captures: [captureSummary] }))
+      .mockResolvedValueOnce(Response.json({ captures: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listCaptures(captureScope.projectId)).resolves.toEqual([
+      captureSummary
+    ]);
+    await expect(listCaptures(captureScope.projectId, true)).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/projects/project%20%2F%20draft/captures",
+      expect.objectContaining({
+        credentials: "include",
+        headers: { accept: "application/json" }
+      })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/projects/project%20%2F%20draft/captures?includeArchived=true",
+      expect.objectContaining({
+        credentials: "include",
+        headers: { accept: "application/json" }
+      })
+    );
+  });
+
+  it("sends the acknowledged working version when saving a capture document", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        head: { ...captureHead, workingVersion: 2 }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      saveCaptureDocument({
+        ...captureScope,
+        expectedWorkingVersion: 1,
+        document
+      })
+    ).resolves.toMatchObject({ workingVersion: 2, document });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects/project%20%2F%20draft/captures/capture%20%2F%20inbox/body",
+      {
+        body: JSON.stringify({
+          expectedWorkingVersion: 1,
+          document
+        }),
+        credentials: "include",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json"
+        },
+        method: "PATCH"
+      }
+    );
+  });
+
+  it("archives and restores captures through the archive route", async () => {
+    const archivedHead = {
+      ...captureHead,
+      status: "archived",
+      archivedAt: "2026-07-12T18:05:00.000Z"
+    } as const;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ head: archivedHead }))
+      .mockResolvedValueOnce(Response.json({ head: captureHead }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      setCaptureArchived({ ...captureScope, archived: true })
+    ).resolves.toEqual(archivedHead);
+    await expect(
+      setCaptureArchived({ ...captureScope, archived: false })
+    ).resolves.toEqual(captureHead);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/projects/project%20%2F%20draft/captures/capture%20%2F%20inbox/archive",
+      {
+        body: JSON.stringify({ archived: true }),
+        credentials: "include",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json"
+        },
+        method: "POST"
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/projects/project%20%2F%20draft/captures/capture%20%2F%20inbox/archive",
+      {
+        body: JSON.stringify({ archived: false }),
+        credentials: "include",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json"
+        },
+        method: "POST"
+      }
+    );
+  });
+
+  it("preserves capture version conflict codes for client recovery", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json(
+        {
+          error: "The capture changed since it was loaded.",
+          code: "CAPTURE_VERSION_CONFLICT"
+        },
+        { status: 409 }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      saveCaptureDocument({
+        ...captureScope,
+        expectedWorkingVersion: 1,
+        document
+      })
+    ).rejects.toEqual(
+      expect.objectContaining<Partial<GhostwriterApiError>>({
+        status: 409,
+        code: "CAPTURE_VERSION_CONFLICT",
+        message: "The capture changed since it was loaded."
+      })
+    );
+  });
+
+  it("promotes captures without Canvas geometry when placement is unassigned", async () => {
+    const integratedCaptureHead = {
+      ...captureHead,
+      status: "integrated",
+      workingVersion: 2,
+      integrationRevisionId: "capture-revision-integrated",
+      integratedSceneId: "scene-from-inbox",
+      integratedAt: "2026-07-12T19:00:00.000Z",
+      integratedByAccountId: "account-writer"
+    };
+    const promoteResponse = {
+      captureHead: integratedCaptureHead,
+      scene: {
+        id: "scene-from-inbox",
+        title: "From the inbox",
+        bookId: bookId("book-inbox")
+      },
+      sceneDocumentHead: head,
+      navigator: { id: captureScope.projectId, version: 2 }
+    };
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(promoteResponse, { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      promoteCaptureToScene({
+        ...captureScope,
+        expectedCaptureWorkingVersion: 1,
+        expectedCaptureContentHash: captureHead.contentHash,
+        expectedProjectVersion: 1,
+        title: "From the inbox",
+        manuscriptPlacement: {
+          kind: "unassigned",
+          bookId: bookId("book-inbox")
+        }
+      })
+    ).resolves.toEqual(promoteResponse);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects/project%20%2F%20draft/captures/capture%20%2F%20inbox/promote",
+      {
+        body: JSON.stringify({
+          expectedCaptureWorkingVersion: 1,
+          expectedCaptureContentHash: captureHead.contentHash,
+          expectedProjectVersion: 1,
+          title: "From the inbox",
+          manuscriptPlacement: {
+            kind: "unassigned",
+            bookId: bookId("book-inbox")
+          }
+        }),
+        credentials: "include",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json"
+        },
+        method: "POST"
+      }
+    );
+  });
+
+  it("promotes captures with chapter placement and optional Canvas board response", async () => {
+    const signalBookId = bookId("book-signal");
+    const lowTideChapterId = chapterId("chapter-low-tide");
+    const integratedSceneId = "scene-chapter-promo";
+    const promoteResponse = {
+      captureHead: {
+        ...captureHead,
+        status: "integrated",
+        integratedSceneId,
+        integrationRevisionId: "capture-revision-chapter",
+        integratedAt: "2026-07-12T19:05:00.000Z",
+        integratedByAccountId: "account-writer"
+      },
+      scene: {
+        id: integratedSceneId,
+        title: "Chapter promotion",
+        bookId: signalBookId
+      },
+      sceneDocumentHead: head,
+      navigator: { id: captureScope.projectId, version: 3 },
+      canvas: {
+        board: { version: 2, objects: [], links: [], regions: [] },
+        spine: { canvasVersion: 2, orderedSceneIds: [integratedSceneId] }
+      }
+    };
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(promoteResponse, { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      promoteCaptureToScene({
+        ...captureScope,
+        expectedCaptureWorkingVersion: 1,
+        expectedCaptureContentHash: captureHead.contentHash,
+        expectedProjectVersion: 2,
+        title: "Chapter promotion",
+        manuscriptPlacement: {
+          kind: "chapter",
+          bookId: signalBookId,
+          chapterId: lowTideChapterId
+        },
+        canvas: {
+          expectedCanvasVersion: 1,
+          x: 120,
+          y: 80,
+          width: 240,
+          height: 160,
+          z: 3,
+          storyOrderHint: 5
+        }
+      })
+    ).resolves.toEqual(promoteResponse);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects/project%20%2F%20draft/captures/capture%20%2F%20inbox/promote",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          expectedCaptureWorkingVersion: 1,
+          expectedCaptureContentHash: captureHead.contentHash,
+          expectedProjectVersion: 2,
+          title: "Chapter promotion",
+          manuscriptPlacement: {
+            kind: "chapter",
+            bookId: signalBookId,
+            chapterId: lowTideChapterId
+          },
+          canvas: {
+            expectedCanvasVersion: 1,
+            x: 120,
+            y: 80,
+            width: 240,
+            height: 160,
+            z: 3,
+            storyOrderHint: 5
+          }
+        })
+      })
+    );
+  });
+
+  it("preserves capture promotion conflict codes for client recovery", async () => {
+    const conflicts: ReadonlyArray<
+      Readonly<{ code: string; error: string; status: number }>
+    > = [
+      {
+        code: "CAPTURE_VERSION_CONFLICT",
+        error: "The capture changed since it was loaded.",
+        status: 409
+      },
+      {
+        code: "CAPTURE_CONTENT_CHANGED",
+        error: "The capture changed since it was loaded.",
+        status: 409
+      },
+      {
+        code: "CAPTURE_NOT_PROMOTABLE",
+        error: "This capture cannot be promoted.",
+        status: 409
+      }
+    ];
+    let callIndex = 0;
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      const conflict = conflicts[callIndex]!;
+      callIndex += 1;
+      return Response.json(
+        { error: conflict.error, code: conflict.code },
+        { status: conflict.status }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const promoteInput = {
+      ...captureScope,
+      expectedCaptureWorkingVersion: 1,
+      expectedCaptureContentHash: captureHead.contentHash,
+      expectedProjectVersion: 1,
+      title: "Should fail",
+      manuscriptPlacement: {
+        kind: "unassigned" as const,
+        bookId: bookId("book-inbox")
+      }
+    };
+
+    for (const conflict of conflicts) {
+      await expect(promoteCaptureToScene(promoteInput)).rejects.toEqual(
+        expect.objectContaining<Partial<GhostwriterApiError>>({
+          status: conflict.status,
+          code: conflict.code,
+          message: conflict.error
+        })
+      );
+    }
+  });
+
+  const attachmentScope = {
+    ...captureScope,
+    attachmentId: "attachment / scan"
+  } as const;
+  const attachmentSummary = {
+    attachmentId: attachmentScope.attachmentId,
+    captureId: captureScope.captureId,
+    projectId: captureScope.projectId,
+    state: "pending",
+    displayFilename: "note.txt",
+    declaredContentType: "text/plain",
+    declaredByteSize: 12,
+    pendingExpiresAt: "2026-07-24T13:00:00.000Z",
+    createdAt: "2026-07-24T12:00:00.000Z",
+    updatedAt: "2026-07-24T12:00:00.000Z"
+  } as const;
+
+  it("initializes capture attachment uploads on encoded nested paths without extra fields", async () => {
+    const initBody = {
+      attachment: attachmentSummary,
+      upload: {
+        url: "https://objects.example.test/put/object",
+        expiresAt: "2026-07-24T12:15:00.000Z"
+      },
+      uploadHeaders: { "Content-Type": "text/plain" }
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json(initBody, { status: 201 })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      initCaptureAttachmentUpload({
+        ...captureScope,
+        displayFilename: "note.txt",
+        declaredContentType: "text/plain",
+        declaredByteSize: 12,
+        clientSha256: "a".repeat(64)
+      })
+    ).resolves.toEqual(initBody);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects/project%20%2F%20draft/captures/capture%20%2F%20inbox/attachments/init",
+      {
+        body: JSON.stringify({
+          displayFilename: "note.txt",
+          declaredContentType: "text/plain",
+          declaredByteSize: 12,
+          clientSha256: "a".repeat(64)
+        }),
+        credentials: "include",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json"
+        },
+        method: "POST"
+      }
+    );
+    expect(JSON.stringify(initBody.attachment)).not.toMatch(/objectKey|clientSha256/);
+  });
+
+  it("finalizes, lists, downloads, and deletes attachments through encoded paths", async () => {
+    const readyAttachment = {
+      ...attachmentSummary,
+      state: "ready",
+      readyContentType: "text/plain",
+      actualByteSize: 12,
+      readyAt: "2026-07-24T12:05:00.000Z",
+      pendingExpiresAt: undefined
+    };
+    const download = {
+      download: {
+        url: "https://objects.example.test/get/object",
+        expiresAt: "2026-07-24T12:10:00.000Z"
+      }
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ attachment: readyAttachment })
+      )
+      .mockResolvedValueOnce(Response.json({ attachments: [readyAttachment] }))
+      .mockResolvedValueOnce(Response.json(download))
+      .mockResolvedValueOnce(
+        Response.json({
+          attachment: { ...readyAttachment, state: "deleted", deletedAt: "2026-07-24T12:06:00.000Z" }
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(finalizeCaptureAttachmentUpload(attachmentScope)).resolves.toEqual({
+      attachment: readyAttachment
+    });
+    await expect(listCaptureAttachments(captureScope)).resolves.toEqual([readyAttachment]);
+    await expect(getCaptureAttachmentDownloadUrl(attachmentScope)).resolves.toEqual(download);
+    await expect(deleteCaptureAttachment(attachmentScope)).resolves.toMatchObject({
+      attachment: { state: "deleted" }
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/projects/project%20%2F%20draft/captures/capture%20%2F%20inbox/attachments/attachment%20%2F%20scan/finalize",
+      expect.objectContaining({
+        method: "POST",
+        body: "{}"
+      })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/projects/project%20%2F%20draft/captures/capture%20%2F%20inbox/attachments",
+      expect.objectContaining({
+        credentials: "include",
+        headers: { accept: "application/json" }
+      })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/projects/project%20%2F%20draft/captures/capture%20%2F%20inbox/attachments/attachment%20%2F%20scan/download",
+      expect.objectContaining({
+        credentials: "include",
+        headers: { accept: "application/json" }
+      })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "/api/projects/project%20%2F%20draft/captures/capture%20%2F%20inbox/attachments/attachment%20%2F%20scan",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+
+  it("preserves stable attachment API error codes from the server", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json(
+        {
+          error: "This attachment type is not supported.",
+          code: "ATTACHMENT_TYPE_REFUSED"
+        },
+        { status: 415 }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      initCaptureAttachmentUpload({
+        ...captureScope,
+        displayFilename: "archive.zip",
+        declaredContentType: "application/zip",
+        declaredByteSize: 100,
+        clientSha256: "b".repeat(64)
+      })
+    ).rejects.toEqual(
+      expect.objectContaining<Partial<GhostwriterApiError>>({
+        status: 415,
+        code: "ATTACHMENT_TYPE_REFUSED",
+        message: "This attachment type is not supported."
+      })
+    );
+  });
+
+  it("calls provider status and capture reflection agent routes", async () => {
+    const receipt = {
+      id: "receipt-1",
+      projectId: captureScope.projectId,
+      workflowId: "scene-partner.capture-reflection",
+      workflowVersion: "1",
+      model: "gpt-5.6-terra",
+      receiptHash: "a".repeat(64),
+      createdAt: "2026-07-24T22:00:00.000Z",
+      resources: [
+        {
+          resourceClass: "capture",
+          captureId: captureScope.captureId,
+          workingVersion: 1,
+          contentHash: "b".repeat(64),
+          inclusionReason: "selected-capture",
+          providerTextCharCount: 12,
+          providerTextHash: "c".repeat(64)
+        }
+      ],
+      maxOutputTokens: 1500,
+      wallClockSeconds: 60,
+      outputSchemaId: "capture-reflection-v1"
+    };
+    const proposal = {
+      id: "proposal-1",
+      projectId: captureScope.projectId,
+      runId: "run-1",
+      receiptId: receipt.id,
+      status: "ready",
+      outputSchemaId: "capture-reflection-v1",
+      payload: {
+        schemaId: "capture-reflection-v1",
+        summary: "Harbor mood.",
+        questions: ["Where?"],
+        possibleStoryJobs: [{ label: "Open", rationale: "Tone." }]
+      },
+      contentHash: "d".repeat(64),
+      baseCaptureId: captureScope.captureId,
+      baseCaptureWorkingVersion: 1,
+      baseCaptureContentHash: "b".repeat(64),
+      createdAt: "2026-07-24T22:01:00.000Z",
+      updatedAt: "2026-07-24T22:01:00.000Z"
+    };
+    const run = {
+      id: "run-1",
+      projectId: captureScope.projectId,
+      status: "ready",
+      workflowId: receipt.workflowId,
+      receiptId: receipt.id,
+      receiptHash: receipt.receiptHash,
+      model: receipt.model,
+      createdAt: "2026-07-24T22:01:00.000Z",
+      updatedAt: "2026-07-24T22:01:00.000Z"
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ configured: false, callsDisabled: false })
+      )
+      .mockResolvedValueOnce(Response.json({ receipt }, { status: 201 }))
+      .mockResolvedValueOnce(
+        Response.json({ kind: "ready", run, proposal }, { status: 201 })
+      )
+      .mockResolvedValueOnce(
+        Response.json({ proposal: { ...proposal, status: "rejected" } })
+      )
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            mode: "new-scene",
+            proposal: { ...proposal, status: "applied" },
+            scene: {
+              id: "scene-1",
+              title: "Open",
+              projectId: captureScope.projectId
+            },
+            sceneDocumentHead: {
+              sceneId: "scene-1",
+              projectId: captureScope.projectId,
+              workingVersion: 1,
+              contentHash: "e".repeat(64)
+            },
+            captureHead: {
+              ...captureHead,
+              status: "integrated",
+              integratedSceneId: "scene-1"
+            },
+            navigator: {}
+          },
+          { status: 201 }
+        )
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getOpenAiProviderStatus()).resolves.toEqual({
+      configured: false,
+      callsDisabled: false
+    });
+    await expect(
+      previewCaptureReflectionContext({
+        projectId: captureScope.projectId,
+        captureId: captureScope.captureId
+      })
+    ).resolves.toEqual(receipt);
+    await expect(
+      startCaptureReflectionRun({
+        projectId: captureScope.projectId,
+        receiptId: receipt.id,
+        expectedReceiptHash: receipt.receiptHash
+      })
+    ).resolves.toEqual({ kind: "ready", run, proposal });
+    await expect(
+      rejectAgentProposal({
+        projectId: captureScope.projectId,
+        proposalId: proposal.id
+      })
+    ).resolves.toMatchObject({ status: "rejected" });
+    await expect(
+      applyAgentProposal({
+        projectId: captureScope.projectId,
+        proposalId: proposal.id,
+        mode: "new-scene",
+        title: "Open",
+        bookId: "book-1",
+        expectedProjectVersion: 1,
+        expectedProposalContentHash: proposal.contentHash
+      })
+    ).resolves.toMatchObject({ mode: "new-scene", proposal: { status: "applied" } });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/me/provider/openai",
+      expect.objectContaining({ credentials: "include" })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/projects/project%20%2F%20draft/agent/context-preview",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/projects/project%20%2F%20draft/agent/runs",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "/api/projects/project%20%2F%20draft/agent/proposals/proposal-1/reject",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
+      "/api/projects/project%20%2F%20draft/agent/proposals/proposal-1/apply",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("calls craft partner preview and craft-fields apply routes", async () => {
+    const receipt = {
+      id: "receipt-craft-1",
+      projectId: captureScope.projectId,
+      workflowId: "sketch-partner.craft-fields",
+      workflowVersion: "1",
+      model: "gpt-5.6-terra" as const,
+      receiptHash: "a".repeat(64),
+      createdAt: "2026-07-24T22:00:00.000Z",
+      resources: [
+        {
+          resourceClass: "capture",
+          captureId: captureScope.captureId,
+          workingVersion: 1,
+          contentHash: "b".repeat(64),
+          inclusionReason: "selected-capture",
+          providerTextCharCount: 12,
+          providerTextHash: "c".repeat(64)
+        }
+      ],
+      maxOutputTokens: 1500,
+      wallClockSeconds: 60,
+      outputSchemaId: "sketch-fields-v1",
+      targetSceneId: "scene-1"
+    };
+    const proposal = {
+      id: "proposal-craft-1",
+      projectId: captureScope.projectId,
+      runId: "run-craft-1",
+      receiptId: receipt.id,
+      status: "ready" as const,
+      outputSchemaId: "sketch-fields-v1" as const,
+      payload: {
+        schemaId: "sketch-fields-v1" as const,
+        purpose: "Force a choice.",
+        conflict: "Pressure rises."
+      },
+      contentHash: "d".repeat(64),
+      baseCaptureId: captureScope.captureId,
+      baseCaptureWorkingVersion: 1,
+      baseCaptureContentHash: "b".repeat(64),
+      createdAt: "2026-07-24T22:01:00.000Z",
+      updatedAt: "2026-07-24T22:01:00.000Z"
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ receipt }, { status: 201 }))
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            mode: "craft-fields",
+            proposal: { ...proposal, status: "applied" },
+            navigator: {}
+          },
+          { status: 201 }
+        )
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      previewCaptureReflectionContext({
+        projectId: captureScope.projectId,
+        captureId: captureScope.captureId,
+        workflowId: "sketch-partner.craft-fields",
+        sceneId: "scene-1"
+      })
+    ).resolves.toEqual(receipt);
+    await expect(
+      applyAgentProposal({
+        projectId: captureScope.projectId,
+        proposalId: proposal.id,
+        mode: "craft-fields",
+        expectedProjectVersion: 3,
+        expectedProposalContentHash: proposal.contentHash
+      })
+    ).resolves.toMatchObject({ mode: "craft-fields", proposal: { status: "applied" } });
+
+    const previewCall = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(previewCall.body))).toMatchObject({
+      captureId: captureScope.captureId,
+      workflowId: "sketch-partner.craft-fields",
+      sceneId: "scene-1"
+    });
+    const applyCall = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    expect(JSON.parse(String(applyCall.body))).toMatchObject({
+      mode: "craft-fields",
+      expectedProjectVersion: 3
+    });
   });
 });

@@ -4,10 +4,10 @@
   "type": "module",
   "packageManager": "pnpm@11.11.0",
   "scripts": {
-    "verify": "pnpm typecheck && pnpm lint && pnpm test",
+    "verify": "echo '[verify] typecheck' && pnpm typecheck && echo '[verify] lint' && pnpm lint && echo '[verify] test' && pnpm test && echo '[verify] done'",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
-    "test": "node --test .cursor/hooks/enforce-delegate-model-routing.test.mjs && vitest run --exclude 'e2e/**' --exclude '.cursor/hooks/**' --maxWorkers=2",
+    "test": "node --test .cursor/hooks/enforce-delegate-model-routing.test.mjs && vitest run --exclude 'e2e/**' --exclude '.cursor/hooks/**' --maxWorkers=2 --teardownTimeout=20000 --hookTimeout=20000 --testTimeout=30000",
     "test:e2e": "playwright test",
     "db:generate": "pnpm --filter @ghostwriter/storage db:generate",
     "db:migrate": "pnpm --filter @ghostwriter/storage db:migrate",

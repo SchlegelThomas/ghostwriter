@@ -12,6 +12,8 @@ import type {
   SceneLeaseHolderId,
   SceneRevision,
   SceneRevisionMetadata,
+  SceneRevisionOrigin,
+  SceneRevisionReason,
   SceneVariant
 } from "./scene-documents.js";
 import type { SceneDocumentV1 } from "@ghostwriter/editor";
@@ -126,6 +128,31 @@ export type CreateNamedSceneVariantInput = SceneConditionalMutationInput &
     name: string;
   }>;
 
+export type CreateNamedVariantFromDocumentOutcome =
+  | Readonly<{
+      ok: true;
+      head: SceneDocumentHead;
+      revision: SceneRevision;
+      variant: SceneVariant;
+    }>
+  | Readonly<{
+      ok: false;
+      reason:
+        | SceneConditionalMutationConflictReason
+        | "variant-name-conflict";
+    }>;
+
+export type CreateNamedVariantFromDocumentInput = SceneConditionalMutationInput &
+  Readonly<{
+    revisionId: RevisionId;
+    variantId: SceneVariantId;
+    name: string;
+    document: SceneDocumentV1;
+    contentHash: SceneContentHash;
+    origin: SceneRevisionOrigin;
+    reason: SceneRevisionReason;
+  }>;
+
 export type RestoreSceneRevisionInput = SceneConditionalMutationInput &
   Readonly<{
     sourceRevisionId: RevisionId;
@@ -158,6 +185,9 @@ export interface SceneDocumentRepository {
   createNamedVariant(
     input: CreateNamedSceneVariantInput
   ): Promise<CreateNamedSceneVariantOutcome>;
+  createNamedVariantFromDocument(
+    input: CreateNamedVariantFromDocumentInput
+  ): Promise<CreateNamedVariantFromDocumentOutcome>;
   restoreRevision(
     input: RestoreSceneRevisionInput
   ): Promise<RestoreSceneRevisionOutcome>;

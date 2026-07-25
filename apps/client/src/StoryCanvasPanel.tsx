@@ -93,7 +93,6 @@ import {
 import {
   availableCanvasStoryKnowledge,
   canvasChapterAggregates,
-  canonicalIndexForCanvasHandoff,
   canvasCapturePosition,
   canvasCanonicalReferenceState,
   canvasDriftLabel,
@@ -113,6 +112,11 @@ import {
   type CanvasViewport,
   type CanvasViewportSize
 } from "./canvas-model.js";
+import {
+  listManuscriptHandoffChoices,
+  manuscriptHandoffStoryOrderHintText,
+  resolveManuscriptHandoffPlacement
+} from "./manuscript-handoff-placement.js";
 
 const { colors, fonts } = ghostwriterTheme;
 const OBJECT_NUDGE = 24;
@@ -2660,26 +2664,7 @@ export function StoryCanvasPanel({
 
   function chooseScenePlacement(value: string): void {
     setScenePlacement(value);
-    const [bookIdValue, chapterIdValue] = value.split("::");
-    const book = project.books.find((candidate) => candidate.id === bookIdValue);
-    if (book === undefined) {
-      setSceneStoryOrderHint("");
-      return;
-    }
-    const placement: CanvasScenePlacementInput =
-      chapterIdValue === "unassigned"
-        ? { kind: "unassigned", bookId: book.id }
-        : {
-            kind: "chapter",
-            bookId: book.id,
-            chapterId: book.parts
-              .flatMap((part) => part.chapters)
-              .find((chapter) => chapter.id === chapterIdValue)!.id
-          };
-    const canonicalIndex = canonicalIndexForCanvasHandoff(project, placement);
-    setSceneStoryOrderHint(
-      canonicalIndex === undefined ? "" : String(canonicalIndex)
-    );
+    setSceneStoryOrderHint(manuscriptHandoffStoryOrderHintText(project, value));
   }
 
   function updateSurfaceSize(event: LayoutChangeEvent): void {
@@ -2902,14 +2887,16 @@ export function StoryCanvasPanel({
   async function submitSceneHandoff(
     options: Readonly<{ openSplit?: boolean }> = {}
   ): Promise<void> {
-    const [bookIdValue, chapterIdValue] = scenePlacement.split("::");
-    const book = project.books.find((candidate) => candidate.id === bookIdValue);
+    const manuscriptPlacement = resolveManuscriptHandoffPlacement(
+      project,
+      scenePlacement
+    );
     const position = defaultPosition();
     const width = parseFinite(sceneWidth) ?? 260;
     const height = parseFinite(sceneHeight) ?? 160;
     const storyOrderHint = parseStoryOrderHint(sceneStoryOrderHint);
     if (
-      book === undefined ||
+      manuscriptPlacement === undefined ||
       storyOrderHint === undefined ||
       width <= 0 ||
       height <= 0 ||
@@ -2917,16 +2904,6 @@ export function StoryCanvasPanel({
     ) {
       return;
     }
-    const manuscriptPlacement: CanvasScenePlacementInput =
-      chapterIdValue === "unassigned"
-        ? { kind: "unassigned", bookId: book.id }
-        : {
-            kind: "chapter",
-            bookId: book.id,
-            chapterId: book.parts
-              .flatMap((part) => part.chapters)
-              .find((chapter) => chapter.id === chapterIdValue)!.id
-          };
     const createdSceneId = await onCreateScene({
       title: sceneTitle.trim(),
       manuscriptPlacement,
@@ -4055,34 +4032,15 @@ export function StoryCanvasPanel({
             Explicit book and chapter-or-Unassigned placement
           </Text>
           <View style={styles.choiceRow}>
-            {project.books
-              .filter((book) => book.archivedAt === undefined)
-              .flatMap((book) => [
-                <CanvasButton
-                  disabled={busy}
-                  key={`${book.id}::unassigned`}
-                  label={`${book.title} · Unassigned`}
-                  onPress={() =>
-                    chooseScenePlacement(`${book.id}::unassigned`)
-                  }
-                  selected={scenePlacement === `${book.id}::unassigned`}
-                />,
-                ...book.parts.flatMap((part) =>
-                  part.chapters.map((chapter) => (
-                    <CanvasButton
-                      disabled={busy}
-                      key={`${book.id}::${chapter.id}`}
-                      label={`${book.title} · ${chapter.title}`}
-                      onPress={() =>
-                        chooseScenePlacement(`${book.id}::${chapter.id}`)
-                      }
-                      selected={
-                        scenePlacement === `${book.id}::${chapter.id}`
-                      }
-                    />
-                  ))
-                )
-              ])}
+            {listManuscriptHandoffChoices(project).map((choice) => (
+              <CanvasButton
+                disabled={busy}
+                key={choice.key}
+                label={choice.label}
+                onPress={() => chooseScenePlacement(choice.key)}
+                selected={scenePlacement === choice.key}
+              />
+            ))}
           </View>
           <Field
             disabled={busy}
@@ -4099,13 +4057,17 @@ export function StoryCanvasPanel({
       ) : null}
 
       {chapterAggregates.length === 0 ? null : (
-        <View
-          accessibilityLabel="Canvas Chapter Aggregates"
-          style={styles.aggregateGrid}
+        <ScrollView
+          accessibilityLabel="Chapter navigation"
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chapterStrip}
+          contentContainerStyle={styles.chapterStripContent}
         >
+          <Text style={styles.chapterStripLabel}>Chapters</Text>
           {chapterAggregates.map((aggregate) => (
             <Pressable
-              accessibilityLabel={`Enter chapter aggregate ${aggregate.title}`}
+              accessibilityLabel={`Open chapter ${aggregate.title}`}
               accessibilityRole="button"
               key={aggregate.chapterId}
               onPress={() =>
@@ -4117,20 +4079,19 @@ export function StoryCanvasPanel({
                 })
               }
               style={({ pressed }) => [
-                styles.aggregateCard,
+                styles.chapterChip,
                 pressed && styles.pressed
               ]}
             >
-              <Text style={styles.aggregateEyebrow}>Chapter aggregate</Text>
-              <Text style={styles.aggregateTitle}>{aggregate.title}</Text>
-              <Text style={styles.aggregateMeta}>
-                {aggregate.sceneCount} scenes · {aggregate.placedSceneCount} placed
-                · {aggregate.linkCount} links
+              <Text numberOfLines={1} style={styles.chapterChipTitle}>
+                {aggregate.title}
               </Text>
-              <Text style={styles.aggregateAction}>Dive into chapter →</Text>
+              <Text style={styles.chapterChipMeta}>
+                {aggregate.sceneCount}
+              </Text>
             </Pressable>
           ))}
-        </View>
+        </ScrollView>
       )}
 
       {board !== undefined && board.objects.length >= 500 ? (
@@ -5506,48 +5467,52 @@ const styles = StyleSheet.create({
     gap: 8,
     minWidth: 0
   },
-  aggregateGrid: {
-    backgroundColor: colors.wash,
+  /** Compact chapter jump strip — keeps the spatial board as the majority surface. */
+  chapterStrip: {
+    backgroundColor: colors.topbar,
     borderBottomColor: colors.line,
     borderBottomWidth: 1,
+    flexGrow: 0,
+    flexShrink: 0,
+    maxHeight: 40
+  },
+  chapterStripContent: {
+    alignItems: "center",
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    padding: 10
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5
   },
-  aggregateCard: {
-    backgroundColor: colors.paper,
-    borderColor: colors.line,
-    borderRadius: 9,
-    borderWidth: 1,
-    flexGrow: 1,
-    minWidth: 190,
-    padding: 10
-  },
-  aggregateEyebrow: {
-    color: colors.kicker,
+  chapterStripLabel: {
+    color: colors.muted,
     fontFamily: fonts.uiSemibold,
-    fontSize: 7,
-    letterSpacing: 1.1,
+    fontSize: 9,
+    letterSpacing: 0.4,
+    marginRight: 2,
     textTransform: "uppercase"
   },
-  aggregateTitle: {
-    color: colors.ink,
-    fontFamily: fonts.story,
-    fontSize: 19,
-    marginTop: 2
+  chapterChip: {
+    alignItems: "center",
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 6,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    maxWidth: 180,
+    paddingHorizontal: 8,
+    paddingVertical: 4
   },
-  aggregateMeta: {
+  chapterChipTitle: {
+    color: colors.ink,
+    flexShrink: 1,
+    fontFamily: fonts.uiMedium,
+    fontSize: 11
+  },
+  chapterChipMeta: {
     color: colors.muted,
     fontFamily: fonts.ui,
-    fontSize: 8,
-    marginTop: 3
-  },
-  aggregateAction: {
-    color: colors.accent,
-    fontFamily: fonts.uiSemibold,
-    fontSize: 8,
-    marginTop: 7
+    fontSize: 10
   },
   focusStage: {
     alignItems: "flex-start",
@@ -5693,7 +5658,7 @@ const styles = StyleSheet.create({
   surface: {
     backgroundColor: "#eee8df",
     flex: 1,
-    minHeight: 420,
+    minHeight: 0,
     minWidth: 0,
     overflow: "hidden",
     position: "relative"

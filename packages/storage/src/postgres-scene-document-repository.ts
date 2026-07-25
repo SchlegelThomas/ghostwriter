@@ -15,6 +15,8 @@ import {
   type AcquireSceneLeaseOutcome,
   type CreateNamedSceneVariantInput,
   type CreateNamedSceneVariantOutcome,
+  type CreateNamedVariantFromDocumentInput,
+  type CreateNamedVariantFromDocumentOutcome,
   type CreateSceneCheckpointInput,
   type CreateSceneCheckpointOutcome,
   type InitializeSceneDocumentInput,
@@ -48,8 +50,11 @@ import {
 
 function assertGenesis(input: InitializeSceneDocumentInput): void {
   const { head, genesisRevision } = input;
+  const allowedInitialReason =
+    genesisRevision.reason === "genesis" ||
+    genesisRevision.reason === "capture-promotion";
   if (
-    genesisRevision.reason !== "genesis" ||
+    !allowedInitialReason ||
     genesisRevision.parentRevisionId !== undefined ||
     head.checkpointRevisionId !== genesisRevision.id ||
     head.sceneId !== genesisRevision.sceneId ||
@@ -277,6 +282,7 @@ async function queryLease(
 type ConditionalSceneMutationInput =
   | CreateSceneCheckpointInput
   | CreateNamedSceneVariantInput
+  | CreateNamedVariantFromDocumentInput
   | RestoreSceneRevisionInput;
 
 type ConditionalMutationContext =
@@ -720,6 +726,67 @@ export function createPostgresSceneDocumentRepository(
           revision: checkpoint.revision,
           variant: variantFromRow(created),
           checkpointCreated: checkpoint.created
+        };
+      });
+    },
+    createNamedVariantFromDocument(
+      input: CreateNamedVariantFromDocumentInput
+    ): Promise<CreateNamedVariantFromDocumentOutcome> {
+      return db.transaction(async (transaction) => {
+        const exec = transaction as unknown as RepositoryDatabase;
+        const context = await lockConditionalMutation(exec, input);
+        if (!context.ok) return context;
+
+        const [duplicate] = await exec
+          .select({ id: sceneVariants.id })
+          .from(sceneVariants)
+          .where(
+            and(
+              eq(sceneVariants.sceneId, input.sceneId),
+              eq(sceneVariants.name, input.name)
+            )
+          )
+          .limit(1);
+        if (duplicate !== undefined) {
+          return { ok: false, reason: "variant-name-conflict" };
+        }
+
+        const revision = await insertRevision(
+          exec,
+          createSceneRevision({
+            id: input.revisionId,
+            sceneId: input.sceneId,
+            projectId: input.projectId,
+            parentRevisionId: context.head.checkpointRevisionId,
+            document: input.document,
+            contentHash: input.contentHash,
+            actorAccountId: input.actorAccountId,
+            origin: input.origin,
+            reason: input.reason,
+            createdAt: input.now
+          })
+        );
+        const [created] = await exec
+          .insert(sceneVariants)
+          .values({
+            id: input.variantId,
+            projectId: input.projectId,
+            sceneId: input.sceneId,
+            revisionId: revision.id,
+            creatorAccountId: input.actorAccountId,
+            name: input.name,
+            createdAt: input.now,
+            updatedAt: input.now
+          })
+          .returning();
+        if (created === undefined) {
+          throw new Error("Scene variant insert returned no row.");
+        }
+        return {
+          ok: true,
+          head: context.head,
+          revision,
+          variant: variantFromRow(created)
         };
       });
     },

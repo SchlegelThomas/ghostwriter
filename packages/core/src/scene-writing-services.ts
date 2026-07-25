@@ -259,6 +259,55 @@ export async function createInitialSceneDocumentState(input: {
   return Object.freeze({ head, genesisRevision });
 }
 
+/** Hermetic/local seed helper — genesis head with original placeholder prose. */
+export async function createSceneDocumentStateWithProse(input: {
+  projectId: ProjectId;
+  sceneId: SceneId;
+  actorAccountId: AccountId;
+  ids: IdGenerator;
+  now: string;
+  prose: string;
+}): Promise<InitializeSceneDocumentInput> {
+  const newRevisionId = revisionId(input.ids.create("revision"));
+  const document = validateSceneDocumentV1({
+    schemaVersion: 1,
+    document: {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          attrs: { id: input.ids.create("sceneDocumentBlock") },
+          content: [{ type: "text", text: input.prose }]
+        }
+      ]
+    }
+  });
+  const contentHash = sceneContentHash(await hashSceneDocument(document));
+  const genesisRevision = createSceneRevision({
+    id: newRevisionId,
+    sceneId: input.sceneId,
+    projectId: input.projectId,
+    document,
+    contentHash,
+    actorAccountId: input.actorAccountId,
+    origin: "system",
+    reason: "genesis",
+    createdAt: input.now
+  });
+  const head = createSceneDocumentHead({
+    sceneId: input.sceneId,
+    projectId: input.projectId,
+    workingVersion: 1,
+    document,
+    contentHash,
+    checkpointRevisionId: newRevisionId,
+    updatedByAccountId: input.actorAccountId,
+    createdAt: input.now,
+    updatedAt: input.now
+  });
+  return Object.freeze({ head, genesisRevision });
+}
+
 async function ensureWorkspace(
   dependencies: SceneWritingServiceDependencies,
   accountId: AccountId,

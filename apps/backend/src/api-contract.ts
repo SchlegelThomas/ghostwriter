@@ -1,5 +1,7 @@
 import {
   bookId,
+  CAPTURE_ATTACHMENT_MAX_DISPLAY_FILENAME_LENGTH,
+  MCP_GRANT_TOOL_NAMES,
   CANVAS_MAX_COORDINATE,
   CANVAS_MAX_DIMENSION,
   CANVAS_MAX_ZOOM,
@@ -7,15 +9,20 @@ import {
   canvasLinkId,
   canvasObjectId,
   canvasRevisionId,
+  captureContentHash,
   chapterId,
   partId,
   revisionId,
   SCENE_VARIANT_NAME_MAX_LENGTH,
   sceneId,
   storyKnowledgeId,
+  type AccountId,
   type CanvasCommand,
+  type CaptureId,
   type CreateSceneFromCanvasInput,
-  type ProjectCommand
+  type ProjectCommand,
+  type ProjectId,
+  type PromoteCaptureToSceneInput
 } from "@ghostwriter/core";
 import { z } from "zod";
 
@@ -229,7 +236,16 @@ const commandSchema = z.discriminatedUnion("type", [
     type: z.literal("book.update"),
     bookId: id,
     title: title.optional(),
-    status: bookStatus.optional()
+    status: bookStatus.optional(),
+    cover: z
+      .object({
+        concept: z.string().trim().min(1).max(5_000).optional(),
+        notes: z.string().trim().min(1).max(5_000).optional(),
+        imageUrl: httpUrl.optional()
+      })
+      .partial()
+      .nullable()
+      .optional()
   }),
   z.object({ type: z.literal("book.reorder"), bookIds: z.array(id).max(100) }),
   z.object({
@@ -372,6 +388,83 @@ export const saveSceneDocumentRequestSchema = z
     document: z.unknown()
   })
   .strict();
+
+export const saveCaptureDocumentRequestSchema = saveSceneDocumentRequestSchema;
+export const CAPTURE_DOCUMENT_REQUEST_MAX_BYTES = SCENE_DOCUMENT_REQUEST_MAX_BYTES;
+
+export const createCaptureRequestSchema = z
+  .object({
+    sourceModality: z.enum(["text", "dictation"]).default("text")
+  })
+  .strict();
+
+export const setCaptureArchivedRequestSchema = z
+  .object({
+    archived: z.boolean()
+  })
+  .strict();
+
+const captureAttachmentSha256Schema = z
+  .string()
+  .trim()
+  .regex(/^[0-9a-f]{64}$/i, "Must be a 64-character hexadecimal SHA-256 digest.");
+
+export const initCaptureAttachmentRequestSchema = z
+  .object({
+    displayFilename: z
+      .string()
+      .trim()
+      .min(1)
+      .max(CAPTURE_ATTACHMENT_MAX_DISPLAY_FILENAME_LENGTH),
+    declaredContentType: z.string().trim().min(1).max(200),
+    declaredByteSize: z.number().int().positive(),
+    clientSha256: captureAttachmentSha256Schema
+  })
+  .strict();
+
+export const finalizeCaptureAttachmentRequestSchema = z.object({}).strict();
+
+export async function parseOptionalJsonRequest<Output>(
+  request: Request,
+  schema: z.ZodType<Output>,
+  maxBytes = DEFAULT_JSON_REQUEST_MAX_BYTES
+): Promise<JsonRequestResult<Output>> {
+  const contentLength = Number.parseInt(
+    request.headers.get("content-length") ?? "",
+    10
+  );
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    return { success: false, code: "PAYLOAD_TOO_LARGE" };
+  }
+  const text = await request.text();
+  if (new TextEncoder().encode(text).byteLength > maxBytes) {
+    return { success: false, code: "PAYLOAD_TOO_LARGE" };
+  }
+
+  let value: unknown;
+  if (text.trim() === "") {
+    value = {};
+  } else {
+    try {
+      value = JSON.parse(text) as unknown;
+    } catch {
+      return { success: false, code: "INVALID_JSON" };
+    }
+  }
+
+  const result = schema.safeParse(value);
+  if (!result.success) {
+    return {
+      success: false,
+      code: "INVALID_REQUEST",
+      issues: result.error.issues.map((issue) => ({
+        path: issue.path.join("."),
+        message: issue.message
+      }))
+    };
+  }
+  return { success: true, data: result.data };
+}
 
 export const createSceneCheckpointRequestSchema = z
   .object({
@@ -695,6 +788,77 @@ export function toCreateSceneFromCanvasInput(
   };
 }
 
+const captureContentHashRequestSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(
+    /^[a-f0-9]{64}$/u,
+    "Capture content hash must be a SHA-256 digest."
+  );
+
+const promoteCaptureCanvasRequestSchema = canvasGeometrySchema
+  .extend({
+    expectedCanvasVersion: z.number().int().positive()
+  })
+  .strict();
+
+export const promoteCaptureRequestSchema = z
+  .object({
+    expectedCaptureWorkingVersion: z.number().int().positive(),
+    expectedCaptureContentHash: captureContentHashRequestSchema,
+    expectedProjectVersion: z.number().int().positive(),
+    title,
+    manuscriptPlacement: manuscriptPlacementSchema,
+    canvas: promoteCaptureCanvasRequestSchema.optional()
+  })
+  .strict();
+
+export type ParsedPromoteCaptureRequest = z.infer<
+  typeof promoteCaptureRequestSchema
+>;
+
+export function toPromoteCaptureToSceneInput(
+  request: ParsedPromoteCaptureRequest,
+  accountId: AccountId,
+  projectId: ProjectId,
+  captureId: CaptureId
+): PromoteCaptureToSceneInput {
+  const { canvas, expectedCaptureContentHash, ...rest } = request;
+  return {
+    accountId,
+    projectId,
+    captureId,
+    expectedCaptureContentHash: captureContentHash(expectedCaptureContentHash),
+    ...rest,
+    ...(canvas === undefined
+      ? {}
+      : {
+          expectedCanvasVersion: canvas.expectedCanvasVersion,
+          canvas: {
+            x: canvas.x,
+            y: canvas.y,
+            width: canvas.width,
+            height: canvas.height,
+            z: canvas.z,
+            ...(canvas.parentRegionId === undefined
+              ? {}
+              : { parentRegionId: canvas.parentRegionId }),
+            ...(canvas.storyOrderHint === undefined
+              ? {}
+              : { storyOrderHint: canvas.storyOrderHint }),
+            ...(canvas.label === undefined ? {} : { label: canvas.label }),
+            ...(canvas.sourceKey === undefined
+              ? {}
+              : { sourceKey: canvas.sourceKey }),
+            ...(canvas.provenance === undefined
+              ? {}
+              : { provenance: canvas.provenance })
+          }
+        })
+  };
+}
+
 type ParsedCommand = z.infer<typeof commandSchema>;
 
 export function toProjectCommand(command: ParsedCommand): ProjectCommand {
@@ -815,3 +979,212 @@ export function toProjectCommand(command: ParsedCommand): ProjectCommand {
       };
   }
 }
+
+const optionalPositiveVersion = z.number().int().positive().optional();
+
+export const OPENAI_PROVIDER_CREDENTIAL_MAX_BYTES = 4_096;
+
+export const setOpenAiProviderCredentialRequestSchema = z.object({
+  apiKey: z.string().trim().min(20).max(200).regex(/^\S+$/u),
+  expectedVersion: optionalPositiveVersion
+});
+
+export const deleteOpenAiProviderCredentialRequestSchema = z.object({
+  expectedVersion: z.number().int().positive()
+});
+
+export const validateOpenAiProviderCredentialRequestSchema = z.object({
+  expectedVersion: z.number().int().positive()
+});
+
+const aiCollaborationPostureSchema = z.enum([
+  "options",
+  "questions-first",
+  "craft-explanations",
+  "minimal"
+]);
+
+export const patchAiCollaborationRequestSchema = z.union([
+  z.object({
+    skipSetup: z.literal(true),
+    expectedVersion: optionalPositiveVersion
+  }),
+  z.object({
+    posture: aiCollaborationPostureSchema,
+    boundaries: z.string().trim().max(2_000).optional(),
+    expectedVersion: optionalPositiveVersion
+  })
+]);
+
+export const saveProjectAgentInstructionsRequestSchema = z.object({
+  body: z.string().trim().min(1).max(8_000),
+  expectedVersion: optionalPositiveVersion
+});
+
+const playbookTriggerSchema = z.enum(["capture-reflection", "manual"]);
+const agentContextClassSchema = z.enum(["capture"]);
+const agentOutputSchemaIdSchema = z.enum([
+  "capture-reflection-v1",
+  "sketch-fields-v1",
+  "character-sheet-v1",
+  "backdrop-fields-v1"
+]);
+
+export const saveProjectPlaybookRequestSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  enabled: z.boolean(),
+  trigger: playbookTriggerSchema,
+  allowedContextClasses: z.array(agentContextClassSchema).min(1).max(8),
+  outputSchemaId: agentOutputSchemaIdSchema,
+  guidance: z.string().trim().min(1).max(4_000),
+  expectedVersion: optionalPositiveVersion
+});
+
+export const updateProjectPlaybookRequestSchema = saveProjectPlaybookRequestSchema;
+
+export const archiveProjectPlaybookRequestSchema = z.object({
+  expectedVersion: z.number().int().positive()
+});
+
+const agentModelIdSchema = z.enum(["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]);
+
+const agentWorkflowIdSchema = z.enum([
+  "scene-partner.capture-reflection",
+  "sketch-partner.craft-fields",
+  "character-coach.sheet-fields",
+  "worldkeeper.backdrop-fields"
+]);
+
+export const agentContextPreviewRequestSchema = z.object({
+  captureId: id,
+  model: agentModelIdSchema.optional(),
+  workflowId: agentWorkflowIdSchema.optional(),
+  sceneId: id.optional(),
+  storyKnowledgeId: id.optional()
+});
+
+export const agentStartRunRequestSchema = z.object({
+  receiptId: id,
+  expectedReceiptHash: z
+    .string()
+    .trim()
+    .regex(/^[a-f0-9]{64}$/u)
+});
+
+const scenePartnerTurnPhaseSchema = z.enum([
+  "interview",
+  "match",
+  "new-scene",
+  "iterate"
+]);
+
+export const scenePartnerTurnRequestSchema = z
+  .object({
+    ideaProse: z.string().max(24_000),
+    scenes: z
+      .array(
+        z
+          .object({
+            id: id,
+            title: z.string().trim().min(1).max(200),
+            label: z.string().trim().min(1).max(400)
+          })
+          .strict()
+      )
+      .max(200),
+    messages: z
+      .array(
+        z
+          .object({
+            role: z.enum(["assistant", "user"]),
+            body: z.string().trim().min(1).max(4_000)
+          })
+          .strict()
+      )
+      .max(40),
+    phase: scenePartnerTurnPhaseSchema.optional(),
+    matchedSceneId: id.nullable().optional()
+  })
+  .strict();
+
+export const scenePartnerImageRequestSchema = z
+  .object({
+    prompt: z.string().trim().min(1).max(4_000)
+  })
+  .strict();
+
+export const bookCoverImageRequestSchema = z
+  .object({
+    prompt: z.string().trim().min(1).max(4_000)
+  })
+  .strict();
+
+export const bookCoverImageJobRequestSchema = z
+  .object({
+    prompt: z.string().trim().min(1).max(4_000),
+    count: z.number().int().min(2).max(4).optional(),
+    refinement: z.string().trim().min(1).max(2_000).optional()
+  })
+  .strict();
+
+export const bookCoverImageApplyRequestSchema = z
+  .object({
+    prompt: z.string().trim().min(1).max(4_000).optional(),
+    previewDataUri: z.string().trim().min(1).max(12_000_000).optional()
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const hasPrompt = value.prompt !== undefined;
+    const hasPreview = value.previewDataUri !== undefined;
+    if (hasPrompt === hasPreview) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Provide exactly one of prompt or previewDataUri."
+      });
+    }
+  });
+
+const agentProposalContentHashSchema = z
+  .string()
+  .trim()
+  .regex(/^[a-f0-9]{64}$/u);
+
+export const agentApplyProposalRequestSchema = z.discriminatedUnion("mode", [
+  z
+    .object({
+      mode: z.literal("new-scene"),
+      title,
+      bookId: id,
+      chapterId: id.optional(),
+      placeOnCanvas: z.boolean().optional(),
+      expectedProjectVersion: z.number().int().positive(),
+      expectedCanvasVersion: z.number().int().positive().optional(),
+      expectedProposalContentHash: agentProposalContentHashSchema
+    })
+    .strict(),
+  z
+    .object({
+      mode: z.literal("named-variant"),
+      sceneId: id,
+      variantName: z.string().trim().min(1).max(SCENE_VARIANT_NAME_MAX_LENGTH),
+      expectedWorkingVersion: z.number().int().positive(),
+      sessionId: id,
+      expectedProposalContentHash: agentProposalContentHashSchema
+    })
+    .strict(),
+  z
+    .object({
+      mode: z.literal("craft-fields"),
+      expectedProjectVersion: z.number().int().positive(),
+      expectedProposalContentHash: agentProposalContentHashSchema
+    })
+    .strict()
+]);
+
+export const createMcpGrantRequestSchema = z
+  .object({
+    captureIds: z.array(id).min(1).max(64),
+    tools: z.array(z.enum(MCP_GRANT_TOOL_NAMES)).min(1),
+    expiresAt: z.string().trim().min(1).max(64)
+  })
+  .strict();

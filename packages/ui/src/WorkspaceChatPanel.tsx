@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -7,8 +7,19 @@ import {
   TextInput,
   View
 } from "react-native";
-import type { GhostwriterCapability } from "@ghostwriter/core";
+import { ArrowUp } from "phosphor-react-native";
+import type { AgentModelId } from "@ghostwriter/core";
+import { AGENT_MODEL_IDS } from "@ghostwriter/core";
 import { ghostwriterTheme } from "./theme.js";
+import {
+  agentModelLabel,
+  WORKSPACE_AGENT_EFFORTS,
+  WORKSPACE_AGENT_MODES,
+  workspaceAgentEffortLabel,
+  workspaceAgentModeLabel,
+  type WorkspaceAgentEffort,
+  type WorkspaceAgentMode
+} from "./workspace-agent-prefs.js";
 
 const { colors, fonts } = ghostwriterTheme;
 
@@ -18,245 +29,439 @@ export type WorkspaceChatMessage = Readonly<{
   body: string;
 }>;
 
+export type WorkspaceChatSendInput = Readonly<{
+  message: string;
+  mode: WorkspaceAgentMode;
+  model: AgentModelId;
+  effort: WorkspaceAgentEffort;
+}>;
+
 export type WorkspaceChatPanelProps = Readonly<{
-  capabilities: readonly GhostwriterCapability[];
   messages: readonly WorkspaceChatMessage[];
   busy?: boolean;
   open: boolean;
   onClose(): void;
-  onSend(message: string): Promise<void> | void;
+  onSend(input: WorkspaceChatSendInput): Promise<void> | void;
+  mode: WorkspaceAgentMode;
+  model: AgentModelId;
+  effort: WorkspaceAgentEffort;
+  onModeChange(mode: WorkspaceAgentMode): void;
+  onModelChange(model: AgentModelId): void;
+  onEffortChange(effort: WorkspaceAgentEffort): void;
+  providerConfigured?: boolean;
+  onOpenSettings?(): void;
+  selectionSummary?: string;
+  /** Docked in the secondary shell — no outer border; close returns to Properties. */
+  variant?: "floating" | "docked";
 }>;
 
+type PickerKind = "mode" | "model" | "effort" | null;
+
 export function WorkspaceChatPanel({
-  capabilities,
   messages,
   busy = false,
   open,
   onClose,
-  onSend
+  onSend,
+  mode,
+  model,
+  effort,
+  onModeChange,
+  onModelChange,
+  onEffortChange,
+  providerConfigured = true,
+  onOpenSettings,
+  selectionSummary,
+  variant = "floating"
 }: WorkspaceChatPanelProps) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [openPicker, setOpenPicker] = useState<PickerKind>(null);
+  const scrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    if (messages.length === 0) return;
+    scrollRef.current?.scrollToEnd({ animated: true });
+  }, [messages.length]);
 
   if (!open) return null;
 
-  async function sendMessage(
-    message: string,
-    clearComposer: boolean
-  ): Promise<void> {
-    const text = message.trim();
+  async function send(): Promise<void> {
+    const text = draft.trim();
     if (text.length === 0 || sending || busy) return;
     setSending(true);
+    setOpenPicker(null);
     try {
-      await onSend(text);
-      if (clearComposer) setDraft("");
+      await onSend({ message: text, mode, model, effort });
+      setDraft("");
     } finally {
       setSending(false);
     }
   }
 
-  async function send(): Promise<void> {
-    await sendMessage(draft, true);
-  }
+  const composerDisabled = busy || sending;
+  const canSend = !composerDisabled && draft.trim().length > 0;
 
   return (
-    <View accessibilityLabel="Workspace MCP chat" style={styles.panel}>
-      <View style={styles.heading}>
-        <View style={styles.headingCopy}>
-          <Text style={styles.eyebrow}>Capabilities</Text>
-          <Text style={styles.title}>MCP chat</Text>
+    <View
+      accessibilityLabel="Workspace writing agent"
+      style={[styles.panel, variant === "docked" && styles.panelDocked]}
+    >
+      {variant === "floating" ? (
+        <View style={styles.floatingHeading}>
+          <Text style={styles.floatingTitle}>Agent</Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onClose}
+            style={({ pressed }) => [
+              styles.ghostButton,
+              pressed && styles.pressed
+            ]}
+          >
+            <Text style={styles.ghostButtonText}>Close</Text>
+          </Pressable>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          onPress={onClose}
-          style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
-        >
-          <Text style={styles.closeButtonText}>Close</Text>
-        </Pressable>
-      </View>
-      <Text style={styles.help}>
-        Tool invoke against the open project. LLM completion waits on an OpenAI
-        key; until then replies echo tool results.
-      </Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.capabilityScroll}
-      >
-        {capabilities.slice(0, 24).map((capability) =>
-          capability.access === "read" ? (
-            <Pressable
-              accessibilityLabel={`Run ${capability.title}`}
-              accessibilityRole="button"
-              disabled={busy || sending}
-              key={capability.id}
-              onPress={() => void sendMessage(capability.id, false)}
-              style={({ pressed }) => [
-                styles.capabilityChip,
-                pressed && styles.pressed,
-                (busy || sending) && styles.disabled
-              ]}
-            >
-              <Text numberOfLines={1} style={styles.capabilityText}>
-                {capability.title}
-              </Text>
-            </Pressable>
-          ) : (
-            <View key={capability.id} style={styles.capabilityChip}>
-              <Text numberOfLines={1} style={styles.capabilityText}>
-                {capability.title}
-              </Text>
-            </View>
-          )
-        )}
-      </ScrollView>
-      <ScrollView
-        contentContainerStyle={styles.messages}
-        keyboardShouldPersistTaps="handled"
-        style={styles.messageScroll}
-      >
-        {messages.length === 0 ? (
-          <Text style={styles.empty}>
-            Ask what tools can do for this project, or name a capability to run.
+      ) : null}
+
+      {selectionSummary !== undefined && selectionSummary.trim().length > 0 ? (
+        <View style={styles.selectionChip}>
+          <Text numberOfLines={1} style={styles.selectionChipText}>
+            {selectionSummary}
           </Text>
-        ) : (
-          messages.map((message) => (
-            <View
-              key={message.id}
-              style={[
-                styles.message,
-                message.role === "user" && styles.messageUser,
-                message.role === "system" && styles.messageSystem
-              ]}
-            >
-              <Text style={styles.messageRole}>{message.role}</Text>
-              <Text style={styles.messageBody}>{message.body}</Text>
-            </View>
-          ))
-        )}
-      </ScrollView>
-      <View style={styles.composer}>
-        <TextInput
-          accessibilityLabel="Chat message"
-          editable={!busy && !sending}
-          multiline
-          onChangeText={setDraft}
-          onSubmitEditing={() => void send()}
-          placeholder="Invoke a capability or ask about this project…"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          value={draft}
-        />
-        <Pressable
-          accessibilityRole="button"
-          disabled={busy || sending || draft.trim().length === 0}
-          onPress={() => void send()}
-          style={({ pressed }) => [
-            styles.sendButton,
-            pressed && styles.pressed,
-            (busy || sending || draft.trim().length === 0) && styles.disabled
+        </View>
+      ) : null}
+
+      <View style={styles.messageArea}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.messages,
+            messages.length === 0 && styles.messagesEmpty
           ]}
+          keyboardShouldPersistTaps="handled"
+          ref={scrollRef}
+          style={styles.messageScroll}
         >
-          <Text style={styles.sendButtonText}>
-            {sending ? "Sending…" : "Send"}
-          </Text>
-        </Pressable>
+          {messages.length === 0 ? (
+            <View style={styles.emptyBlock}>
+              <Text style={styles.emptyTitle}>
+                {mode === "plan"
+                  ? "Plan with the manuscript"
+                  : mode === "agent"
+                    ? "Writing agent"
+                    : "Chat about this project"}
+              </Text>
+              <Text style={styles.empty}>
+                {mode === "plan"
+                  ? "Ask for outlines, scene lists, or proposal drafts you can move into Plans."
+                  : mode === "agent"
+                    ? "Ask for next steps, cover ideas, or scene work — propose only until you apply."
+                    : "Ask questions, research continuity, or draft ideas against the open project."}
+              </Text>
+              {!providerConfigured ? (
+                <View style={styles.emptyCtaBlock}>
+                  <Text style={styles.emptyHint}>
+                    Add your OpenAI key in Settings for real replies.
+                  </Text>
+                  {onOpenSettings !== undefined ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={onOpenSettings}
+                      style={({ pressed }) => [
+                        styles.settingsButton,
+                        pressed && styles.pressed
+                      ]}
+                    >
+                      <Text style={styles.settingsButtonText}>Open Settings</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+          ) : (
+            messages.map((message) => (
+              <View
+                key={message.id}
+                style={[
+                  styles.message,
+                  message.role === "user" && styles.messageUser,
+                  message.role === "system" && styles.messageSystem
+                ]}
+              >
+                <Text style={styles.messageRole}>{message.role}</Text>
+                <Text style={styles.messageBody}>{message.body}</Text>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      </View>
+
+      <View style={styles.composer}>
+        {openPicker !== null ? (
+          <View style={styles.pickerMenuDock}>
+            {(openPicker === "mode"
+              ? WORKSPACE_AGENT_MODES.map((value) => ({
+                  value,
+                  label: workspaceAgentModeLabel(value)
+                }))
+              : openPicker === "model"
+                ? AGENT_MODEL_IDS.map((value) => ({
+                    value,
+                    label: agentModelLabel(value)
+                  }))
+                : WORKSPACE_AGENT_EFFORTS.map((value) => ({
+                    value,
+                    label: workspaceAgentEffortLabel(value)
+                  }))
+            ).map((option) => (
+              <Pressable
+                accessibilityRole="menuitem"
+                key={option.value}
+                onPress={() => {
+                  if (openPicker === "mode") {
+                    onModeChange(option.value as WorkspaceAgentMode);
+                  } else if (openPicker === "model") {
+                    onModelChange(option.value as AgentModelId);
+                  } else {
+                    onEffortChange(option.value as WorkspaceAgentEffort);
+                  }
+                  setOpenPicker(null);
+                }}
+                style={({ pressed }) => [
+                  styles.pickerOption,
+                  pressed && styles.pressed
+                ]}
+              >
+                <Text style={styles.pickerOptionText}>{option.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+
+        <View style={styles.composerShell}>
+          <TextInput
+            accessibilityLabel="Chat message"
+            editable={!composerDisabled}
+            multiline
+            onChangeText={setDraft}
+            onSubmitEditing={() => void send()}
+            placeholder="Ask about this project…"
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+            value={draft}
+          />
+          <View style={styles.composerToolbar}>
+            <View style={styles.pickerRow}>
+              <ComposerChip
+                accessibilityLabel="Agent mode"
+                disabled={composerDisabled}
+                label={workspaceAgentModeLabel(mode)}
+                onPress={() =>
+                  setOpenPicker((current) =>
+                    current === "mode" ? null : "mode"
+                  )
+                }
+                selected={openPicker === "mode"}
+              />
+              <ComposerChip
+                accessibilityLabel="Agent model"
+                disabled={composerDisabled}
+                label={agentModelLabel(model)}
+                onPress={() =>
+                  setOpenPicker((current) =>
+                    current === "model" ? null : "model"
+                  )
+                }
+                selected={openPicker === "model"}
+              />
+              <ComposerChip
+                accessibilityLabel="Agent effort"
+                disabled={composerDisabled}
+                label={workspaceAgentEffortLabel(effort)}
+                onPress={() =>
+                  setOpenPicker((current) =>
+                    current === "effort" ? null : "effort"
+                  )
+                }
+                selected={openPicker === "effort"}
+              />
+            </View>
+            <Pressable
+              accessibilityLabel="Send"
+              accessibilityRole="button"
+              disabled={!canSend}
+              onPress={() => void send()}
+              style={({ pressed }) => [
+                styles.sendButton,
+                pressed && styles.pressed,
+                !canSend && styles.disabled
+              ]}
+            >
+              <ArrowUp color="#ffffff" size={13} weight="thin" />
+            </Pressable>
+          </View>
+        </View>
       </View>
     </View>
   );
 }
 
+function ComposerChip({
+  accessibilityLabel,
+  label,
+  disabled,
+  selected,
+  onPress
+}: Readonly<{
+  accessibilityLabel: string;
+  label: string;
+  disabled: boolean;
+  selected: boolean;
+  onPress(): void;
+}>) {
+  return (
+    <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: selected, disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.pickerChip,
+        selected && styles.pickerChipSelected,
+        pressed && styles.pressed,
+        disabled && styles.disabled
+      ]}
+    >
+      <Text
+        style={[
+          styles.pickerChipText,
+          selected && styles.pickerChipTextSelected
+        ]}
+      >
+        {label} ▾
+      </Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   panel: {
-    backgroundColor: "#f7f3ec",
+    backgroundColor: colors.paper,
     borderLeftColor: colors.line,
     borderLeftWidth: 1,
     flex: 1,
+    flexDirection: "column",
+    height: "100%",
     minHeight: 0,
-    minWidth: 0
+    minWidth: 0,
+    width: "100%",
+    ...(typeof document !== "undefined"
+      ? ({ display: "flex" } as object)
+      : {})
   },
-  heading: {
-    alignItems: "flex-start",
+  panelDocked: {
+    borderLeftWidth: 0
+  },
+  floatingHeading: {
+    alignItems: "center",
     borderBottomColor: colors.line,
     borderBottomWidth: 1,
     flexDirection: "row",
-    gap: 8,
+    flexShrink: 0,
     justifyContent: "space-between",
-    padding: 12
+    paddingHorizontal: 12,
+    paddingVertical: 10
   },
-  headingCopy: {
-    flex: 1,
-    minWidth: 0
-  },
-  eyebrow: {
-    color: colors.kicker,
-    fontFamily: fonts.uiSemibold,
-    fontSize: 8,
-    letterSpacing: 1.3,
-    textTransform: "uppercase"
-  },
-  title: {
+  floatingTitle: {
     color: colors.ink,
     fontFamily: fonts.story,
-    fontSize: 20,
-    marginTop: 2
+    fontSize: 18
   },
-  closeButton: {
-    backgroundColor: colors.panel,
-    borderColor: colors.line,
+  ghostButton: {
     borderRadius: 6,
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 6
-  },
-  closeButtonText: {
-    color: colors.ink,
-    fontFamily: fonts.uiSemibold,
-    fontSize: 8
-  },
-  help: {
-    color: colors.muted,
-    fontFamily: fonts.ui,
-    fontSize: 9,
-    lineHeight: 13,
-    paddingHorizontal: 12,
-    paddingTop: 8
-  },
-  capabilityScroll: {
-    flexGrow: 0,
-    marginTop: 8,
-    maxHeight: 42,
-    paddingHorizontal: 10
-  },
-  capabilityChip: {
-    alignSelf: "center",
-    backgroundColor: colors.panel,
-    borderColor: colors.line,
-    borderRadius: 999,
-    borderWidth: 1,
-    marginRight: 6,
     paddingHorizontal: 8,
     paddingVertical: 5
   },
-  capabilityText: {
+  ghostButtonText: {
+    color: colors.muted,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 11
+  },
+  selectionChip: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.wash,
+    borderColor: colors.line,
+    borderRadius: 999,
+    borderWidth: 1,
+    flexShrink: 0,
+    marginHorizontal: 10,
+    marginTop: 8,
+    maxWidth: "92%",
+    paddingHorizontal: 9,
+    paddingVertical: 4
+  },
+  selectionChipText: {
     color: colors.muted,
     fontFamily: fonts.uiMedium,
-    fontSize: 7,
-    maxWidth: 140
+    fontSize: 10
+  },
+  messageArea: {
+    flex: 1,
+    flexGrow: 1,
+    minHeight: 0,
+    minWidth: 0
   },
   messageScroll: {
     flex: 1,
     minHeight: 0
   },
   messages: {
+    flexGrow: 1,
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12
+  },
+  messagesEmpty: {
+    flexGrow: 1,
+    justifyContent: "center",
+    minHeight: "100%" as unknown as number
+  },
+  emptyBlock: {
     gap: 8,
-    padding: 12
+    paddingHorizontal: 4
+  },
+  emptyTitle: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 14
   },
   empty: {
     color: colors.muted,
     fontFamily: fonts.ui,
-    fontSize: 10,
-    fontStyle: "italic"
+    fontSize: 12,
+    lineHeight: 18
+  },
+  emptyCtaBlock: {
+    gap: 8,
+    marginTop: 6
+  },
+  emptyHint: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 11,
+    lineHeight: 15
+  },
+  settingsButton: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.brandDark,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7
+  },
+  settingsButtonText: {
+    color: "#ffffff",
+    fontFamily: fonts.uiSemibold,
+    fontSize: 11
   },
   message: {
     backgroundColor: colors.panel,
@@ -264,7 +469,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     gap: 4,
-    padding: 9
+    paddingHorizontal: 10,
+    paddingVertical: 9
   },
   messageUser: {
     backgroundColor: colors.accentSoft,
@@ -277,49 +483,110 @@ const styles = StyleSheet.create({
   messageRole: {
     color: colors.kicker,
     fontFamily: fonts.uiSemibold,
-    fontSize: 7,
-    letterSpacing: 0.8,
+    fontSize: 9,
+    letterSpacing: 0.6,
     textTransform: "uppercase"
   },
   messageBody: {
     color: colors.ink,
     fontFamily: fonts.ui,
-    fontSize: 10,
-    lineHeight: 15
+    fontSize: 13,
+    lineHeight: 19
   },
   composer: {
     borderTopColor: colors.line,
     borderTopWidth: 1,
-    gap: 8,
-    padding: 10
+    flexShrink: 0,
+    gap: 6,
+    marginTop: "auto",
+    paddingBottom: 10,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    position: "relative",
+    zIndex: 5
   },
-  input: {
+  pickerMenuDock: {
     backgroundColor: colors.panel,
     borderColor: colors.line,
-    borderRadius: 7,
+    borderRadius: 8,
     borderWidth: 1,
+    bottom: "100%",
+    left: 10,
+    marginBottom: 6,
+    maxHeight: 220,
+    minWidth: 140,
+    overflow: "hidden",
+    position: "absolute",
+    zIndex: 30
+  },
+  pickerOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 9
+  },
+  pickerOptionText: {
     color: colors.ink,
     fontFamily: fonts.ui,
-    fontSize: 10,
-    minHeight: 56,
-    paddingHorizontal: 9,
-    paddingVertical: 8,
+    fontSize: 12
+  },
+  composerShell: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 4,
+    paddingBottom: 6,
+    paddingHorizontal: 8,
+    paddingTop: 8
+  },
+  input: {
+    color: colors.ink,
+    fontFamily: fonts.ui,
+    fontSize: 13,
+    maxHeight: 140,
+    minHeight: 44,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
     textAlignVertical: "top",
     width: "100%"
   },
+  composerToolbar: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between",
+    minWidth: 0
+  },
+  pickerRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexShrink: 1,
+    flexWrap: "wrap",
+    gap: 4,
+    minWidth: 0
+  },
+  pickerChip: {
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 5
+  },
+  pickerChipSelected: {
+    backgroundColor: colors.accentSoft
+  },
+  pickerChipText: {
+    color: colors.muted,
+    fontFamily: fonts.uiMedium,
+    fontSize: 11
+  },
+  pickerChipTextSelected: {
+    color: colors.kicker
+  },
   sendButton: {
     alignItems: "center",
-    alignSelf: "flex-end",
     backgroundColor: colors.brandDark,
-    borderRadius: 6,
-    minHeight: 34,
-    paddingHorizontal: 12,
-    paddingVertical: 8
-  },
-  sendButtonText: {
-    color: "#ffffff",
-    fontFamily: fonts.uiSemibold,
-    fontSize: 9
+    borderRadius: 999,
+    height: 24,
+    justifyContent: "center",
+    width: 24
   },
   pressed: {
     opacity: 0.72

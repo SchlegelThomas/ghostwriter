@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ghost-writer · Visual mockups 5.0 — Capture to Story (proposed)</title>
+  <style>
+    /* Tokens aligned with Mockups 4.0 / packages/ui theme — no external assets */
+    :root {
+      --ink: #28231f;
+      --muted: #766c63;
+      --paper: #fcfaf6;
+      --canvas: #f5f1ea;
+      --panel: #ffffff;
+      --topbar: #fdfcf9;
+      --wash: #f2eee7;
+      --line: #ddd5ca;
+      --accent: #754535;
+      --accent-soft: #f2e5df;
+      --kicker: #6e3f32;
+      --brand-dark: #2c2a27;
+      --rail: #322c27;
+      --rail-active: #4a4039;
+      --rail-text: #cbbfb4;
+      --board: #eee8df;
+      --green: #3f684f;
+      --green-soft: #e7f0e9;
+      --blue: #3f6175;
+      --blue-soft: #e8f0f4;
+      --amber: #80622c;
+      --amber-soft: #f5ecd9;
+      --red: #89514b;
+      --red-soft: #f5e5e2;
+      --purple: #5a4a6e;
+      --purple-soft: #ece8f2;
+      --shadow: 0 2px 5px rgba(29, 21, 15, 0.08);
+      --shadow-float: 0 10px 28px rgba(29, 21, 15, 0.1);
+      --serif: Georgia, "Times New Roman", serif;
+      --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      --brand-script: "Segoe Script", "Apple Chancery", cursive;
+      --rail-w: 32px;
+      --topbar-h: 44px;
+      --toolbar-h: 36px;
+      --icon: 28px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-weight: 500;
+      line-height: 1.45;
+    }
+    a { color: var(--accent); }
+    button, input, select, textarea { font: inherit; }
+    button {
+      cursor: pointer;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 6px;
+      color: var(--ink);
+    }
+    button:focus-visible, a:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .wrap { margin: 0 auto; max-width: 1320px; padding: 40px 20px 88px; }
+    .flag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--purple);
+      color: #fff;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 7px 12px;
+      margin-bottom: 14px;
+    }
+    .flag::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #c4b8e8;
+    }
+    .kicker {
+      color: var(--kicker);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      margin: 0 0 8px;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 600;
+      font-size: clamp(34px, 5vw, 52px);
+      line-height: 1.05;
+      margin: 0 0 14px;
+    }
+    h2 {
+      font-family: var(--serif);
+      font-weight: 600;
+      font-size: clamp(24px, 3vw, 32px);
+      line-height: 1.15;
+      margin: 0 0 10px;
+    }
+    h3 { margin: 0 0 6px; font-size: 14px; font-weight: 700; }
+    .lede {
+      font-size: 17px;
+      color: #4a433c;
+      max-width: 780px;
+      margin: 0 0 18px;
+      font-weight: 400;
+    }
+    .note {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+      box-shadow: var(--shadow);
+      max-width: 920px;
+      font-size: 13px;
+    }
+    .toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 22px 0 0;
+    }
+    .toc a {
+      text-decoration: none;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .toc a:hover { border-color: var(--accent); background: var(--accent-soft); }
+    .section { margin-top: 52px; scroll-margin-top: 16px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+    .pill--proposed { background: var(--purple-soft); color: var(--purple); }
+    .pill--canon { background: var(--green-soft); color: var(--green); }
+    .pill--noncanon { background: var(--amber-soft); color: var(--amber); }
+    .pill--refusal { background: var(--red-soft); color: var(--red); }
+    .grid-3, .grid-2 {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    @media (max-width: 900px) {
+      .grid-3, .grid-2 { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px 14px;
+      box-shadow: var(--shadow);
+    }
+    .card p { margin: 0; font-size: 13px; color: #4f4841; font-weight: 400; }
+    .demo-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+    }
+    .demo-controls button {
+      padding: 6px 9px;
+      font-size: 11px;
+      font-weight: 600;
+      min-height: 30px;
+    }
+    .demo-controls button[aria-pressed="true"] {
+      background: var(--brand-dark);
+      border-color: var(--brand-dark);
+      color: #fff;
+    }
+    .btn-primary {
+      background: var(--brand-dark) !important;
+      border-color: var(--brand-dark) !important;
+      color: #fff !important;
+    }
+
+    /* —— Interactive shell —— */
+    .shell {
+      margin-top: 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--canvas);
+      box-shadow: var(--shadow-float);
+      display: grid;
+      grid-template-rows: auto auto minmax(420px, 1fr);
+      min-height: 560px;
+      position: relative;
+    }
+    .shell__topbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: var(--topbar-h);
+      padding: 4px 10px;
+      background: var(--topbar);
+      border-bottom: 1px solid var(--line);
+    }
+    .shell__topbar .title {
+      font-family: var(--serif);
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .shell__topbar .meta { font-size: 9px; color: var(--muted); }
+    .shell__topbar .spacer { flex: 1; }
+    .save-chip {
+      font-size: 9px;
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 4px 8px;
+      white-space: nowrap;
+    }
+    .save-chip[data-state="saved"] { background: var(--green-soft); color: var(--green); }
+    .save-chip[data-state="saving"] { background: var(--blue-soft); color: var(--blue); }
+    .save-chip[data-state="unsaved"] { background: var(--amber-soft); color: var(--amber); }
+    .save-chip[data-state="conflict"] { background: var(--red-soft); color: var(--red); }
+    .shell__toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-height: var(--toolbar-h);
+      padding: 4px 8px;
+      background: var(--topbar);
+      border-bottom: 1px solid var(--line);
+      overflow-x: auto;
+    }
+    .shell__body {
+      display: grid;
+      grid-template-columns: var(--rail-w) minmax(0, 1fr);
+      min-height: 0;
+    }
+    .rail {
+      background: var(--rail);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 6px 2px;
+    }
+    .rail__brand {
+      font-family: var(--brand-script);
+      color: #fff;
+      font-size: 12px;
+      margin: 2px 0 6px;
+    }
+    .rail button {
+      width: 28px;
+      height: 28px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--rail-text);
+      border-radius: 5px;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 0;
+      line-height: 1.1;
+    }
+    .rail button[aria-current="true"] {
+      background: var(--rail-active);
+      border-color: #63554b;
+      color: #fff;
+    }
+    .rail__cap {
+      margin-top: auto;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: var(--accent-soft);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .center {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--paper);
+    }
+    .center__surface { flex: 1; padding: 14px; overflow: auto; }
+    .center__surface[hidden] { display: none !important; }
+    .board {
+      background: var(--board);
+      border-radius: 8px;
+      min-height: 280px;
+      padding: 16px;
+      position: relative;
+    }
+    .board-card {
+      width: 160px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      box-shadow: var(--shadow);
+      font-size: 11px;
+    }
+    .board-card strong { display: block; font-size: 12px; }
+    .board-card span { color: var(--muted); font-size: 10px; }
+    .prose-sample {
+      max-width: 640px;
+      font-family: var(--serif);
+      font-size: 17px;
+      line-height: 1.55;
+      color: var(--ink);
+    }
+    .return-banner {
+      font-size: 11px;
+      background: var(--wash);
+      border: 1px dashed var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-bottom: 10px;
+      color: var(--muted);
+    }
+    .return-banner strong { color: var(--ink); }
+
+    /* Capture overlay */
+    .capture-layer {
+      position: absolute;
+      inset: 0;
+      background: rgba(44, 42, 39, 0.35);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 12px;
+      z-index: 5;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .2s ease;
+    }
+    .shell[data-capture="open"] .capture-layer {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .capture-layer { transition: none; }
+    }
+    .capture-sheet {
+      width: min(720px, 100%);
+      max-height: 92%;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px 12px 8px 8px;
+      box-shadow: var(--shadow-float);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .capture-sheet__head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: var(--wash);
+    }
+    .capture-sheet__head h3 { flex: 1; margin: 0; font-size: 13px; }
+    .capture-sheet__body {
+      flex: 1;
+      overflow: auto;
+      padding: 12px;
+    }
+    .capture-editor {
+      min-height: 120px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: var(--serif);
+      font-size: 16px;
+      line-height: 1.5;
+      background: var(--paper);
+    }
+    .attach-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .attach {
+      flex: 1 1 140px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 11px;
+      background: var(--wash);
+    }
+    .attach[data-status="uploading"] { border-color: var(--blue); background: var(--blue-soft); }
+    .attach[data-status="ready"] { border-color: var(--green); background: var(--green-soft); }
+    .attach[data-status="refused"] { border-color: var(--red); background: var(--red-soft); }
+    .capture-sheet__foot {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 12px;
+      border-top: 1px solid var(--line);
+      align-items: center;
+    }
+    .capture-sheet__foot .hint { flex: 1; font-size: 10px; color: var(--muted); min-width: 180px; }
+
+    /* Inbox list */
+    .inbox {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: 720px;
+    }
+    .inbox-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: var(--panel);
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 10px;
+      align-items: start;
+    }
+    .inbox-item[aria-selected="true"] {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-soft);
+    }
+    .inbox-item__type { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--muted); }
+    .inbox-item__title { font-size: 13px; font-weight: 600; }
+    .inbox-item__meta { font-size: 11px; color: var(--muted); }
+    .quiet-invite {
+      margin-top: 8px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--accent-soft);
+      border: 1px solid #e0cfc6;
+      font-size: 12px;
+    }
+    .quiet-invite[hidden] { display: none !important; }
+    .quiet-invite p { margin: 0 0 8px; }
+    .quiet-invite__actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    /* Receipt + compare */
+    .receipt {
+      font-family: ui-monospace, monospace;
+      font-size: 11px;
+      background: var(--brand-dark);
+      color: #d8d0c5;
+      border-radius: 8px;
+      padding: 12px;
+      line-height: 1.5;
+    }
+    .receipt dt { color: #9a9088; margin-top: 6px; }
+    .receipt dd { margin: 0 0 4px; color: #f5f1ea; }
+    .compare {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    @media (max-width: 760px) {
+      .compare { grid-template-columns: 1fr; }
+    }
+    .compare-col {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: var(--panel);
+      font-size: 12px;
+    }
+    .compare-col--base { background: var(--wash); }
+    .compare-col--stale { opacity: .65; border-style: dashed; border-color: var(--red); }
+    .compare-col h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+
+    /* Narrow phone */
+    .narrow-wrap {
+      display: grid;
+      grid-template-columns: minmax(0, 390px) 1fr;
+      gap: 16px;
+      align-items: start;
+      margin-top: 14px;
+    }
+    @media (max-width: 820px) {
+      .narrow-wrap { grid-template-columns: 1fr; }
+    }
+    .phone {
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      overflow: hidden;
+      background: var(--panel);
+      box-shadow: var(--shadow-float);
+    }
+    .phone__top {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 14px 8px;
+      font-size: 13px;
+      font-weight: 600;
+      border-bottom: 1px solid var(--line);
+    }
+    .phone__tabs {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      font-size: 10px;
+      font-weight: 700;
+      text-align: center;
+      border-bottom: 1px solid var(--line);
+    }
+    .phone__tabs span {
+      padding: 8px 4px;
+      color: var(--muted);
+    }
+    .phone__tabs span[aria-current="page"] {
+      color: var(--accent);
+      box-shadow: inset 0 -2px 0 var(--accent);
+    }
+    .phone__body { padding: 12px 14px 16px; font-size: 12px; }
+    .phone__capture {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      min-height: 100px;
+      font-family: var(--serif);
+      font-size: 15px;
+      background: var(--paper);
+    }
+    .phone__save { margin-top: 8px; font-size: 10px; font-weight: 700; color: var(--green); }
+
+    .state-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+    @media (max-width: 900px) {
+      .state-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 560px) {
+      .state-grid { grid-template-columns: 1fr; }
+    }
+    .state-grid article {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12px;
+    }
+    .state-grid strong { display: block; margin-bottom: 4px; font-size: 13px; }
+    .state-grid span { color: #4f4841; font-weight: 400; line-height: 1.45; }
+
+    .matrix {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      margin-top: 14px;
+      font-size: 12px;
+    }
+    .matrix th, .matrix td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .matrix th {
+      background: var(--wash);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .matrix tr:last-child td { border-bottom: 0; }
+
+    .noscript-panel {
+      background: var(--amber-soft);
+      border: 1px solid #dcc9a0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12px;
+      margin-bottom: 16px;
+    }
+    .craft-delta {
+      display: grid;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .craft-delta label {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px;
+      align-items: start;
+      font-size: 12px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--wash);
+    }
+    .mcp-box {
+      border-left: 3px solid var(--blue);
+      padding: 10px 12px;
+      background: var(--blue-soft);
+      border-radius: 0 8px 8px 0;
+      font-size: 12px;
+    }
+    kbd {
+      font-size: 10px;
+      padding: 2px 5px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--wash);
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <span class="flag">Proposed UX 5.0 · not shipped</span>
+    <p class="kicker">Capture · Inbox · Integration · First agents</p>
+    <h1>Capture first.<br>Integrate with consent.</h1>
+    <p class="lede">Living design for the Capture to Story epic: noncanonical capture, durable Inbox, deterministic promotion, receipt-backed agent runs, and job-bound partners — without automatic placement, background model calls, or duplicate manuscript truth.</p>
+    <div class="note">
+      <strong>Scope:</strong> experience contract for
+      <code>plans/active/2026-07-24-capture-to-story-agents/</code>.
+      Builds on
+      <a href="Ghostwriter%20Mockups%202.0.html">Mockups 2.0</a> (Inbox direction),
+      <a href="Ghostwriter%20Mockups%203.0.html">Mockups 3.0</a> (Canvas order boundaries),
+      and <a href="Ghostwriter%20Mockups%204.0.html">Mockups 4.0</a> (job-bound agents, propose-not-apply).
+      Shipped product and accepted ADRs win on conflict. Everything labeled <span class="pill pill--proposed">Proposed</span> below is not implemented.
+    </div>
+
+    <noscript>
+      <p class="noscript-panel"><strong>JavaScript is off.</strong> Static sections below still show the full flow: capture authority, Inbox states, handoff, receipt, Scene Partner compare, craft deltas, MCP posture, narrow layout, and refusal matrix. Interactive demo controls require JS.</p>
+    </noscript>
+
+    <nav class="toc" aria-label="Mockups 5.0 sections">
+      <a href="#authority">Authority</a>
+      <a href="#anywhere">Capture anywhere</a>
+      <a href="#composer">Composer &amp; media</a>
+      <a href="#inbox">Inbox</a>
+      <a href="#handoff">No-AI handoff</a>
+      <a href="#quiet">Quiet invitation</a>
+      <a href="#byok">BYOK &amp; receipt</a>
+      <a href="#guidance">Setup &amp; playbooks</a>
+      <a href="#scene-partner">Scene Partner</a>
+      <a href="#craft">Craft partners</a>
+      <a href="#mcp">External MCP</a>
+      <a href="#narrow">Narrow</a>
+      <a href="#states">States &amp; a11y</a>
+    </nav>
+
+    <section class="section" id="authority">
+      <p class="kicker">Product thesis</p>
+      <h2>One story model. Capture is not canon.</h2>
+      <div class="grid-3">
+        <article class="card">
+          <span class="pill pill--noncanon">Noncanonical</span>
+          <h3>Capture</h3>
+          <p>Rich prose and attachments live in a dedicated version domain. Scene manuscript stays untouched until explicit promotion or apply.</p>
+        </article>
+        <article class="card">
+          <span class="pill pill--canon">Canonical</span>
+          <h3>Scene prose</h3>
+          <p>After acknowledgement, the same <code>SceneId</code> appears in Draft, Canvas card, Split, and history. Canvas never embeds a second body or reorders Draft.</p>
+        </article>
+        <article class="card">
+          <span class="pill pill--proposed">Proposed</span>
+          <h3>Inbox projection</h3>
+          <p>Lists captures, agent runs, and proposals — not a second content store. Integrated captures remain inspectable with source revision pinned.</p>
+        </article>
+      </div>
+      <table class="matrix" aria-label="Explicit refusals">
+        <thead>
+          <tr><th>Not in this epic</th><th>Writer-visible posture</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Background model calls</td><td>Quiet invitation is local only; egress starts only after explicit run + receipt review.</td></tr>
+          <tr><td>Automatic placement</td><td>Handoff asks unassigned vs explicit chapter/scene; agents may suggest, never apply.</td></tr>
+          <tr><td>Generic chat</td><td>Job-bound workflows with typed proposal payloads.</td></tr>
+          <tr><td>OCR / transcription / image gen</td><td>Attachments stay references; dictation is browser text into capture editor.</td></tr>
+          <tr><td>External apply</td><td>MCP clients propose; human apply stays first-party.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section" id="anywhere">
+      <p class="kicker">Entry · proposed</p>
+      <h2>Capture without choosing hierarchy first.</h2>
+      <p class="lede" style="font-size:15px;">Persistent rail <kbd>C</kbd> / Capture command opens a lightweight composer over Project, Draft, or Canvas. Closing returns focus and selection to the invoking surface — no caret steal when agent work finishes later.</p>
+
+      <div class="shell" id="shell-anywhere" data-surface="draft" data-capture="closed" data-save="saved">
+        <header class="shell__topbar" aria-label="Project topbar">
+          <div>
+            <div class="title">The Signal at Bellwether</div>
+            <div class="meta">Owner · project v24 · <span id="surface-label">Draft surface</span></div>
+          </div>
+          <span class="spacer"></span>
+          <span class="save-chip" id="shell-save-chip" data-state="saved">Capture saved</span>
+          <button type="button" class="btn-primary" id="btn-open-capture">Capture</button>
+        </header>
+        <div class="shell__toolbar" aria-label="Surface toolbar">
+          <button type="button" data-surface-btn="project">Project home</button>
+          <button type="button" data-surface-btn="draft" aria-pressed="true">Draft</button>
+          <button type="button" data-surface-btn="canvas">Canvas</button>
+          <span style="font-size:10px;color:var(--muted);margin-left:8px;">Invoke Capture from any — context preserved on close</span>
+        </div>
+        <div class="shell__body">
+          <aside class="rail" aria-label="Activity rail">
+            <div class="rail__brand" aria-hidden="true">gw</div>
+            <button type="button">H</button>
+            <button type="button" aria-current="true">W</button>
+            <button type="button">M</button>
+            <button type="button" id="rail-inbox">I</button>
+            <button type="button" class="rail__cap" id="rail-capture" title="Capture (proposed)">+</button>
+          </aside>
+          <div class="center">
+            <div class="return-banner" id="return-banner"><strong>Return target:</strong> <span id="return-target">Draft · scene “Static on the channel” · caret line 12</span></div>
+            <div class="center__surface" id="surface-project" hidden>
+              <h3>Project overview</h3>
+              <p style="font-size:13px;color:var(--muted);">Books, recent scenes, Canvas entry — no setup form before capture.</p>
+            </div>
+            <div class="center__surface" id="surface-draft">
+              <p class="prose-sample">The receiver clicked before Mara touched it. Her own voice said her name, then asked why she had come back.</p>
+              <p style="font-size:11px;color:var(--muted);margin-top:12px;"><span class="pill pill--canon">Canonical scene</span> lease held · saved to server</p>
+            </div>
+            <div class="center__surface" id="surface-canvas" hidden>
+              <div class="board">
+                <div class="board-card" style="position:absolute;left:24px;top:24px;">
+                  <strong>Static on the channel</strong>
+                  <span>Scene card · same SceneId</span>
+                </div>
+                <p style="font-size:11px;color:var(--muted);margin:0;">Canvas references prose; it does not duplicate manuscript order or body text.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="capture-layer" id="capture-layer" aria-hidden="true">
+          <div class="capture-sheet" role="dialog" aria-labelledby="capture-title" aria-modal="true">
+            <header class="capture-sheet__head">
+              <span class="pill pill--noncanon">Capture · noncanonical</span>
+              <h3 id="capture-title">Quick capture</h3>
+              <button type="button" id="btn-close-capture">Close · return</button>
+            </header>
+            <div class="capture-sheet__body">
+              <div class="capture-editor" contenteditable="true" aria-label="Capture prose (proposed)">The lamp room still smells like salt even when the fog is gone.</div>
+              <div class="attach-row" aria-label="Attachments (proposed)">
+                <div class="attach" data-status="ready"><strong>harbor-sketch.jpg</strong><br>Ready · object store · not in Postgres</div>
+                <div class="attach" data-status="uploading"><strong>voice-memo.webm</strong><br>Uploading… 62%</div>
+                <div class="attach" data-status="refused"><strong>archive.zip</strong><br>Refused · type not allowed</div>
+              </div>
+            </div>
+            <footer class="capture-sheet__foot">
+              <span class="hint">Saved means durable server acknowledgement — not “local only.”</span>
+              <button type="button" id="btn-save-state">Cycle save state</button>
+              <button type="button" class="btn-primary">Done · return to surface</button>
+            </footer>
+          </div>
+        </div>
+      </div>
+      <div class="demo-controls" aria-label="Capture anywhere demo">
+        <button type="button" id="demo-from-draft" aria-pressed="true">Open from Draft</button>
+        <button type="button" id="demo-from-canvas">Open from Canvas</button>
+        <button type="button" id="demo-from-project">Open from Project</button>
+        <button type="button" id="demo-capture-open">Toggle Capture overlay</button>
+      </div>
+    </section>
+
+    <section class="section" id="composer">
+      <p class="kicker">Composer · proposed</p>
+      <h2>Scene-compatible prose, dictation, honest attachments.</h2>
+      <div class="grid-2">
+        <article class="card">
+          <h3>Modalities</h3>
+          <p>Keyboard and browser dictation insert text at the capture caret. Images, recorded audio, and bounded files upload through authenticated paths; bytes never enter the ProseMirror document or Postgres rows.</p>
+          <ul style="margin:8px 0 0;padding-left:18px;font-size:13px;color:#4f4841;">
+            <li>Text promotes losslessly on integration.</li>
+            <li>Binary objects remain references with checksum and scan state.</li>
+            <li>No managed transcription, OCR, or auto-parse in this epic.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Save truth</h3>
+          <p>Writers see Saving, Saved, Not saved, conflict, and bounded recovery — same honesty as scene lease saves, separate version domain.</p>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">
+            <span class="save-chip" data-state="saving">Saving…</span>
+            <span class="save-chip" data-state="saved">Saved · capture v3</span>
+            <span class="save-chip" data-state="unsaved">Not saved · recovery available</span>
+            <span class="save-chip" data-state="conflict">Conflict · changed nothing</span>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="inbox">
+      <p class="kicker">Inbox · proposed</p>
+      <h2>Durable review home — no authority confusion.</h2>
+      <p class="lede" style="font-size:15px;">Filters: captures, agent runs, proposals. Status language separates draft capture, ready, integrated, archived, run states, and stale proposals.</p>
+      <div class="inbox" id="inbox-list" role="listbox" aria-label="Project Inbox (proposed)">
+        <article class="inbox-item" role="option" aria-selected="true" data-inbox="capture">
+          <span class="pill pill--noncanon">Capture</span>
+          <div>
+            <div class="inbox-item__title">Lamp room salt memory</div>
+            <div class="inbox-item__meta">Ready · capture rev 3 · attachments 1 ready, 1 uploading</div>
+            <div class="quiet-invite" id="quiet-invite">
+              <p><em>Help find its place?</em> — local suggestion only; no provider call until you choose a workflow.</p>
+              <div class="quiet-invite__actions">
+                <button type="button" class="btn-primary" id="btn-start-scene-partner">Start Scene Partner…</button>
+                <button type="button" id="btn-dismiss-invite">Dismiss for now</button>
+              </div>
+            </div>
+          </div>
+          <span class="pill pill--proposed">Noncanonical</span>
+        </article>
+        <article class="inbox-item" role="option" data-inbox="run">
+          <span class="pill pill--proposed">Agent run</span>
+          <div>
+            <div class="inbox-item__title">Scene Partner · placement options</div>
+            <div class="inbox-item__meta">Ready · receipt hash 8f2a… · OpenAI (BYOK)</div>
+          </div>
+          <span class="save-chip" data-state="saved">Proposal ready</span>
+        </article>
+        <article class="inbox-item" role="option" data-inbox="integrated">
+          <span class="pill pill--canon">Integrated</span>
+          <div>
+            <div class="inbox-item__title">Promoted → Unassigned scene “Fogglass answer”</div>
+            <div class="inbox-item__meta">Source capture rev 2 retained · SceneId sc_91… · Canvas card optional</div>
+          </div>
+          <button type="button">View source capture</button>
+        </article>
+        <article class="inbox-item" role="option" data-inbox="archived">
+          <span class="inbox-item__type">Archived</span>
+          <div>
+            <div class="inbox-item__title">Old idea · bell tower</div>
+            <div class="inbox-item__meta">Archived · restore available</div>
+          </div>
+        </article>
+      </div>
+      <div class="demo-controls">
+        <button type="button" id="btn-toggle-invite" aria-pressed="true">Quiet invitation visible</button>
+        <button type="button" id="btn-inbox-empty">Show empty Inbox</button>
+      </div>
+      <p id="inbox-empty" hidden style="margin-top:12px;font-size:13px;color:var(--muted);">Empty Inbox — capture something from any surface. <span class="pill pill--proposed">Proposed copy</span></p>
+    </section>
+
+    <section class="section" id="handoff">
+      <p class="kicker">Deterministic handoff · proposed</p>
+      <h2>Promote without AI.</h2>
+      <article class="card">
+        <p>Writer chooses <strong>new unassigned scene</strong> or <strong>explicit placement</strong> (book / chapter / after scene). Optional Canvas card in the same acknowledged transaction. Same canonical <code>SceneId</code> everywhere after save. Version mismatch applies nothing.</p>
+        <div class="demo-controls" style="margin-top:10px;">
+          <button type="button" class="btn-primary" id="btn-handoff-ok">Acknowledged handoff</button>
+          <button type="button" id="btn-handoff-conflict">Simulate conflict (apply nothing)</button>
+        </div>
+        <p id="handoff-result" style="margin-top:10px;font-size:12px;" role="status">Ready to promote capture rev 3 → scene genesis + optional card.</p>
+      </article>
+    </section>
+
+    <section class="section" id="quiet">
+      <p class="kicker">Quiet invitation · proposed</p>
+      <h2>After acknowledged pause — never automatic egress.</h2>
+      <div class="grid-2">
+        <article class="card">
+          <h3>When it appears</h3>
+          <p>Only after capture is durably saved and the writer has been idle long enough to notice — not on first keystroke, not while Saving.</p>
+        </article>
+        <article class="card">
+          <h3>When it does not</h3>
+          <p>Dismissal is durable enough not to nag. Dismissed captures never trigger network egress or consume provider budget by themselves.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="byok">
+      <p class="kicker">BYOK · proposed</p>
+      <h2>OpenAI key custody and context receipt before egress.</h2>
+      <div class="grid-2">
+        <article class="card">
+          <h3>Account settings</h3>
+          <p>Writer adds, tests, rotates, or deletes an OpenAI key. Stored encrypted server-side; never returned to client, logs, or exports.</p>
+          <label style="display:block;margin-top:10px;font-size:12px;">API key
+            <input type="password" value="sk-proj-••••••••••••••••" readonly aria-readonly="true" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--line);border-radius:6px;">
+          </label>
+          <p style="font-size:11px;color:var(--muted);margin-top:6px;">Display is masked placeholder only — mockup never shows a real credential.</p>
+          <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+            <span class="save-chip" data-state="saved">Validated</span>
+            <button type="button">Test connection</button>
+            <button type="button">Rotate</button>
+            <button type="button">Remove key</button>
+          </div>
+        </article>
+        <article class="card">
+          <h3>Context receipt (before run)</h3>
+          <p>Immutable summary of what will leave Ghostwriter. Client-supplied prose cannot widen scope.</p>
+          <dl class="receipt" aria-label="Example context receipt">
+            <dt>Workflow</dt><dd>scene-partner · v1 (proposed)</dd>
+            <dt>Resources</dt><dd>capture:cap_12 @ rev 3 · project: Bellwether @ v24</dd>
+            <dt>Destination</dt><dd>OpenAI · gpt-4.1 · writer BYOK</dd>
+            <dt>Budget</dt><dd>≤ 8k tokens · no tools · no web</dd>
+            <dt>Receipt hash</dt><dd>8f2a91c…</dd>
+          </dl>
+          <div class="demo-controls">
+            <button type="button" class="btn-primary" id="btn-run-agent">Confirm &amp; run</button>
+            <button type="button" id="btn-cancel-run">Cancel</button>
+          </div>
+          <p id="run-status" style="font-size:11px;margin-top:8px;color:var(--muted);">No egress until Confirm.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="guidance">
+      <p class="kicker">Progressive setup · proposed</p>
+      <h2>Write first. Configure collaboration when it becomes useful.</h2>
+      <p class="lede" style="font-size:15px;">Profile and AI setup never block Capture. The first agent request opens one just-in-time path: connect a provider, review egress, then optionally describe how Ghostwriter should collaborate. Publishing identity and contact fields are never AI context by default.</p>
+      <div class="grid-3">
+        <article class="card">
+          <span class="pill pill--canon">1 · Immediate</span>
+          <h3>Capture without setup</h3>
+          <p>Sign in, open a project, and write. No genre quiz, craft form, provider key, or agent personality is required.</p>
+        </article>
+        <article class="card">
+          <span class="pill pill--proposed">2 · First help request</span>
+          <h3>Connect and consent</h3>
+          <p>Add/test the OpenAI key, choose a model and budget posture, then inspect the context receipt before the first egress.</p>
+        </article>
+        <article class="card">
+          <span class="pill pill--proposed">3 · Optional refinement</span>
+          <h3>Writing preferences</h3>
+          <p>Choose concise or exploratory collaboration, name content boundaries, and add project guidance. Skip or change it at any time.</p>
+        </article>
+      </div>
+
+      <div class="grid-2">
+        <article class="card">
+          <h3>How Ghostwriter should work with me</h3>
+          <label style="display:block;margin-top:8px;font-size:12px;">Collaboration posture
+            <select style="display:block;width:100%;margin-top:4px;padding:8px;border:1px solid var(--line);border-radius:6px;">
+              <option>Offer a few clear options</option>
+              <option>Ask questions before proposing</option>
+              <option>Explain craft reasoning</option>
+              <option>Stay minimal unless invited</option>
+            </select>
+          </label>
+          <label style="display:block;margin-top:8px;font-size:12px;">Project guidance
+            <textarea rows="4" style="display:block;width:100%;margin-top:4px;padding:8px;border:1px solid var(--line);border-radius:6px;">Preserve close third person. Do not resolve the lighthouse mystery. Flag uncertainty instead of filling gaps.</textarea>
+          </label>
+          <p style="font-size:11px;color:var(--muted);margin-top:6px;">Versioned and project-scoped. Effective guidance is shown in the context receipt before every run.</p>
+        </article>
+
+        <article class="card">
+          <h3>Custom playbook <span class="pill pill--proposed">User skill</span></h3>
+          <p>Declarative guidance—not executable code or new authority.</p>
+          <dl class="receipt" aria-label="Example custom agent playbook" style="margin-top:8px;">
+            <dt>Name</dt><dd>Check the emotional turn</dd>
+            <dt>Use when</dt><dd>I ask whether a scene earns its ending</dd>
+            <dt>Allowed context</dt><dd>Current scene, sketch, linked cast sheets</dd>
+            <dt>Output</dt><dd>Questions + one noncanonical sketch delta</dd>
+            <dt>Guidance</dt><dd>Prefer observable choices over diagnosis</dd>
+            <dt>Cannot add</dt><dd>Tools, network access, permissions, canonical apply</dd>
+          </dl>
+          <div class="demo-controls">
+            <button type="button" class="btn-primary">Save playbook</button>
+            <button type="button">Preview effective instructions</button>
+          </div>
+        </article>
+      </div>
+
+      <div class="card" style="margin-top:10px;border-color:var(--red);">
+        <h3>Instruction boundary</h3>
+        <p>Ghostwriter policy and workflow contracts remain non-overridable. Writer preferences, playbooks, manuscript text, uploads, and MCP content are untrusted inputs. Server policy—not prompt wording—enforces context scope, tool allowlists, egress, budgets, proposal-only authority, revision checks, and cross-project isolation.</p>
+      </div>
+    </section>
+
+    <section class="section" id="scene-partner">
+      <p class="kicker">Scene Partner · proposed</p>
+      <h2>Two labeled variants · immutable base.</h2>
+      <p class="lede" style="font-size:15px;">Compare proposals against unchanged capture text and optional existing scene base. Apply creates scene or named variant; dismiss leaves canon untouched. Stale versions apply nothing.</p>
+      <p style="font-size:12px;font-weight:700;color:var(--green);" id="base-unchanged">Your draft has not changed.</p>
+      <div class="compare" id="compare-grid">
+        <div class="compare-col compare-col--base">
+          <h4>Base · capture rev 3</h4>
+          <p>The lamp room still smells like salt even when the fog is gone.</p>
+        </div>
+        <div class="compare-col">
+          <h4>Variant A · New scene “Fogglass answer”</h4>
+          <p>Mara answers the dead frequency in present tense — refusing the future voice the right to speak first.</p>
+          <button type="button" class="btn-primary">Apply variant A</button>
+        </div>
+        <div class="compare-col">
+          <h4>Variant B · Variant of “Static on the channel”</h4>
+          <p>Same beat, tighter turn: the rule breaks before Mara keys the mic.</p>
+          <button type="button">Apply variant B</button>
+        </div>
+      </div>
+      <div class="demo-controls">
+        <button type="button" id="btn-stale-proposal">Show stale / conflict</button>
+        <button type="button" id="btn-fresh-proposal">Reset compare</button>
+      </div>
+      <p id="stale-msg" hidden class="card" style="margin-top:10px;border-color:var(--red);"><span class="pill pill--refusal">Stale</span> Capture or scene version changed — apply changed nothing. Start a new run for a fresh proposal hash.</p>
+    </section>
+
+    <section class="section" id="craft">
+      <p class="kicker">Craft partners · proposed</p>
+      <h2>Typed deltas — not generic chat.</h2>
+      <p class="lede" style="font-size:15px;">Sketch Partner, Character Coach, and Worldkeeper share the same receipt → run → proposal pipeline. Output updates craft fields unless the writer explicitly chooses a prose workflow.</p>
+      <div class="grid-3">
+        <article class="card" data-craft="sketch">
+          <h3>Sketch Partner</h3>
+          <div class="craft-delta">
+            <label><input type="checkbox" checked> Purpose: force present-tense answer</label>
+            <label><input type="checkbox" checked> Turn: Mara refuses silence</label>
+            <label><input type="checkbox"> Conflict: (optional field)</label>
+          </div>
+          <button type="button" class="btn-primary" style="margin-top:8px;">Apply selected sketch fields</button>
+        </article>
+        <article class="card" data-craft="coach">
+          <h3>Character Coach</h3>
+          <div class="craft-delta">
+            <label><input type="checkbox" checked> Desire: hear the truth before the storm</label>
+            <label><input type="checkbox"> Pressure: duty vs. lamp room</label>
+          </div>
+          <button type="button" style="margin-top:8px;">Apply sheet delta</button>
+        </article>
+        <article class="card" data-craft="world">
+          <h3>Worldkeeper</h3>
+          <div class="craft-delta">
+            <label><input type="checkbox" checked> Backdrop: lamps stay lit unless evacuation</label>
+          </div>
+          <button type="button" style="margin-top:8px;">Apply knowledge delta</button>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="mcp">
+      <p class="kicker">External MCP · proposed</p>
+      <h2>Read and propose under grant — never apply.</h2>
+      <div class="mcp-box">
+        <p><strong>Grant scope (example):</strong> project Bellwether · captures cap_12,cap_09 · propose scene-partner, sketch-partner · no credentials · no enumeration · no canonical apply.</p>
+        <p style="margin-top:8px;">External proposals land in the same Inbox with initiator labeled <em>MCP client</em>. Writer compares and applies with the same hash/version guards as UI-initiated runs.</p>
+      </div>
+      <table class="matrix" style="margin-top:14px;">
+        <thead><tr><th>Capability</th><th>External MCP</th><th>First-party UI</th></tr></thead>
+        <tbody>
+          <tr><td>Read granted capture/context</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>Submit typed proposal</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>Apply to canonical scene/project</td><td>No</td><td>Yes (human confirm)</td></tr>
+          <tr><td>Provider key / raw prose in errors</td><td>No</td><td>No</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section" id="narrow">
+      <p class="kicker">Narrow · proposed</p>
+      <h2>Capture and Inbox as first-class routes.</h2>
+      <div class="narrow-wrap">
+        <div class="phone" id="phone-demo">
+          <div class="phone__top"><span>Bellwether</span><span>⋯</span></div>
+          <div class="phone__tabs" role="tablist">
+            <span role="tab" aria-current="page" data-phone-tab="capture">Capture</span>
+            <span role="tab" data-phone-tab="project">Project</span>
+            <span role="tab" data-phone-tab="draft">Draft</span>
+            <span role="tab" data-phone-tab="inbox">Inbox</span>
+          </div>
+          <div class="phone__body" id="phone-body">
+            <div class="phone__capture">Salt air in the lamp room — write first, structure later.</div>
+            <div class="phone__save">Saved · capture v4</div>
+            <button type="button" class="btn-primary" style="width:100%;margin-top:10px;">Attach photo</button>
+          </div>
+        </div>
+        <article class="card">
+          <h3>Mobile interaction contract</h3>
+          <ul style="margin:8px 0 0;padding-left:18px;font-size:13px;color:#4f4841;">
+            <li>One primary action per screen: capture, one proposal decision, or recovery.</li>
+            <li>Dictation and attachment progress remain visible; no modal maze.</li>
+            <li>Focus order: tab bar → content → primary action → dismiss.</li>
+            <li>Reduced motion: no decorative transitions on save chips.</li>
+            <li>Screen reader: save state in <code>role="status"</code>; proposals announce “provisional.”</li>
+          </ul>
+          <div class="demo-controls">
+            <button type="button" data-phone-nav="capture" aria-pressed="true">Capture tab</button>
+            <button type="button" data-phone-nav="inbox">Inbox tab</button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="states">
+      <p class="kicker">Verification matrix · proposed</p>
+      <h2>Loading, empty, error, refusal — wide and narrow.</h2>
+      <div class="state-grid">
+        <article><strong>Capture save</strong><span>Saving, saved, not saved, conflict, bounded recovery, unauthorized.</span></article>
+        <article><strong>Attachments</strong><span>Uploading, scanning, ready, refused type/size, abandoned cleanup.</span></article>
+        <article><strong>Inbox</strong><span>Empty, filtered, integrated + source retained, archived restore.</span></article>
+        <article><strong>Agent run</strong><span>Queued, running, needs input, ready, failed, canceled — errors without manuscript text.</span></article>
+        <article><strong>Proposal</strong><span>Ready, stale, rejected, applied; conflict applies nothing.</span></article>
+        <article><strong>BYOK</strong><span>Missing key, invalid key, rate limit, provider outage — canon unchanged.</span></article>
+        <article><strong>Guidance</strong><span>Skipped setup, inherited preferences, disabled/deleted playbook, oversized or adversarial instructions, publishing-profile exclusion.</span></article>
+        <article><strong>Handoff</strong><span>Unassigned vs placed, optional Canvas card, version guard.</span></article>
+        <article><strong>Keyboard</strong><span><kbd>Esc</kbd> closes Capture returning focus; Inbox list roving tabindex.</span></article>
+        <article><strong>MCP</strong><span>Revoked grant, scope mismatch, proposal parity with UI.</span></article>
+      </div>
+      <details class="card" style="margin-top:14px;">
+        <summary><strong>Workflow walkthrough (static · no JS)</strong></summary>
+        <ol style="margin:10px 0 0;padding-left:20px;font-size:13px;color:#4f4841;">
+          <li>Open Capture from Draft — write prose — Saved acknowledgement.</li>
+          <li>Close Capture — return to Draft caret — open Inbox on another device — capture persists.</li>
+          <li>Optional: deterministic promote to unassigned scene + Canvas card — same SceneId.</li>
+          <li>After idle: quiet “Help find its place?” — dismiss or start Scene Partner.</li>
+          <li>Review BYOK status and context receipt — confirm run — compare variants — apply one or dismiss.</li>
+          <li>Optionally add project guidance or a declarative playbook — preview the effective instruction layers before use.</li>
+          <li>Alternatively: craft partner typed deltas — apply selected fields only.</li>
+          <li>External MCP submits proposal — appears in Inbox — human apply only.</li>
+        </ol>
+      </details>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      var shell = document.getElementById("shell-anywhere");
+      if (!shell) return;
+
+      var surfaces = {
+        project: document.getElementById("surface-project"),
+        draft: document.getElementById("surface-draft"),
+        canvas: document.getElementById("surface-canvas")
+      };
+      var returnTarget = document.getElementById("return-target");
+      var surfaceLabel = document.getElementById("surface-label");
+      var saveChip = document.getElementById("shell-save-chip");
+      var captureLayer = document.getElementById("capture-layer");
+      var saveStates = ["saved", "saving", "unsaved", "conflict"];
+      var saveLabels = {
+        saved: "Capture saved",
+        saving: "Saving capture…",
+        unsaved: "Not saved · recovery",
+        conflict: "Conflict · nothing changed"
+      };
+
+      function setSurface(name) {
+        shell.dataset.surface = name;
+        Object.keys(surfaces).forEach(function (key) {
+          if (surfaces[key]) surfaces[key].hidden = key !== name;
+        });
+        document.querySelectorAll("[data-surface-btn]").forEach(function (btn) {
+          btn.setAttribute("aria-pressed", String(btn.getAttribute("data-surface-btn") === name));
+        });
+        var labels = {
+          project: "Project home · no hierarchy required",
+          draft: "Draft · scene “Static on the channel” · caret line 12",
+          canvas: "Canvas · card “Static on the channel” selected"
+        };
+        if (returnTarget) returnTarget.textContent = labels[name] || name;
+        if (surfaceLabel) surfaceLabel.textContent = name.charAt(0).toUpperCase() + name.slice(1) + " surface";
+      }
+
+      function setCapture(open) {
+        shell.dataset.capture = open ? "open" : "closed";
+        if (captureLayer) captureLayer.setAttribute("aria-hidden", String(!open));
+        var btn = document.getElementById("btn-open-capture");
+        if (btn) btn.setAttribute("aria-expanded", String(open));
+      }
+
+      function cycleSave() {
+        var idx = saveStates.indexOf(shell.dataset.save || "saved");
+        var next = saveStates[(idx + 1) % saveStates.length];
+        shell.dataset.save = next;
+        if (saveChip) {
+          saveChip.dataset.state = next;
+          saveChip.textContent = saveLabels[next];
+        }
+      }
+
+      document.querySelectorAll("[data-surface-btn]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          setSurface(btn.getAttribute("data-surface-btn") || "draft");
+        });
+      });
+
+      document.getElementById("btn-open-capture")?.addEventListener("click", function () { setCapture(true); });
+      document.getElementById("btn-close-capture")?.addEventListener("click", function () { setCapture(false); });
+      document.getElementById("rail-capture")?.addEventListener("click", function () { setCapture(true); });
+      document.getElementById("btn-save-state")?.addEventListener("click", cycleSave);
+
+      document.getElementById("demo-from-draft")?.addEventListener("click", function () {
+        setSurface("draft");
+        setCapture(true);
+        syncDemoAnywhere("demo-from-draft");
+      });
+      document.getElementById("demo-from-canvas")?.addEventListener("click", function () {
+        setSurface("canvas");
+        setCapture(true);
+        syncDemoAnywhere("demo-from-canvas");
+      });
+      document.getElementById("demo-from-project")?.addEventListener("click", function () {
+        setSurface("project");
+        setCapture(true);
+        syncDemoAnywhere("demo-from-project");
+      });
+      document.getElementById("demo-capture-open")?.addEventListener("click", function () {
+        setCapture(shell.dataset.capture !== "open");
+      });
+
+      function syncDemoAnywhere(activeId) {
+        ["demo-from-draft", "demo-from-canvas", "demo-from-project"].forEach(function (id) {
+          var el = document.getElementById(id);
+          if (el) el.setAttribute("aria-pressed", String(id === activeId));
+        });
+      }
+
+      document.getElementById("btn-dismiss-invite")?.addEventListener("click", function () {
+        var q = document.getElementById("quiet-invite");
+        if (q) q.hidden = true;
+        var t = document.getElementById("btn-toggle-invite");
+        if (t) t.setAttribute("aria-pressed", "false");
+      });
+      document.getElementById("btn-toggle-invite")?.addEventListener("click", function () {
+        var q = document.getElementById("quiet-invite");
+        var t = document.getElementById("btn-toggle-invite");
+        if (!q || !t) return;
+        var show = q.hidden;
+        q.hidden = !show;
+        t.setAttribute("aria-pressed", String(show));
+      });
+      document.getElementById("btn-inbox-empty")?.addEventListener("click", function () {
+        var list = document.getElementById("inbox-list");
+        var empty = document.getElementById("inbox-empty");
+        if (!list || !empty) return;
+        var hide = list.hidden;
+        list.hidden = !hide;
+        empty.hidden = hide;
+      });
+
+      document.getElementById("btn-handoff-ok")?.addEventListener("click", function () {
+        var r = document.getElementById("handoff-result");
+        if (r) {
+          r.textContent = "Acknowledged: scene sc_91 created (unassigned), Canvas card linked, capture rev 3 marked integrated — source retained.";
+          r.style.color = "var(--green)";
+        }
+      });
+      document.getElementById("btn-handoff-conflict")?.addEventListener("click", function () {
+        var r = document.getElementById("handoff-result");
+        if (r) {
+          r.textContent = "Conflict: project version changed — apply changed nothing. Review recovery.";
+          r.style.color = "var(--red)";
+        }
+      });
+
+      document.getElementById("btn-run-agent")?.addEventListener("click", function () {
+        var s = document.getElementById("run-status");
+        if (s) s.textContent = "Running… (mock) — proposal will appear in Inbox when ready.";
+      });
+      document.getElementById("btn-cancel-run")?.addEventListener("click", function () {
+        var s = document.getElementById("run-status");
+        if (s) s.textContent = "Cancel requested — no canonical change. Provider usage may already have occurred.";
+      });
+
+      document.getElementById("btn-stale-proposal")?.addEventListener("click", function () {
+        document.querySelectorAll(".compare-col:not(.compare-col--base)").forEach(function (col) {
+          col.classList.add("compare-col--stale");
+        });
+        var msg = document.getElementById("stale-msg");
+        if (msg) msg.hidden = false;
+        var base = document.getElementById("base-unchanged");
+        if (base) base.textContent = "Your draft has not changed — proposal is stale.";
+      });
+      document.getElementById("btn-fresh-proposal")?.addEventListener("click", function () {
+        document.querySelectorAll(".compare-col--stale").forEach(function (col) {
+          col.classList.remove("compare-col--stale");
+        });
+        var msg = document.getElementById("stale-msg");
+        if (msg) msg.hidden = true;
+        var base = document.getElementById("base-unchanged");
+        if (base) base.textContent = "Your draft has not changed.";
+      });
+
+      var phoneBodies = {
+        capture: '<div class="phone__capture">Salt air in the lamp room — write first, structure later.</div><div class="phone__save">Saved · capture v4</div><button type="button" class="btn-primary" style="width:100%;margin-top:10px;">Attach photo</button>',
+        inbox: '<p style="font-size:11px;color:var(--muted);">Inbox · 2 captures · 1 proposal</p><div class="inbox-item" style="margin-top:8px;"><span class="pill pill--noncanon">Capture</span><div><div class="inbox-item__title">Lamp room salt</div><div class="inbox-item__meta">Ready</div></div></div>'
+      };
+      document.querySelectorAll("[data-phone-nav]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var tab = btn.getAttribute("data-phone-nav") || "capture";
+          document.querySelectorAll("[data-phone-nav]").forEach(function (b) {
+            b.setAttribute("aria-pressed", String(b.getAttribute("data-phone-nav") === tab));
+          });
+          document.querySelectorAll("[data-phone-tab]").forEach(function (span) {
+            span.setAttribute("aria-current", span.getAttribute("data-phone-tab") === tab ? "page" : "false");
+          });
+          var body = document.getElementById("phone-body");
+          if (body && phoneBodies[tab]) body.innerHTML = phoneBodies[tab];
+        });
+      });
+
+      setSurface("draft");
+    })();
+  </script>
+</body>
+</html>

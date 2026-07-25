@@ -1,0 +1,69 @@
+:root {
+  color-scheme: light dark;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.55;
+}
+
+body {
+  margin: 0;
+  background: Canvas;
+  color: CanvasText;
+}
+
+main {
+  box-sizing: border-box;
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 5rem;
+}
+
+header {
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
+  margin-bottom: 2rem;
+  padding-bottom: 1.25rem;
+}
+
+h1, h2, h3 { line-height: 1.2; }
+h1 { font-size: clamp(2rem, 6vw, 3rem); margin: .25rem 0; }
+h2 { margin-top: 2.5rem; }
+
+.eyebrow {
+  color: color-mix(in srgb, CanvasText 65%, transparent);
+  font-size: .85rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.meta, .callout {
+  background: color-mix(in srgb, CanvasText 8%, transparent);
+  border-radius: .5rem;
+  padding: 1rem 1.25rem;
+}
+
+.checklist {
+  list-style: none;
+  padding-left: 0;
+}
+
+.checklist li { margin: .6rem 0; }
+.checklist input { accent-color: #2f7d4a; margin-right: .5rem; }
+
+code {
+  background: color-mix(in srgb, CanvasText 10%, transparent);
+  border-radius: .25rem;
+  padding: .1em .3em;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th, td {
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
+  padding: .7rem;
+  text-align: left;
+  vertical-align: top;
+}

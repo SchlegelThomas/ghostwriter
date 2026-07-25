@@ -1,4 +1,17 @@
 import type { LakebaseConnectionConfig } from "@ghostwriter/storage";
+import type { R2CaptureObjectStorageConfig } from "./r2-capture-object-storage.js";
+import {
+  parseProviderCallsDisabled,
+  parseProviderKekConfig,
+  type ProviderKekRuntimeConfig
+} from "./provider-kek-config.js";
+import {
+  parseValidatedR2AccountId,
+  parseValidatedR2BucketName,
+  parseValidatedR2Credential
+} from "./r2-config-validation.js";
+
+export type { R2CaptureObjectStorageConfig };
 
 export type DatabaseConfig =
   | Readonly<{ mode: "url"; connectionString: string; ssl: boolean }>
@@ -15,7 +28,47 @@ export type BackendConfig = Readonly<{
     trustedOrigins: readonly string[];
     secureCookies: boolean;
   }>;
+  r2: R2CaptureObjectStorageConfig | undefined;
+  provider: Readonly<{
+    kek: ProviderKekRuntimeConfig | undefined;
+    callsDisabled: boolean;
+  }>;
 }>;
+
+const R2_ENV_KEYS = Object.freeze([
+  "R2_ACCOUNT_ID",
+  "R2_ACCESS_KEY_ID",
+  "R2_SECRET_ACCESS_KEY",
+  "R2_BUCKET_NAME"
+] as const);
+
+export function parseR2CaptureObjectStorageConfig(
+  env: NodeJS.ProcessEnv
+): R2CaptureObjectStorageConfig | undefined {
+  const values = R2_ENV_KEYS.map((key) => env[key]);
+  const present = values.filter((value) => value !== undefined && value.length > 0);
+  if (present.length === 0) {
+    return undefined;
+  }
+  if (present.length !== R2_ENV_KEYS.length) {
+    throw new Error(
+      "R2 object storage environment variables must all be set or all be omitted."
+    );
+  }
+
+  const accountId = parseValidatedR2AccountId(values[0]!);
+  const accessKeyId = parseValidatedR2Credential(values[1]!);
+  const secretAccessKey = parseValidatedR2Credential(values[2]!);
+  const bucketName = parseValidatedR2BucketName(values[3]!);
+
+  return Object.freeze({
+    accountId,
+    accessKeyId,
+    secretAccessKey,
+    bucketName,
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`
+  });
+}
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
   const value = env[key];
@@ -101,6 +154,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
     trustedOrigins: Object.freeze([...new Set([baseUrl, ...trustedOrigins])]),
     secureCookies: new URL(baseUrl).protocol === "https:"
   } as const;
+  const r2 = parseR2CaptureObjectStorageConfig(env);
+  const provider = Object.freeze({
+    kek: parseProviderKekConfig(env),
+    callsDisabled: parseProviderCallsDisabled(env)
+  });
 
   // Lakebase (service-principal OAuth) mode is selected when a client secret + PG host are present.
   if (
@@ -112,6 +170,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
     return {
       port,
       auth,
+      r2,
+      provider,
       database: {
         mode: "lakebase",
         lakebase: {
@@ -139,6 +199,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
   return {
     port,
     auth,
+    r2,
+    provider,
     database: { mode: "url", connectionString, ssl: env.DATABASE_SSL === "require" }
   };
 }

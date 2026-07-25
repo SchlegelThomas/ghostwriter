@@ -140,11 +140,15 @@ function blockText(block: SceneBlockV1): string {
   }
 }
 
+export function sceneDocumentPlainText(document: SceneDocumentV1): string {
+  return document.document.content
+    .map((block) => blockText(block))
+    .filter((value) => value.length > 0)
+    .join("\n\n");
+}
+
 export function sceneDocumentCharacterCount(document: SceneDocumentV1): number {
-  return document.document.content.reduce(
-    (total, block) => total + blockText(block).length,
-    0
-  );
+  return sceneDocumentPlainText(document).length;
 }
 
 export function collectActiveBookSceneIds(

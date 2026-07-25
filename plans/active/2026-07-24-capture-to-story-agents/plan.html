@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Capture to Story — writing flow and first agents</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan · Writing and agents epic</p>
+      <h1>Capture to Story</h1>
+      <p class="lede">Let writers capture prose, voice, images, audio, and files from anywhere in a project, then use bounded agents to help turn that material into a coherent story without forcing structure before inspiration or silently changing canon.</p>
+      <p class="meta"><strong>Status:</strong> active — founder accepted plan and implementation 2026-07-24; checkpoint delivery underway<br>
+        <strong>Branch:</strong> <code>feat/capture-to-story-agents</code><br>
+        <strong>Owner:</strong> founder + parent agent<br>
+        <strong>Living designs:</strong>
+        <a href="../../designs/Ghostwriter%20Mockups%202.0.html">Mockups 2.0</a> ·
+        <a href="../../designs/Ghostwriter%20Mockups%203.0.html">Mockups 3.0</a> ·
+        <a href="../../designs/Ghostwriter%20Mockups%204.0.html">Mockups 4.0</a> ·
+        <a href="../../designs/Ghostwriter%20Mockups%205.0.html">Mockups 5.0 · Capture to Story</a></p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Make capture—not hierarchy—the easiest way into Ghostwriter. A writer can open Capture from Project, Draft, Canvas, or a narrow screen and begin immediately. The original material is durably acknowledged into a project Inbox as an explicitly noncanonical artifact; the writer does not need to choose a book, chapter, scene, Canvas position, or craft framework first.</p>
+      <p>After an acknowledged pause, Ghostwriter may quietly offer <em>Help find its place</em>. That invitation never starts a provider call by itself. When the writer accepts, a bounded agent receives an inspectable context receipt and returns durable, revision-bound proposals: create or place a scene, make a scene variant, shape a sketch, update a character sheet, add a backdrop constraint, or connect the material to Canvas. The writer compares and applies an exact proposal; the core rechecks all versions and either applies the complete change or nothing.</p>
+      <p>This epic also establishes OpenAI as the first bring-your-own-key provider, with each writer's key encrypted server-side and never returned after storage. External MCP clients may read granted context and create proposals, but cannot apply them.</p>
+      <p>AI onboarding is progressive rather than a prerequisite: Capture remains immediately available, and provider setup appears only when the writer first requests agent help. Writers may optionally define collaboration preferences, project instructions, and declarative agent playbooks. These are lower-trust guidance layers—not executable code, new tools, or authority—and the effective instruction stack is visible before egress.</p>
+      <p><strong>Explicitly out of scope:</strong> generic always-on project chat, autonomous background agents, automatic story placement, silent prose edits, open-web research, OCR or managed audio transcription, arbitrary file parsing, same-scene collaborative editing, Guided/Balanced/Minimal onboarding, full project import/export, and a second canonical manuscript store.</p>
+      <p><strong>Founder revision 2026-07-25:</strong> Scene Partner is a job-bound conversational agent (not generic chat). It shows thinking, scans manuscript scenes for matches, interviews when unclear, iterates prose with the writer, and may propose scene images. Apply remains human-gated. Generated images for Scene Partner are now in scope for this epic.</p>
+    </section>
+
+    <section>
+      <h2>Product thesis and authority</h2>
+      <ul>
+        <li><strong>Capture first:</strong> inspiration can precede structure. Capture is always reachable and never begins with a setup form.</li>
+        <li><strong>Preserve the original:</strong> integration creates an attributable story artifact while retaining the source capture and its exact applied revision.</li>
+        <li><strong>One story model:</strong> accepted prose still lives in canonical scene documents; Canvas cards still reference the same scene IDs; Capture is a noncanonical Inbox source, not another manuscript.</li>
+        <li><strong>Guidance is optional:</strong> the quiet integration invitation appears after an acknowledged pause and can be dismissed indefinitely. No provider egress occurs until the writer explicitly starts a workflow.</li>
+        <li><strong>Setup follows value:</strong> publishing profile and AI configuration never gate Capture. Provider connection and optional collaboration preferences appear just in time at the first agent request.</li>
+        <li><strong>Agents have jobs:</strong> Scene Partner integrates prose, Sketch Partner shapes intent, Character Coach sharpens agency, and Worldkeeper connects place and consequence. Conversation is supporting context, not the artifact.</li>
+        <li><strong>Propose is not apply:</strong> model output cannot create a canonical revision event. A human approval bound to a proposal hash and current revisions is required.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ol>
+        <li>From Project, Draft, Canvas, and narrow web, a signed-in writer can open Capture, type or dictate immediately, and receive truthful Saving, Saved, Not saved, conflict, and recovery states without first creating manuscript structure.</li>
+        <li>A capture supports scene-compatible rich prose and bounded image, recorded-audio, and file attachments. Text promotes losslessly; binary objects remain authenticated references and never enter Postgres or the ProseMirror document.</li>
+        <li>Captures persist in a project Inbox with stable IDs, current version, revisions, attachment status, provenance, and clear Draft / ready / integrated / archived states. Refreshing or changing devices does not lose acknowledged work.</li>
+        <li>The original capture remains inspectable after integration. The applied target records the capture revision and proposal that produced it; later edits do not create two competing canonical scene bodies.</li>
+        <li>Without AI, a writer can explicitly turn a capture into a new unassigned or placed scene and optionally place the same scene on Canvas in one acknowledged operation. Version conflict changes nothing.</li>
+        <li>After an acknowledged pause, the Inbox may show a quiet <em>Help find its place</em> invitation. Dismissal is durable enough not to nag; the invitation never triggers network egress or consumes provider budget.</li>
+        <li>A writer can add, test, rotate, and delete an OpenAI key. The key is encrypted server-side per account, never returned to a client, never logged or exported, and provider failure leaves captures and canonical story state unchanged.</li>
+        <li>A writer can skip AI setup, capture without a provider, and complete provider setup only when first requesting help. Publishing identity, legal/contact, mailing, biography, and representation fields are excluded from model context unless a future workflow obtains separate explicit consent.</li>
+        <li>A writer can define account collaboration preferences, project instructions, and versioned declarative playbooks with explicit trigger, context scope, output type, and guidance. The run receipt previews the effective instruction layers; user content cannot add tools, grant permissions, expand egress, override proposal-only authority, or cross project boundaries.</li>
+        <li>Every real agent run shows the approved resources, exact revisions, destination, budget, provider, and model before egress. Context is assembled server-side; client-supplied prose or IDs cannot broaden scope.</li>
+        <li>Agent runs and proposals survive refresh and expose queued, running, needs-input, ready, failed, canceled, stale, rejected, and applied states where applicable. Errors contain no manuscript text or credentials.</li>
+        <li>Scene Partner can propose at least two labeled outcomes against an immutable base: create a new scene from a capture or create a named variant of an existing scene. The working draft stays unchanged until a separate writer apply action.</li>
+        <li>Sketch Partner, Character Coach, and Worldkeeper use the same receipt and proposal pipeline for typed craft deltas. Their output cannot enter scene prose unless the writer chooses a prose workflow.</li>
+        <li>An integration proposal can place or link the resulting canonical scene on Canvas while preserving manuscript-order authority. Draft, Canvas, Inbox, history, and Split use the same scene ID after acknowledgement.</li>
+        <li>Stale capture, scene, project, or Canvas versions make the proposal stale or conflicted and apply nothing. Retry or rebase creates a new proposal; it never rewrites provenance.</li>
+        <li>A project-scoped MCP grant can read explicitly granted captures/context and submit typed proposals. External clients cannot apply proposals, retrieve provider credentials, enumerate unauthorized projects, or widen their own grant.</li>
+        <li>All wide and narrow workflows have keyboard and screen-reader paths, deterministic focus transfer, reduced-motion behavior, bounded payloads, and useful empty/loading/refusal states.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Domain and design audit</h2>
+      <h3>Canonical objects and version domains</h3>
+      <ul>
+        <li><strong>Capture:</strong> project-owned noncanonical rich document with its own <code>CaptureId</code>, working version, immutable revisions/content hashes, status, author, timestamps, and optional source modality.</li>
+        <li><strong>Capture attachment:</strong> Postgres metadata plus an authenticated object-store key, content type, byte size, checksum, processing state, and deletion state. Raw bytes never live in project rows, prompts, logs, or exports by default.</li>
+        <li><strong>Inbox item:</strong> a projection over captures, agent runs, and proposals—not a second content owner.</li>
+        <li><strong>Context receipt:</strong> immutable authorized resource revisions, inclusion reasons, sensitivity/egress classification, size budget, provider destination, and hash.</li>
+        <li><strong>Agent run and proposal:</strong> initiator, workflow version, provider/model, receipt, exact targets/base revisions, typed payload, content hash, state, decision, and apply result.</li>
+        <li><strong>Provider credential:</strong> account-owned encrypted secret envelope, provider, masked display metadata, key version, validation state, and timestamps. Decryption is confined to the backend provider adapter.</li>
+        <li><strong>AI collaboration profile:</strong> optional account-level interaction preferences kept separate from publishing identity and contact data.</li>
+        <li><strong>Project agent instructions and playbooks:</strong> versioned, declarative, project-scoped guidance with bounded triggers, allowed context classes, and output schemas. They never own tools or authorization.</li>
+        <li><strong>Existing canonical targets:</strong> scene documents and revisions, project metadata/craft records, and Canvas board objects remain authoritative in their existing independent version domains.</li>
+      </ul>
+      <h3>State and transaction rules</h3>
+      <ul>
+        <li>Capture save uses a dedicated expected version and bounded browser recovery; it does not advance <code>project.version</code>.</li>
+        <li>Attachment finalize succeeds only after object checksum/type/size validation; abandoned uploads expire without producing a ready attachment.</li>
+        <li>Capture-to-new-scene apply checks proposal hash, capture revision, project version, and optional Canvas board version, then creates scene metadata, genesis document, optional card/link, provenance, and applied proposal atomically.</li>
+        <li>Capture-to-existing-scene produces a named variant against an exact scene revision. It does not splice model output into the live working document.</li>
+        <li>Craft proposal apply uses the existing project command version; Canvas placement uses the board version; conflicts apply nothing.</li>
+        <li>The server compiles non-overridable product policy → workflow contract → account preferences → project instructions → playbook → assignment. It records the resulting version/hash in the context receipt and treats manuscript, uploads, custom instructions, and external MCP content as untrusted data.</li>
+      </ul>
+      <h3>Design surfaces</h3>
+      <ul>
+        <li><strong>Wide:</strong> Capture is a lightweight composer available from the persistent rail/command path without replacing the current center surface; Inbox is the durable review home; Canvas and Draft handoffs preserve selection.</li>
+        <li><strong>Narrow:</strong> Capture and Inbox are first-class destinations rather than compressed desktop panes. Text, dictation, attachment progress, one proposal decision, and recovery remain usable one-handed and with assistive technology.</li>
+        <li><strong>Draft and Canvas:</strong> accepting integration opens the canonical scene in Draft or Split when supported; Canvas never embeds a second prose body or silently chooses manuscript order.</li>
+        <li><strong>Focus:</strong> opening and closing Capture returns focus and selection to the invoking surface; agent readiness never steals the caret.</li>
+        <li><strong>Progressive setup:</strong> first agent use opens a short provider/egress path, followed by skippable collaboration preferences. Custom playbooks live in AI settings and are previewable from each run receipt rather than blocking the writing surface.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Observable checkpoints</h2>
+      <article>
+        <h3>0 · Experience contract, threat model, and ADRs</h3>
+        <p><strong>Writer-visible result:</strong> founder acceptance of the interactive <a href="../../designs/Ghostwriter%20Mockups%205.0.html">Mockups 5.0</a> flow for capture → Inbox → receipt → proposal → scene/Canvas, at wide and narrow widths, before product code changes.</p>
+        <ul>
+          <li>Review and refine Mockups 5.0 as the living Capture/Inbox/agent design; preserve Mockups 2.0–4.0 as their existing concern owners.</li>
+          <li>Accept a Capture/Inbox/media truth-and-promotion ADR and an AI provider/context/proposal-authority ADR with threat model.</li>
+          <li>Resolve media type/size limits, retention/deletion, object-store choice, encryption key rotation, and BYOK failure policy.</li>
+          <li>Accept the progressive AI setup, instruction-precedence, publishing-profile exclusion, and declarative playbook contracts shown in Mockups 5.0.</li>
+          <li>Record the MCP grant boundary and why external apply remains unavailable.</li>
+        </ul>
+      </article>
+
+      <article>
+        <h3>1 · Capture prose and dictation from anywhere</h3>
+        <p><strong>Writer-visible result:</strong> open Capture from Project, Draft, or Canvas, write immediately, close it, and find the acknowledged artifact in Inbox on another load.</p>
+        <ul>
+          <li>Add the capture domain, memory/Postgres repositories, migration, service, API, encrypted recovery, and rich editor host.</li>
+          <li>Reuse the scene-compatible ProseMirror schema without treating a capture as a scene.</li>
+          <li>Support keyboard and browser dictation; preserve the current surface and caret on close.</li>
+          <li>Refuse unauthorized, oversized, stale, or conflicting saves without losing local unacknowledged prose.</li>
+        </ul>
+      </article>
+
+      <article>
+        <h3>2 · Inbox and deterministic story handoff</h3>
+        <p><strong>Writer-visible result:</strong> review a capture, create an unassigned or explicitly placed canonical scene, optionally add its Canvas card, and return to the same capture with an integration receipt.</p>
+        <ul>
+          <li>Build the Inbox projection, filters, status language, archive/restore, and source/target provenance.</li>
+          <li>Add a core transactional handoff patterned after the existing Canvas scene creation service.</li>
+          <li>Preserve the source capture; mark the exact revision integrated only after durable acknowledgement.</li>
+          <li>Expose the same deterministic handoff through a core capability and document the temporary MCP exception until grants land.</li>
+        </ul>
+      </article>
+
+      <article>
+        <h3>3 · Mixed-media capture</h3>
+        <p><strong>Writer-visible result:</strong> attach an image, recorded-audio clip, or bounded file to a capture, see honest upload/scan/refusal state, and retrieve or delete the original through an authorized path.</p>
+        <ul>
+          <li>Provision private object storage and authenticated upload/finalize/download/delete flows; keep object keys unguessable and account/project scoped.</li>
+          <li>Validate declared and detected type, size, checksum, filename display, and safe rendering; never execute or automatically parse uploaded content.</li>
+          <li>Define cleanup for abandoned uploads, archived captures, credential loss, account exit, backups, and future portable export.</li>
+          <li>Keep browser dictation as text input; managed transcription, OCR, and content extraction remain separate future proposals.</li>
+        </ul>
+      </article>
+
+      <article>
+        <h3>4 · BYOK provider and receipt-backed agent runs</h3>
+        <p><strong>Writer-visible result:</strong> securely connect an OpenAI key, preview exactly what a workflow will read and send, run or cancel it, and see a durable result or content-free failure in Inbox.</p>
+        <ul>
+          <li>Create a provider-neutral AI package with OpenAI and deterministic fake adapters, structured outputs, cancellation, usage accounting, time/token/tool budgets, and content-free diagnostics.</li>
+          <li>Encrypt credentials server-side with versioned key wrapping; support masked status, validation, rotation, deletion, and fail-closed decryption.</li>
+          <li>Assemble context on the server from authorized revision-addressed resources; do not trust client-provided manuscript context.</li>
+          <li>Keep Capture usable without AI; present provider setup only at first agent use, then offer skippable account collaboration preferences and project-scoped instructions.</li>
+          <li>Persist versioned declarative playbooks and compile the fixed instruction hierarchy server-side. Show effective layers in the receipt; reject attempts to add capabilities, tools, unrestricted resources, or executable behavior.</li>
+          <li>Persist receipts, runs, and typed proposals; no model operation can emit a canonical revision event.</li>
+        </ul>
+      </article>
+
+      <article>
+        <h3>5 · Scene Partner integrates a capture</h3>
+        <p><strong>Writer-visible result (superseded 2026-07-25):</strong> original typed reflection + apply path shipped; founder feedback replaces the interstitial UX with conversational Scene Partner (checkpoint 8).</p>
+        <ul>
+          <li>Offer the invitation only after acknowledged idle; dismissal never blocks writing and no background provider call occurs.</li>
+          <li>Show assignment, context receipt, cost/budget posture, variants, base, differences, provenance, and “Your draft has not changed.”</li>
+          <li>Bind approval to proposal hash and exact capture/scene/project/Canvas versions; add idempotent transactional apply and undo/history path.</li>
+          <li>Handle missing key, rate limit, cancellation, malformed output, stale base, conflicting versions, deleted source, and provider outage.</li>
+        </ul>
+      </article>
+
+      <article>
+        <h3>8 · Scene Partner conversational craft (founder revision)</h3>
+        <p><strong>Writer-visible result:</strong> choosing Scene Partner opens a chat immediately—no Help find its place / Start interstitial. The agent shows thinking, reads manuscript scenes, matches or proposes a new scene, interviews when the idea is unclear, iterates prose with the writer, and can propose a scene image. Nothing enters canon until the writer applies.</p>
+        <ul>
+          <li>Remove multi-click interstitial states from Scene Partner entry.</li>
+          <li>Visible thinking / tool steps (scene scan, match evaluation, clarify, prose draft, image draft).</li>
+          <li>Back-and-forth chat turns with BYOK OpenAI; hermetic fake for local/CI.</li>
+          <li>Human-gated apply for scene/prose/image proposals; draft unchanged until apply.</li>
+          <li>Image proposals are optional, receipt-bound, and never silent canon.</li>
+        </ul>
+      </article>
+
+      <article>
+        <h3>6 · Craft partners without a form gauntlet</h3>
+        <p><strong>Writer-visible result:</strong> ask Sketch Partner, Character Coach, or Worldkeeper to shape captured material into editable craft deltas, then accept selected fields without entering prose or silently asserting canon.</p>
+        <ul>
+          <li>Reuse one assignment/receipt/run/proposal lifecycle for all roles; role labels are workflow lenses, not separate memory owners.</li>
+          <li>Compare typed field deltas and apply through existing <code>scene.update</code> and <code>storyKnowledge.update</code> commands.</li>
+          <li>Require writer selection when a capture could refer to multiple scenes, characters, or places; never guess a canonical target.</li>
+          <li>Keep advice plain-language and optional so writers do not need craft vocabulary to proceed.</li>
+        </ul>
+      </article>
+
+      <article>
+        <h3>7 · Scoped MCP proposal parity</h3>
+        <p><strong>Writer-visible result:</strong> pair an external client to one project and allow it to inspect its grant, read selected captures/context, and submit noncanonical proposals that appear in the same Inbox.</p>
+        <ul>
+          <li>Add server-created project/resource grants, revocation, egress disclosure, audit events, and non-disclosing capability discovery.</li>
+          <li>Expose narrow tools for context assembly and proposal submission; validate all output as untrusted typed data.</li>
+          <li>Do not expose provider keys, arbitrary URLs/filesystem/shell, project-wide enumeration, canonical apply, delete, or grant mutation.</li>
+          <li>Prove UI/MCP normalized parity for proposal creation while preserving different permission ceilings.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section>
+      <h2>Tasks</h2>
+      <ol>
+        <li>Complete checkpoint 0 and obtain founder acceptance before product implementation.</li>
+        <li>For each checkpoint, copy the feature checklist into the record log and complete the domain, design, binding, refusal, accessibility, and coherence maps.</li>
+        <li>Frame bounded development slices on the parent; delegate most implementation through Composer fast/standard, then Grok if needed. Escalate only with a recorded creative or concrete reason.</li>
+        <li>Serialize writers touching capture/proposal state machines, migrations, shared version domains, or the same UI orchestration files.</li>
+        <li>Implement checkpoints 1–7 inside-out: core policy, storage, API, client state, UI, capability/MCP binding, tests, docs, and browser acceptance.</li>
+        <li>Update this plan and record log immediately after every checkpoint; run the cumulative coherence gate before moving on.</li>
+        <li>Present the complete product to the founder after targeted checks, browser walkthroughs, and <code>pnpm verify</code>. Add or repair Playwright only after explicit founder verification.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li><strong>Core properties:</strong> captures never become manuscript authority; model commands cannot emit canonical revisions; apply requires matching approval hash and every expected version; replay is idempotent; conflict applies nothing.</li>
+        <li><strong>State machines:</strong> capture, attachment, run, and proposal transitions reject invalid, stale, duplicate, canceled, archived, and cross-project operations.</li>
+        <li><strong>Storage parity:</strong> memory and Postgres contracts, migration from empty, rollback across capture-to-scene/Canvas apply, object metadata/object-store fake parity, abandoned-upload cleanup.</li>
+        <li><strong>Security:</strong> account/project authorization, non-disclosure, grant matrix, credential envelope rotation/deletion, log redaction, malicious filenames/types, oversized payloads, prompt injection, cross-project IDs, revoked access, and explicit exclusion of publishing/contact profile fields from AI context.</li>
+        <li><strong>Provider:</strong> deterministic fake model in required CI; structured-output corruption, timeout, cancellation, rate limit, budget exhaustion, and missing/deleted key. Live OpenAI smoke is optional and never required in CI.</li>
+        <li><strong>Instruction policy:</strong> table-driven and property tests prove fixed precedence; arbitrary writer/playbook/manuscript/MCP strings cannot add a tool, resource, egress destination, permission, or canonical effect. Fuzz oversized Unicode, nested prompt-like markup, fake tool JSON, URLs, cross-project IDs, and instruction-conflict combinations.</li>
+        <li><strong>Context snapshots:</strong> deterministic golden fixtures assert the exact effective policy/workflow/preference/project/playbook/assignment versions and hashes in each receipt while excluding credentials, publishing identity, legal/contact details, and unauthorized resources.</li>
+        <li><strong>API:</strong> stable request/response/error contracts, upload authorization, content limits, origin checks, context assembled from server state, and no raw prose/secret diagnostics.</li>
+        <li><strong>Client/UI:</strong> save/recovery queues, focus return, quiet invitation dismissal, Inbox refresh, compare/apply, stale/refusal copy, keyboard/screen-reader semantics, reduced motion, narrow layout, Capture-before-AI onboarding, skipped setup, provider reconnect, preference inheritance, playbook preview/disable/delete, and no publishing-profile leakage.</li>
+        <li><strong>Browser walkthrough per checkpoint:</strong> record route, viewport, actions, successful result, refusal result, save truth, focus, and responsive behavior.</li>
+        <li><strong>Repository gates:</strong> changed-file diagnostics, focused package checks, <code>pnpm verify</code>, <code>git diff --check</code>, HTML link/structure validation, and secret/artifact inspection.</li>
+        <li><strong>Deferred Playwright:</strong> after explicit founder verification, audit existing journeys and add the smallest durable Capture → Inbox → apply and MCP proposal coverage; run focused first, full suite once.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <ul>
+        <li><strong>Living designs:</strong> Mockups 2.0 supplies linked manuscript/Canvas truth and early Capture/Inbox direction; Mockups 3.0 preserves explicit manuscript placement and Canvas order boundaries; Mockups 4.0 supplies the craft studio and four job-bound agents; <a href="../../designs/Ghostwriter%20Mockups%205.0.html">Mockups 5.0</a> owns the proposed Capture → Inbox → integration experience. Preserve all four concern histories.</li>
+        <li><strong>Accepted ADR:</strong> <a href="../../../docs/adr/0010-capture-inbox-media-and-promotion.md">ADR 0010</a> — Capture, Inbox, private R2 attachments, revisions, and transactional promotion into scene/Canvas.</li>
+        <li><strong>Accepted ADR:</strong> <a href="../../../docs/adr/0011-byok-context-proposals-playbooks-and-mcp-grants.md">ADR 0011</a> — BYOK provider boundary, encrypted credential lifecycle, progressive setup, instruction layering, declarative playbooks, server-side context receipts, proposal authority, and scoped MCP grants.</li>
+        <li><strong>Product:</strong> update <code>docs/PRODUCT.md</code> when each writer-visible checkpoint is accepted; do not describe planned media or real agents as shipped early.</li>
+        <li><strong>Architecture/API:</strong> update <code>docs/ARCHITECTURE.md</code> and <code>docs/API.md</code> for new packages, ports, version domains, routes, capabilities, and errors.</li>
+        <li><strong>Operations:</strong> update <code>docs/OPERATIONS.md</code> for object storage, encryption keys, OpenAI BYOK behavior, cleanup, monitoring, backup, rotation, and incident response.</li>
+        <li><strong>Historical blueprint:</strong> reconcile the open agent-authority decisions in <code>plans/active/2026-07-11-agentic-writing-experience/</code> only after the new ADRs are accepted.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <h3>Founder direction recorded</h3>
+      <ul>
+        <li>Capture snippets and ideas from anywhere into a durable Inbox, then promote or attach them.</li>
+        <li>Offer quiet integration help after an acknowledged pause; do not organize automatically.</li>
+        <li>Persist a minimal proposal Inbox rather than limiting results to one Assist session.</li>
+        <li>Use OpenAI first with writer-owned keys encrypted server-side.</li>
+        <li>Do not depend on ChatGPT/Codex or Claude/Anthropic first-party CLI OAuth tokens. Current standard model APIs do not expose a documented consumer delegated OAuth flow for Ghostwriter; retain a provider adapter so an official flow can replace key entry later.</li>
+        <li>Support scene-compatible rich prose, dictation, images, recorded audio, and files.</li>
+        <li>Expose scoped read/propose MCP tools; external apply is excluded.</li>
+        <li>Do not add a separate checkpoint for profile/AI setup. Include progressive onboarding, optional instructions/playbooks, and adversarial verification inside checkpoints 0 and 4.</li>
+      </ul>
+      <h3>Gates before implementation</h3>
+      <ul>
+        <li><strong>Media cost and safety:</strong> object-store vendor, accepted MIME classes, per-object/project limits, retention, deletion, backup, and future export must be accepted before checkpoint 3.</li>
+        <li><strong>Credential custody:</strong> encryption key source, envelope format, key rotation, operator access, backup/restore, and breach response must be accepted in the provider ADR before storing a real key.</li>
+        <li><strong>Capture editing depth:</strong> checkpoint 0 must confirm whether capture revisions expose full history or only recovery plus integration provenance.</li>
+        <li><strong>Proposal review density:</strong> checkpoint 0 must validate whether Inbox review is a center workspace, side rail, or responsive route; agent results must not become another modal maze.</li>
+      </ul>
+      <h3>Primary risks</h3>
+      <ul>
+        <li>A separate capture document can feel like duplicate truth unless authority, integration state, and source provenance are unmistakable.</li>
+        <li>Mixed media expands security, cost, retention, export, and account-exit obligations; it must not block the text-first checkpoint.</li>
+        <li>Encrypted BYOK is still backend custody of a sensitive credential. Weak key management would be worse than session-only keys.</li>
+        <li>Combining raw user instructions with internal prompts can enable injection or accidental data disclosure. The implementation must use fixed server-side authority and capability enforcement; prompt hierarchy is explanatory defense-in-depth, not the security boundary.</li>
+        <li>Quiet suggestions can become interruption or hidden spend. The product must prompt locally and require explicit egress consent for every run posture.</li>
+        <li>Agent placement can feel authoritative even when labeled proposed. Ambiguous targets must ask the writer rather than ranking silently.</li>
+        <li>This epic is intentionally large. Each checkpoint must remain independently demonstrable, reversible, and releasable; no horizontal “agent platform” layer counts as completion by itself.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked disabled> Latest <code>main</code> pulled and feature branch created</li>
+        <li><input type="checkbox" checked disabled> Product, architecture, living-design, code, and historical-agent audits completed</li>
+        <li><input type="checkbox" checked disabled> Founder direction recorded for Capture, Inbox, BYOK, mixed media, quiet integration, and MCP</li>
+        <li><input type="checkbox" checked disabled> Interactive Capture to Story living design created as <a href="../../designs/Ghostwriter%20Mockups%205.0.html">Mockups 5.0</a></li>
+        <li><input type="checkbox" checked disabled> Plan accepted; implementation authorized 2026-07-24</li>
+        <li><input type="checkbox" checked disabled> Checkpoint 0 experience contract, threat model, and ADRs accepted</li>
+        <li><input type="checkbox" checked disabled> Checkpoint 1 capture prose and dictation implemented; real-browser acceptance pending</li>
+        <li><input type="checkbox" checked disabled> Checkpoint 2 Inbox and deterministic story handoff implemented; real-browser acceptance pending</li>
+        <li><input type="checkbox" checked disabled> Checkpoint 3 mixed-media capture implemented; live R2/browser acceptance pending</li>
+        <li><input type="checkbox" checked disabled> Checkpoint 4 BYOK provider and agent-run foundation complete</li>
+        <li><input type="checkbox" checked disabled> Checkpoint 5 Scene Partner integration complete</li>
+        <li><input type="checkbox" checked disabled> Checkpoint 6 craft partners complete</li>
+        <li><input type="checkbox" checked disabled> Checkpoint 7 scoped MCP proposal parity complete</li>
+        <li><input type="checkbox" checked disabled> Targeted checks and <code>pnpm verify</code> complete (712 tests); real-browser walkthrough pending founder</li>
+        <li><input type="checkbox" checked disabled> Checkpoint 8 live BYOK Scene Partner turns + images (hermetic fake default; <code>GHOSTWRITER_E2E_LIVE_OPENAI=1</code> for local live)</li>
+        <li><input type="checkbox" disabled> Founder verifies the complete product outcome</li>
+        <li><input type="checkbox" disabled> Post-gate Playwright audit and final suite complete</li>
+        <li><input type="checkbox" checked disabled> Docs + handoff updated for Capture/BYOK plus shell/Title Page/Agent follow-ons on this branch</li>
+        <li><input type="checkbox" disabled> Archive plan after merge; founder verification + Playwright still open</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

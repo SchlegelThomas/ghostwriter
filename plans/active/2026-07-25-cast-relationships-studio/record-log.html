@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cast studio · record log</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Record log</p>
+      <h1>Cast &amp; relationships studio</h1>
+      <p class="meta"><strong>Started:</strong> 2026-07-25</p>
+    </header>
+
+    <section>
+      <h2>2026-07-25 — Proposed</h2>
+      <p>Founder asked to move Cast out of the tree pane into the center and make it richer (relationship/scene visualization + role summary). Current code mounts <code>CharacterBrowsePanel</code> as <code>charactersPrimary</code> when <code>primarySideView === "characters"</code>, replacing the Explorer. Plans already opens as a center workspace via Inbox; Title Page owns draft center for project home.</p>
+      <p>Proposed decisions D1–D4 recorded in the plan (center host, SVG ego constellation, deterministic role summary, roster in studio not primary).</p>
+      <p>Waiting on founder accept before product code.</p>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Audit synthesis</h2>
+      <p>Read-only inventory confirmed: wide Cast mounts as <code>charactersPrimary</code> (replaces Explorer); narrow already uses center launchpad + <code>CharacterBrowsePanel</code>. Data for richer UX already exists (notes, sheet, typed knowledge links, linked scenes). No character relationship graph component today — Canvas “relationships” lens is a different domain. Plans center pattern is <code>inboxOwnsCenter</code>; for Cast, prefer a dedicated center-owner flag (or shared owner enum) rather than stacking more special cases, and keep Explorer as the only wide primary content (D1/D4).</p>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Parked for new work</h2>
+      <p>Founder wrapping the Capture/shell/agent branch for PR. Cast studio remains <strong>proposed</strong> — no product code. Resume after plan accept.</p>
+    </section>
+  </main>
+</body>
+</html>

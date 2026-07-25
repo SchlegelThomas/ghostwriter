@@ -23,10 +23,12 @@ export const SCENE_VARIANT_NAME_MAX_LENGTH = 100;
 export type SceneRevisionOrigin = "human" | "agent" | "system";
 export type SceneRevisionReason =
   | "genesis"
+  | "capture-promotion"
   | "checkpoint"
   | "idle-checkpoint"
   | "restore"
-  | "schema-migration";
+  | "schema-migration"
+  | "named-variant";
 
 export type SceneDocumentHead = Readonly<{
   sceneId: SceneId;

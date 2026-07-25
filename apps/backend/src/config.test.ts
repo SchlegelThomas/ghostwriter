@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { loadConfig, pagesPreviewCookieDomain } from "./config.js";
+import { loadConfig, pagesPreviewCookieDomain, parseR2CaptureObjectStorageConfig } from "./config.js";
+import { R2_OBJECT_STORAGE_CONFIG_ERROR } from "./r2-config-validation.js";
+
+const VALID_R2_ACCOUNT_ID = "0123456789abcdef0123456789abcdef";
 
 const baseEnv = {
   DATABASE_URL: "postgres://localhost/ghostwriter",
@@ -28,6 +31,7 @@ describe("backend auth configuration", () => {
       ],
       secureCookies: true
     });
+    expect(config.r2).toBeUndefined();
   });
 
   it("rejects an auth URL with a path", () => {
@@ -62,5 +66,84 @@ describe("backend auth configuration", () => {
     expect(() => loadConfig(withoutGoogleSecret)).toThrow(
       "GOOGLE_CLIENT_SECRET is required."
     );
+  });
+});
+
+describe("backend R2 object storage configuration", () => {
+  it("omits R2 when no variables are set", () => {
+    expect(parseR2CaptureObjectStorageConfig({})).toBeUndefined();
+    expect(loadConfig(baseEnv).r2).toBeUndefined();
+  });
+
+  it("loads all-or-none R2 settings with a derived endpoint", () => {
+    const config = loadConfig({
+      ...baseEnv,
+      R2_ACCOUNT_ID: VALID_R2_ACCOUNT_ID.toUpperCase(),
+      R2_ACCESS_KEY_ID: "  access-key-id  ",
+      R2_SECRET_ACCESS_KEY: "  secret-access-key  ",
+      R2_BUCKET_NAME: "private-capture"
+    });
+
+    expect(config.r2).toEqual({
+      accountId: VALID_R2_ACCOUNT_ID,
+      accessKeyId: "access-key-id",
+      secretAccessKey: "secret-access-key",
+      bucketName: "private-capture",
+      endpoint: `https://${VALID_R2_ACCOUNT_ID}.r2.cloudflarestorage.com`
+    });
+  });
+
+  it("rejects invalid R2 values with content-free errors", () => {
+    const invalidEnv = {
+      R2_ACCOUNT_ID: "not-a-valid-account",
+      R2_ACCESS_KEY_ID: "access-key-id",
+      R2_SECRET_ACCESS_KEY: "secret-access-key",
+      R2_BUCKET_NAME: "private-capture"
+    };
+
+    expect(() => parseR2CaptureObjectStorageConfig(invalidEnv)).toThrow(
+      R2_OBJECT_STORAGE_CONFIG_ERROR
+    );
+
+    try {
+      parseR2CaptureObjectStorageConfig({
+        ...invalidEnv,
+        R2_SECRET_ACCESS_KEY: "  "
+      });
+      expect.unreachable("blank secret should throw");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      expect(message).toBe(R2_OBJECT_STORAGE_CONFIG_ERROR);
+    }
+
+    expect(() =>
+      parseR2CaptureObjectStorageConfig({
+        ...invalidEnv,
+        R2_ACCOUNT_ID: VALID_R2_ACCOUNT_ID,
+        R2_BUCKET_NAME: "../evil-bucket"
+      })
+    ).toThrow(R2_OBJECT_STORAGE_CONFIG_ERROR);
+  });
+
+  it("rejects partial R2 configuration with a content-free error", () => {
+    expect(() =>
+      parseR2CaptureObjectStorageConfig({
+        R2_ACCOUNT_ID: VALID_R2_ACCOUNT_ID,
+        R2_BUCKET_NAME: "private-capture"
+      })
+    ).toThrow(
+      "R2 object storage environment variables must all be set or all be omitted."
+    );
+
+    try {
+      parseR2CaptureObjectStorageConfig({
+        R2_ACCOUNT_ID: VALID_R2_ACCOUNT_ID,
+        R2_SECRET_ACCESS_KEY: "leaked-secret-value"
+      });
+      expect.unreachable("partial R2 config should throw");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      expect(message).not.toContain("leaked-secret-value");
+    }
   });
 });

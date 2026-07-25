@@ -18,7 +18,7 @@ database with Drizzle migrations, a Node/Hono service, and a database branch per
 | Browser API | Cloudflare Pages Function → Fly.io | Same-origin `/api/*` keeps auth cookies first-party and streams to the fixed backend |
 | Mobile builds (later) | Expo EAS free tier | ~30 builds/month free; EAS Update for OTA fixes |
 | Desktop distribution (later) | GitHub Releases | electron-builder artifacts attached by Actions, free |
-| MCP server | Runs locally (stdio) | No hosting needed; distribute via `npx` when it stabilizes |
+| MCP server | Runs locally (stdio) | Fixture navigator by default; scoped grant tools use injectable grant services / optional `GHOSTWRITER_MCP_GRANT_TOKEN` for local parity. Production remote MCP OAuth remains later. |
 
 Expected future costs are Lakebase/Fly usage beyond their available tiers and Apple's $99/yr
 developer account once iOS device/TestFlight builds start. Cloudflare Pages is used in
@@ -85,6 +85,70 @@ callback, so required CI uses the hermetic identity boundary; a real Google logi
 local or production acceptance check. The test identity server refuses to start unless
 `GHOSTWRITER_E2E=1` and is never part of the production entry point.
 
+Hermetic E2E backend (`apps/backend/src/e2e-server.ts`) defaults to a fake OpenAI validation and
+structured-completion provider so CI/Playwright never spend tokens. Cover-image preview uses that
+same injected fake and does **not** require a saved key. Set
+`GHOSTWRITER_E2E_LIVE_OPENAI=1` (with `GHOSTWRITER_E2E=1`) to use the real OpenAI adapter for local
+founder checks. For live images/completions, supply a BYOK key either via **Settings** in the app
+or (local only) `GHOSTWRITER_E2E_SEED_OPENAI_KEY` in the hermetic process environment — never commit
+the key, and never paste it into chat/logs. Playwright must leave
+`GHOSTWRITER_E2E_LIVE_OPENAI` and `GHOSTWRITER_E2E_SEED_OPENAI_KEY` unset.
+
+On boot, the hermetic server seeds a **Harry Potter** multi-book project for the E2E writer
+account (seven books, chapters/scenes with original placeholder prose, cast/locations/threads, and
+a few Plans (Inbox) captures). Fixture source: `packages/core/src/harry-potter-fixture.ts`;
+orchestration: `apps/backend/src/hermetic-seed.ts`. Restarting the hermetic process resets PGlite
+and reseeds from scratch.
+
+### Capture media implemented locally; R2 provisioning pending
+
+ADR 0010 and ADR 0011 accept the following boundaries for the active Capture-to-Story epic. They
+are not required by the shipped product until release. The private-object adapter, metadata
+migration, direct-upload client, memory fake, and refusal tests are implemented locally; no bucket,
+credentials, Fly secrets, or deployment were created in this branch:
+
+- Private Cloudflare R2 stores Capture attachment bytes and applied book-cover PNGs
+  (`projects/{projectId}/books/{bookId}/cover.png`). Fly holds `R2_ACCOUNT_ID`,
+  `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME`, authorizes every object
+  operation, and issues short-lived single-object URLs. Hermetic E2E uses a memory object-store
+  fake (cover download returns a PNG data URI for display). Required CI uses the same memory fake.
+- Writer OpenAI keys are encrypted in Lakebase under a versioned AES-GCM envelope. Root keys such as
+  `GHOSTWRITER_PROVIDER_KEK_V1` live only as Fly secrets; they are distinct from an optional
+  Ghostwriter-operated `OPENAI_API_KEY`.
+- Root-key rotation deploys an overlapping new version, rewraps or replaces safe envelopes, then
+  retires the old key. Suspected compromise disables provider calls, deletes affected envelopes,
+  requires writer key re-entry, and triggers notification.
+- Pending uploads expire after 24 hours. Archived and exited-account attachments remain until an
+  explicit purge workflow; operations and product copy must not claim account exit erased them.
+- Logs, metrics, audits, errors, and exports never contain provider keys, raw Capture prose, or
+  attachment bytes.
+
+R2 uses the S3-compatible endpoint with pinned `aws4fetch` SigV4 signing. Browser PUTs bind the
+exact `Content-Type`; finalize performs a server-signed bounded GET and hashes/detects actual bytes.
+The private bucket CORS policy must list exact origins—R2 does not accept wildcard preview origins:
+
+```json
+[
+  {
+    "AllowedOrigins": [
+      "https://ghost-writer.studio",
+      "https://www.ghost-writer.studio",
+      "http://localhost:8081",
+      "http://localhost:8787"
+    ],
+    "AllowedMethods": ["PUT", "GET", "HEAD"],
+    "AllowedHeaders": ["Content-Type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Add each stable branch-preview origin explicitly when media upload is required there; do not use
+`https://*.ghostwriter-di2.pages.dev`. Missing R2 configuration selects a content-free unavailable
+adapter: Capture prose/Inbox remain usable while media init/download returns
+`ATTACHMENT_STORAGE_UNAVAILABLE`.
+
 Validated locally on 2026-07-12 against a temporary migrated Lakebase branch: real Google consent,
 durable account/profile bootstrap, project creation and reload, and sign-out with zero remaining
 server sessions. The temporary branch and downloaded credential files were deleted afterward.
@@ -110,8 +174,9 @@ export, and deploys it to the Pages production environment. No manual production
 
 ### CI — every PR and push to main
 
-`.github/workflows/ci.yml` runs `pnpm verify` (typecheck + lint + test). Merging requires
-green CI. Both workflows are guarded to no-op until the monorepo is scaffolded
+`.github/workflows/ci.yml` runs `pnpm verify` (typecheck + lint + unit/integration tests only).
+Playwright browser journeys (`pnpm test:e2e`) stay local and are not required for merge. Merging
+requires green CI. Both workflows are guarded to no-op until the monorepo is scaffolded
 (they check for `package.json`), so they won't fail on docs-only work in the meantime.
 
 Storage and backend tests run against **PGlite** (in-process Postgres), so `pnpm verify` needs no
@@ -180,9 +245,16 @@ Validated end-to-end on 2026-07-11: a throwaway branch was created from `product
 Provisioned and wired automatically:
 
 - Service principal **`ghostwriter-ci`** — client id `a4622cb7-c206-4ace-a085-2b9ecdf98b37`.
-- Its Postgres role on `production` with `CREATE`/table privileges (migrations can run as the SP).
+  GitHub `LAKEBASE_USER` and Fly runtime both use this Postgres role. The SP OAuth client mints
+  database credentials for CI/deploy.
 - GitHub secrets `DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID`; variables `LAKEBASE_PROJECT_ID`,
   `LAKEBASE_USER` (= SP client id), `LAKEBASE_ENDPOINT_ID`.
+- Application tables and the Drizzle journal are founder-owned (`tas9117@gmail.com`). Postgres
+  requires ownership for `ALTER TABLE … ADD COLUMN`, so owner-profile migrates
+  (`DATABRICKS_PROFILE=ghostwriter-owner`, `LAKEBASE_USER=tas9117@gmail.com`) are needed when CI
+  would otherwise hit `must be owner of table …`. Additive migrations for this PR were applied to
+  `production` that way on 2026-07-25 so PR-branch CoW migrates as the SP are no-ops / CREATE-only.
+  Prefer transferring table ownership to the SP long-term if Databricks admin allows it.
 
 Provisioning is complete: `DATABRICKS_CLIENT_SECRET` and `FLY_API_TOKEN` are configured, the Fly
 app is deployed, and the backend authenticates to Lakebase with the service principal. The current

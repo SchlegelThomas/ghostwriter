@@ -4,7 +4,14 @@ import {
   createBookReaderServices,
   createIdentityServices,
   createGhostwriterServices,
+  createCaptureServices,
+  createCaptureAttachmentServices,
+  createCapturePromotionServices,
   createSceneWritingServices,
+  type CaptureAttachmentServices,
+  type CaptureObjectStoragePort,
+  type CapturePromotionServices,
+  type CaptureServices,
   type DomainIdKind,
   type GhostwriterServices,
   type IdentityServices,
@@ -17,6 +24,9 @@ import {
   createNodePostgresDatabase,
   createPostgresCanvasRepository,
   createPostgresCanvasSceneCreationUnitOfWork,
+  createPostgresCaptureAttachmentRepository,
+  createPostgresCaptureDocumentRepository,
+  createPostgresCaptureScenePromotionUnitOfWork,
   createPostgresProjectRepository,
   createPostgresSceneDocumentRepository,
   createPostgresWriterProfileRepository,
@@ -24,14 +34,21 @@ import {
 } from "@ghostwriter/storage";
 import { createBetterAuthGateway, type AuthGateway } from "./auth.js";
 import type { BackendConfig } from "./config.js";
+import { createAgentProviderRuntime, type AgentProviderRuntime } from "./agent-provider-runtime.js";
+import { createCaptureObjectStorageFromConfig } from "./r2-capture-object-storage.js";
 
 export type BackendRuntime = Readonly<{
   services: GhostwriterServices;
   writing: SceneWritingServices;
+  captures: CaptureServices;
+  captureAttachments: CaptureAttachmentServices;
+  capturePromotions: CapturePromotionServices;
   canvas: CanvasServices;
   reader: BookReaderServices;
   identity: IdentityServices;
+  agentProvider: AgentProviderRuntime;
   auth: AuthGateway;
+  objectStorage: CaptureObjectStoragePort;
   close(): Promise<void>;
 }>;
 
@@ -46,6 +63,9 @@ export function createBackendRuntime(config: BackendConfig): BackendRuntime {
   const { db, close } = connection;
   const repository = createPostgresProjectRepository(db);
   const sceneDocuments = createPostgresSceneDocumentRepository(db);
+  const captureDocuments = createPostgresCaptureDocumentRepository(db);
+  const captureAttachmentsRepository = createPostgresCaptureAttachmentRepository(db);
+  const objectStorage = createCaptureObjectStorageFromConfig(config.r2);
   const canvases = createPostgresCanvasRepository(db);
   const profiles = createPostgresWriterProfileRepository(db);
   const clock = { now: () => new Date().toISOString() };
@@ -58,6 +78,28 @@ export function createBackendRuntime(config: BackendConfig): BackendRuntime {
   const writing = createSceneWritingServices({
     projects: repository,
     sceneDocuments,
+    ids,
+    clock
+  });
+  const captures = createCaptureServices({
+    projects: repository,
+    captureDocuments,
+    ids,
+    clock
+  });
+  const captureAttachments = createCaptureAttachmentServices({
+    projects: repository,
+    captureDocuments,
+    attachments: captureAttachmentsRepository,
+    objectStorage,
+    ids,
+    clock
+  });
+  const capturePromotions = createCapturePromotionServices({
+    projects: repository,
+    captureDocuments,
+    canvases,
+    promotion: createPostgresCaptureScenePromotionUnitOfWork(db),
     ids,
     clock
   });
@@ -76,6 +118,30 @@ export function createBackendRuntime(config: BackendConfig): BackendRuntime {
   });
   const identity = createIdentityServices({ profiles, clock });
   const auth = createBetterAuthGateway(db, config.auth);
+  const agentProvider = createAgentProviderRuntime({
+    db,
+    projects: repository,
+    captureDocuments,
+    ids,
+    clock,
+    kekConfig: config.provider.kek,
+    callsDisabled: config.provider.callsDisabled,
+    capturePromotions,
+    sceneDocuments
+  });
 
-  return { services, writing, canvas, reader, identity, auth, close };
+  return {
+    services,
+    writing,
+    captures,
+    captureAttachments,
+    capturePromotions,
+    canvas,
+    reader,
+    identity,
+    agentProvider,
+    auth,
+    objectStorage,
+    close
+  };
 }

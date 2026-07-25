@@ -4,8 +4,19 @@ import {
 } from "@ghostwriter/core";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import {
+  registerMcpGrantTools,
+  type McpGrantRuntime
+} from "./grant-tools.js";
 
 export const PROJECT_NAVIGATOR_TOOL_NAME = "ghostwriter_project_navigator";
+export type { McpGrantRuntime } from "./grant-tools.js";
+export {
+  GET_GRANT_TOOL_NAME,
+  READ_CAPTURE_TOOL_NAME,
+  ASSEMBLE_CAPTURE_REFLECTION_CONTEXT_TOOL_NAME,
+  PROPOSE_CAPTURE_REFLECTION_TOOL_NAME
+} from "./grant-tools.js";
 
 const sceneSchema = z.object({
   id: z.string(),
@@ -172,12 +183,24 @@ function projectNavigatorOutput(): z.infer<typeof projectNavigatorOutputSchema> 
   };
 }
 
-export function createGhostwriterMcpServer(): McpServer {
+export type CreateGhostwriterMcpServerOptions = Readonly<{
+  /**
+   * When provided (tests or env-authenticated local MCP), register scoped grant tools.
+   * Production remote MCP OAuth remains later; v1 proves capability parity locally.
+   */
+  grantRuntime?: McpGrantRuntime;
+}>;
+
+export function createGhostwriterMcpServer(
+  options: CreateGhostwriterMcpServerOptions = {}
+): McpServer {
+  const hasGrantRuntime = options.grantRuntime !== undefined;
   const server = new McpServer(
     { name: "ghostwriter", version: "0.1.0" },
     {
-      instructions:
-        "Ghostwriter exposes project-scoped writing capabilities. This build contains read-only sample data."
+      instructions: hasGrantRuntime
+        ? "Ghostwriter exposes project-scoped writing capabilities under a server-created MCP grant. External clients may read granted Captures and submit typed proposals; apply remains first-party."
+        : "Ghostwriter exposes project-scoped writing capabilities. This build contains read-only sample data."
     }
   );
 
@@ -230,6 +253,10 @@ export function createGhostwriterMcpServer(): McpServer {
       };
     }
   );
+
+  if (options.grantRuntime !== undefined) {
+    registerMcpGrantTools(server, options.grantRuntime);
+  }
 
   return server;
 }

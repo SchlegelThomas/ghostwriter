@@ -8,6 +8,8 @@ import type {
   AcquireSceneLeaseInput,
   CreateNamedSceneVariantInput,
   CreateNamedSceneVariantOutcome,
+  CreateNamedVariantFromDocumentInput,
+  CreateNamedVariantFromDocumentOutcome,
   CreateSceneCheckpointInput,
   CreateSceneCheckpointOutcome,
   InitializeSceneDocumentInput,
@@ -77,8 +79,11 @@ function expiresAtOrBefore(expiresAt: string, now: string): boolean {
 
 function assertGenesis(input: InitializeSceneDocumentInput): void {
   const { head, genesisRevision } = input;
+  const allowedInitialReason =
+    genesisRevision.reason === "genesis" ||
+    genesisRevision.reason === "capture-promotion";
   if (
-    genesisRevision.reason !== "genesis" ||
+    !allowedInitialReason ||
     genesisRevision.parentRevisionId !== undefined ||
     head.checkpointRevisionId !== genesisRevision.id ||
     head.sceneId !== genesisRevision.sceneId ||
@@ -95,6 +100,7 @@ function assertGenesis(input: InitializeSceneDocumentInput): void {
 type ConditionalSceneMutationInput =
   | CreateSceneCheckpointInput
   | CreateNamedSceneVariantInput
+  | CreateNamedVariantFromDocumentInput
   | RestoreSceneRevisionInput;
 
 function conditionalMutationConflict(
@@ -429,6 +435,67 @@ export function createMemorySceneDocumentRepository(): SceneDocumentRepository {
           revision: checkpoint.revision,
           variant: createSceneVariant(variant),
           checkpointCreated: checkpoint.created
+        };
+      });
+    },
+    createNamedVariantFromDocument(
+      input: CreateNamedVariantFromDocumentInput
+    ): Promise<CreateNamedVariantFromDocumentOutcome> {
+      return serializeWrite(() => {
+        const conflict = conditionalMutationConflict(state, input);
+        if (conflict !== undefined) return { ok: false, reason: conflict };
+        const duplicateName = [...state.variants.values()].some(
+          (variant) =>
+            variant.sceneId === input.sceneId && variant.name === input.name
+        );
+        if (duplicateName) {
+          return { ok: false, reason: "variant-name-conflict" };
+        }
+        if (state.variants.has(input.variantId)) {
+          throw new DomainValidationError(
+            "DUPLICATE_ID",
+            "The scene variant ID already exists."
+          );
+        }
+        if (state.revisions.has(input.revisionId)) {
+          throw new DomainValidationError(
+            "DUPLICATE_ID",
+            "The scene revision ID already exists."
+          );
+        }
+        const current = state.heads.get(input.sceneId);
+        if (current === undefined) {
+          return { ok: false, reason: "working-version-conflict" };
+        }
+        const revision = createSceneRevision({
+          id: input.revisionId,
+          sceneId: input.sceneId,
+          projectId: input.projectId,
+          parentRevisionId: current.checkpointRevisionId,
+          document: input.document,
+          contentHash: input.contentHash,
+          actorAccountId: input.actorAccountId,
+          origin: input.origin,
+          reason: input.reason,
+          createdAt: input.now
+        });
+        const variant = createSceneVariant({
+          id: input.variantId,
+          projectId: input.projectId,
+          sceneId: input.sceneId,
+          revisionId: revision.id,
+          creatorAccountId: input.actorAccountId,
+          name: input.name,
+          createdAt: input.now,
+          updatedAt: input.now
+        });
+        state.revisions.set(revision.id, revision);
+        state.variants.set(variant.id, variant);
+        return {
+          ok: true,
+          head: createSceneDocumentHead(current),
+          revision: createSceneRevision(revision),
+          variant: createSceneVariant(variant)
         };
       });
     },

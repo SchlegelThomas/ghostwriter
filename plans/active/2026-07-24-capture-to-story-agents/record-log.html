@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Capture to Story — record log</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter record log</p>
+      <h1>Capture to Story</h1>
+      <p class="meta"><a href="plan.html">Return to delivery plan</a> · <strong>Branch:</strong> <code>feat/capture-to-story-agents</code></p>
+    </header>
+
+    <article>
+      <h2>2026-07-24 — Planning effort opened from current main</h2>
+      <p>The founder directed the next large epic toward the actual writing experience and Ghostwriter's first real agents. The clean harness branch was left intact, local <code>main</code> was fast-forwarded from <code>ef8b0ed</code> to <code>7b60eb4</code>, and <code>feat/capture-to-story-agents</code> was created. No product implementation or local commit was made.</p>
+      <p>The new feature-delivery harness governs the effort: parent-owned analysis and acceptance, observable vertical checkpoints, read-only research fan-out, bounded Composer/Grok development delegation after plan acceptance, direct browser walkthroughs, and deferred Playwright until founder verification.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-24 — Shipped Write and agent baseline audited</h2>
+      <p>Parallel read-only audits covered the current Write implementation, core/storage/API/client/MCP bindings, Mockups 4.0, ADR 0009, and the historical agentic blueprint. The shipped product has Writing Studio chrome, scene sketches, character sheets, backdrop companions, browser dictation, deterministic four-role proposals, scene leases/history/recovery, and Canvas/Draft shared IDs.</p>
+      <p>The current agents are workflow placeholders rather than real project-aware agents. The backend trusts client-assembled assist context, proposals are ephemeral, prose Apply inserts at the caret instead of comparing against an immutable base, <code>packages/ai</code> does not exist, provider streaming/cancellation/usage are absent, and MCP assist remains an explicit exception. The permanent authority principle remains accepted: models propose; humans apply.</p>
+      <p>The original narrow idea of polishing Focus, <kbd>⌘M</kbd>, ink, and companion layouts did not match the founder's actual concern and was dropped as the epic thesis.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-24 — Founder reframed the problem as capture and coherence</h2>
+      <p>The founder said the current experience is too disconnected from Canvas, requires too much hierarchy before reaching prose, and does not yet feel like a tool that helps someone write well without knowing craft best practices. The desired experience is to write wherever inspiration happens and integrate that work into the story coherently.</p>
+      <p>A second journey audit confirmed the friction: an empty project has one book and no scenes; Tiptap requires a canonical scene, selection, workspace load, and lease; Canvas scene creation asks for manuscript placement before prose; Split is wide-only; and no shipped Capture/Inbox entry exists. Unassigned scenes provide a safe low-ceremony manuscript path, but they do not satisfy the selected “quick capture first, integrate later” workflow.</p>
+      <p>The plan therefore introduces a deliberately noncanonical Capture artifact and durable Inbox. It preserves one canonical scene model by promoting through revision-bound, attributable transactions rather than making Capture a second manuscript.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-24 — Founder decisions recorded</h2>
+      <ul>
+        <li><strong>Entry:</strong> quick capture of snippets and ideas from anywhere, followed by promotion or attachment.</li>
+        <li><strong>Integration timing:</strong> a quiet suggestion after acknowledged pause, not a pre-writing form and not automatic placement.</li>
+        <li><strong>Proposal home:</strong> a minimal durable Project Inbox rather than session-only Assist state.</li>
+        <li><strong>Provider:</strong> OpenAI first behind a provider-neutral interface.</li>
+        <li><strong>Credentials:</strong> writer-owned API keys persisted encrypted server-side per account.</li>
+        <li><strong>Capture formats:</strong> scene-compatible rich prose and dictation plus images, recorded audio, and files.</li>
+        <li><strong>MCP:</strong> project-scoped read and propose tools; no external canonical apply.</li>
+      </ul>
+      <p>The plan adds a safety interpretation to the quiet suggestion: the UI may offer help after acknowledged idle, but it does not send content or spend provider budget until the writer explicitly begins the workflow and reviews the egress posture.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-24 — Epic decomposed into observable checkpoints</h2>
+      <ol>
+        <li>Experience contract, threat model, and ADRs.</li>
+        <li>Capture prose and dictation from anywhere.</li>
+        <li>Inbox and deterministic story/Canvas handoff.</li>
+        <li>Mixed-media capture with private object storage.</li>
+        <li>Encrypted BYOK provider and receipt-backed agent runs.</li>
+        <li>Scene Partner capture integration and immutable-base variants.</li>
+        <li>Sketch Partner, Character Coach, and Worldkeeper typed deltas.</li>
+        <li>Scoped MCP proposal parity.</li>
+      </ol>
+      <p>Text capture and deterministic handoff precede media and model work so the writer outcome can be validated without cloud storage or an LLM. Mixed media remains in the accepted epic but has a separate cost/security gate. No horizontal “agent platform” layer counts as a completed checkpoint.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-24 — Mockups 5.0 added as the living experience contract</h2>
+      <p>The founder identified a missing advantage of the HTML planning system: the proposed epic had detailed prose but no interactive mockup. Added <a href="../../designs/Ghostwriter%20Mockups%205.0.html">Ghostwriter Mockups 5.0 — Capture to Story</a> beside the other living designs rather than burying it in the delivery-plan folder.</p>
+      <p>The self-contained design demonstrates Capture over Project/Draft/Canvas, rich prose/dictation/attachment states, durable Inbox, deterministic no-AI handoff, quiet integration invitations, encrypted OpenAI BYOK posture, pre-egress context receipts, Scene Partner immutable-base variants, typed craft-agent deltas, propose-only MCP, narrow routes, and refusal/accessibility states. It is explicitly proposed and does not imply implementation.</p>
+      <p>A Composer-fast design slice created only the new living artifact. Parent review corrected cancellation copy so it does not falsely promise zero provider usage after a run has begun. The parent still owns founder browser review, ADR acceptance, plan truth, and end-to-end checkpoint acceptance.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-24 — Progressive AI setup and custom playbooks folded into scope</h2>
+      <p>The founder directed that profile/AI setup and user-provided skills or instructions belong in the epic without becoming a separate checkpoint. Capture remains the first action. Provider setup appears only at first agent use; optional collaboration preferences, project instructions, and declarative playbooks follow progressively and never block writing.</p>
+      <p>Current official provider documentation does not expose a general consumer OAuth delegation flow that a third-party Ghostwriter web app can use for ordinary model API billing. OpenAI's ChatGPT/Codex browser OAuth and Anthropic's Claude/CLI browser login are first-party product flows; OpenAI Apps OAuth authenticates ChatGPT to an external service, and Anthropic workload identity federation targets managed workloads. The plan keeps encrypted OpenAI BYOK and forbids reuse of undocumented first-party tokens while preserving a provider adapter for a future official delegated flow.</p>
+      <p>Publishing identity is separated from AI collaboration data. Legal/contact, mailing, biography, and representation fields do not enter model context by default. Custom playbooks may name a trigger, allowed context, output type, and guidance, but cannot add tools, egress, permissions, executable code, or canonical apply authority.</p>
+      <p>The verification strategy does not rely on filtering “nefarious” wording. Server-side policy fixes instruction precedence and capability ceilings. Table/property tests and adversarial fuzz fixtures will prove that arbitrary preference, playbook, manuscript, upload, or MCP strings cannot expand tools, resources, egress, project scope, or canonical effects; deterministic receipt snapshots prove effective instruction versions/hashes and exclusion of secrets and publishing data.</p>
+      <p>Mockups 5.0 now shows Capture-before-setup, just-in-time BYOK consent, optional collaboration preferences, a custom playbook, effective-instruction preview, and the non-overridable server-policy boundary.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-24 — Founder accepted the plan and authorized implementation</h2>
+      <p>The founder accepted the Capture to Story plan and directed the feature-delivery harness to continue until the complete epic is built, with founder feedback after the implementation pass. Work begins with the first independently releasable outcome: durable text/dictation Capture from every project surface. Media, live-model, and MCP work remain later checkpoints so each risk boundary can be verified before the next.</p>
+      <p>No push, PR, deployment, or local commit was authorized. Product implementation remains constrained by accepted ADRs, server-authoritative save truth, one canonical scene model, human apply, and the checkpoint browser/verification gates.</p>
+    </article>
+
+    <article>
+      <h2>Feature checkpoint 0 — working notes</h2>
+      <h3>Outcome</h3>
+      <ul>
+        <li><strong>Writer-visible result:</strong> an accepted wide/narrow experience contract for Capture → Inbox → context receipt → proposal → canonical scene/Canvas.</li>
+        <li><strong>Entry point:</strong> persistent project rail/command path and narrow Capture destination.</li>
+        <li><strong>Successful end state:</strong> founder can trace capture, deterministic promotion, agent review, stale refusal, and return to Draft/Canvas without duplicate truth.</li>
+        <li><strong>Refusal/error states:</strong> unauthenticated, unsaved/conflicted capture, missing/deleted provider key, disallowed media, failed upload, stale proposal, ambiguous target, revoked grant, and provider outage.</li>
+        <li><strong>Non-goals:</strong> product implementation, generic chat, automatic model calls, automatic placement, open-web research, transcription/OCR, external apply, and full import/export.</li>
+      </ul>
+
+      <h3>Parent frame</h3>
+      <ul>
+        <li>Parent owns product thesis, source-of-truth reconciliation, ADR boundary, checkpoint breakdown, and final acceptance.</li>
+        <li>Read-only audits were fanned out for Write UX gaps, agent architecture, historical blueprint reconciliation, and write-anywhere journey mapping.</li>
+        <li>Future design or implementation delegates must return outcome, files, evidence, parent-owned items, and stop reason.</li>
+        <li>Shared capture/proposal state machines, migrations, and version-domain code remain serial.</li>
+      </ul>
+
+      <h3>Domain map</h3>
+      <ul>
+        <li><strong>Canonical manuscript:</strong> existing <code>SceneId</code>, scene working version, immutable revisions/variants, lease, and recovery remain authoritative.</li>
+        <li><strong>Capture:</strong> proposed project-owned noncanonical document with dedicated version/revisions and source modality.</li>
+        <li><strong>Inbox:</strong> projection over captures, runs, and proposals rather than a duplicate store.</li>
+        <li><strong>Promotion:</strong> exact capture revision + proposal hash + project/scene/Canvas preconditions; atomic all-or-nothing apply.</li>
+        <li><strong>Archive/delete:</strong> capture archive/restore required; attachment deletion and account-exit policy remain checkpoint-0 decisions.</li>
+        <li><strong>History/provenance:</strong> initiator, provider/model, workflow version, context receipt, source/target revisions, writer decision, and undo path.</li>
+        <li><strong>Guidance:</strong> account collaboration preferences, project instructions, and declarative playbooks are versioned inputs, not authorization or executable behavior; publishing profile data remains outside AI context by default.</li>
+      </ul>
+
+      <h3>Design map</h3>
+      <ul>
+        <li>Mockups 2.0 supplies the one-story-model, Capture/Inbox, unassigned, write-first/storyboard-first, and narrow direction.</li>
+        <li>Mockups 3.0 remains authoritative that Canvas does not silently choose manuscript placement or reading order.</li>
+        <li>Mockups 4.0 supplies the four bounded roles, quiet draft posture, one scene lease, and propose-not-apply invariant.</li>
+        <li>Mockups 5.0 owns the proposed Capture → Inbox → integration journey and makes its wide, narrow, authority, egress, agent-review, and refusal states interactive.</li>
+        <li>The shipped product and accepted ADRs outrank proposal-only design language where they conflict.</li>
+        <li>Checkpoint 0 must define focus return, no-caret-steal readiness, keyboard/screen-reader path, narrow route, reduced motion, save acknowledgement, and stale/recovery behavior.</li>
+      </ul>
+
+      <h3>Binding map</h3>
+      <ul>
+        <li><strong>Core:</strong> new capture, context, run, proposal, credential-policy, instruction-compiler/playbook-policy, and apply services; reuse scene/project/Canvas commands.</li>
+        <li><strong>Storage:</strong> memory and Postgres capture/proposal/credential metadata; private object storage for binary attachments.</li>
+        <li><strong>Backend:</strong> authenticated capture/Inbox/upload/provider/run/proposal routes with stable errors and server-assembled context.</li>
+        <li><strong>Client/UI:</strong> Capture composer, recovery, Inbox, receipt/review/apply, Draft/Canvas handoff, and responsive navigation.</li>
+        <li><strong>Capabilities/MCP:</strong> capture/context read and proposal create under server grants; canonical apply remains a first-party exception.</li>
+      </ul>
+
+      <h3>Cumulative coherence gate</h3>
+      <ul class="checklist">
+        <li><input type="checkbox" disabled> No duplicate canonical state</li>
+        <li><input type="checkbox" disabled> Tree/manuscript order and Canvas relationships agree</li>
+        <li><input type="checkbox" disabled> Draft, history, Canvas, Split, Capture, and Inbox share stable IDs</li>
+        <li><input type="checkbox" disabled> All success UI follows durable acknowledgement</li>
+        <li><input type="checkbox" disabled> Conflicts apply nothing and expose review/recovery</li>
+        <li><input type="checkbox" disabled> Recovery remains bounded and noncanonical</li>
+        <li><input type="checkbox" disabled> Memory/Postgres/object-store and migration paths agree</li>
+        <li><input type="checkbox" disabled> Authorization, non-disclosure, credential custody, and egress remain intact</li>
+        <li><input type="checkbox" disabled> Keyboard, focus, narrow, and reduced motion work</li>
+        <li><input type="checkbox" disabled> Capability bindings and MCP exceptions are truthful</li>
+        <li><input type="checkbox" disabled> Prior Draft/Canvas/history workflows pass direct browser walkthroughs</li>
+        <li><input type="checkbox" disabled> Docs, handoff, and delegated parent-owned items are current</li>
+        <li><input type="checkbox" disabled> Parent completed end-to-end acceptance</li>
+      </ul>
+    </article>
+
+    <article>
+      <h2>2026-07-24 — Checkpoint 0 decisions and ADRs accepted</h2>
+      <ul>
+        <li><strong>Inbox:</strong> dedicated center workspace on wide web and a first-class narrow route.</li>
+        <li><strong>Capture history:</strong> current editing, bounded recovery, and immutable integration provenance; a full visible revision timeline remains later.</li>
+        <li><strong>Media:</strong> private Cloudflare R2 with JPEG/PNG/WebP ≤ 8 MiB, WebM/MP4/MP3 ≤ 15 MiB, PDF/text ≤ 5 MiB, 10 attachments per Capture, and 200 MiB active attachments per project.</li>
+        <li><strong>Credential incident:</strong> backend custody is accepted; suspected root-key compromise disables provider use, deletes affected envelopes, requires writer key re-entry, and triggers notification.</li>
+        <li><strong>Exit/purge:</strong> attachments remain after account exit until a separate explicit purge flow; the product must not claim they were erased.</li>
+      </ul>
+      <p>Accepted <a href="../../../docs/adr/0010-capture-inbox-media-and-promotion.md">ADR 0010</a> and <a href="../../../docs/adr/0011-byok-context-proposals-playbooks-and-mcp-grants.md">ADR 0011</a>, including their threat models. Mockups 5.0 and the plan are accepted. Checkpoint 1 product implementation may begin.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-24 — Checkpoint 1 implementation frame locked</h2>
+      <ul>
+        <li>Capture uses its own working version and <code>CAPTURE_VERSION_CONFLICT</code>; it never advances project, scene, or Canvas versions.</li>
+        <li>V1 persists genesis plus integration provenance, not one immutable revision per autosave. Default lists hide archived Captures; an explicit filter includes them.</li>
+        <li>Opening Capture may create an empty acknowledged Capture to keep the composer immediate and recovery identity stable. Untouched empty Captures are omitted from the normal Inbox projection and may be cleaned up later; they never become Scenes.</li>
+        <li>Closing attempts to flush. If acknowledgement fails, the writer may still close with explicit Not saved/recovery truth; no local/server merge occurs.</li>
+        <li>Checkpoint 1 supplies the accepted center-workspace/narrow-route Inbox as a minimal Capture list/open surface. Integration actions remain checkpoint 2.</li>
+        <li>Capture recovery generalizes the existing encrypted document-recovery behavior by entity type and ID. Capture has no editing lease in the owner-only release.</li>
+        <li>The Capture overlay hides background workspace content from assistive technology while open, traps focus, closes on Escape, and restores the invoking focus/selection without unmounting the active Draft.</li>
+      </ul>
+      <p>Development is split serially across core/memory, Postgres/migration, backend API, and client/UI orchestration. One writer owns each shared version domain at a time; the parent reviews every return and owns browser/end-to-end acceptance.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-24 — Checkpoint 1 implemented; browser acceptance deferred</h2>
+      <p>Implemented the first complete Capture slice across core, memory/Postgres storage, migration 0012, backend contracts/routes, client API, encrypted browser recovery, shared browser dictation, standalone composer, accessible modal shell, dedicated Inbox center workspace, narrow Capture/Inbox destinations, Jump targets, save/activity truth, and capability registry exceptions.</p>
+      <ul>
+        <li><strong>Domain:</strong> Capture is noncanonical, owner-authorized, independent from project/scene/Canvas versions, and has no editing lease. Empty untouched genesis rows stay out of Inbox.</li>
+        <li><strong>Persistence:</strong> memory and Postgres repositories share optimistic save/archive behavior; migration-from-empty and 11 PGlite repository cases pass. Capture genesis references its revision; the reverse revision-to-Capture FK remains a known circular-bootstrap tradeoff to revisit with checkpoint 2 integration revisions.</li>
+        <li><strong>API:</strong> create/list/read/save/archive routes enforce trusted origins, 2 MiB bodies, non-disclosing ownership, stable content-free errors, and <code>CAPTURE_VERSION_CONFLICT</code>.</li>
+        <li><strong>Experience:</strong> Capture opens over Project/Draft/Canvas without changing mode or remounting Draft; close flushes best-effort and restores focus after modal dismissal. Inbox owns the center only when selected; narrow web receives full Capture/Inbox destinations.</li>
+        <li><strong>Recovery/save truth:</strong> Capture records use isolated encrypted IndexedDB keys with tab fallback. Closed unresolved Capture problems keep global save state non-idle; harmless transient closing cannot leave the shell stuck on Saving.</li>
+        <li><strong>Accessibility:</strong> modal semantics, initial focus, Escape, deferred return focus, live save/dictation states, keyboard-reachable recovery/conflict choices, and narrow wrapping are implemented.</li>
+      </ul>
+      <p><strong>Evidence:</strong> <code>pnpm verify</code> passed with 41 Vitest files / 351 tests plus 17 routing-hook tests; client and UI focused suites/typechecks passed; production Expo web export completed; IDE diagnostics and <code>git diff --check</code> are clean.</p>
+      <p><strong>Acceptance gap:</strong> this session has no interactive browser-control tool, and Playwright remains forbidden before founder verification. The real-browser wide/narrow walkthrough is therefore explicitly pending the founder's requested post-build feedback pass. Checkpoint 1 is implemented but its plan checkbox remains open; subsequent implementation may proceed without falsely claiming visual acceptance.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-24 — Checkpoint 2 deterministic handoff frame locked</h2>
+      <ul>
+        <li>Any acknowledged nonempty draft/ready Capture may promote; untouched empty, archived, and integrated Captures refuse.</li>
+        <li>The writer edits a required scene title defaulted to “Untitled scene”; no model derives it.</li>
+        <li>Placement matches the existing safe Canvas handoff: explicit active book plus chapter append or Unassigned. “After scene” ordering remains later.</li>
+        <li>Optional Canvas card is off by default. When selected, the same transaction checks the board version and uses bounded default geometry; Canvas never changes manuscript order.</li>
+        <li>Apply requires expected Capture working version and content hash, project version, and optional Canvas version. Integration revision parent is the Capture genesis revision; scene genesis uses an explicit <code>capture-promotion</code> reason.</li>
+        <li>Second promotion is a stable integrated conflict rather than idempotently creating or returning another scene. Empty Capture hard-refuses.</li>
+        <li>Wide Inbox uses list/detail; narrow uses list → detail with Back. Success stays on an integration receipt with explicit Open Draft / Open Split actions rather than navigating automatically.</li>
+        <li>The source Capture remains read-only and shows integration revision, target Scene ID, actor/time, and optional Canvas result. MCP remains an explicit exception until checkpoint 7.</li>
+      </ul>
+    </article>
+
+    <article>
+      <h2>2026-07-24 — Checkpoint 2 implemented; browser acceptance deferred</h2>
+      <p>Implemented deterministic Capture → Scene integration across core/memory, Postgres migration 0013 and a four-domain transaction, backend/client API, shared placement helpers, Inbox list/detail handoff, exact authority preview, optional Canvas placement, durable source receipt, and explicit Draft/Split navigation.</p>
+      <ul>
+        <li><strong>Atomicity:</strong> Capture version/hash, project version, and optional existing Canvas version are rechecked. Scene metadata, lossless scene genesis, Capture integration revision/head, and optional card commit together or roll back together.</li>
+        <li><strong>Provenance:</strong> scene genesis records <code>capture-promotion</code>; the Capture records integration revision, target Scene ID, actor, and time and becomes read-only. Stable ProseMirror block IDs and content hash are preserved.</li>
+        <li><strong>Persistence:</strong> migration 0013 adds integration FKs and resolves the genesis revision↔Capture cycle with deferrable constraints. Public Postgres <code>integrate()</code> is atomic even outside the promotion UoW.</li>
+        <li><strong>Experience:</strong> Inbox supplies list/detail on wide and list→detail on narrow, required writer title, shared chapter/Unassigned choices, Canvas off by default, no-AI preview, one Apply, and a retained receipt with View source/Open Draft/Open Split (Split hidden narrow).</li>
+        <li><strong>Concurrency:</strong> controls that could change the active Capture are disabled during Apply; stale Capture/hash/project/Canvas, missing board, empty/archive/integrated, invalid placement, double promotion, and injected persistence failures apply nothing.</li>
+        <li><strong>Accessibility/save truth:</strong> no nested interactive row controls, focused title on detail change, live Applying/refusal/receipt status, content-free errors, and server acknowledgement before any integrated UI.</li>
+      </ul>
+      <p><strong>Evidence:</strong> <code>pnpm verify</code> passed with 45 Vitest files / 406 tests plus 17 routing-hook tests after one parent-caught unused-import lint fix; production Expo web export completed; client/UI/backend/core/storage focused suites and typechecks pass; diagnostics and diff checks are clean.</p>
+      <p><strong>Acceptance gap:</strong> real-browser wide/narrow walkthrough remains grouped into the founder's requested post-build feedback pass. No Playwright was authored or run.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-24 — Checkpoint 3 mixed-media frame locked</h2>
+      <ul>
+        <li>Attachment bytes use direct short-lived browser PUT to private R2; Fly authorizes init/finalize/download/delete and never proxies ordinary upload bytes.</li>
+        <li>Upload URLs expire after 15 minutes; download URLs after 5 minutes; pending metadata expires after 24 hours. R2 CORS allows exact trusted production/preview/local origins, PUT/GET/HEAD, signed Content-Type, and exposed ETag.</li>
+        <li>Pending and ready attachments count toward the 10-per-Capture and 200 MiB-per-project quotas. Reservation is transactional so concurrent inits cannot exceed either limit.</li>
+        <li>Finalize re-reads the bounded object through the backend adapter, computes SHA-256, and detects the allowlisted magic/text type before marking ready. It does not trust client MIME, client checksum, ETag, or metadata alone.</li>
+        <li>Images/audio/PDF/plain text retain the accepted 8/15/5 MiB limits. Unsupported, mismatched, oversized, archive, executable, and octet-stream content fails closed and the object is removed or queued for cleanup.</li>
+        <li>Attachment add/finalize requires an editable draft/ready Capture. Authenticated list/download and explicit delete remain available for integrated/archived source review. Delete removes bytes and leaves a metadata tombstone; account exit still retains until explicit purge.</li>
+        <li>Attachments remain parallel Capture metadata. Promotion copies prose only; attachments do not become ProseMirror nodes, scene image references, model context, OCR, or transcription.</li>
+        <li>Image/file picker and recorded audio use the same upload pipeline. Browser dictation remains text at the caret and is not an audio attachment.</li>
+      </ul>
+    </article>
+
+    <article>
+      <h2>2026-07-24 — Checkpoint 3 implemented; live R2/browser acceptance deferred</h2>
+      <p>Implemented mixed-media Capture across core policy/services, memory/Postgres metadata and migration 0014, atomic quotas, provider-neutral object storage, pinned <code>aws4fetch</code> R2 signing, backend control routes, direct browser upload, server-side byte inspection, client API, file/image picker, recorded audio, progress/refusal states, download, delete tombstones, and composer save/activity integration.</p>
+      <ul>
+        <li><strong>Storage/security:</strong> Postgres contains metadata only. R2 keys are server-generated; signed PUT binds Content-Type; finalize performs a bounded signed GET, computes SHA-256, detects magic/text type, and fails closed on mismatch. Filenames reject paths/control characters; text detection rejects binary controls and executable/archive signatures.</li>
+        <li><strong>Limits/concurrency:</strong> project-row locking prevents concurrent count/quota overrun. Pending and ready bytes count toward accepted limits; expired pending uploads clean idempotently after 24 hours.</li>
+        <li><strong>Authority:</strong> add/finalize is draft/ready only. Integrated/archived Capture remains available for list/download/explicit delete. Deleted metadata stays as a provenance tombstone; attachments never enter scene prose, Canvas, OCR/transcription, or model context.</li>
+        <li><strong>Experience:</strong> one-at-a-time direct upload shows monotonic progress and durable ready/refused/deleted states. Audio recording cleans tracks on stop/cancel/error and feeds the same upload path. Attachment rows scroll inside the bounded Capture modal.</li>
+        <li><strong>Resilience:</strong> missing R2 config selects an unavailable adapter so prose Capture continues; media returns stable content-free 503. PUT failure leaves pending metadata for cleanup and never sends bytes through the JSON API.</li>
+      </ul>
+      <p><strong>Evidence:</strong> after parent fixes for unused-test lint and control-character regex policy, <code>pnpm verify</code> passed with 55 Vitest files / 544 tests plus 17 routing-hook tests; production web export completed; adapter/config/backend/client/core/storage focused suites and typechecks pass; diagnostics and diff checks are clean.</p>
+      <p><strong>Acceptance gap:</strong> no Cloudflare bucket, CORS policy, R2 credentials, Fly secrets, deployment, or real-media browser walkthrough was created because external provisioning/deployment was not authorized. These remain in the final founder/browser and release gate; no Playwright was run.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-24 — Checkpoint 4 BYOK/agent-foundation frame locked</h2>
+      <ul>
+        <li>The first durable real-agent workflow is Scene Partner reflection: one selected Capture → typed noncanonical summary, questions, and possible story jobs. It proves receipt/run/proposal/Inbox value without prose variants or canonical apply; those remain checkpoint 5.</li>
+        <li>OpenAI uses native fetch to the Responses API with strict <code>text.format</code> JSON Schema. Default model is <code>gpt-5.6-terra</code>; accepted selectable aliases are Luna/Terra/Sol. Initial limits are 24,000 Capture characters, 1,500 output tokens, no tools/web, and a 60-second wall clock.</li>
+        <li>Provider validation uses a minimal no-project-content request or account capability endpoint; required CI uses a deterministic fake. No live provider call is required for verification.</li>
+        <li>Project instructions are one editable optimistic-version document with hash-in-receipt; user-visible history remains later. Initial playbook output schema registry contains only <code>capture-reflection-v1</code>.</li>
+        <li>Context receipts hard-exclude publishing/contact fields, attachment bytes/metadata, credentials, Canvas, and unrelated project resources. Client submits IDs/assignment choices, never prose.</li>
+        <li>Runs/receipts/proposals retain with the project until explicit purge. Account-exit auto-purge remains unavailable and product copy must stay honest.</li>
+        <li>Inbox becomes one server read projection over Captures, runs, and proposals. The old deterministic Writing Studio endpoint coexists until Scene/craft workflows migrate in checkpoints 5–6.</li>
+        <li>KEK incident notification is an in-app/provider-disabled status in this epic; external email notification requires a later communications plan. No real key is stored until Fly receives a root KEK through an authorized release step.</li>
+      </ul>
+    </article>
+
+    <article>
+      <h2>2026-07-24 — Checkpoints 4–7 implemented; verify green</h2>
+      <p>Completed the remaining agent vertical: BYOK credential/guidance/playbook routes, capture-reflection orchestration with fake-provider CI, Inbox Scene Partner preview/run/reject/apply (new scene or named variant without mutating the live draft), Sketch/Coach/Worldkeeper typed craft apply, and scoped MCP grants with propose-only Capture-reflection tools. Parent reviewed delegated returns, fixed lint blockers, and updated product/handoff truth.</p>
+      <ul>
+        <li><strong>Evidence:</strong> <code>pnpm verify</code> green — 77 Vitest files / 712 tests plus 17 routing-hook tests.</li>
+        <li><strong>Acceptance gap:</strong> real-browser founder walkthrough, live R2/KEK provisioning, and post-gate Playwright remain open by design.</li>
+        <li><strong>Non-goals preserved:</strong> no silent canon writes, no external apply, no automatic provider spend from quiet invitations alone.</li>
+      </ul>
+    </article>
+
+    <article>
+      <h2>Verification evidence</h2>
+      <ul>
+        <li><strong>Automated checks:</strong> <code>pnpm verify</code> passed (712 tests + 17 hook tests); typecheck and eslint clean.</li>
+        <li><strong>Browser walkthrough:</strong> pending founder feedback pass after this build.</li>
+        <li><strong>Playwright:</strong> deferred until the founder verifies the complete implemented outcome.</li>
+        <li><strong>Live ops:</strong> R2 bucket/CORS/credentials and provider KEK Fly secrets not provisioned in this session.</li>
+      </ul>
+    </article>
+
+    <article>
+      <h2>2026-07-25 — Scene Partner becomes conversational (+ images)</h2>
+      <p>Founder rejected Scene Partner interstitial clicks (Help find its place → Start → static apply). Accepted direction:</p>
+      <ul>
+        <li>Job-bound chat with visible thinking; auto-start on Scene Partner entry.</li>
+        <li>Scan manuscript scenes for matches; else propose new scene; interview when unclear.</li>
+        <li>Iterate prose with the writer; optionally propose scene images.</li>
+        <li>Apply remains human-gated. Generated images for Scene Partner are now in epic scope (was out of scope).</li>
+      </ul>
+      <p><strong>Checkpoint 8</strong> opened for this revision. Generic always-on chat remains out of scope.</p>
+      <p><strong>Slice 1 landed:</strong> Scene Partner opens into chat with visible thinking and auto-start (no Help/Start gates). Hermetic fake session covers interview / match / new-scene / prose / apply offer / placeholder image proposal. Human-gated apply via existing promote/reflection helpers. Live OpenAI chat + real image API still open.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-25 — Dreams &amp; Ideas UX pass (founder feedback)</h2>
+      <p>After hermetic local validation, founder found Inbox review layout broken (nested buttons, clipped overflow, Characters framing). Fixes landed, then founder directed a creative UX cleanup before feature polish:</p>
+      <ul>
+        <li>Writer-facing rename <strong>Inbox → Dreams &amp; Ideas</strong> (narrow rail label <strong>Dreams</strong>).</li>
+        <li>Breadcrumb stack navigation (list → idea → partner/integrate) using the full center workspace; wide split removed.</li>
+        <li>Idea step prompt: <em>What do you want to do with this idea?</em> → Scene Partner, Craft Partner, Worldkeeper, plus Add to manuscript.</li>
+        <li>Stripped mockup instructional copy from partner and handoff surfaces; APIs unchanged.</li>
+      </ul>
+      <p><strong>Next:</strong> founder reviews the new flow in the browser; then iterate partner feature UX.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-25 — Live BYOK Scene Partner turns + images</h2>
+      <p>Scene Partner chat now calls live OpenAI when the writer’s BYOK key is configured in Settings:</p>
+      <ul>
+        <li><code>scene-partner-turn-v1</code> structured turns (thinking steps, assistant message, phase, optional prose/actions/image prompt).</li>
+        <li><code>POST …/scene-partner/turns</code> and <code>POST …/scene-partner/images</code>; chat history is not persisted; apply stays human-gated.</li>
+        <li>Hermetic E2E defaults to fake completions + placeholder images. Local live: <code>GHOSTWRITER_E2E=1 GHOSTWRITER_E2E_LIVE_OPENAI=1</code> plus Settings key. Playwright leaves <code>GHOSTWRITER_E2E_LIVE_OPENAI</code> unset.</li>
+      </ul>
+    </article>
+
+    <article>
+      <h2>2026-07-25 — Plans rename + docs/PR handoff</h2>
+      <p>Writer-facing <strong>Dreams &amp; Ideas</strong> rebranded to <strong>Plans</strong> (center workspace). Shell / Title Page / Agent harness follow-ons landed on this branch. Docs sweep updated PRODUCT, ARCHITECTURE, API, OPERATIONS, README, and WHERE-I-LEFT-OFF. Founder verification and Playwright remain open; Cast studio is a separate proposed plan.</p>
+    </article>
+  </main>
+</body>
+</html>

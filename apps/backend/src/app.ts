@@ -3,16 +3,30 @@ import {
   BookNotFoundError,
   BookReaderTooLargeError,
   bookId,
+  CaptureArchivedMutationError,
+  CaptureAttachmentNotEditableError,
+  CaptureAttachmentNotFoundError,
+  CaptureAttachmentPolicyError,
+  CaptureAttachmentStorageError,
+  CaptureContentHashMismatchError,
+  CaptureIntegratedMutationError,
+  CaptureNotFoundError,
+  CapturePromotionNotEligibleError,
+  CaptureVersionConflictError,
+  captureId,
+  attachmentId,
   CanvasCommandError,
   CanvasNotFoundError,
   CanvasRevisionNotFoundError,
   CanvasVersionConflictError,
   DomainValidationError,
+  InvalidCaptureDocumentError,
   InvalidSceneDocumentError,
   InvalidSceneVariantNameError,
   ProfileConflictError,
   ProjectAccessDeniedError,
   ProjectCommandError,
+  ProjectArchivedMutationError,
   ProjectVersionConflictError,
   projectId,
   SceneLeaseConflictError,
@@ -22,6 +36,10 @@ import {
   sceneId,
   SceneVariantNameConflictError,
   SceneWorkingVersionConflictError,
+  type CaptureAttachmentServices,
+  type CaptureObjectStoragePort,
+  type CapturePromotionServices,
+  type CaptureServices,
   type BookReaderProjection,
   type BookReaderServices,
   type CanvasRevisionMetadata,
@@ -32,6 +50,8 @@ import {
   type IdentityServices,
   type WritingAssistRole,
   storyKnowledgeId,
+  type CaptureDocumentHead,
+  type CaptureSummary,
   type SceneDocumentHead,
   type SceneRevisionMetadata,
   type SceneVariant,
@@ -42,6 +62,8 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import {
   compareSceneRevisionsRequestSchema,
+  CAPTURE_DOCUMENT_REQUEST_MAX_BYTES,
+  createCaptureRequestSchema,
   createSceneFromCanvasRequestSchema,
   createProjectRequestSchema,
   createSceneCheckpointRequestSchema,
@@ -52,42 +74,71 @@ import {
   restoreCanvasRequestSchema,
   saveCanvasPreferenceRequestSchema,
   parseJsonRequest,
+  parseOptionalJsonRequest,
+  initCaptureAttachmentRequestSchema,
+  finalizeCaptureAttachmentRequestSchema,
+  promoteCaptureRequestSchema,
+  saveCaptureDocumentRequestSchema,
   saveSceneDocumentRequestSchema,
+  setCaptureArchivedRequestSchema,
   SCENE_DOCUMENT_REQUEST_MAX_BYTES,
   toCanvasCommand,
   toCreateSceneFromCanvasInput,
+  toPromoteCaptureToSceneInput,
   toProjectCommand,
   updateProfileRequestSchema,
   writingAssistRequestSchema
 } from "./api-contract.js";
 import type { AuthGateway, AuthenticatedSession } from "./auth.js";
+import type { AgentProviderRuntime } from "./agent-provider-runtime.js";
+import {
+  captureAttachmentDownloadResponse,
+  captureAttachmentErrorStatusAndBody,
+  captureAttachmentSummaryResponse,
+  captureAttachmentUploadResponse
+} from "./capture-attachment-api.js";
 import {
   ElevenLabsVoicePort,
   toReaderVoicePack,
   type VoiceSynthesisPort
 } from "./voice.js";
 import { z } from "zod";
-import { GHOSTWRITER_CAPABILITIES } from "@ghostwriter/core";
+import { registerProviderAgentRoutes } from "./provider-agent-routes.js";
+import { registerAgentRunRoutes } from "./agent-run-routes.js";
+import {
+  registerScenePartnerRoutes,
+  type ScenePartnerImageGenerator
+} from "./scene-partner-routes.js";
+import { registerBookCoverImageRoutes } from "./book-cover-image-routes.js";
+import { registerMcpGrantRoutes } from "./mcp-grant-routes.js";
+import { registerWorkspaceChatRoutes } from "./workspace-chat-routes.js";
+import {
+  mapAgentGuidanceRouteError,
+  providerAgentErrorStatusAndBody
+} from "./provider-agent-api.js";
 
 export type BackendDependencies = Readonly<{
   services: GhostwriterServices;
   writing: SceneWritingServices;
+  captures: CaptureServices;
+  captureAttachments: CaptureAttachmentServices;
+  capturePromotions: CapturePromotionServices;
   canvas: CanvasServices;
   reader: BookReaderServices;
   identity: IdentityServices;
   auth: AuthGateway;
   allowedOrigins?: readonly string[];
   voice?: VoiceSynthesisPort;
+  agentProvider: AgentProviderRuntime;
+  /** Same port used by capture attachments; required for cover apply/download. */
+  objectStorage: CaptureObjectStoragePort;
+  /** Optional Scene Partner / cover image generator (hermetic/tests inject fakes). */
+  scenePartnerGenerateImage?: ScenePartnerImageGenerator;
 }>;
 
 const readerSpeakRequestSchema = z.object({
   text: z.string().trim().min(1).max(2_400),
   voice: z.enum(["default", "narrative", "noir", "soft"]).optional()
-});
-
-const workspaceChatRequestSchema = z.object({
-  message: z.string().trim().min(1).max(4_000),
-  projectId: z.string().trim().min(1).max(200).optional()
 });
 
 type BackendEnvironment = {
@@ -120,6 +171,58 @@ function sceneHeadMetadataResponse(head: SceneDocumentHead) {
     updatedByAccountId: head.updatedByAccountId,
     createdAt: head.createdAt,
     updatedAt: head.updatedAt
+  };
+}
+
+function captureHeadResponse(head: CaptureDocumentHead) {
+  return {
+    captureId: head.captureId,
+    projectId: head.projectId,
+    status: head.status,
+    sourceModality: head.sourceModality,
+    workingVersion: head.workingVersion,
+    document: head.document,
+    contentHash: head.contentHash,
+    genesisRevisionId: head.genesisRevisionId,
+    authorAccountId: head.authorAccountId,
+    updatedByAccountId: head.updatedByAccountId,
+    createdAt: head.createdAt,
+    updatedAt: head.updatedAt,
+    ...(head.archivedAt === undefined ? {} : { archivedAt: head.archivedAt }),
+    ...(head.integrationRevisionId === undefined
+      ? {}
+      : { integrationRevisionId: head.integrationRevisionId }),
+    ...(head.integratedSceneId === undefined
+      ? {}
+      : { integratedSceneId: head.integratedSceneId }),
+    ...(head.integratedAt === undefined ? {} : { integratedAt: head.integratedAt }),
+    ...(head.integratedByAccountId === undefined
+      ? {}
+      : { integratedByAccountId: head.integratedByAccountId })
+  };
+}
+
+function captureSummaryResponse(summary: CaptureSummary) {
+  return {
+    captureId: summary.captureId,
+    projectId: summary.projectId,
+    status: summary.status,
+    sourceModality: summary.sourceModality,
+    workingVersion: summary.workingVersion,
+    authorAccountId: summary.authorAccountId,
+    createdAt: summary.createdAt,
+    updatedAt: summary.updatedAt,
+    ...(summary.archivedAt === undefined ? {} : { archivedAt: summary.archivedAt }),
+    ...(summary.integrationRevisionId === undefined
+      ? {}
+      : { integrationRevisionId: summary.integrationRevisionId }),
+    ...(summary.integratedSceneId === undefined
+      ? {}
+      : { integratedSceneId: summary.integratedSceneId }),
+    ...(summary.integratedAt === undefined ? {} : { integratedAt: summary.integratedAt }),
+    ...(summary.integratedByAccountId === undefined
+      ? {}
+      : { integratedByAccountId: summary.integratedByAccountId })
   };
 }
 
@@ -460,95 +563,9 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
     return context.json(speech);
   });
 
-  app.post("/api/workspace/chat", async (context) => {
-    const parsed = await parseJsonRequest(
-      context.req.raw,
-      workspaceChatRequestSchema
-    );
-    if (!parsed.success) {
-      return context.json(
-        {
-          error: "Invalid request.",
-          code: parsed.code,
-          ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
-        },
-        parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
-      );
-    }
-    const normalizedMessage = parsed.data.message.toLocaleLowerCase();
-    const requestedCapability = GHOSTWRITER_CAPABILITIES.find(
-      (capability) =>
-        capability.id.toLocaleLowerCase() === normalizedMessage ||
-        capability.title.toLocaleLowerCase() === normalizedMessage
-    );
-
-    if (requestedCapability?.id === "project.navigator.read") {
-      if (parsed.data.projectId === undefined) {
-        return context.json({
-          reply:
-            "Open a project before running the manuscript hierarchy capability."
-        });
-      }
-      const authSession = context.get("authSession");
-      let navigator;
-      try {
-        navigator = await dependencies.services.getProjectNavigator(
-          accountId(authSession.account.id),
-          projectId(parsed.data.projectId)
-        );
-      } catch (error) {
-        if (
-          error instanceof DomainValidationError ||
-          error instanceof ProjectAccessDeniedError
-        ) {
-          return context.json(
-            { error: "Project not found.", code: "PROJECT_NOT_FOUND" },
-            404
-          );
-        }
-        throw error;
-      }
-      if (navigator === undefined) {
-        return context.json(
-          { error: "Project not found.", code: "PROJECT_NOT_FOUND" },
-          404
-        );
-      }
-      return context.json({
-        reply: [
-          `Ran ${requestedCapability.title}.`,
-          `${navigator.title} · project version ${navigator.version}`,
-          `${navigator.totals.books} books · ${navigator.totals.scenes} scenes · ${navigator.totals.storyKnowledge} story records`,
-          `Books: ${navigator.books.map((book) => book.title).join(", ")}`
-        ].join("\n")
-      });
-    }
-
-    const capabilities = (
-      requestedCapability === undefined
-        ? GHOSTWRITER_CAPABILITIES.filter((capability) =>
-            capability.title
-              .toLocaleLowerCase()
-              .includes(normalizedMessage.slice(0, 24))
-          )
-        : [requestedCapability]
-    ).slice(0, 5);
-    const listed =
-      capabilities.length > 0
-        ? capabilities.map((capability) => `• ${capability.title}`).join("\n")
-        : GHOSTWRITER_CAPABILITIES.slice(0, 8)
-            .map((capability) => `• ${capability.title}`)
-            .join("\n");
-    return context.json({
-      reply: [
-        "Tool-only chat is active. OpenAI completion is not configured yet.",
-        parsed.data.projectId === undefined
-          ? "No project context was supplied."
-          : `Open project: ${parsed.data.projectId}`,
-        "Matching capabilities:",
-        listed
-      ].join("\n")
-    });
+  registerWorkspaceChatRoutes(app, {
+    services: dependencies.services,
+    agentProvider: dependencies.agentProvider
   });
 
   app.post("/api/projects/:projectId/writing-assist", async (context) => {
@@ -1047,6 +1064,341 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
     }
   );
 
+  app.post("/api/projects/:projectId/captures", async (context) => {
+    const parsed = await parseOptionalJsonRequest(
+      context.req.raw,
+      createCaptureRequestSchema
+    );
+    if (!parsed.success) {
+      return context.json(
+        {
+          error: "Invalid capture request.",
+          code: parsed.code,
+          ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
+        },
+        parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
+      );
+    }
+    const authSession = context.get("authSession");
+    const head = await dependencies.captures.createCapture({
+      accountId: accountId(authSession.account.id),
+      projectId: projectId(context.req.param("projectId")),
+      sourceModality: parsed.data.sourceModality
+    });
+    return context.json({ head: captureHeadResponse(head) }, 201);
+  });
+
+  app.get("/api/projects/:projectId/captures", async (context) => {
+    const authSession = context.get("authSession");
+    const includeArchived = context.req.query("includeArchived") === "true";
+    const captures = await dependencies.captures.listCaptures({
+      accountId: accountId(authSession.account.id),
+      projectId: projectId(context.req.param("projectId")),
+      includeArchived
+    });
+    return context.json({
+      captures: captures.map(captureSummaryResponse)
+    });
+  });
+
+  app.get("/api/projects/:projectId/captures/:captureId", async (context) => {
+    const authSession = context.get("authSession");
+    const head = await dependencies.captures.getCapture({
+      accountId: accountId(authSession.account.id),
+      projectId: projectId(context.req.param("projectId")),
+      captureId: captureId(context.req.param("captureId"))
+    });
+    return context.json({ head: captureHeadResponse(head) });
+  });
+
+  app.patch(
+    "/api/projects/:projectId/captures/:captureId/body",
+    async (context) => {
+      const parsed = await parseJsonRequest(
+        context.req.raw,
+        saveCaptureDocumentRequestSchema,
+        CAPTURE_DOCUMENT_REQUEST_MAX_BYTES
+      );
+      if (!parsed.success) {
+        return context.json(
+          {
+            error: "Invalid capture document request.",
+            code: parsed.code,
+            ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
+          },
+          parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
+        );
+      }
+      const authSession = context.get("authSession");
+      const head = await dependencies.captures.saveCaptureDocument({
+        accountId: accountId(authSession.account.id),
+        projectId: projectId(context.req.param("projectId")),
+        captureId: captureId(context.req.param("captureId")),
+        expectedWorkingVersion: parsed.data.expectedWorkingVersion,
+        document: parsed.data.document
+      });
+      return context.json({ head: captureHeadResponse(head) });
+    }
+  );
+
+  app.post(
+    "/api/projects/:projectId/captures/:captureId/archive",
+    async (context) => {
+      const parsed = await parseJsonRequest(
+        context.req.raw,
+        setCaptureArchivedRequestSchema
+      );
+      if (!parsed.success) {
+        return context.json(
+          {
+            error: "Invalid capture archive request.",
+            code: parsed.code,
+            ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
+          },
+          parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
+        );
+      }
+      const authSession = context.get("authSession");
+      const head = await dependencies.captures.setCaptureArchived({
+        accountId: accountId(authSession.account.id),
+        projectId: projectId(context.req.param("projectId")),
+        captureId: captureId(context.req.param("captureId")),
+        archived: parsed.data.archived
+      });
+      return context.json({ head: captureHeadResponse(head) });
+    }
+  );
+
+  app.post(
+    "/api/projects/:projectId/captures/:captureId/promote",
+    async (context) => {
+      const parsed = await parseJsonRequest(
+        context.req.raw,
+        promoteCaptureRequestSchema
+      );
+      if (!parsed.success) {
+        return context.json(
+          {
+            error: "Invalid capture promotion request.",
+            code: parsed.code,
+            ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
+          },
+          parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
+        );
+      }
+      const authSession = context.get("authSession");
+      try {
+        const result = await dependencies.capturePromotions.promoteCaptureToScene(
+          toPromoteCaptureToSceneInput(
+            parsed.data,
+            accountId(authSession.account.id),
+            projectId(context.req.param("projectId")),
+            captureId(context.req.param("captureId"))
+          )
+        );
+        return context.json(
+          {
+            captureHead: captureHeadResponse(result.captureHead),
+            scene: result.scene,
+            sceneDocumentHead: sceneHeadResponse(result.sceneDocumentHead),
+            navigator: result.navigator,
+            ...(result.canvas === undefined
+              ? {}
+              : { canvas: canvasWorkspaceResponse(result.canvas) })
+          },
+          201
+        );
+      } catch (error) {
+        if (
+          error instanceof CaptureArchivedMutationError ||
+          error instanceof CaptureIntegratedMutationError
+        ) {
+          return context.json(
+            {
+              error: "This capture cannot be promoted.",
+              code: "CAPTURE_NOT_PROMOTABLE"
+            },
+            409
+          );
+        }
+        throw error;
+      }
+    }
+  );
+
+  app.post(
+    "/api/projects/:projectId/captures/:captureId/attachments/init",
+    async (context) => {
+      const parsed = await parseJsonRequest(
+        context.req.raw,
+        initCaptureAttachmentRequestSchema
+      );
+      if (!parsed.success) {
+        return context.json(
+          {
+            error: "Invalid capture attachment request.",
+            code: parsed.code,
+            ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
+          },
+          parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
+        );
+      }
+      try {
+        await dependencies.captureAttachments.cleanupExpiredPending().catch(() => undefined);
+        const authSession = context.get("authSession");
+        const result = await dependencies.captureAttachments.initAttachmentUpload({
+          accountId: accountId(authSession.account.id),
+          projectId: projectId(context.req.param("projectId")),
+          captureId: captureId(context.req.param("captureId")),
+          displayFilename: parsed.data.displayFilename,
+          declaredContentType: parsed.data.declaredContentType,
+          declaredByteSize: parsed.data.declaredByteSize,
+          clientSha256: parsed.data.clientSha256
+        });
+        return context.json(
+          captureAttachmentUploadResponse({
+            attachment: result.attachment,
+            upload: result.upload,
+            requiredContentType: result.attachment.declaredContentType
+          }),
+          201
+        );
+      } catch (error) {
+        const mapped = captureAttachmentErrorStatusAndBody(error);
+        if (mapped !== undefined) {
+          return context.json(mapped.body, mapped.status);
+        }
+        throw error;
+      }
+    }
+  );
+
+  app.post(
+    "/api/projects/:projectId/captures/:captureId/attachments/:attachmentId/finalize",
+    async (context) => {
+      const parsed = await parseOptionalJsonRequest(
+        context.req.raw,
+        finalizeCaptureAttachmentRequestSchema
+      );
+      if (!parsed.success) {
+        return context.json(
+          {
+            error: "Invalid capture attachment request.",
+            code: parsed.code,
+            ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
+          },
+          parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
+        );
+      }
+      try {
+        const authSession = context.get("authSession");
+        const attachment = await dependencies.captureAttachments.finalizeAttachmentUpload({
+          accountId: accountId(authSession.account.id),
+          projectId: projectId(context.req.param("projectId")),
+          captureId: captureId(context.req.param("captureId")),
+          attachmentId: attachmentId(context.req.param("attachmentId"))
+        });
+        return context.json({
+          attachment: captureAttachmentSummaryResponse(attachment)
+        });
+      } catch (error) {
+        const mapped = captureAttachmentErrorStatusAndBody(error);
+        if (mapped !== undefined) {
+          return context.json(mapped.body, mapped.status);
+        }
+        throw error;
+      }
+    }
+  );
+
+  app.get(
+    "/api/projects/:projectId/captures/:captureId/attachments",
+    async (context) => {
+      try {
+        const authSession = context.get("authSession");
+        const attachments = await dependencies.captureAttachments.listAttachments({
+          accountId: accountId(authSession.account.id),
+          projectId: projectId(context.req.param("projectId")),
+          captureId: captureId(context.req.param("captureId"))
+        });
+        return context.json({
+          attachments: attachments.map(captureAttachmentSummaryResponse)
+        });
+      } catch (error) {
+        const mapped = captureAttachmentErrorStatusAndBody(error);
+        if (mapped !== undefined) {
+          return context.json(mapped.body, mapped.status);
+        }
+        throw error;
+      }
+    }
+  );
+
+  app.get(
+    "/api/projects/:projectId/captures/:captureId/attachments/:attachmentId/download",
+    async (context) => {
+      try {
+        const authSession = context.get("authSession");
+        const download = await dependencies.captureAttachments.getAttachmentDownloadUrl({
+          accountId: accountId(authSession.account.id),
+          projectId: projectId(context.req.param("projectId")),
+          captureId: captureId(context.req.param("captureId")),
+          attachmentId: attachmentId(context.req.param("attachmentId"))
+        });
+        return context.json(captureAttachmentDownloadResponse(download));
+      } catch (error) {
+        const mapped = captureAttachmentErrorStatusAndBody(error);
+        if (mapped !== undefined) {
+          return context.json(mapped.body, mapped.status);
+        }
+        throw error;
+      }
+    }
+  );
+
+  app.delete(
+    "/api/projects/:projectId/captures/:captureId/attachments/:attachmentId",
+    async (context) => {
+      try {
+        const authSession = context.get("authSession");
+        const attachment = await dependencies.captureAttachments.deleteAttachment({
+          accountId: accountId(authSession.account.id),
+          projectId: projectId(context.req.param("projectId")),
+          captureId: captureId(context.req.param("captureId")),
+          attachmentId: attachmentId(context.req.param("attachmentId"))
+        });
+        return context.json({
+          attachment: captureAttachmentSummaryResponse(attachment)
+        });
+      } catch (error) {
+        const mapped = captureAttachmentErrorStatusAndBody(error);
+        if (mapped !== undefined) {
+          return context.json(mapped.body, mapped.status);
+        }
+        throw error;
+      }
+    }
+  );
+
+  registerProviderAgentRoutes(app, { agentProvider: dependencies.agentProvider });
+  registerAgentRunRoutes(app, { agentProvider: dependencies.agentProvider });
+  registerScenePartnerRoutes(app, {
+    agentProvider: dependencies.agentProvider,
+    captures: dependencies.captures,
+    ...(dependencies.scenePartnerGenerateImage === undefined
+      ? {}
+      : { generateImage: dependencies.scenePartnerGenerateImage })
+  });
+  registerBookCoverImageRoutes(app, {
+    agentProvider: dependencies.agentProvider,
+    services: dependencies.services,
+    objectStorage: dependencies.objectStorage,
+    ...(dependencies.scenePartnerGenerateImage === undefined
+      ? {}
+      : { generateImage: dependencies.scenePartnerGenerateImage })
+  });
+  registerMcpGrantRoutes(app, { agentProvider: dependencies.agentProvider });
+
   app.onError((error, context) => {
     if (error instanceof CanvasNotFoundError) {
       return context.json(
@@ -1106,6 +1458,90 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
       return context.json(
         { error: "Invalid scene document.", code: "INVALID_SCENE_DOCUMENT" },
         422
+      );
+    }
+    if (error instanceof CaptureNotFoundError) {
+      return context.json(
+        { error: "Capture not found.", code: "CAPTURE_NOT_FOUND" },
+        404
+      );
+    }
+    if (error instanceof CaptureAttachmentNotFoundError) {
+      return context.json(
+        {
+          error: "Capture attachment was not found.",
+          code: "ATTACHMENT_NOT_FOUND"
+        },
+        404
+      );
+    }
+    if (error instanceof CaptureAttachmentNotEditableError) {
+      return context.json(
+        {
+          error: "Capture attachment cannot be changed in the current state.",
+          code: "ATTACHMENT_NOT_EDITABLE"
+        },
+        409
+      );
+    }
+    if (error instanceof CaptureAttachmentStorageError) {
+      return context.json(
+        {
+          error: "Attachment storage is unavailable.",
+          code: "ATTACHMENT_STORAGE_UNAVAILABLE"
+        },
+        503
+      );
+    }
+    if (error instanceof CaptureAttachmentPolicyError) {
+      const mapped = captureAttachmentErrorStatusAndBody(error);
+      if (mapped !== undefined) {
+        return context.json(mapped.body, mapped.status);
+      }
+    }
+    if (error instanceof CaptureVersionConflictError) {
+      return context.json(
+        { error: error.message, code: "CAPTURE_VERSION_CONFLICT" },
+        409
+      );
+    }
+    if (error instanceof CaptureContentHashMismatchError) {
+      return context.json(
+        {
+          error: "The capture changed since it was loaded.",
+          code: "CAPTURE_CONTENT_CHANGED"
+        },
+        409
+      );
+    }
+    if (error instanceof CapturePromotionNotEligibleError) {
+      return context.json(
+        {
+          error: "This capture cannot be promoted.",
+          code: "CAPTURE_NOT_PROMOTABLE"
+        },
+        409
+      );
+    }
+    if (error instanceof InvalidCaptureDocumentError) {
+      return context.json(
+        { error: "Invalid capture document.", code: "INVALID_CAPTURE_DOCUMENT" },
+        422
+      );
+    }
+    if (
+      error instanceof CaptureArchivedMutationError ||
+      error instanceof CaptureIntegratedMutationError
+    ) {
+      return context.json(
+        { error: "This capture cannot be edited.", code: "CAPTURE_NOT_EDITABLE" },
+        409
+      );
+    }
+    if (error instanceof ProjectArchivedMutationError) {
+      return context.json(
+        { error: "Archived projects cannot be changed.", code: "PROJECT_ARCHIVED" },
+        409
       );
     }
     if (error instanceof SceneRevisionNotFoundError) {
@@ -1170,6 +1606,15 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
     }
     if (error instanceof DomainValidationError) {
       return context.json({ error: error.message, code: error.code }, 422);
+    }
+
+    const providerMapped = providerAgentErrorStatusAndBody(error);
+    if (providerMapped !== undefined) {
+      return context.json(providerMapped.body, providerMapped.status);
+    }
+    const guidanceMapped = mapAgentGuidanceRouteError(error, "instructions");
+    if (guidanceMapped !== undefined) {
+      return context.json(guidanceMapped.body, guidanceMapped.status);
     }
 
     console.error("Ghostwriter backend request failed.", {

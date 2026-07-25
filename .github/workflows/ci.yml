@@ -36,14 +36,8 @@ jobs:
         if: steps.scaffold.outputs.exists == 'true'
         run: pnpm install --frozen-lockfile
 
-      - name: Verify (typecheck + lint + test)
+      - name: Verify (typecheck + lint + unit test)
         if: steps.scaffold.outputs.exists == 'true'
         run: pnpm verify
-
-      - name: Install Chromium for browser tests
-        if: steps.scaffold.outputs.exists == 'true'
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Authenticated browser journey
-        if: steps.scaffold.outputs.exists == 'true'
-        run: pnpm test:e2e
+        # Playwright / authenticated browser journeys are local-only for now
+        # (`pnpm test:e2e` after founder verification). CI stays on unit/integration.

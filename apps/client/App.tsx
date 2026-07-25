@@ -5,6 +5,7 @@ import { Jost_500Medium } from "@expo-google-fonts/jost/500Medium/index.js";
 import { Jost_600SemiBold } from "@expo-google-fonts/jost/600SemiBold/index.js";
 import { Parisienne_400Regular } from "@expo-google-fonts/parisienne/400Regular/index.js";
 import type {
+  AgentModelId,
   BookId,
   CanvasCommand,
   CanvasObjectId,
@@ -15,11 +16,16 @@ import type {
   StoryProjectSummary,
   WriterPublishingDetails
 } from "@ghostwriter/core";
-import { GHOSTWRITER_CAPABILITIES } from "@ghostwriter/core";
+import { GHOSTWRITER_CAPABILITIES, parseBookCoverLocatorUrl } from "@ghostwriter/core";
 import {
   AccountGateScreen,
   AuthenticatedProjectWorkspace,
   BookReaderPanel,
+  aggregateProjectChangesIdle,
+  captureReturnStateFromScene,
+  captureShellChangesIdle,
+  finalizeCaptureShellActivityOnClose,
+  scheduleCaptureFocusRestore,
   drillBack,
   drillIntoChapter,
   drillIntoScene,
@@ -36,6 +42,15 @@ import {
   type WriteComposition,
   type WriteInputModality,
   type WorkspaceChatMessage,
+  type WorkspaceChatSendInput,
+  type CaptureReturnState,
+  type InboxWorkspacePresentation,
+  DEFAULT_WORKSPACE_AGENT_PREFS,
+  readWorkspaceAgentPrefs,
+  writeWorkspaceAgentPrefs,
+  type WorkspaceAgentEffort,
+  type WorkspaceAgentMode,
+  sceneSelection,
   workspaceModeForComposition
 } from "@ghostwriter/ui";
 import { useFonts } from "expo-font";
@@ -61,14 +76,20 @@ import {
   createProject,
   executeCanvasCommand,
   executeProjectCommand,
+  getBookCoverDownload,
   getBookReader,
   getCanvasBoard,
   getCanvasHistory,
   getCanvasPreference,
   getCurrentWriter,
+  getOpenAiProviderStatus,
   getProject,
   GhostwriterApiError,
   listProjects,
+  getBookCoverImageJob,
+  postBookCoverImageApply,
+  postBookCoverImageJob,
+  promoteCaptureToScene,
   releaseSceneLease,
   restoreCanvasRevision,
   saveCanvasPreference,
@@ -77,6 +98,8 @@ import {
   synthesizeReaderSpeech,
   undoCanvas,
   updateWriterProfile,
+  type BookCoverImageJobOption,
+  type BookCoverImageJobStatus,
   type BookReaderResponse,
   type CanvasPreferenceResponse,
   type CanvasHistoryResponse,
@@ -103,8 +126,50 @@ import {
 } from "./src/canvas-chrome.js";
 import type { ManuscriptSelection } from "@ghostwriter/ui";
 import { sceneRecoveryService } from "./src/scene-recovery.js";
+import {
+  CaptureComposerPanel,
+  type CaptureComposerHandle
+} from "./src/CaptureComposerPanel.js";
+import { CaptureModalShell } from "./src/CaptureModalShell.js";
+import { InboxPanel } from "./src/InboxPanel.js";
+import { SettingsPanel } from "./src/SettingsPanel.js";
+import {
+  captureRecoveryService
+} from "./src/capture-recovery.js";
+import type {
+  CaptureComposerAcknowledgementEvent,
+  CaptureComposerActivity,
+  CaptureComposerProblemEvent
+} from "./src/capture-composer.js";
+import type {
+  CaptureHandoffPromoteInput
+} from "./src/capture-handoff.js";
+import {
+  acknowledgementCopyForCapturePromotion,
+  handoffTargetShouldAbortAfterDraftPrepFailed,
+  installCapturePromotionState
+} from "./src/capture-handoff.js";
+import type {
+  InboxPanelAcknowledgementEvent,
+  InboxPanelActivity,
+  InboxPanelProblemEvent
+} from "./src/inbox-panel.js";
 
 type AppPhase = "loading" | "signedOut" | "library" | "project";
+
+type ActiveCoverOptionsJob = Readonly<{
+  projectId: string;
+  bookId: BookId;
+  bookTitle: string;
+  jobId: string;
+  status: BookCoverImageJobStatus;
+  options?: readonly BookCoverImageJobOption[];
+  error?: Readonly<{
+    code: string;
+    message: string;
+  }>;
+  basePrompt?: string;
+}>;
 
 type ReaderReturnState = Readonly<{
   workspaceMode: ProjectWorkspaceMode;
@@ -213,6 +278,16 @@ export default function App() {
   const [readerSpeaking, setReaderSpeaking] = useState(false);
   const readerAudioRef = useRef<{ pause(): void } | null>(null);
   const [chatMessages, setChatMessages] = useState<WorkspaceChatMessage[]>([]);
+  const [chatMode, setChatMode] = useState<WorkspaceAgentMode>(
+    DEFAULT_WORKSPACE_AGENT_PREFS.mode
+  );
+  const [chatModel, setChatModel] = useState<AgentModelId>(
+    DEFAULT_WORKSPACE_AGENT_PREFS.model
+  );
+  const [chatEffort, setChatEffort] = useState<WorkspaceAgentEffort>(
+    DEFAULT_WORKSPACE_AGENT_PREFS.effort
+  );
+  const [chatProviderConfigured, setChatProviderConfigured] = useState(false);
   const readerReturnStateRef = useRef<ReaderReturnState | undefined>(undefined);
   const draftPanelRef = useRef<DraftPanelHandle>(null);
   const selectedProjectRef = useRef<ProjectNavigator | undefined>(undefined);
@@ -223,6 +298,328 @@ export default function App() {
   const metadataUndoToastIdRef = useRef<string | undefined>(undefined);
   const canvasUndoToastIdRef = useRef<string | undefined>(undefined);
   const lastDraftAcknowledgementAtRef = useRef<number | undefined>(undefined);
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [activeCaptureId, setActiveCaptureId] = useState<string | undefined>();
+  const [inboxSelectedCaptureId, setInboxSelectedCaptureId] = useState<
+    string | undefined
+  >();
+  const [captureComposerReadOnly, setCaptureComposerReadOnly] = useState(false);
+  const captureComposerRef = useRef<CaptureComposerHandle>(null);
+  const captureReturnStateRef = useRef<CaptureReturnState | undefined>(
+    undefined
+  );
+  const pendingCaptureFocusRestoreRef = useRef<
+    CaptureReturnState | undefined
+  >(undefined);
+  const captureActivityRef = useRef<CaptureComposerActivity>("idle");
+  const captureProblemWhileClosedRef = useRef(false);
+  const [captureActivity, setCaptureActivity] =
+    useState<CaptureComposerActivity>("idle");
+  const [captureProblemWhileClosed, setCaptureProblemWhileClosed] =
+    useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [inboxActivity, setInboxActivity] =
+    useState<InboxPanelActivity>("idle");
+  const [inboxRefreshSignal, setInboxRefreshSignal] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [providerStatusSignal, setProviderStatusSignal] = useState(0);
+  const [coverOptionsJob, setCoverOptionsJob] = useState<
+    ActiveCoverOptionsJob | undefined
+  >();
+  const [coverReviewBookId, setCoverReviewBookId] = useState<
+    BookId | undefined
+  >();
+  const coverJobPollRef = useRef<ReturnType<typeof setInterval> | undefined>(
+    undefined
+  );
+
+  function focusTargetFromDocument():
+    | CaptureReturnState["focusTarget"]
+    | undefined {
+    if (typeof document === "undefined") return undefined;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && typeof active.focus === "function") {
+      return { focus: () => active.focus() };
+    }
+    return undefined;
+  }
+
+  async function flushCaptureIfOpen(): Promise<void> {
+    if (!captureOpen || captureComposerRef.current === null) return;
+    try {
+      await captureComposerRef.current.flush();
+    } catch {
+      // Exit paths continue when Capture flush fails; recovery stays explicit.
+    }
+  }
+
+  function handleCaptureActivityChange(
+    activity: CaptureComposerActivity
+  ): void {
+    captureActivityRef.current = activity;
+    setCaptureActivity(activity);
+    if (activity === "problem") {
+      captureProblemWhileClosedRef.current = true;
+      setCaptureProblemWhileClosed(true);
+    } else if (activity === "idle") {
+      captureProblemWhileClosedRef.current = false;
+      setCaptureProblemWhileClosed(false);
+    }
+  }
+
+  function handleCaptureProblemResolved(id: string): void {
+    dismissToast(id);
+  }
+
+  function bumpInboxRefresh(): void {
+    setInboxRefreshSignal((signal) => signal + 1);
+  }
+
+  function openCaptureComposer(
+    captureId?: string,
+    options?: Readonly<{ readOnly?: boolean }>
+  ): void {
+    captureReturnStateRef.current = captureReturnStateFromScene(
+      selectedSceneId,
+      focusTargetFromDocument()
+    );
+    setCaptureComposerReadOnly(options?.readOnly === true);
+    setActiveCaptureId(captureId);
+    setCaptureOpen(true);
+  }
+
+  async function closeCaptureComposer(): Promise<void> {
+    await flushCaptureIfOpen();
+    const restore = captureReturnStateRef.current;
+    captureReturnStateRef.current = undefined;
+    pendingCaptureFocusRestoreRef.current = restore;
+    const finalized = finalizeCaptureShellActivityOnClose(
+      captureActivityRef.current,
+      captureProblemWhileClosedRef.current
+    );
+    captureActivityRef.current = finalized.activity;
+    captureProblemWhileClosedRef.current = finalized.problemWhileClosed;
+    setCaptureActivity(finalized.activity);
+    setCaptureProblemWhileClosed(finalized.problemWhileClosed);
+    setCaptureOpen(false);
+    setActiveCaptureId(undefined);
+    setCaptureComposerReadOnly(false);
+  }
+
+  async function openInboxWorkspace(): Promise<void> {
+    if (inboxOpen) return;
+    const draftIsVisible =
+      workspaceMode === "draft" || workspaceMode === "split";
+    if (draftIsVisible) {
+      setBusy(true);
+      try {
+        await prepareCurrentDraftForExit();
+      } finally {
+        setBusy(false);
+      }
+    }
+    setInboxOpen(true);
+  }
+
+  function closeInboxWorkspace(): void {
+    setInboxOpen(false);
+    if (workspaceMode === "draft" || workspaceMode === "split") {
+      setDraftMountVersion((version) => version + 1);
+    }
+  }
+
+  async function ensureCanvasVersionForHandoff(): Promise<number | undefined> {
+    if (selectedProject === undefined) return undefined;
+    if (canvasWorkspace !== undefined) {
+      return canvasWorkspace.board.version;
+    }
+    try {
+      const loaded = await getCanvasBoard(selectedProject.id);
+      setCanvasWorkspace(loaded);
+      setCanvasSaveState("saved");
+      setCanvasMessage(undefined);
+      dismissToast("canvas-conflict");
+      dismissToast("canvas-save-problem");
+      return loaded.board.version;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function handleCapturePromote(input: CaptureHandoffPromoteInput) {
+    if (selectedProject === undefined) {
+      throw new Error("Capture handoff requires an open project.");
+    }
+    const response = await promoteCaptureToScene({
+      projectId: selectedProject.id,
+      captureId: input.captureId,
+      expectedCaptureWorkingVersion: input.expectedCaptureWorkingVersion,
+      expectedCaptureContentHash: input.expectedCaptureContentHash,
+      expectedProjectVersion: input.expectedProjectVersion,
+      title: input.title,
+      manuscriptPlacement: input.manuscriptPlacement,
+      ...(input.canvas === undefined ? {} : { canvas: input.canvas })
+    });
+    const installed = installCapturePromotionState(response);
+    setSelectedProject(installed.navigator);
+    selectedProjectRef.current = installed.navigator;
+    if (installed.canvasWorkspace !== undefined) {
+      setCanvasWorkspace(installed.canvasWorkspace);
+      setCanvasSaveState("saved");
+      setCanvasMessage(undefined);
+      dismissToast("canvas-conflict");
+      dismissToast("canvas-save-problem");
+    }
+    setSaveState("saved");
+    dismissToast("project-conflict");
+    dismissToast("project-save-problem");
+    bumpInboxRefresh();
+    const acknowledgement = acknowledgementCopyForCapturePromotion(response);
+    showToast(
+      acknowledgementToast({
+        id: nextToastId("capture-promote"),
+        title: acknowledgement.title,
+        detail: acknowledgement.detail,
+        now: Date.now()
+      })
+    );
+    return response;
+  }
+
+  async function openHandoffTargetScene(
+    sceneId: SceneId,
+    targetMode: "draft" | "split"
+  ): Promise<void> {
+    const needsDraftPrep =
+      workspaceMode === "draft" || workspaceMode === "split";
+    if (needsDraftPrep) {
+      setBusy(true);
+      let draftPrepFailed = false;
+      try {
+        await prepareCurrentDraftForExit();
+      } catch (cause) {
+        draftPrepFailed = true;
+        handleError(
+          cause,
+          "Ghostwriter could not prepare Draft before opening the integrated scene."
+        );
+      } finally {
+        setBusy(false);
+      }
+      if (handoffTargetShouldAbortAfterDraftPrepFailed(draftPrepFailed)) {
+        return;
+      }
+    }
+
+    setBusy(true);
+    try {
+      closeInboxWorkspace();
+      setSelectedSceneId(sceneId);
+      setSelectedCanvasObjectId(
+        canvasWorkspace?.board.objects.find(
+          (object) =>
+            object.sceneId === sceneId && object.archivedAt === undefined
+        )?.id
+      );
+      await changeWorkspaceMode(targetMode);
+    } catch (cause) {
+      handleError(cause, "Ghostwriter could not open the integrated scene.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleCaptureAcknowledgement(
+    event: CaptureComposerAcknowledgementEvent
+  ): void {
+    bumpInboxRefresh();
+    showToast(
+      acknowledgementToast({
+        id: nextToastId(`capture-${event.kind}`),
+        title: event.title,
+        detail: `${event.detail} · Saved to project`,
+        now: Date.now()
+      })
+    );
+  }
+
+  function handleCaptureProblem(problem: CaptureComposerProblemEvent): void {
+    captureProblemWhileClosedRef.current = true;
+    setCaptureProblemWhileClosed(true);
+    showToast(
+      problemToast({
+        id: problem.id,
+        title: problem.title,
+        detail: problem.detail,
+        tone: problem.tone,
+        now: Date.now()
+      })
+    );
+  }
+
+  function handleInboxAcknowledgement(
+    event: InboxPanelAcknowledgementEvent
+  ): void {
+    bumpInboxRefresh();
+    showToast(
+      acknowledgementToast({
+        id: nextToastId(`inbox-${event.kind}`),
+        title: event.title,
+        detail: event.detail,
+        now: Date.now()
+      })
+    );
+  }
+
+  function handleInboxProblem(problem: InboxPanelProblemEvent): void {
+    showToast(
+      problemToast({
+        id: problem.id,
+        title: problem.title,
+        detail: problem.detail,
+        tone: problem.tone,
+        now: Date.now()
+      })
+    );
+  }
+
+  function resetCaptureInboxShell(): void {
+    setCaptureOpen(false);
+    setActiveCaptureId(undefined);
+    setInboxSelectedCaptureId(undefined);
+    setCaptureComposerReadOnly(false);
+    captureReturnStateRef.current = undefined;
+    pendingCaptureFocusRestoreRef.current = undefined;
+    captureActivityRef.current = "idle";
+    captureProblemWhileClosedRef.current = false;
+    setCaptureActivity("idle");
+    setCaptureProblemWhileClosed(false);
+    setInboxOpen(false);
+    setInboxActivity("idle");
+    setInboxRefreshSignal(0);
+  }
+
+  useEffect(() => {
+    if (captureOpen) return;
+    const restore = pendingCaptureFocusRestoreRef.current;
+    if (restore === undefined) return;
+    pendingCaptureFocusRestoreRef.current = undefined;
+    let frame = 0;
+    let cancelled = false;
+    scheduleCaptureFocusRestore(restore, (run) => {
+      if (typeof requestAnimationFrame === "undefined") {
+        if (!cancelled) run();
+        return;
+      }
+      frame = requestAnimationFrame(() => {
+        if (!cancelled) run();
+      });
+    });
+    return () => {
+      cancelled = true;
+      if (frame !== 0) cancelAnimationFrame(frame);
+    };
+  }, [captureOpen]);
 
   useEffect(() => {
     void bootstrap();
@@ -284,6 +681,70 @@ export default function App() {
     });
   }
 
+  function clearCoverJobPoll(): void {
+    if (coverJobPollRef.current === undefined) return;
+    clearInterval(coverJobPollRef.current);
+    coverJobPollRef.current = undefined;
+  }
+
+  useEffect(() => {
+    return () => {
+      clearCoverJobPoll();
+    };
+  }, []);
+
+  useEffect(() => {
+    clearCoverJobPoll();
+    setCoverOptionsJob(undefined);
+    setCoverReviewBookId(undefined);
+  }, [selectedProject?.id]);
+
+  useEffect(() => {
+    if (selectedProject === undefined) {
+      setChatMode(DEFAULT_WORKSPACE_AGENT_PREFS.mode);
+      setChatModel(DEFAULT_WORKSPACE_AGENT_PREFS.model);
+      setChatEffort(DEFAULT_WORKSPACE_AGENT_PREFS.effort);
+      setChatMessages([]);
+      return;
+    }
+    const prefs = readWorkspaceAgentPrefs(selectedProject.id);
+    setChatMode(prefs.mode);
+    setChatModel(prefs.model);
+    setChatEffort(prefs.effort);
+    setChatMessages([]);
+  }, [selectedProject?.id]);
+
+  useEffect(() => {
+    if (selectedProject === undefined) {
+      setChatProviderConfigured(false);
+      return;
+    }
+    let cancelled = false;
+    void getOpenAiProviderStatus()
+      .then((status) => {
+        if (!cancelled) setChatProviderConfigured(status.configured);
+      })
+      .catch(() => {
+        if (!cancelled) setChatProviderConfigured(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProject?.id, providerStatusSignal]);
+
+  function persistChatPrefs(next: Readonly<{
+    mode?: WorkspaceAgentMode;
+    model?: AgentModelId;
+    effort?: WorkspaceAgentEffort;
+  }>): void {
+    if (selectedProject === undefined) return;
+    writeWorkspaceAgentPrefs(selectedProject.id, {
+      mode: next.mode ?? chatMode,
+      model: next.model ?? chatModel,
+      effort: next.effort ?? chatEffort
+    });
+  }
+
   function dismissToast(id: string): void {
     toastActionsRef.current.delete(id);
     dispatchToast({ type: "dismiss", id });
@@ -341,6 +802,7 @@ export default function App() {
       setDraftActivity("idle");
       resetCanvasState();
       clearAcknowledgements();
+      resetCaptureInboxShell();
       setPhase("signedOut");
       setError("Your session ended. Sign in again to continue.");
       return;
@@ -401,10 +863,12 @@ export default function App() {
     setError(undefined);
     try {
       const accountId = writer?.account.id;
+      await flushCaptureIfOpen();
       await prepareCurrentDraftForExit();
       await signOut();
       if (accountId !== undefined) {
         await sceneRecoveryService.clearAccount(accountId);
+        await captureRecoveryService.clearAccount(accountId);
       }
       setWriter(undefined);
       setProjects([]);
@@ -416,6 +880,7 @@ export default function App() {
       setDraftActivity("idle");
       resetCanvasState();
       clearAcknowledgements();
+      resetCaptureInboxShell();
       setPhase("signedOut");
     } catch (cause) {
       handleError(cause, "Ghostwriter could not sign out.");
@@ -440,6 +905,7 @@ export default function App() {
       setDraftActivity("idle");
       resetCanvasState();
       setSaveState("saved");
+      resetCaptureInboxShell();
       setPhase("project");
     } catch (cause) {
       handleError(cause, "Ghostwriter could not open the project.");
@@ -485,6 +951,160 @@ export default function App() {
     }
   }
 
+  function beginCoverOptionsJobPoll(input: Readonly<{
+    projectId: string;
+    bookId: BookId;
+    bookTitle: string;
+    jobId: string;
+  }>): void {
+    clearCoverJobPoll();
+    const pollOnce = (): void => {
+      void (async () => {
+        try {
+          const snapshot = await getBookCoverImageJob({
+            projectId: input.projectId,
+            bookId: input.bookId,
+            jobId: input.jobId
+          });
+          if (snapshot.status === "ready") {
+            clearCoverJobPoll();
+            setCoverOptionsJob((current) =>
+              current?.jobId === input.jobId
+                ? {
+                    ...current,
+                    status: "ready",
+                    options: snapshot.options,
+                    basePrompt: snapshot.basePrompt,
+                    error: undefined
+                  }
+                : current
+            );
+            const now = Date.now();
+            const toastId = nextToastId("cover-options");
+            showToast(
+              acknowledgementToast({
+                id: toastId,
+                title: "Cover options ready",
+                detail: `${input.bookTitle} · ready to review`,
+                now,
+                actionLabel: "Review covers"
+              }),
+              () => {
+                setCoverReviewBookId(input.bookId);
+              }
+            );
+            return;
+          }
+          if (snapshot.status === "failed") {
+            clearCoverJobPoll();
+            setCoverOptionsJob((current) =>
+              current?.jobId === input.jobId
+                ? {
+                    ...current,
+                    status: "failed",
+                    error: snapshot.error,
+                    basePrompt: snapshot.basePrompt
+                  }
+                : current
+            );
+            showToast(
+              problemToast({
+                id: nextToastId("cover-options"),
+                title: "Cover options failed",
+                detail:
+                  snapshot.error?.message ??
+                  "Ghostwriter could not paint cover options.",
+                now: Date.now()
+              })
+            );
+            return;
+          }
+          setCoverOptionsJob((current) =>
+            current?.jobId === input.jobId
+              ? {
+                  ...current,
+                  status: snapshot.status,
+                  basePrompt: snapshot.basePrompt
+                }
+              : current
+          );
+        } catch {
+          // Transient poll failures keep the interval alive until ready/failed.
+        }
+      })();
+    };
+    pollOnce();
+    coverJobPollRef.current = setInterval(pollOnce, 2000);
+  }
+
+  async function startBookCoverOptionsJob(input: Readonly<{
+    bookId: BookId;
+    prompt: string;
+    count?: number;
+    refinement?: string;
+  }>): Promise<void> {
+    if (selectedProject === undefined) {
+      throw new Error("No project is open.");
+    }
+    const book = selectedProject.books.find(
+      (entry) => entry.id === input.bookId
+    );
+    const bookTitle = book?.title ?? "Book";
+    const projectId = selectedProject.id;
+    clearCoverJobPoll();
+    const started = await postBookCoverImageJob({
+      projectId,
+      bookId: input.bookId,
+      prompt: input.prompt,
+      count: input.count ?? 3,
+      ...(input.refinement === undefined || input.refinement.trim() === ""
+        ? {}
+        : { refinement: input.refinement.trim() })
+    });
+    setCoverOptionsJob({
+      projectId,
+      bookId: input.bookId,
+      bookTitle,
+      jobId: started.jobId,
+      status: "queued",
+      basePrompt: input.prompt
+    });
+    beginCoverOptionsJobPoll({
+      projectId,
+      bookId: input.bookId,
+      bookTitle,
+      jobId: started.jobId
+    });
+  }
+
+  async function applyBookCoverImage(input: Readonly<{
+    bookId: BookId;
+    previewDataUri: string;
+  }>): Promise<void> {
+    if (selectedProject === undefined) return;
+    await postBookCoverImageApply({
+      projectId: selectedProject.id,
+      bookId: input.bookId,
+      previewDataUri: input.previewDataUri
+    });
+    await refreshCurrentProject();
+  }
+
+  async function resolveBookCoverDisplayUrl(input: Readonly<{
+    bookId: BookId;
+    imageUrl: string;
+  }>): Promise<string | undefined> {
+    const locator = parseBookCoverLocatorUrl(input.imageUrl);
+    if (locator === undefined) {
+      return input.imageUrl;
+    }
+    const download = await getBookCoverDownload({
+      projectId: locator.projectId,
+      bookId: locator.bookId
+    });
+    return download.download.url;
+  }
+
   async function makeProject(input: {
     title: string;
     firstBookTitle: string;
@@ -504,6 +1124,7 @@ export default function App() {
       setDraftActivity("idle");
       resetCanvasState();
       setSaveState("saved");
+      resetCaptureInboxShell();
       setPhase("project");
       const now = Date.now();
       showToast(
@@ -813,6 +1434,8 @@ export default function App() {
   async function leaveProject(): Promise<void> {
     setBusy(true);
     setError(undefined);
+    await flushCaptureIfOpen();
+    resetCaptureInboxShell();
     await prepareCurrentDraftForExit();
     setReaderProjection(undefined);
     setReaderError(undefined);
@@ -942,6 +1565,7 @@ export default function App() {
     nextMode: ProjectWorkspaceMode
   ): Promise<void> {
     if (nextMode === workspaceMode || selectedProject === undefined) return;
+    if (inboxOpen) closeInboxWorkspace();
     const draftIsVisible =
       workspaceMode === "draft" || workspaceMode === "split";
     const draftWillBeVisible = nextMode === "draft" || nextMode === "split";
@@ -961,6 +1585,7 @@ export default function App() {
 
   async function selectWorkspaceScene(sceneId: SceneId): Promise<void> {
     if (sceneId === selectedSceneId) return;
+    if (inboxOpen) closeInboxWorkspace();
     if (workspaceMode === "draft" || workspaceMode === "split") {
       setBusy(true);
       await prepareCurrentDraftForExit();
@@ -1013,13 +1638,12 @@ export default function App() {
   ): void {
     setDrillStack((stack) => drillIntoScene(stack, scope));
     void selectWorkspaceScene(scope.sceneId);
+    // Scene writing takes the full center; plan-draft keeps Canvas+Draft split.
     if (workflowLens === "plan-draft") {
       void changeWorkspaceMode("split");
       return;
     }
-    if (workspaceMode !== "canvas" && workspaceMode !== "split") {
-      void changeWorkspaceMode("canvas");
-    }
+    void changeWorkspaceMode("draft");
   }
 
   function handleWorkflowLensChange(lens: CanvasWorkflowLens): void {
@@ -1031,6 +1655,7 @@ export default function App() {
 
   async function openReader(): Promise<void> {
     if (selectedProject === undefined || selectedSceneId === undefined) return;
+    if (inboxOpen) closeInboxWorkspace();
     const bookId = bookIdForScene(selectedProject, selectedSceneId);
     if (bookId === undefined) {
       setReaderError("Choose a scene in a book to open Reader.");
@@ -1123,17 +1748,47 @@ export default function App() {
     setReaderSpeaking(false);
   }
 
-  async function handleChatSend(message: string): Promise<void> {
+  async function handleChatSend(input: WorkspaceChatSendInput): Promise<void> {
     const userMessage: WorkspaceChatMessage = {
       id: `chat-user-${Date.now()}`,
       role: "user",
-      body: message
+      body: input.message
     };
     setChatMessages((current) => [...current, userMessage]);
+    const selection =
+      selectedProject === undefined || selectedSceneId === undefined
+        ? undefined
+        : sceneSelection(selectedProject, selectedSceneId);
     try {
       const result = await sendWorkspaceChat({
-        message,
-        projectId: selectedProject?.id
+        message: input.message,
+        projectId: selectedProject?.id,
+        mode: input.mode,
+        model: input.model,
+        effort: input.effort,
+        ...(selection === undefined
+          ? {}
+          : {
+              selection: {
+                kind: selection.kind,
+                ...("bookId" in selection
+                  ? { bookId: selection.bookId }
+                  : {}),
+                ...("partId" in selection && selection.partId !== undefined
+                  ? { partId: selection.partId }
+                  : {}),
+                ...("chapterId" in selection &&
+                selection.chapterId !== undefined
+                  ? { chapterId: selection.chapterId }
+                  : {}),
+                ...("sceneId" in selection
+                  ? { sceneId: selection.sceneId }
+                  : {}),
+                ...("storyKnowledgeId" in selection
+                  ? { storyKnowledgeId: selection.storyKnowledgeId }
+                  : {})
+              }
+            })
       });
       setChatMessages((current) => [
         ...current,
@@ -1612,20 +2267,105 @@ export default function App() {
     }
 
     return (
+      <>
       <AuthenticatedProjectWorkspace
-        allChangesIdle={
-          saveState === "saved" &&
-          canvasSaveState === "saved" &&
-          draftActivity === "idle" &&
-          !busy &&
-          !canvasBusy
-        }
+        allChangesIdle={aggregateProjectChangesIdle({
+          projectSaveIdle: saveState === "saved",
+          canvasSaveIdle: canvasSaveState === "saved",
+          draftActivityIdle: draftActivity === "idle",
+          captureActivityIdle: captureShellChangesIdle({
+            modalOpen: captureOpen,
+            activity: captureActivity,
+            problemWhileClosed: captureProblemWhileClosed
+          }),
+          inboxActivityIdle: !inboxOpen || inboxActivity === "idle",
+          shellBusy: busy,
+          canvasBusy
+        })}
         busy={busy}
+        inboxOpen={inboxOpen}
+        settingsOpen={settingsOpen}
+        onCloseInbox={closeInboxWorkspace}
+        onOpenCapture={(captureId) => openCaptureComposer(captureId)}
+        onOpenInbox={() => void openInboxWorkspace()}
+        onOpenSettings={() => setSettingsOpen(true)}
+        renderInbox={(presentation: InboxWorkspacePresentation) => (
+          <InboxPanel
+            canvasVersion={canvasWorkspace?.board.version}
+            compact={presentation.compact}
+            ensureCanvasVersion={() => ensureCanvasVersionForHandoff()}
+            onAcknowledgement={handleInboxAcknowledgement}
+            onActivityChange={setInboxActivity}
+            onOpenCapture={(captureId) => openCaptureComposer(captureId)}
+            onOpenSettings={() => setSettingsOpen(true)}
+            providerStatusSignal={providerStatusSignal}
+            onOpenDraft={(sceneId) =>
+              void openHandoffTargetScene(sceneId as SceneId, "draft")
+            }
+            {...(presentation.compact
+              ? {}
+              : {
+                  onOpenSplit: (sceneId) =>
+                    void openHandoffTargetScene(sceneId as SceneId, "split")
+                })}
+            onProblem={handleInboxProblem}
+            onProblemResolved={dismissToast}
+            onPromote={(input) => handleCapturePromote(input)}
+            onSelectCapture={setInboxSelectedCaptureId}
+            onViewSourceCapture={(captureId) =>
+              openCaptureComposer(captureId, { readOnly: true })
+            }
+            project={selectedProject}
+            projectId={selectedProject.id}
+            projectVersion={selectedProject.version}
+            refreshSignal={inboxRefreshSignal}
+            selectedCaptureId={inboxSelectedCaptureId}
+          />
+        )}
         chatCapabilities={GHOSTWRITER_CAPABILITIES}
         chatMessages={chatMessages}
+        chatMode={chatMode}
+        chatModel={chatModel}
+        chatEffort={chatEffort}
+        chatProviderConfigured={chatProviderConfigured}
+        onChatModeChange={(mode) => {
+          setChatMode(mode);
+          persistChatPrefs({ mode });
+        }}
+        onChatModelChange={(model) => {
+          setChatModel(model);
+          persistChatPrefs({ model });
+        }}
+        onChatEffortChange={(effort) => {
+          setChatEffort(effort);
+          persistChatPrefs({ effort });
+        }}
         drillStack={drillStack}
         error={error}
         mode={workspaceMode}
+        coverOptionsJob={
+          coverOptionsJob === undefined
+            ? undefined
+            : {
+                bookId: coverOptionsJob.bookId,
+                jobId: coverOptionsJob.jobId,
+                status: coverOptionsJob.status,
+                ...(coverOptionsJob.options === undefined
+                  ? {}
+                  : { options: coverOptionsJob.options }),
+                ...(coverOptionsJob.error === undefined
+                  ? {}
+                  : { error: coverOptionsJob.error }),
+                ...(coverOptionsJob.basePrompt === undefined
+                  ? {}
+                  : { basePrompt: coverOptionsJob.basePrompt })
+              }
+        }
+        coverReviewBookId={coverReviewBookId}
+        onApplyCoverImage={(input) => applyBookCoverImage(input)}
+        onCoverReviewConsumed={() => setCoverReviewBookId(undefined)}
+        onResolveCoverDisplayUrl={(input) => resolveBookCoverDisplayUrl(input)}
+        onStartCoverOptionsJob={(input) => startBookCoverOptionsJob(input)}
         onBack={() => void leaveProject()}
         onChatSend={handleChatSend}
         onCommand={runCommand}
@@ -1804,6 +2544,46 @@ export default function App() {
         selectedSceneId={selectedSceneId}
         workflowLens={workflowLens}
       />
+      <CaptureModalShell
+        onRequestClose={() => void closeCaptureComposer()}
+        onShow={() => captureComposerRef.current?.focus()}
+        visible={captureOpen}
+      >
+        <CaptureComposerPanel
+          accountId={writer.account.id}
+          captureId={activeCaptureId}
+          readOnly={captureComposerReadOnly}
+          onAcknowledgement={handleCaptureAcknowledgement}
+          onActivityChange={handleCaptureActivityChange}
+          onCaptureReady={(captureId) => setActiveCaptureId(captureId)}
+          onClose={() => void closeCaptureComposer()}
+          onProblem={handleCaptureProblem}
+          onProblemResolved={handleCaptureProblemResolved}
+          projectId={selectedProject.id}
+          ref={captureComposerRef}
+        />
+      </CaptureModalShell>
+      <CaptureModalShell
+        accessibilityLabel="Settings"
+        dismissAccessibilityLabel="Dismiss Settings"
+        onRequestClose={() => {
+          setSettingsOpen(false);
+          setProviderStatusSignal((n) => n + 1);
+        }}
+        visible={settingsOpen}
+      >
+        <SettingsPanel
+          onClose={() => {
+            setSettingsOpen(false);
+            setProviderStatusSignal((n) => n + 1);
+          }}
+          onConfigured={() => {
+            setSettingsOpen(false);
+            setProviderStatusSignal((n) => n + 1);
+          }}
+        />
+      </CaptureModalShell>
+      </>
     );
   }
 

@@ -128,8 +128,13 @@ ADR 0005 establishes the identity spine used by all real project access:
 - Authored kernel records archive/restore; empty parts/chapters may be safely removed. Named editions
   remain read-only until immutable scene/project revisions exist.
 - Canonical MCP command bindings are explicit security exceptions, not omissions: direct external
-  writes wait for scoped grants and the agent-authority/remote-authorization ADR. Fixture MCP reads
-  continue to exercise the shared navigator projection.
+  writes wait for scoped grants. Fixture MCP reads continue to exercise the shared navigator
+  projection. ADR 0011 scoped grants now bind Capture reflection propose-only tools
+  (`ghostwriter_get_grant`, `ghostwriter_read_capture`,
+  `ghostwriter_assemble_capture_reflection_context`, `ghostwriter_propose_capture_reflection`)
+  under server-minted opaque tokens; apply, credential access, grant mutation, and project
+  enumeration remain unavailable to external MCP clients. Production remote MCP OAuth remains later;
+  v1 proves capability parity via injectable grant services in local/tests.
 
 See [ADR 0005](adr/0005-authenticated-accounts-and-project-access.md).
 
@@ -172,8 +177,55 @@ metadata persistence now updates stable canonical rows rather than deleting/rebu
   beside `displayName` (migration `0011_writer_publishing`).
 - [ADR 0009](adr/0009-writing-craft-and-assist.md) adds scene sketch + character sheet craft JSON,
   craft-only ink, browser dictation into Tiptap, and propose-only writing-assist proposals.
-- Canonical MCP writes, real-time subscriptions/presence, editor invitations, comments/suggestions,
-  image generation, and full offline access remain explicit later decisions.
+- Canonical MCP writes (beyond propose-only grants), real-time subscriptions/presence, editor
+  invitations, comments/suggestions, and full offline access remain explicit later decisions.
+
+## Accepted Capture and agent architecture (implemented locally)
+
+[ADR 0010](adr/0010-capture-inbox-media-and-promotion.md) and
+[ADR 0011](adr/0011-byok-context-proposals-playbooks-and-mcp-grants.md) govern Capture-to-Story and
+BYOK agents on `feat/capture-to-story-agents`:
+
+- Capture is a project-owned noncanonical rich document with a dedicated expected-version domain,
+  bounded browser recovery, and immutable integration provenance. Inbox (writer-facing **Plans**
+  center workspace) is a projection over captures, runs, and proposals—not another prose owner.
+- Deterministic promotion creates or places one canonical scene and optional Canvas card under
+  exact Capture/project/Canvas preconditions. Canvas still never owns manuscript order.
+- Private Capture attachments and applied book-cover PNGs use Cloudflare R2 through an
+  object-storage port and Fly-authorized short-lived object URLs. Binary bytes never enter Postgres
+  project JSON or editor documents. Hermetic E2E uses a memory fake.
+- `packages/ai` provides a provider-neutral boundary with OpenAI BYOK first (`completeStructured`,
+  `gpt-image-1` images) and a deterministic fake provider in required CI. Writer keys are encrypted
+  under versioned Fly-held root keys (`GHOSTWRITER_PROVIDER_KEK_V1`).
+- Context is assembled server-side into revision-addressed receipts. Fixed product/workflow policy
+  outranks optional account preferences, project instructions, declarative playbooks, and the
+  assignment; capabilities remain enforced outside the model.
+- Models and external MCP clients may create typed noncanonical proposals. Only an authenticated
+  first-party human interaction may apply an exact hash after core revalidates every version.
+- Project-scoped MCP grants persist token hashes (never plaintext), closed Capture/tool allowlists,
+  expiry, and revocation. Owner admin routes mint/revoke grants; proposals created under a grant
+  appear in the same Inbox projection as first-party UI runs.
+- Workspace Agent dock (`POST /api/workspace/chat`) uses BYOK chat completion with server-assembled
+  navigator/selection context; mode/model/effort are client prefs. Toolkit jobs (Scene Partner,
+  cover options) remain separate propose/apply or apply-cover routes.
+
+Product and operational docs must preserve shipped-vs-local distinctions until each checkpoint is
+founder-accepted in a real browser. R2/KEK secrets are not assumed provisioned on production Fly
+until operations confirms them.
+
+The active branch implements Capture prose/Inbox/promotion plus the mixed-media boundary:
+`capture_attachments` metadata, transactional quotas, provider-neutral object storage, a private R2
+SigV4 adapter, memory fake, Fly control routes, direct browser upload, backend byte
+hash/type inspection, recorded audio, and attachment UI. Attachments stay outside ProseMirror,
+scene promotion, and model context. Book covers store concept/notes and an optional
+`https://ghostwriter.cover/...` locator (`book.cover`, migration `0018_book_cover`).
+
+## Workspace shell (Cursor-like)
+
+Wide layout is activity rail | resizable primary (Explorer or Characters browse) | editor center
+(Draft / Canvas / Split / Title Page / Plans) | resizable secondary (Agent | Properties). Narrow
+keeps rail/tab fallbacks; Plans may still take the center. Cast center-studio redesign is proposed
+separately and must not be described as shipped until implemented.
 
 ## Accepted product requirements (2026-07-11)
 
@@ -237,7 +289,7 @@ plan's record-log plus update this section.
 | Browser recovery | IndexedDB, OPFS, simpler encrypted draft buffer | Implemented under ADR 0006: bounded encrypted IndexedDB for unacknowledged prose only |
 | Story Canvas state | relational board objects/links, aggregate JSON board, scene-only placement fields | Implemented foundation under ADR 0007: project board with dedicated version, canonical ID references, manuscript-derived spine, and accessible ordered projection |
 | Build tooling | pnpm native workspace orchestration; revisit Turborepo only when measured need appears | Resolved for scaffold |
-| AI providers | Anthropic, OpenAI, local models via Ollama | `packages/ai` should abstract this from day one |
+| AI providers | Resolved for first live workflow by ADR 0011 | Provider-neutral `packages/ai`; OpenAI BYOK first, deterministic fake in CI; future official delegated auth can replace key entry |
 
 ## Non-negotiables recap
 

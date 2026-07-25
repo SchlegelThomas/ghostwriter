@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Writing agent harness — record log</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Record log</p>
+      <h1>Writing agent harness</h1>
+    </header>
+
+    <section>
+      <h2>2026-07-25 — Inventory + proposed plan</h2>
+      <ul>
+        <li>Founder direction: Cursor-like agentic harness for writing — modes/agents toolkit, MCP chat, model + effort, Ghostwriter layer over frontier models with book/project/idea context.</li>
+        <li>Inventory: Agent dock + capability chips exist; workspace chat is tool-only. ADR 0011 (BYOK, receipts, runs, proposals, playbooks, MCP grants) is live mainly via Inbox/Scene Partner.</li>
+        <li>Gaps: mode picker, model/effort picker, Ask completion, tool-calling loop in dock, Partner toolkit wiring into dock.</li>
+        <li>Proposed modes: <strong>Ask / Plan / Partner</strong> (writing-native) rather than cloning Cursor’s Agent/Plan/Ask labels verbatim.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Founder accept: modes + Plans rebrand</h2>
+      <ul>
+        <li><strong>Accepted modes:</strong> <strong>chat</strong> / <strong>Plan</strong> / <strong>agent</strong> (replaces Ask / Partner naming).</li>
+        <li><strong>chat:</strong> Q&amp;A, research, draft ideas.</li>
+        <li><strong>Plan:</strong> outlines / proposals / drafts that land in <strong>Plans</strong> (ex–Dreams &amp; Ideas).</li>
+        <li><strong>agent:</strong> job-bound writing toolkit agents (Scene Partner, Cover, …).</li>
+        <li><strong>Plans view:</strong> always opens in the center pane (wide and narrow); left primary stays Explorer or Characters. Capture remains modal.</li>
+        <li>Plan status → active; “Plan accepted” todo checked.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — CP1 + CP2: Agent dock chat live</h2>
+      <ul>
+        <li>Rewrote <code>WorkspaceChatPanel</code>: removed capability chip strip; Cursor-like composer with mode / model / effort pickers; empty-state Settings CTA when BYOK missing.</li>
+        <li>Prefs helpers <code>workspace-agent-prefs.ts</code> persist mode/model/effort per project in localStorage.</li>
+        <li>Upgraded <code>POST /api/workspace/chat</code> (extracted <code>workspace-chat-routes.ts</code>): deterministic <code>project.navigator.read</code> kept; else BYOK <code>completeStructured</code> with server-assembled navigator/selection context and mode instructions; no-key returns friendly 200 + <code>PROVIDER_NOT_CONFIGURED</code> (no capability-matching wall).</li>
+        <li>Hermetic e2e fake answers <code>workspace-chat-turn-v1</code>.</li>
+        <li>CP1 + CP2 todos checked. Next: CP3 tools-in-the-loop / CP4 toolkit agent deep-link.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Docs note (partial)</h2>
+      <ul>
+        <li>PRODUCT/ARCHITECTURE/API now describe Agent dock chat modes and <code>POST /api/workspace/chat</code>.</li>
+        <li>CP5 Plan→Plans persistence + harness ADR amendment still open; CP3–CP4 not started.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
+

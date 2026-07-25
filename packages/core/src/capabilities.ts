@@ -354,6 +354,169 @@ export const BOOK_READER_CAPABILITY = Object.freeze({
   })
 }) satisfies GhostwriterCapability;
 
+export const CAPTURE_READ_CAPABILITY = Object.freeze({
+  id: "capture.read",
+  title: "Read one owned Capture working document",
+  access: "read",
+  scope: "project",
+  coreUseCase: "getCapture",
+  bindings: Object.freeze({
+    ui: "CaptureComposer",
+    web: "GET /api/projects/{projectId}/captures/{captureId}",
+    mcp: "ghostwriter_read_capture"
+  })
+}) satisfies GhostwriterCapability;
+
+export const CAPTURE_LIST_CAPABILITY = Object.freeze({
+  id: "capture.list",
+  title: "List owned Capture summaries for a project",
+  access: "read",
+  scope: "project",
+  coreUseCase: "listCaptures",
+  bindings: Object.freeze({
+    ui: "InboxPanel",
+    web: "GET /api/projects/{projectId}/captures",
+    mcpException:
+      "Capture list reads require authenticated project authority that the current MCP binding does not have."
+  })
+}) satisfies GhostwriterCapability;
+
+function captureMutation(
+  id: string,
+  title: string,
+  coreUseCase: string,
+  web: string,
+  ui: string
+): GhostwriterCapability {
+  return Object.freeze({
+    id,
+    title,
+    access: "apply",
+    scope: "project",
+    coreUseCase,
+    bindings: Object.freeze({
+      ui,
+      web,
+      mcpException: MCP_CANONICAL_MUTATION_EXCEPTION
+    })
+  });
+}
+
+export const CAPTURE_MUTATION_CAPABILITIES: readonly GhostwriterCapability[] =
+  Object.freeze([
+    captureMutation(
+      "capture.create",
+      "Create a noncanonical Capture",
+      "createCapture",
+      "POST /api/projects/{projectId}/captures",
+      "CaptureComposer"
+    ),
+    captureMutation(
+      "capture.document.save",
+      "Save an acknowledged Capture document",
+      "saveCaptureDocument",
+      "PATCH /api/projects/{projectId}/captures/{captureId}/body",
+      "CaptureComposer"
+    ),
+    captureMutation(
+      "capture.archive",
+      "Archive or restore a Capture",
+      "setCaptureArchived",
+      "POST /api/projects/{projectId}/captures/{captureId}/archive",
+      "InboxPanel"
+    ),
+    captureMutation(
+      "capture.promote",
+      "Promote an acknowledged Capture into a new Scene",
+      "promoteCaptureToScene",
+      "POST /api/projects/{projectId}/captures/{captureId}/promote",
+      "InboxPanel"
+    )
+  ]);
+
+function captureAttachmentMutation(
+  id: string,
+  title: string,
+  coreUseCase: string,
+  web: string,
+  ui: string
+): GhostwriterCapability {
+  return Object.freeze({
+    id,
+    title,
+    access: "apply",
+    scope: "project",
+    coreUseCase,
+    bindings: Object.freeze({
+      ui,
+      web,
+      mcpException:
+        "Capture attachment mutations require authenticated project authority and private object storage that the current MCP binding does not have."
+    })
+  });
+}
+
+function captureAttachmentRead(
+  id: string,
+  title: string,
+  coreUseCase: string,
+  web: string,
+  ui: string
+): GhostwriterCapability {
+  return Object.freeze({
+    id,
+    title,
+    access: "read",
+    scope: "project",
+    coreUseCase,
+    bindings: Object.freeze({
+      ui,
+      web,
+      mcpException:
+        "Capture attachment reads require authenticated project authority that the current MCP binding does not have."
+    })
+  });
+}
+
+export const CAPTURE_ATTACHMENT_CAPABILITIES: readonly GhostwriterCapability[] =
+  Object.freeze([
+    captureAttachmentMutation(
+      "capture.attachment.init",
+      "Reserve a bounded private Capture attachment upload",
+      "initAttachmentUpload",
+      "POST /api/projects/{projectId}/captures/{captureId}/attachments/init",
+      "CaptureComposer"
+    ),
+    captureAttachmentMutation(
+      "capture.attachment.finalize",
+      "Finalize a server-inspected Capture attachment upload",
+      "finalizeAttachmentUpload",
+      "POST /api/projects/{projectId}/captures/{captureId}/attachments/{attachmentId}/finalize",
+      "CaptureComposer"
+    ),
+    captureAttachmentRead(
+      "capture.attachment.list",
+      "List Capture attachment metadata for a project Capture",
+      "listAttachments",
+      "GET /api/projects/{projectId}/captures/{captureId}/attachments",
+      "InboxPanel"
+    ),
+    captureAttachmentRead(
+      "capture.attachment.download",
+      "Issue a short-lived Capture attachment download URL",
+      "getAttachmentDownloadUrl",
+      "POST /api/projects/{projectId}/captures/{captureId}/attachments/{attachmentId}/download",
+      "InboxPanel"
+    ),
+    captureAttachmentMutation(
+      "capture.attachment.delete",
+      "Delete a Capture attachment and record a tombstone",
+      "deleteAttachment",
+      "DELETE /api/projects/{projectId}/captures/{captureId}/attachments/{attachmentId}",
+      "InboxPanel"
+    )
+  ]);
+
 export const WRITING_ASSIST_CAPABILITY = Object.freeze({
   id: "writing.assist.propose",
   title: "Propose writing-assist craft or prose variants",
@@ -368,6 +531,203 @@ export const WRITING_ASSIST_CAPABILITY = Object.freeze({
   })
 }) satisfies GhostwriterCapability;
 
+const AGENT_MCP_DEFER =
+  "Agent account/guidance surfaces stay first-party; scoped MCP grants cover Capture reflection read/propose only.";
+
+const MCP_GRANT_APPLY_EXCEPTION =
+  "External MCP clients may submit typed proposals under a scoped grant but cannot apply, reject, cancel, or mutate grants; apply remains first-party UI authority (ADR 0011).";
+
+export const MCP_GRANT_DISCOVER_CAPABILITY = Object.freeze({
+  id: "mcp.grant.discover",
+  title: "Discover the active project-scoped MCP grant",
+  access: "read",
+  scope: "project",
+  coreUseCase: "getGrantUnderToken",
+  bindings: Object.freeze({
+    mcp: "ghostwriter_get_grant"
+  })
+}) satisfies GhostwriterCapability;
+
+export const MCP_GRANT_MANAGE_CAPABILITY = Object.freeze({
+  id: "mcp.grant.manage",
+  title: "Create and revoke project-scoped MCP grants",
+  access: "apply",
+  scope: "project",
+  coreUseCase: "createGrant",
+  bindings: Object.freeze({
+    web: "POST|DELETE /api/projects/{projectId}/mcp-grants",
+    mcpException:
+      "Grant minting and revocation are first-party owner operations; MCP clients cannot widen or recreate grants."
+  })
+}) satisfies GhostwriterCapability;
+
+export const ACCOUNT_PROVIDER_CREDENTIAL_MANAGE_CAPABILITY = Object.freeze({
+  id: "account.providerCredential.manage",
+  title: "Manage encrypted OpenAI provider credentials",
+  access: "apply",
+  scope: "account",
+  coreUseCase: "setOpenAiCredential",
+  bindings: Object.freeze({
+    mcpException:
+      "Provider credentials are never available through MCP; decryption is confined to the backend provider adapter."
+  })
+}) satisfies GhostwriterCapability;
+
+export const ACCOUNT_AI_COLLABORATION_READ_CAPABILITY = Object.freeze({
+  id: "account.aiCollaboration.read",
+  title: "Read account AI collaboration preferences",
+  access: "read",
+  scope: "account",
+  coreUseCase: "getAccountAiCollaborationProfile",
+  bindings: Object.freeze({
+    mcpException: AGENT_MCP_DEFER
+  })
+}) satisfies GhostwriterCapability;
+
+export const ACCOUNT_AI_COLLABORATION_UPDATE_CAPABILITY = Object.freeze({
+  id: "account.aiCollaboration.update",
+  title: "Update account AI collaboration preferences",
+  access: "apply",
+  scope: "account",
+  coreUseCase: "saveAccountAiCollaborationProfile",
+  bindings: Object.freeze({
+    mcpException: AGENT_MCP_DEFER
+  })
+}) satisfies GhostwriterCapability;
+
+export const PROJECT_AGENT_INSTRUCTIONS_READ_CAPABILITY = Object.freeze({
+  id: "project.agentInstructions.read",
+  title: "Read project agent instructions",
+  access: "read",
+  scope: "project",
+  coreUseCase: "getProjectAgentInstructions",
+  bindings: Object.freeze({
+    mcpException: AGENT_MCP_DEFER
+  })
+}) satisfies GhostwriterCapability;
+
+export const PROJECT_AGENT_INSTRUCTIONS_UPDATE_CAPABILITY = Object.freeze({
+  id: "project.agentInstructions.update",
+  title: "Update project agent instructions",
+  access: "apply",
+  scope: "project",
+  coreUseCase: "saveProjectAgentInstructions",
+  bindings: Object.freeze({
+    mcpException: AGENT_MCP_DEFER
+  })
+}) satisfies GhostwriterCapability;
+
+export const PROJECT_PLAYBOOK_READ_CAPABILITY = Object.freeze({
+  id: "project.playbook.read",
+  title: "Read declarative project playbooks",
+  access: "read",
+  scope: "project",
+  coreUseCase: "listProjectPlaybooks",
+  bindings: Object.freeze({
+    mcpException: AGENT_MCP_DEFER
+  })
+}) satisfies GhostwriterCapability;
+
+export const PROJECT_PLAYBOOK_UPDATE_CAPABILITY = Object.freeze({
+  id: "project.playbook.update",
+  title: "Create or update declarative project playbooks",
+  access: "apply",
+  scope: "project",
+  coreUseCase: "saveProjectPlaybook",
+  bindings: Object.freeze({
+    mcpException: AGENT_MCP_DEFER
+  })
+}) satisfies GhostwriterCapability;
+
+export const AGENT_CONTEXT_PREVIEW_CAPABILITY = Object.freeze({
+  id: "agent.context.preview",
+  title: "Preview compiled agent context and egress receipt",
+  access: "read",
+  scope: "project",
+  coreUseCase: "compileCaptureReflectionInstructions",
+  bindings: Object.freeze({
+    ui: "CaptureHandoffPanel",
+    web: "POST /api/projects/{projectId}/agent/context-preview",
+    mcp: "ghostwriter_assemble_capture_reflection_context"
+  })
+}) satisfies GhostwriterCapability;
+
+export const AGENT_RUN_CREATE_CAPABILITY = Object.freeze({
+  id: "agent.run.create",
+  title: "Queue a receipt-backed agent run",
+  access: "propose",
+  scope: "project",
+  coreUseCase: "queueRun",
+  bindings: Object.freeze({
+    ui: "CaptureHandoffPanel",
+    web: "POST /api/projects/{projectId}/agent/runs",
+    mcp: "ghostwriter_propose_capture_reflection"
+  })
+}) satisfies GhostwriterCapability;
+
+export const AGENT_RUN_READ_CAPABILITY = Object.freeze({
+  id: "agent.run.read",
+  title: "Read agent run summaries and detail for a project",
+  access: "read",
+  scope: "project",
+  coreUseCase: "getRun",
+  bindings: Object.freeze({
+    ui: "InboxPanel",
+    mcpException: AGENT_MCP_DEFER
+  })
+}) satisfies GhostwriterCapability;
+
+export const AGENT_RUN_CANCEL_CAPABILITY = Object.freeze({
+  id: "agent.run.cancel",
+  title: "Cancel a queued or running agent run",
+  access: "apply",
+  scope: "project",
+  coreUseCase: "cancelRun",
+  bindings: Object.freeze({
+    ui: "InboxPanel",
+    mcpException: MCP_GRANT_APPLY_EXCEPTION
+  })
+}) satisfies GhostwriterCapability;
+
+export const AGENT_PROPOSAL_READ_CAPABILITY = Object.freeze({
+  id: "agent.proposal.read",
+  title: "Read agent proposal summaries and detail for a project",
+  access: "read",
+  scope: "project",
+  coreUseCase: "getProposal",
+  bindings: Object.freeze({
+    ui: "InboxPanel",
+    web: "GET /api/projects/{projectId}/agent/proposals",
+    mcpException:
+      "Proposal listing stays first-party; MCP clients create proposals into the same Inbox without project-wide enumeration."
+  })
+}) satisfies GhostwriterCapability;
+
+export const AGENT_PROPOSAL_REJECT_CAPABILITY = Object.freeze({
+  id: "agent.proposal.reject",
+  title: "Reject a ready agent proposal",
+  access: "apply",
+  scope: "project",
+  coreUseCase: "rejectProposal",
+  bindings: Object.freeze({
+    ui: "InboxPanel",
+    mcpException: MCP_GRANT_APPLY_EXCEPTION
+  })
+}) satisfies GhostwriterCapability;
+
+export const AGENT_PROPOSAL_APPLY_CAPABILITY = Object.freeze({
+  id: "agent.proposal.apply",
+  title: "Apply an exact agent proposal hash",
+  access: "apply",
+  scope: "project",
+  coreUseCase: "applyProposal",
+  bindings: Object.freeze({
+    ui: "InboxPanel",
+    web: "POST /api/projects/{projectId}/agent/proposals/{proposalId}/apply",
+    mcpException: MCP_GRANT_APPLY_EXCEPTION
+  })
+}) satisfies GhostwriterCapability;
+
 export const GHOSTWRITER_CAPABILITIES: readonly GhostwriterCapability[] = Object.freeze([
   PROJECT_NAVIGATOR_CAPABILITY,
   ...PROJECT_COMMAND_CAPABILITIES,
@@ -376,6 +736,26 @@ export const GHOSTWRITER_CAPABILITIES: readonly GhostwriterCapability[] = Object
   ...SCENE_WRITING_MUTATION_CAPABILITIES,
   ...CANVAS_READ_CAPABILITIES,
   ...CANVAS_MUTATION_CAPABILITIES,
+  CAPTURE_READ_CAPABILITY,
+  CAPTURE_LIST_CAPABILITY,
+  ...CAPTURE_MUTATION_CAPABILITIES,
+  ...CAPTURE_ATTACHMENT_CAPABILITIES,
   BOOK_READER_CAPABILITY,
-  WRITING_ASSIST_CAPABILITY
+  WRITING_ASSIST_CAPABILITY,
+  ACCOUNT_PROVIDER_CREDENTIAL_MANAGE_CAPABILITY,
+  ACCOUNT_AI_COLLABORATION_READ_CAPABILITY,
+  ACCOUNT_AI_COLLABORATION_UPDATE_CAPABILITY,
+  PROJECT_AGENT_INSTRUCTIONS_READ_CAPABILITY,
+  PROJECT_AGENT_INSTRUCTIONS_UPDATE_CAPABILITY,
+  PROJECT_PLAYBOOK_READ_CAPABILITY,
+  PROJECT_PLAYBOOK_UPDATE_CAPABILITY,
+  MCP_GRANT_DISCOVER_CAPABILITY,
+  MCP_GRANT_MANAGE_CAPABILITY,
+  AGENT_CONTEXT_PREVIEW_CAPABILITY,
+  AGENT_RUN_CREATE_CAPABILITY,
+  AGENT_RUN_READ_CAPABILITY,
+  AGENT_RUN_CANCEL_CAPABILITY,
+  AGENT_PROPOSAL_READ_CAPABILITY,
+  AGENT_PROPOSAL_REJECT_CAPABILITY,
+  AGENT_PROPOSAL_APPLY_CAPABILITY
 ]);

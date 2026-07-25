@@ -12,6 +12,13 @@ export type SceneVariantId = BrandedId<"SceneVariantId">;
 export type CanvasObjectId = BrandedId<"CanvasObjectId">;
 export type CanvasLinkId = BrandedId<"CanvasLinkId">;
 export type CanvasRevisionId = BrandedId<"CanvasRevisionId">;
+export type CaptureId = BrandedId<"CaptureId">;
+export type CaptureRevisionId = BrandedId<"CaptureRevisionId">;
+export type AttachmentId = BrandedId<"AttachmentId">;
+export type PlaybookId = BrandedId<"PlaybookId">;
+export type ContextReceiptId = BrandedId<"ContextReceiptId">;
+export type AgentRunId = BrandedId<"AgentRunId">;
+export type AgentProposalId = BrandedId<"AgentProposalId">;
 
 export type DomainValidationCode =
   | "EMPTY_VALUE"
@@ -24,7 +31,9 @@ export type DomainValidationCode =
   | "INVALID_VERSION"
   | "INVALID_URL"
   | "INVALID_CRAFT"
-  | "VALUE_TOO_LONG";
+  | "VALUE_TOO_LONG"
+  | "INVALID_AGENT_POLICY"
+  | "INVALID_AGENT_OUTPUT";
 
 export class DomainValidationError extends Error {
   readonly code: DomainValidationCode;
@@ -116,6 +125,34 @@ export function canvasLinkId(value: string): CanvasLinkId {
 
 export function canvasRevisionId(value: string): CanvasRevisionId {
   return createId(value, "CanvasRevisionId");
+}
+
+export function captureId(value: string): CaptureId {
+  return createId(value, "CaptureId");
+}
+
+export function captureRevisionId(value: string): CaptureRevisionId {
+  return createId(value, "CaptureRevisionId");
+}
+
+export function attachmentId(value: string): AttachmentId {
+  return createId(value, "AttachmentId");
+}
+
+export function playbookId(value: string): PlaybookId {
+  return createId(value, "PlaybookId");
+}
+
+export function contextReceiptId(value: string): ContextReceiptId {
+  return createId(value, "ContextReceiptId");
+}
+
+export function agentRunId(value: string): AgentRunId {
+  return createId(value, "AgentRunId");
+}
+
+export function agentProposalId(value: string): AgentProposalId {
+  return createId(value, "AgentProposalId");
 }
 
 function freezeList<Value>(values: readonly Value[]): readonly Value[] {
@@ -249,6 +286,37 @@ export function createManuscriptStructure(input: ManuscriptStructure): Manuscrip
   });
 }
 
+export type BookCover = Readonly<{
+  concept?: string;
+  notes?: string;
+  imageUrl?: string;
+}>;
+
+export function createBookCover(input: BookCover): BookCover {
+  const concept =
+    input.concept === undefined
+      ? undefined
+      : requireText(input.concept, "Book cover concept");
+  const notes =
+    input.notes === undefined ? undefined : requireText(input.notes, "Book cover notes");
+  const imageUrl =
+    input.imageUrl === undefined
+      ? undefined
+      : requireHttpUrl(input.imageUrl, "Book cover image URL");
+  const cover = Object.freeze({
+    ...(concept === undefined ? {} : { concept }),
+    ...(notes === undefined ? {} : { notes }),
+    ...(imageUrl === undefined ? {} : { imageUrl })
+  });
+  if (Object.keys(cover).length === 0) {
+    throw new DomainValidationError(
+      "EMPTY_VALUE",
+      "Book cover must include at least one field."
+    );
+  }
+  return cover;
+}
+
 export type Book = Readonly<{
   id: BookId;
   projectId: ProjectId;
@@ -256,6 +324,7 @@ export type Book = Readonly<{
   status: BookStatus;
   manuscript: ManuscriptStructure;
   createdAt: string;
+  cover?: BookCover;
   archivedAt?: string;
 }>;
 
@@ -264,6 +333,8 @@ export function createBook(input: Book): Book {
     input.archivedAt === undefined
       ? undefined
       : requireText(input.archivedAt, "Book archive time");
+  const cover =
+    input.cover === undefined ? undefined : createBookCover(input.cover);
   return Object.freeze({
     id: input.id,
     projectId: input.projectId,
@@ -271,6 +342,7 @@ export function createBook(input: Book): Book {
     status: input.status,
     manuscript: createManuscriptStructure(input.manuscript),
     createdAt: requireText(input.createdAt, "Book creation time"),
+    ...(cover === undefined ? {} : { cover }),
     ...(archivedAt === undefined ? {} : { archivedAt })
   });
 }

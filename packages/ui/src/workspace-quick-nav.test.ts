@@ -9,10 +9,13 @@ import {
 } from "@ghostwriter/core";
 import { describe, expect, it } from "vitest";
 import {
+  buildCapabilityJumpTargets,
+  buildUnifiedSearchTargets,
   buildWorkspaceJumpTargets,
   commandPaletteKinds,
   filterWorkspaceJumpTargets,
   manuscriptJumpKinds,
+  unifiedSearchKinds,
   type WorkspaceJumpKind,
   type WorkspaceJumpTarget
 } from "./workspace-quick-nav.js";
@@ -139,7 +142,9 @@ describe("buildWorkspaceJumpTargets", () => {
     expect(targetIds(targetsByKind(targets, "panel"))).toEqual([
       "panel:structure",
       "panel:chat",
-      "panel:jump"
+      "panel:jump",
+      "action:capture",
+      "action:inbox"
     ]);
   });
 
@@ -230,5 +235,34 @@ describe("workspace jump kind helpers", () => {
 
   it("returns shell command kinds for the command palette", () => {
     expect(commandPaletteKinds()).toEqual(["mode", "panel"]);
+  });
+
+  it("includes MCP capabilities in unified top-search kinds", () => {
+    expect(unifiedSearchKinds()).toContain("capability");
+  });
+});
+
+describe("buildUnifiedSearchTargets", () => {
+  it("merges manuscript jump targets with MCP capabilities", () => {
+    const capabilities = [
+      {
+        id: "ghostwriter.project.describe",
+        title: "Describe project",
+        access: "read" as const,
+        scope: "project" as const,
+        coreUseCase: "describeProject",
+        bindings: { mcp: "ghostwriter_describe_project" }
+      }
+    ];
+    const targets = buildUnifiedSearchTargets(navigator, capabilities);
+    expect(targets.length).toBeGreaterThan(
+      buildWorkspaceJumpTargets(navigator).length
+    );
+    expect(
+      buildCapabilityJumpTargets(capabilities).map((target) => target.id)
+    ).toEqual(["capability:ghostwriter.project.describe"]);
+    expect(
+      targets.some((target) => target.kind === "capability")
+    ).toBe(true);
   });
 });

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Writing agent harness (Cursor-like)</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan</p>
+      <h1>Writing agent harness</h1>
+      <p class="meta"><strong>Status:</strong> active<br>
+        <strong>Branch:</strong> <code>feat/capture-to-story-agents</code> (shared until harness needs its own branch)<br>
+        <strong>Owner:</strong> founder + parent agent</p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Make Ghostwriter the <strong>agentic harness for creative writing</strong>: a Cursor-like Agent dock where writers pick a writing mode/agent, choose frontier model + effort, attach book/project/idea context, chat with tools (MCP capabilities), and receive propose-only results they can review and apply. Ghostwriter owns the writing-specific layer (workflows, context receipts, playbooks, toolkit agents); providers supply models under BYOK.</p>
+      <p><strong>Out of scope for this plan:</strong> marketplace / multi-tenant orgs; Anthropic/Google adapters (OpenAI first, multi-provider port already exists); silent canonical writes; replacing Plans Scene Partner flows wholesale in CP1; Playwright until founder verifies.</p>
+    </section>
+
+    <section>
+      <h2>What already exists</h2>
+      <ul>
+        <li>Shell: secondary <strong>Agent | Properties</strong> with docked <code>WorkspaceChatPanel</code>.</li>
+        <li>ADR 0011 platform: BYOK OpenAI, context receipts, runs/proposals, playbooks, MCP grants — used mainly from <strong>Plans / Scene Partner</strong>.</li>
+        <li>Capability catalog + MCP server; workspace chat today is <strong>tool-only</strong> (navigator read) and does not call the LLM.</li>
+        <li>Writing jobs in Mockups 4.0/5.0: Scene Partner, Character Coach, Worldkeeper, Sketch Partner (propose-only).</li>
+        <li>Writer-facing <strong>Plans</strong> (ex–Dreams &amp; Ideas) opens in the center pane; Capture stays modal.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Target UX (Cursor mapping)</h2>
+      <table>
+        <thead><tr><th>Cursor</th><th>Ghostwriter harness</th></tr></thead>
+        <tbody>
+          <tr><td>Mode: Agent / Plan / Ask / …</td><td><strong>Writing modes</strong>: <strong>chat</strong> (Q&amp;A, research, draft ideas), <strong>Plan</strong> (outlines / proposals / drafts that land in Plans), <strong>agent</strong> (job-bound writing agents from toolkit)</td></tr>
+          <tr><td>Model + effort picker</td><td>BYOK model id + effort/budget posture on the composer; persisted per project preference</td></tr>
+          <tr><td>@ context / paperclip</td><td>Server-assembled context: selection (scene/book), Captures/Plans, manuscript slices via receipt classes — never client-submitted raw canon paste as authority</td></tr>
+          <tr><td>MCP tools in chat</td><td>Capability invoke + LLM tool-calling loop over granted first-party tools; propose-only for writes</td></tr>
+          <tr><td>Agent as harness</td><td>Ghostwriter compiles policy → workflow → project instructions → playbook → assignment; providers are interchangeable backends</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria (epic)</h2>
+      <ul>
+        <li>Agent dock composer shows <strong>mode</strong> and <strong>model/effort</strong> controls (Cursor-like placement on the input bar).</li>
+        <li>With a valid BYOK key, chat mode answers about the open project using server-assembled context (not tool-echo-only).</li>
+        <li>agent mode can start (or deep-link) a toolkit agent job (at least Scene Partner / cover concept) with receipt confirm when egress spends budget.</li>
+        <li>Chat can invoke MCP/read capabilities and surface tool results in-thread; apply remains human-gated.</li>
+        <li>Plan mode produces outlines/proposals/drafts that land in <strong>Plans</strong> (center pane).</li>
+        <li>Propose-only and ADR 0011 invariants hold; no silent manuscript writes.</li>
+        <li>Settings still owns key entry; dock shows clear “configure OpenAI” empty state when missing.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks (vertical checkpoints)</h2>
+      <ol>
+        <li><strong>CP1 — Composer chrome:</strong> Mode picker + model/effort picker on <code>WorkspaceChatPanel</code> (docked). Persist last mode/model/effort per project in localStorage. Empty/disabled states when no BYOK key. No LLM yet — UI + prefs only, wire into send payload stubs.</li>
+        <li><strong>CP2 — chat mode completion:</strong> Upgrade <code>POST /api/workspace/chat</code> to receipt-backed chat: server assembles project/selection context, calls OpenAI via existing <code>packages/ai</code> + BYOK runtime, streams or returns assistant text. Tool-only fallback when key missing. Vitest + hermetic fake provider.</li>
+        <li><strong>CP3 — Tools in the loop:</strong> Allow chat/agent to call a bounded set of read capabilities (navigator, scene metadata, capture list) as tools; show tool traces in chat. Still propose-only for mutations.</li>
+        <li><strong>CP4 — Toolkit agents (agent mode):</strong> Mode → Ghostwriter agents (Scene Partner, Cover, Character Coach, …). Starting a job uses existing run/proposal or Scene Partner turn APIs; dock shows status + link to review/apply (Plans or inline proposal card).</li>
+        <li><strong>CP5 — Plan mode + docs:</strong> Structure/outline proposals as durable proposals that land in Plans; PRODUCT/ARCHITECTURE/ADR note for harness modes; WHERE-I-LEFT-OFF.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li>Vitest: chat route chat-mode with fake provider; mode/effort validation; no key → tool-only; tool loop unit tests.</li>
+        <li>UI model helpers for mode/effort persistence.</li>
+        <li>Manual: Harry Potter project — set key, chat about Privet Drive, switch agent → cover/Scene Partner, confirm no silent writes.</li>
+        <li>No Playwright until founder verifies complete outcome.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p>Update <code>docs/PRODUCT.md</code> (MCP dock → writing harness). Likely a short ADR or amendment to 0011 for <strong>harness modes</strong> (chat / Plan / agent) and model/effort as first-class run fields if not already covered. Living design: Mockups 4.0 (writing agents) + 5.0 (BYOK / receipts).</p>
+      <p><strong>Living design source:</strong>
+        <a href="../../designs/Ghostwriter%20Mockups%204.0.html">Mockups 4.0</a>,
+        <a href="../../designs/Ghostwriter%20Mockups%205.0.html">Mockups 5.0</a>.</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li><strong>Accepted modes:</strong> <strong>chat</strong> / <strong>Plan</strong> / <strong>agent</strong> (not Ask/Partner). chat = Q&amp;A, research, draft ideas; Plan = outlines/proposals/drafts that land in Plans; agent = toolkit writing jobs.</li>
+        <li><strong>Accepted:</strong> Plans view always opens in the center pane (wide and narrow); primary side stays Explorer or Characters.</li>
+        <li><strong>Effort:</strong> Map to provider knobs (e.g. reasoning effort / max tokens / “fast vs thorough”) — exact OpenAI fields TBD in CP2; UI labels Fast / Standard / High first.</li>
+        <li><strong>Multi-provider:</strong> Catalog may list OpenAI models only in v1; Anthropic later behind same port.</li>
+        <li><strong>Cost:</strong> Every chat turn spends BYOK budget — keep receipt/confirm for expensive agent jobs; lighter chat may skip modal and show inline destination chip (decision in CP2).</li>
+        <li><strong>Dual chat:</strong> Keep Scene Partner in Plans vs fold into dock — CP4 should deep-link, not delete Plans Partner in v1.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked> Plan accepted (mode naming + CP1 start)</li>
+        <li><input type="checkbox" checked> CP1 Composer chrome (mode + model/effort)</li>
+        <li><input type="checkbox" checked> CP2 chat mode BYOK completion</li>
+        <li><input type="checkbox"> CP3 Tools in the loop</li>
+        <li><input type="checkbox"> CP4 Toolkit agent mode in dock</li>
+        <li><input type="checkbox"> CP5 Plan mode + docs/ADR</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
