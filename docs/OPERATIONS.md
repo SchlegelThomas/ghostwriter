@@ -244,15 +244,16 @@ Validated end-to-end on 2026-07-11: a throwaway branch was created from `product
 Provisioned and wired automatically:
 
 - Service principal **`ghostwriter-ci`** — client id `a4622cb7-c206-4ace-a085-2b9ecdf98b37`.
-- Its Postgres role on `production` with `CREATE`/table privileges (migrations can run as the SP).
+  Fly runtime connects as this Postgres role (DML). The SP OAuth client still mints database
+  credentials for CI/deploy.
 - GitHub secrets `DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID`; variables `LAKEBASE_PROJECT_ID`,
-  `LAKEBASE_USER` (= SP client id), `LAKEBASE_ENDPOINT_ID`.
-- Drizzle journal objects (`drizzle.__drizzle_migrations` and `__drizzle_migrations_id_seq`) are
-  owned by the founder role (`tas9117@gmail.com`). The SP needs
-  `USAGE, SELECT, UPDATE` on that sequence (and `INSERT` on the journal table) or PR-branch
-  migrates fail with `permission denied for sequence __drizzle_migrations_id_seq` when recording a
-  new migration. Re-grant as owner via the `ghostwriter-owner` Databricks profile if CI hits this
-  again after ownership changes.
+  `LAKEBASE_USER`, `LAKEBASE_ENDPOINT_ID`.
+- **`LAKEBASE_USER` for migrate must be the table owner** (`tas9117@gmail.com`). Application tables
+  and the Drizzle journal are founder-owned; Postgres requires ownership for `ALTER TABLE … ADD
+  COLUMN`. CI authenticates with the SP OAuth client, then connects as the owner role when
+  `LAKEBASE_USER` is the founder email. Using the SP UUID as `LAKEBASE_USER` fails on ALTER with
+  `must be owner of table …` (and may also hit `permission denied for sequence
+  __drizzle_migrations_id_seq` if the journal sequence grants are missing).
 
 Provisioning is complete: `DATABRICKS_CLIENT_SECRET` and `FLY_API_TOKEN` are configured, the Fly
 app is deployed, and the backend authenticates to Lakebase with the service principal. The current
