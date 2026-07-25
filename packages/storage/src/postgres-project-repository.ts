@@ -18,6 +18,7 @@ import {
   validateProjectRecords,
   accountId,
   type Book,
+  type BookCover,
   type BookEdition,
   type BookStatus,
   type Project,
@@ -201,6 +202,7 @@ async function persistBuffer(
         title: book.title,
         status: book.status,
         createdAt: book.createdAt,
+        cover: book.cover ?? null,
         archivedAt: book.archivedAt ?? null
       }))
     );
@@ -385,6 +387,7 @@ function replacementRows(records: ProjectRecords): ReplacementRows {
       title: book.title,
       status: book.status,
       createdAt: book.createdAt,
+      cover: book.cover ?? null,
       archivedAt: book.archivedAt ?? null
     });
 
@@ -599,6 +602,7 @@ async function persistStableReplacementRows(
           title: row.title,
           status: row.status,
           createdAt: row.createdAt,
+          cover: row.cover,
           archivedAt: row.archivedAt
         })
         .where(eq(books.id, row.id));
@@ -922,6 +926,7 @@ async function queryBooks(
           unassignedSceneIds: unassignedRows.map((entry) => sceneId(entry.sceneId))
         },
         createdAt: book.createdAt,
+        ...(book.cover === null ? {} : { cover: book.cover as BookCover }),
         ...(book.archivedAt === null ? {} : { archivedAt: book.archivedAt })
       })
     );

@@ -1,4 +1,7 @@
-import type { ProjectNavigator } from "@ghostwriter/core";
+import type {
+  GhostwriterCapability,
+  ProjectNavigator
+} from "@ghostwriter/core";
 import type { ManuscriptSelection } from "./manuscript-selection.js";
 
 export type WorkspaceSurfaceMode = "draft" | "canvas" | "split";
@@ -9,7 +12,8 @@ export type WorkspaceJumpKind =
   | "scene"
   | "story-knowledge"
   | "mode"
-  | "panel";
+  | "panel"
+  | "capability";
 
 export type WorkspaceJumpTarget = Readonly<{
   id: string;
@@ -24,6 +28,8 @@ export type WorkspaceJumpTarget = Readonly<{
   toggleStructure?: boolean;
   toggleChat?: boolean;
   toggleJump?: boolean;
+  /** Invoke via workspace MCP chat when picked. */
+  capabilityId?: string;
 }>;
 
 function normalizeQuery(query: string): string {
@@ -79,8 +85,8 @@ export function buildWorkspaceJumpTargets(
     {
       id: "panel:chat",
       kind: "panel",
-      title: "Toggle Chat",
-      subtitle: "MCP chat · ⌘⇧P",
+      title: "Open Agent",
+      subtitle: "MCP chat · secondary panel",
       toggleChat: true
     },
     {
@@ -93,15 +99,15 @@ export function buildWorkspaceJumpTargets(
     {
       id: "action:capture",
       kind: "panel",
-      title: "New Capture",
-      subtitle: "Quick capture without hierarchy",
+      title: "New idea",
+      subtitle: "Capture into Plans",
       openCapture: true
     },
     {
       id: "action:inbox",
       kind: "panel",
-      title: "Open Inbox",
-      subtitle: "Acknowledged captures",
+      title: "Open Plans",
+      subtitle: "Captures and ideas",
       openInbox: true
     }
   ];
@@ -220,4 +226,44 @@ export function manuscriptJumpKinds(): readonly WorkspaceJumpKind[] {
 /** Shell commands for ⌘⇧P (modes + panels). */
 export function commandPaletteKinds(): readonly WorkspaceJumpKind[] {
   return ["mode", "panel"];
+}
+
+/** Top quick-search: manuscript + shell + MCP tools. */
+export function unifiedSearchKinds(): readonly WorkspaceJumpKind[] {
+  return [
+    "book",
+    "chapter",
+    "scene",
+    "story-knowledge",
+    "mode",
+    "panel",
+    "capability"
+  ];
+}
+
+export function buildCapabilityJumpTargets(
+  capabilities: readonly GhostwriterCapability[]
+): readonly WorkspaceJumpTarget[] {
+  return capabilities.map((capability) => ({
+    id: `capability:${capability.id}`,
+    kind: "capability" as const,
+    title: capability.title,
+    subtitle: `MCP · ${capability.access} · ${capability.scope}`,
+    capabilityId: capability.id
+  }));
+}
+
+export function buildUnifiedSearchTargets(
+  project: ProjectNavigator,
+  capabilities: readonly GhostwriterCapability[] = []
+): readonly WorkspaceJumpTarget[] {
+  return [
+    ...buildWorkspaceJumpTargets(project),
+    ...buildCapabilityJumpTargets(capabilities)
+  ];
+}
+
+/** True when the query should also filter the manuscript explorer tree. */
+export function queryFiltersManuscriptExplorer(query: string): boolean {
+  return normalizeQuery(query).length > 0;
 }

@@ -11,6 +11,7 @@ import {
   sceneId,
   storyKnowledgeId,
   type Book,
+  type BookCover,
   type BookId,
   type BookStatus,
   type ChapterId,
@@ -86,6 +87,7 @@ export type ProjectCommand =
       bookId: BookId;
       title?: string;
       status?: BookStatus;
+      cover?: BookCover | null;
     }>
   | Readonly<{ type: "book.reorder"; bookIds: readonly BookId[] }>
   | Readonly<{ type: "book.setArchived"; bookId: BookId; archived: boolean }>
@@ -408,13 +410,21 @@ export function applyProjectCommandToRecords(
       break;
     }
     case "book.update":
-      books = updateBook(books, command.bookId, (book) =>
-        createBook({
+      books = updateBook(books, command.bookId, (book) => {
+        let updated: Book = {
           ...book,
           title: command.title ?? book.title,
           status: command.status ?? book.status
-        })
-      );
+        };
+        if (command.cover !== undefined) {
+          const { cover: _ignored, ...withoutCover } = updated;
+          updated =
+            command.cover === null
+              ? withoutCover
+              : { ...withoutCover, cover: command.cover };
+        }
+        return createBook(updated);
+      });
       break;
     case "book.reorder": {
       const ordered = reorderExactly(

@@ -137,6 +137,7 @@ export const books = pgTable("books", {
   title: text("title").notNull(),
   status: text("status").notNull(),
   createdAt: text("created_at").notNull(),
+  cover: jsonb("cover"),
   archivedAt: text("archived_at")
 });
 

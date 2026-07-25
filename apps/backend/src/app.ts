@@ -37,6 +37,7 @@ import {
   SceneVariantNameConflictError,
   SceneWorkingVersionConflictError,
   type CaptureAttachmentServices,
+  type CaptureObjectStoragePort,
   type CapturePromotionServices,
   type CaptureServices,
   type BookReaderProjection,
@@ -102,10 +103,15 @@ import {
   type VoiceSynthesisPort
 } from "./voice.js";
 import { z } from "zod";
-import { GHOSTWRITER_CAPABILITIES } from "@ghostwriter/core";
 import { registerProviderAgentRoutes } from "./provider-agent-routes.js";
 import { registerAgentRunRoutes } from "./agent-run-routes.js";
+import {
+  registerScenePartnerRoutes,
+  type ScenePartnerImageGenerator
+} from "./scene-partner-routes.js";
+import { registerBookCoverImageRoutes } from "./book-cover-image-routes.js";
 import { registerMcpGrantRoutes } from "./mcp-grant-routes.js";
+import { registerWorkspaceChatRoutes } from "./workspace-chat-routes.js";
 import {
   mapAgentGuidanceRouteError,
   providerAgentErrorStatusAndBody
@@ -124,16 +130,15 @@ export type BackendDependencies = Readonly<{
   allowedOrigins?: readonly string[];
   voice?: VoiceSynthesisPort;
   agentProvider: AgentProviderRuntime;
+  /** Same port used by capture attachments; required for cover apply/download. */
+  objectStorage: CaptureObjectStoragePort;
+  /** Optional Scene Partner / cover image generator (hermetic/tests inject fakes). */
+  scenePartnerGenerateImage?: ScenePartnerImageGenerator;
 }>;
 
 const readerSpeakRequestSchema = z.object({
   text: z.string().trim().min(1).max(2_400),
   voice: z.enum(["default", "narrative", "noir", "soft"]).optional()
-});
-
-const workspaceChatRequestSchema = z.object({
-  message: z.string().trim().min(1).max(4_000),
-  projectId: z.string().trim().min(1).max(200).optional()
 });
 
 type BackendEnvironment = {
@@ -558,95 +563,9 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
     return context.json(speech);
   });
 
-  app.post("/api/workspace/chat", async (context) => {
-    const parsed = await parseJsonRequest(
-      context.req.raw,
-      workspaceChatRequestSchema
-    );
-    if (!parsed.success) {
-      return context.json(
-        {
-          error: "Invalid request.",
-          code: parsed.code,
-          ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
-        },
-        parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
-      );
-    }
-    const normalizedMessage = parsed.data.message.toLocaleLowerCase();
-    const requestedCapability = GHOSTWRITER_CAPABILITIES.find(
-      (capability) =>
-        capability.id.toLocaleLowerCase() === normalizedMessage ||
-        capability.title.toLocaleLowerCase() === normalizedMessage
-    );
-
-    if (requestedCapability?.id === "project.navigator.read") {
-      if (parsed.data.projectId === undefined) {
-        return context.json({
-          reply:
-            "Open a project before running the manuscript hierarchy capability."
-        });
-      }
-      const authSession = context.get("authSession");
-      let navigator;
-      try {
-        navigator = await dependencies.services.getProjectNavigator(
-          accountId(authSession.account.id),
-          projectId(parsed.data.projectId)
-        );
-      } catch (error) {
-        if (
-          error instanceof DomainValidationError ||
-          error instanceof ProjectAccessDeniedError
-        ) {
-          return context.json(
-            { error: "Project not found.", code: "PROJECT_NOT_FOUND" },
-            404
-          );
-        }
-        throw error;
-      }
-      if (navigator === undefined) {
-        return context.json(
-          { error: "Project not found.", code: "PROJECT_NOT_FOUND" },
-          404
-        );
-      }
-      return context.json({
-        reply: [
-          `Ran ${requestedCapability.title}.`,
-          `${navigator.title} · project version ${navigator.version}`,
-          `${navigator.totals.books} books · ${navigator.totals.scenes} scenes · ${navigator.totals.storyKnowledge} story records`,
-          `Books: ${navigator.books.map((book) => book.title).join(", ")}`
-        ].join("\n")
-      });
-    }
-
-    const capabilities = (
-      requestedCapability === undefined
-        ? GHOSTWRITER_CAPABILITIES.filter((capability) =>
-            capability.title
-              .toLocaleLowerCase()
-              .includes(normalizedMessage.slice(0, 24))
-          )
-        : [requestedCapability]
-    ).slice(0, 5);
-    const listed =
-      capabilities.length > 0
-        ? capabilities.map((capability) => `• ${capability.title}`).join("\n")
-        : GHOSTWRITER_CAPABILITIES.slice(0, 8)
-            .map((capability) => `• ${capability.title}`)
-            .join("\n");
-    return context.json({
-      reply: [
-        "Tool-only chat is active. OpenAI completion is not configured yet.",
-        parsed.data.projectId === undefined
-          ? "No project context was supplied."
-          : `Open project: ${parsed.data.projectId}`,
-        "Matching capabilities:",
-        listed
-      ].join("\n")
-    });
+  registerWorkspaceChatRoutes(app, {
+    services: dependencies.services,
+    agentProvider: dependencies.agentProvider
   });
 
   app.post("/api/projects/:projectId/writing-assist", async (context) => {
@@ -1463,6 +1382,21 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
 
   registerProviderAgentRoutes(app, { agentProvider: dependencies.agentProvider });
   registerAgentRunRoutes(app, { agentProvider: dependencies.agentProvider });
+  registerScenePartnerRoutes(app, {
+    agentProvider: dependencies.agentProvider,
+    captures: dependencies.captures,
+    ...(dependencies.scenePartnerGenerateImage === undefined
+      ? {}
+      : { generateImage: dependencies.scenePartnerGenerateImage })
+  });
+  registerBookCoverImageRoutes(app, {
+    agentProvider: dependencies.agentProvider,
+    services: dependencies.services,
+    objectStorage: dependencies.objectStorage,
+    ...(dependencies.scenePartnerGenerateImage === undefined
+      ? {}
+      : { generateImage: dependencies.scenePartnerGenerateImage })
+  });
   registerMcpGrantRoutes(app, { agentProvider: dependencies.agentProvider });
 
   app.onError((error, context) => {

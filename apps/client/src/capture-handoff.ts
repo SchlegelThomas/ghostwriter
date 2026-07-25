@@ -74,11 +74,11 @@ export function captureContentHashPrefix(contentHash: string): string {
   return contentHash.slice(0, 8);
 }
 
+/** Stack navigation: list when nothing selected; full-width detail otherwise (all widths). */
 export function inboxHandoffLayoutMode(
-  compact: boolean,
+  _compact: boolean,
   selectedCaptureId: string | undefined
 ): CaptureHandoffLayoutMode {
-  if (!compact) return "split";
   return selectedCaptureId === undefined ? "list-only" : "detail-only";
 }
 

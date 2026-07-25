@@ -3,7 +3,9 @@ import {
   aggregateProjectChangesIdle,
   captureReturnStateFromScene,
   captureShellChangesIdle,
+  centerUsesDenseColumn,
   finalizeCaptureShellActivityOnClose,
+  inboxOpenLeavesCharactersRail,
   inboxTakesCenterWorkspace,
   NARROW_CAPTURE_TAB_LABEL,
   NARROW_INBOX_TAB_LABEL,
@@ -14,14 +16,26 @@ import {
 } from "./workspace-capture-shell.js";
 
 describe("workspace capture shell helpers", () => {
-  it("exposes narrow Capture and Inbox tab labels", () => {
-    expect(NARROW_CAPTURE_TAB_LABEL).toBe("Capture");
-    expect(NARROW_INBOX_TAB_LABEL).toBe("Inbox");
+  it("exposes narrow Capture and Plans tab labels", () => {
+    expect(NARROW_CAPTURE_TAB_LABEL).toBe("Idea Capture");
+    expect(NARROW_INBOX_TAB_LABEL).toBe("Plans");
   });
 
-  it("treats an open Inbox as owning the center workspace", () => {
+  it("treats open Plans as always owning the center workspace", () => {
     expect(inboxTakesCenterWorkspace(false)).toBe(false);
     expect(inboxTakesCenterWorkspace(true)).toBe(true);
+  });
+
+  it("uses a dense center column whenever Inbox owns the center", () => {
+    expect(centerUsesDenseColumn(false, false)).toBe(false);
+    expect(centerUsesDenseColumn(true, false)).toBe(true);
+    expect(centerUsesDenseColumn(false, true)).toBe(true);
+    expect(centerUsesDenseColumn(true, true)).toBe(true);
+  });
+
+  it("leaves the Characters rail when Inbox opens", () => {
+    expect(inboxOpenLeavesCharactersRail("characters")).toBe(true);
+    expect(inboxOpenLeavesCharactersRail("write")).toBe(false);
   });
 
   it("closes Inbox on primary workspace navigation actions", () => {

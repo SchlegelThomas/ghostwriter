@@ -201,6 +201,30 @@ export function createR2CaptureObjectStorage(
       return presign(input.objectKey, "GET", input.expiresAt);
     },
 
+    async putObject(input) {
+      const expiresAt = new Date(deps.now().getTime() + 5 * 60 * 1000).toISOString();
+      const signed = await presign(input.objectKey, "PUT", expiresAt, {
+        "Content-Type": input.contentType
+      });
+
+      let response: Response;
+      try {
+        response = await deps.fetch(signed.url, {
+          method: "PUT",
+          headers: {
+            "Content-Type": input.contentType
+          },
+          body: Buffer.from(input.bytes)
+        });
+      } catch {
+        throw new CaptureObjectStorageError();
+      }
+
+      if (!response.ok) {
+        throw new CaptureObjectStorageError();
+      }
+    },
+
     async inspectObject(objectKey) {
       const objectUrl = buildR2ObjectUrl(config, objectKey);
       const signed = await aws.sign(objectUrl.toString(), {
@@ -292,6 +316,7 @@ export function createUnavailableCaptureObjectStorage(): CaptureObjectStoragePor
   return Object.freeze({
     presignPut: fail,
     presignGet: fail,
+    putObject: fail,
     inspectObject: fail,
     deleteObject: fail
   });

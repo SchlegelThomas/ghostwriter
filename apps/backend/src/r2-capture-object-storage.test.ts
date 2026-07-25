@@ -197,6 +197,46 @@ describe("R2 capture object storage inspectObject", () => {
   });
 });
 
+describe("R2 capture object storage putObject", () => {
+  it("signs PUT and uploads bytes with Content-Type", async () => {
+    const bytes = PNG_PREFIX;
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(init?.method).toBe("PUT");
+      expect(init?.headers).toMatchObject({ "Content-Type": "image/png" });
+      expect(Buffer.isBuffer(init?.body)).toBe(true);
+      expect(Buffer.from(init?.body as Buffer).equals(Buffer.from(bytes))).toBe(true);
+      expect(String(input)).toContain("X-Amz-Signature=");
+      return new Response(null, { status: 200 });
+    });
+
+    const storage = createR2CaptureObjectStorage(TEST_R2_CONFIG, {
+      fetch: fetchImpl,
+      now: fixedNow("2026-01-01T00:00:00.000Z")
+    });
+    await storage.putObject({
+      objectKey: OBJECT_KEY,
+      contentType: "image/png",
+      bytes
+    });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it("maps failed PUT responses to CaptureObjectStorageError", async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 500 }));
+    const storage = createR2CaptureObjectStorage(TEST_R2_CONFIG, {
+      fetch: fetchImpl,
+      now: fixedNow("2026-01-01T00:00:00.000Z")
+    });
+    await expect(
+      storage.putObject({
+        objectKey: OBJECT_KEY,
+        contentType: "image/png",
+        bytes: PNG_PREFIX
+      })
+    ).rejects.toBeInstanceOf(CaptureObjectStorageError);
+  });
+});
+
 describe("R2 capture object storage deleteObject", () => {
   it("treats 404 as idempotent success", async () => {
     const fetchImpl = vi.fn(async () => new Response(null, { status: 404 }));
@@ -236,5 +276,12 @@ describe("capture object storage availability", () => {
         expiresAt: "2026-01-01T00:05:00.000Z"
       })
     ).rejects.toThrow("Capture object storage failed.");
+    await expect(
+      storage.putObject({
+        objectKey: OBJECT_KEY,
+        contentType: "image/png",
+        bytes: PNG_PREFIX
+      })
+    ).rejects.toBeInstanceOf(CaptureObjectStorageError);
   });
 });

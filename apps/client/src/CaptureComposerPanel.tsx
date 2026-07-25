@@ -12,6 +12,7 @@ import {
   useRef,
   useState
 } from "react";
+import { X } from "phosphor-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
   createCapture,
@@ -619,16 +620,16 @@ export const CaptureComposerPanel = forwardRef<
 
   return (
     <View
-      accessibilityLabel="Capture composer"
+      accessibilityLabel="Idea Capture composer"
       focusable
       ref={panelRef}
       style={styles.panel}
       tabIndex={-1}
     >
-      <View accessibilityLabel="Capture composer header" style={styles.header}>
+      <View accessibilityLabel="Idea Capture composer header" style={styles.header}>
         <View style={styles.headingCopy}>
           <Text accessibilityRole="header" style={styles.title}>
-            Capture
+            Idea Capture
           </Text>
           <Text numberOfLines={1} style={styles.meta}>
             {[
@@ -638,21 +639,23 @@ export const CaptureComposerPanel = forwardRef<
             ].join(" · ")}
           </Text>
         </View>
-        <Text
-          accessibilityLabel="Capture save status"
-          accessibilityLiveRegion="polite"
-          style={[
-            styles.saveStatus,
-            captureComposerSaveStatusIsWarning({
-              snapshot: saveSnapshot,
-              problem,
-              recoveryOffer: recoveryOffer !== undefined,
-              attachmentActivity
-            }) && styles.saveStatusWarning
-          ]}
-        >
-          {statusText}
-        </Text>
+        {statusText.length === 0 ? null : (
+          <Text
+            accessibilityLabel="Capture save status"
+            accessibilityLiveRegion="polite"
+            style={[
+              styles.saveStatus,
+              captureComposerSaveStatusIsWarning({
+                snapshot: saveSnapshot,
+                problem,
+                recoveryOffer: recoveryOffer !== undefined,
+                attachmentActivity
+              }) && styles.saveStatusWarning
+            ]}
+          >
+            {statusText}
+          </Text>
+        )}
         {readOnlyStatus === undefined ? null : (
           <Text accessibilityLabel="Capture access status" style={styles.accessStatus}>
             {readOnlyStatus}
@@ -660,7 +663,17 @@ export const CaptureComposerPanel = forwardRef<
         )}
         <View style={styles.headerActions}>
           {onClose === undefined ? null : (
-            <ComposerButton label="Close Capture" onPress={onClose} />
+            <Pressable
+              accessibilityLabel="Close Idea Capture"
+              accessibilityRole="button"
+              onPress={onClose}
+              style={({ pressed }) => [
+                styles.closeButton,
+                pressed && styles.buttonPressed
+              ]}
+            >
+              <X color={colors.ink} size={18} weight="thin" />
+            </Pressable>
           )}
         </View>
       </View>
@@ -669,10 +682,10 @@ export const CaptureComposerPanel = forwardRef<
         <View style={styles.notice}>
           <Text style={styles.noticeText}>
             {head?.status === "integrated"
-              ? "This integrated Capture is read-only. Promotion and manuscript placement stay in Inbox."
+              ? "This integrated Idea Capture is read-only. Promotion and manuscript placement stay in Plans."
               : head?.status === "archived"
-                ? "This archived Capture is read-only. Restore it from Inbox before editing."
-                : "This Capture is read-only."}
+                ? "This archived Idea Capture is read-only. Restore it from Plans before editing."
+                : "This Idea Capture is read-only."}
           </Text>
         </View>
       ) : null}
@@ -772,7 +785,7 @@ export const CaptureComposerPanel = forwardRef<
         </View>
       ) : (
         <>
-          <View accessibilityLabel="Capture input mode" style={styles.modalityRow}>
+          <View accessibilityLabel="Idea Capture input mode" style={styles.modalityRow}>
             <ComposerButton
               disabled={!editorIsEditable}
               label="Keyboard"
@@ -795,7 +808,7 @@ export const CaptureComposerPanel = forwardRef<
             )}
           </View>
           <SceneEditor
-            ariaLabel="Capture composer prose"
+            ariaLabel="Idea Capture prose"
             defaultFormattingToolbarOpen={false}
             editable={editorIsEditable}
             insertTextRequest={insertTextRequest}
@@ -893,8 +906,18 @@ const styles = StyleSheet.create({
     width: "100%"
   },
   headerActions: {
+    alignItems: "center",
     flexDirection: "row",
     gap: 8
+  },
+  closeButton: {
+    alignItems: "center",
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 32,
+    justifyContent: "center",
+    width: 32
   },
   notice: {
     backgroundColor: colors.wash,

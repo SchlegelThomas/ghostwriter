@@ -28,7 +28,8 @@
       <p>After an acknowledged pause, Ghostwriter may quietly offer <em>Help find its place</em>. That invitation never starts a provider call by itself. When the writer accepts, a bounded agent receives an inspectable context receipt and returns durable, revision-bound proposals: create or place a scene, make a scene variant, shape a sketch, update a character sheet, add a backdrop constraint, or connect the material to Canvas. The writer compares and applies an exact proposal; the core rechecks all versions and either applies the complete change or nothing.</p>
       <p>This epic also establishes OpenAI as the first bring-your-own-key provider, with each writer's key encrypted server-side and never returned after storage. External MCP clients may read granted context and create proposals, but cannot apply them.</p>
       <p>AI onboarding is progressive rather than a prerequisite: Capture remains immediately available, and provider setup appears only when the writer first requests agent help. Writers may optionally define collaboration preferences, project instructions, and declarative agent playbooks. These are lower-trust guidance layers—not executable code, new tools, or authority—and the effective instruction stack is visible before egress.</p>
-      <p><strong>Explicitly out of scope:</strong> generic always-on chat, autonomous background agents, automatic story placement, silent prose edits, open-web research, generated images, OCR or managed audio transcription, arbitrary file parsing, same-scene collaborative editing, Guided/Balanced/Minimal onboarding, full project import/export, and a second canonical manuscript store.</p>
+      <p><strong>Explicitly out of scope:</strong> generic always-on project chat, autonomous background agents, automatic story placement, silent prose edits, open-web research, OCR or managed audio transcription, arbitrary file parsing, same-scene collaborative editing, Guided/Balanced/Minimal onboarding, full project import/export, and a second canonical manuscript store.</p>
+      <p><strong>Founder revision 2026-07-25:</strong> Scene Partner is a job-bound conversational agent (not generic chat). It shows thinking, scans manuscript scenes for matches, interviews when unclear, iterates prose with the writer, and may propose scene images. Apply remains human-gated. Generated images for Scene Partner are now in scope for this epic.</p>
     </section>
 
     <section>
@@ -162,12 +163,24 @@
 
       <article>
         <h3>5 · Scene Partner integrates a capture</h3>
-        <p><strong>Writer-visible result:</strong> after a quiet invitation, ask Scene Partner for placement or continuation options, compare two labeled proposals to the untouched source/base, and explicitly create a scene or named variant.</p>
+        <p><strong>Writer-visible result (superseded 2026-07-25):</strong> original typed reflection + apply path shipped; founder feedback replaces the interstitial UX with conversational Scene Partner (checkpoint 8).</p>
         <ul>
           <li>Offer the invitation only after acknowledged idle; dismissal never blocks writing and no background provider call occurs.</li>
           <li>Show assignment, context receipt, cost/budget posture, variants, base, differences, provenance, and “Your draft has not changed.”</li>
           <li>Bind approval to proposal hash and exact capture/scene/project/Canvas versions; add idempotent transactional apply and undo/history path.</li>
           <li>Handle missing key, rate limit, cancellation, malformed output, stale base, conflicting versions, deleted source, and provider outage.</li>
+        </ul>
+      </article>
+
+      <article>
+        <h3>8 · Scene Partner conversational craft (founder revision)</h3>
+        <p><strong>Writer-visible result:</strong> choosing Scene Partner opens a chat immediately—no Help find its place / Start interstitial. The agent shows thinking, reads manuscript scenes, matches or proposes a new scene, interviews when the idea is unclear, iterates prose with the writer, and can propose a scene image. Nothing enters canon until the writer applies.</p>
+        <ul>
+          <li>Remove multi-click interstitial states from Scene Partner entry.</li>
+          <li>Visible thinking / tool steps (scene scan, match evaluation, clarify, prose draft, image draft).</li>
+          <li>Back-and-forth chat turns with BYOK OpenAI; hermetic fake for local/CI.</li>
+          <li>Human-gated apply for scene/prose/image proposals; draft unchanged until apply.</li>
+          <li>Image proposals are optional, receipt-bound, and never silent canon.</li>
         </ul>
       </article>
 
@@ -287,9 +300,11 @@
         <li><input type="checkbox" checked disabled> Checkpoint 6 craft partners complete</li>
         <li><input type="checkbox" checked disabled> Checkpoint 7 scoped MCP proposal parity complete</li>
         <li><input type="checkbox" checked disabled> Targeted checks and <code>pnpm verify</code> complete (712 tests); real-browser walkthrough pending founder</li>
+        <li><input type="checkbox" checked disabled> Checkpoint 8 live BYOK Scene Partner turns + images (hermetic fake default; <code>GHOSTWRITER_E2E_LIVE_OPENAI=1</code> for local live)</li>
         <li><input type="checkbox" disabled> Founder verifies the complete product outcome</li>
         <li><input type="checkbox" disabled> Post-gate Playwright audit and final suite complete</li>
-        <li><input type="checkbox" disabled> Docs, handoff, archive, and PR readiness complete</li>
+        <li><input type="checkbox" checked disabled> Docs + handoff updated for Capture/BYOK plus shell/Title Page/Agent follow-ons on this branch</li>
+        <li><input type="checkbox" disabled> Archive plan after merge; founder verification + Playwright still open</li>
       </ul>
     </section>
   </main>

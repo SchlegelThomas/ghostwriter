@@ -176,13 +176,75 @@ per project, with 8 MiB images, 15 MiB audio, and 5 MiB PDF/plain text. Pending 
 24 hours. Unsupported, oversized, quota, expiry, unavailable-storage, and non-disclosing not-found
 responses use stable `ATTACHMENT_*` codes. Attachments never promote into scene prose or Canvas.
 
+## Provider credentials and agent guidance (BYOK)
+
+Writer OpenAI keys are encrypted at rest under a versioned Fly-held KEK. Routes never return plaintext
+keys. Missing, invalid, and unconfigured provider states use stable codes without echoing secrets.
+
+- `GET /api/me/provider/openai` returns configuration status (present/validated metadata only).
+- `PUT /api/me/provider/openai` stores or replaces the encrypted key after validation.
+- `DELETE /api/me/provider/openai` removes the stored key.
+- `POST /api/me/provider/openai/validate` revalidates the stored key without returning it.
+- `GET` / `PATCH /api/me/ai-collaboration` read/update optional collaboration preferences.
+- `GET` / `PATCH /api/projects/{projectId}/agent-instructions` project-level guidance text.
+- Playbooks: `GET` / `POST /api/projects/{projectId}/playbooks`,
+  `PATCH` / `DELETE /api/projects/{projectId}/playbooks/{playbookId}` — declarative, non-authoritative
+  goal refinements (ADR 0011).
+
+## Agent runs and proposals
+
+Typed noncanonical runs/proposals (context receipts, Capture reflection, craft partners):
+
+- `POST /api/projects/{projectId}/agent/context-preview` assembles an inspectable receipt.
+- `POST /api/projects/{projectId}/agent/runs` starts a run from a receipt + workflow.
+- `GET /api/projects/{projectId}/agent/runs` and `.../runs/{runId}` list/read run status.
+- `POST /api/projects/{projectId}/agent/runs/{runId}/cancel` cancels a run.
+- `GET /api/projects/{projectId}/agent/proposals` and `.../proposals/{proposalId}` list/read.
+- Apply / reject proposal routes accept the exact proposal hash; only first-party human sessions
+  apply. Core revalidates every version and applies all effects or none.
+
+Scene Partner Capture chat (BYOK structured turn, propose-only until promote/variant apply):
+
+- `POST /api/projects/{projectId}/captures/{captureId}/scene-partner/turns`
+- `POST /api/projects/{projectId}/captures/{captureId}/scene-partner/images` (optional illustration
+  preview; does not write manuscript canon)
+
+## Workspace Agent chat
+
+- `POST /api/workspace/chat` accepts project/selection context, optional capability id, and Agent
+  dock prefs (`mode`: `chat` | `plan` | `agent`; model + effort). When `capabilityId` is a read
+  capability (e.g. `project.navigator.read`), the server invokes that tool. Otherwise, with a valid
+  BYOK key, it returns assistant text from `completeStructured` using server-assembled navigator
+  context. Without a key, the route returns a friendly unconfigured response (no silent failure
+  wall). Chat never mutates manuscript canon.
+
+## Book covers (Title Page)
+
+`book.update` may set optional `cover` `{ concept?, notes?, imageUrl? }`. `imageUrl` must be an
+absolute http(s) locator (applied covers use a stable `https://ghostwriter.cover/...` form). Data
+URIs are rejected. Concept/notes persist in Lakebase; bitmap bytes live only in private object
+storage after Apply.
+
+- `POST /api/projects/{projectId}/books/{bookId}/cover/images` — sync single preview (BYOK /
+  hermetic fake); does not persist.
+- `POST /api/projects/{projectId}/books/{bookId}/cover/images/jobs` — start async multi-option job
+  (default 3 portrait `1024x1536` via `gpt-image-1`); optional iteration notes.
+- `GET /api/projects/{projectId}/books/{bookId}/cover/images/jobs/{jobId}` — poll job status/options.
+- `POST /api/projects/{projectId}/books/{bookId}/cover/images/apply` — write PNG to object storage and
+  `book.update` the locator; requires storage configured (hermetic memory fake in E2E).
+- `GET /api/projects/{projectId}/books/{bookId}/cover/download` — short-lived display URL (or hermetic
+  data URI) for the applied locator.
+
+Jobs are in-process for v1 (not a durable queue). History may acknowledge when options are ready.
+
 ## Writing assist
 
 - `POST /api/projects/{projectId}/writing-assist` accepts a role (`scene-partner`,
   `character-coach`, `worldkeeper`, `sketch-partner`), scene context, optional sketch/cast/
   backdrop caption, and optional recent prose excerpt. It returns inspectable proposals labeled
-  `deterministic-local` in v1. Proposals never mutate the project; Apply is a separate client
-  action through `scene.update`, `storyKnowledge.update`, or Draft caret insert.
+  `deterministic-local` when no provider path is used. Proposals never mutate the project; Apply is
+  a separate client action through `scene.update`, `storyKnowledge.update`, or Draft caret insert.
+  Live Scene Partner Capture turns use the Scene Partner routes above.
 
 ## Story Canvas
 
@@ -242,7 +304,8 @@ Project:
 Books:
 
 - `book.create`
-- `book.update`
+- `book.update` (`title?`, `status?`, `cover?` with optional `concept` / `notes` / `imageUrl`;
+  `null` cover clears; http(s) `imageUrl` only — no data URIs)
 - `book.reorder`
 - `book.setArchived`
 

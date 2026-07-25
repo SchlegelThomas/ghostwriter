@@ -263,6 +263,42 @@ describe("project commands", () => {
     ]);
   });
 
+  it("updates book cover and clears it with null", async () => {
+    const { execute } = await setup();
+    let navigator = await execute(1, {
+      type: "book.update",
+      bookId: bookId("book-one"),
+      cover: {
+        concept: "Storm-lit harbor",
+        notes: "Title page mood reference",
+        imageUrl: "https://cdn.example.com/cover.jpg"
+      }
+    });
+
+    expect(navigator.books[0]).toMatchObject({
+      cover: {
+        concept: "Storm-lit harbor",
+        notes: "Title page mood reference",
+        imageUrl: "https://cdn.example.com/cover.jpg"
+      }
+    });
+
+    await expect(
+      execute(navigator.version, {
+        type: "book.update",
+        bookId: bookId("book-one"),
+        cover: { imageUrl: "ftp://cdn.example.com/bad.jpg" }
+      })
+    ).rejects.toMatchObject({ code: "INVALID_URL" });
+
+    navigator = await execute(navigator.version, {
+      type: "book.update",
+      bookId: bookId("book-one"),
+      cover: null
+    });
+    expect(navigator.books[0]?.cover).toBeUndefined();
+  });
+
   it("updates chapter summary, scene ambience URLs, and knowledge depth", async () => {
     const { execute } = await setup();
     let navigator = await execute(1, {

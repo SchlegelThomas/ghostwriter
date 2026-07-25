@@ -11,45 +11,36 @@
     <header>
       <p class="eyebrow">Session handoff</p>
       <h1>Where we left off</h1>
-      <p><strong>Last updated:</strong> 2026-07-24 · <strong>Current branch:</strong> <code>feat/capture-to-story-agents</code></p>
+      <p><strong>Last updated:</strong> 2026-07-25 · <strong>Current branch:</strong> <code>feat/capture-to-story-agents</code></p>
     </header>
 
     <section>
-      <h2>Current state</h2>
-      <p>Capture to Story is implemented on the feature branch through checkpoints 0–7. Repository verification is green. Founder real-browser acceptance, live R2/KEK provisioning, and post-gate Playwright remain open.</p>
+      <h2>Done recently</h2>
       <ul>
-        <li><a href="active/2026-07-24-capture-to-story-agents/plan.html">Capture to Story plan</a></li>
-        <li><a href="designs/Ghostwriter%20Mockups%205.0.html">Mockups 5.0</a></li>
-        <li><a href="../docs/adr/0010-capture-inbox-media-and-promotion.md">ADR 0010</a> · <a href="../docs/adr/0011-byok-context-proposals-playbooks-and-mcp-grants.md">ADR 0011</a></li>
+        <li>Capture → Story inbox, attachments, BYOK agents, propose-only MCP (ADR 0010 / 0011) on this branch.</li>
+        <li>Cursor shell CP1–CP4c: Title Page, async cover options, Explorer actions, Plans center host.</li>
+        <li>Writing agent harness CP1+CP2: Agent dock chat / Plan / agent modes + BYOK project chat.</li>
+        <li><strong>Docs sweep:</strong> PRODUCT, ARCHITECTURE, API, OPERATIONS, plan records, and this handoff updated for shell / Title Page / Agent / covers. Cast studio remains proposed only.</li>
       </ul>
     </section>
 
     <section>
-      <h2>Done for this implementation pass</h2>
+      <h2>Proposed next</h2>
+      <p>Founder starting new work elsewhere — pick up from open plans after merge/review:</p>
       <ul>
-        <li>Capture prose/dictation, Inbox, deterministic promote, mixed-media attachments.</li>
-        <li>OpenAI BYOK, progressive AI setup, playbooks, context receipts, Scene Partner reflection + apply (new scene / named variant).</li>
-        <li>Sketch Partner, Character Coach, Worldkeeper typed craft apply.</li>
-        <li>Scoped MCP grants with propose-only Capture reflection tools.</li>
-        <li><code>pnpm verify</code>: 712 tests + 17 routing-hook tests green.</li>
+        <li><a href="active/2026-07-25-writing-agent-harness/plan.html">Writing agent harness</a> — CP3 tools in the loop, CP4 toolkit deep-link, CP5 Plan→Plans.</li>
+        <li><a href="active/2026-07-25-cast-relationships-studio/plan.html">Cast &amp; relationships studio</a> — proposed center-pane Cast (not started).</li>
+        <li><a href="active/2026-07-25-cursor-shell-navigation/plan.html">Cursor-shell</a> — implementation complete; docs todo closed with this sweep.</li>
       </ul>
     </section>
 
     <section>
-      <h2>Incomplete / next</h2>
+      <h2>Incomplete</h2>
       <ol>
-        <li>Founder browser walkthrough of Capture → Inbox → agent → apply at wide and narrow.</li>
-        <li>Provision R2 + provider KEK for live media/BYOK when authorized to deploy secrets.</li>
-        <li>After founder verifies the complete outcome: focused Playwright, then PR.</li>
-      </ol>
-    </section>
-
-    <section>
-      <h2>How to resume</h2>
-      <ol>
-        <li>Checkout <code>feat/capture-to-story-agents</code>.</li>
-        <li>Read the plan, record log, Mockups 5.0, and ADRs 0010/0011.</li>
-        <li>Exercise Capture/Inbox/agents in a real browser and record feedback.</li>
+        <li>Harness CP3–CP5.</li>
+        <li>Cast center studio (plan proposed; awaiting accept + build).</li>
+        <li>Founder browser acceptance for Title Page / Agent chat / Capture; rotate any OpenAI key pasted in chat.</li>
+        <li>Production R2 + provider KEK provisioning on Fly; post-gate Playwright only after founder verifies.</li>
       </ol>
     </section>
   </main>

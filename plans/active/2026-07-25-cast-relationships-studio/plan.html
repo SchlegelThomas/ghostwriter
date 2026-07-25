@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cast &amp; relationships studio</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan</p>
+      <h1>Cast &amp; relationships studio</h1>
+      <p class="meta"><strong>Status:</strong> proposed<br>
+        <strong>Branch:</strong> <code>feat/capture-to-story-agents</code> (shared shell/UI)<br>
+        <strong>Owner:</strong> founder + parent agent<br>
+        <strong>Related:</strong>
+        <a href="../2026-07-25-cursor-shell-navigation/plan.html">Cursor-shell navigation</a>,
+        <a href="../2026-07-19-structure-cast-browse/plan.html">Structure / cast browse</a></p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Make Cast a first-class center workspace: Characters rail keeps the manuscript Explorer in the primary side and opens a richer Cast studio in the editor center (same hosting class as Title Page / Plans). Writers should see a character’s role in the story, a readable relationship map, and scene presence — not a cramped sidebar form that replaces the tree.</p>
+      <p><strong>Out of scope:</strong> force-directed physics graph libraries; AI-authored role summaries; new canonical relationship kinds; Canvas board rewrite; Playwright until founder verifies.</p>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ul>
+        <li>Characters rail opens Cast in the <strong>center</strong>; primary side remains Explorer (tree stays visible).</li>
+        <li>Cast roster (all non-archived characters) is browseable in the studio; selecting one shows detail without leaving center.</li>
+        <li>Selected character shows a <strong>Role in the story</strong> summary composed from existing notes + character-sheet desire/pressure/voice (deterministic; no provider call).</li>
+        <li>Relationships render as a visual constellation (center ego + linked peers with kind-labeled edges), with click-to-open peer and existing link add/remove still available.</li>
+        <li>Linked scenes render as a presence strip/list with jump to Draft; empty states stay clear.</li>
+        <li>Narrow layout remains usable (roster + detail stack; no blank center).</li>
+        <li>Focused UI tests + typecheck; <code>pnpm verify</code> before handoff; Playwright deferred.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks</h2>
+      <ol>
+        <li><strong>CP1 — Center hosting:</strong> Stop mounting Cast in primary side. Characters rail → keep Explorer primary; introduce a Cast center-owner path (prefer shared center-workspace owner helper over another one-off boolean stacked on Inbox). Close Plans when Cast opens and vice versa. Update shell layout helpers/tests + PRODUCT wording that said “Characters primary view”.</li>
+        <li><strong>CP2 — Cast studio shell:</strong> New <code>CastRelationshipsStudio</code> (roster + detail). Reuse <code>CharacterBrowsePanel</code> edit commands or fold into studio sections; remove duplicate cramped primary scroll.</li>
+        <li><strong>CP3 — Role summary + visualizations:</strong> Pure projection helpers for role summary, relationship graph model, scene presence; SVG/React Native constellation (no new graph dependency); scene strip with Draft handoff.</li>
+        <li><strong>CP4 — Docs + handoff:</strong> PRODUCT/ARCHITECTURE shell notes; revise cursor-shell decision that preferred Characters in primary; record log + WHERE-I-LEFT-OFF.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li>Vitest: cast center-host helpers; role-summary / relationship-graph projections; roster selection keys.</li>
+        <li>Manual: Harry Potter — Characters rail → tree still left; open Dumbledore → role summary, constellation, scenes → jump Draft → back to Cast.</li>
+        <li><code>pnpm --filter @ghostwriter/ui typecheck</code> + focused tests; full <code>pnpm verify</code> before handoff.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p>Update <code>docs/PRODUCT.md</code> workspace chrome (Cast center studio). Light <code>docs/ARCHITECTURE.md</code> shell note if needed. No new ADR — reuse story-knowledge notes/sheet/links and scene links. Living design: Mockups 3.0/4.0 cast language; do not regenerate mockup files.</p>
+      <p><strong>Living design source:</strong>
+        <a href="../../designs/Ghostwriter%20Mockups%203.0.html">Mockups 3.0</a> (structure/cast),
+        <a href="../../designs/Ghostwriter%20Mockups%204.0.html">Mockups 4.0</a> (character sheet / assist column).</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li><strong>D1 (proposed):</strong> Reverses cursor-shell CP3 preference that Characters host in primary side — Cast joins Title Page / Plans as a center workspace; Explorer stays the only primary content on wide.</li>
+        <li><strong>D2 (proposed):</strong> Relationship viz v1 = static ego constellation (SVG), not a Canvas force-graph or new dependency.</li>
+        <li><strong>D3 (proposed):</strong> Role summary is writer-authored field composition (notes + desire/pressure/voice), not BYOK generation in this plan.</li>
+        <li><strong>D4 (proposed):</strong> Primary side does not get a second cast list; roster lives inside the center studio so Explorer remains manuscript navigation.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Feature checkpoints</h2>
+      <ol>
+        <li><strong>Center Cast host</strong> — Characters rail opens studio in center; tree remains primary.</li>
+        <li><strong>Roster + sheet</strong> — pick a character; edit notes/sheet/links in the studio.</li>
+        <li><strong>Role + map + scenes</strong> — summary, constellation, scene presence with Draft jump.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox"> Plan accepted</li>
+        <li><input type="checkbox"> CP1 center hosting</li>
+        <li><input type="checkbox"> CP2 studio shell + edit parity</li>
+        <li><input type="checkbox"> CP3 role summary + relationship/scene viz</li>
+        <li><input type="checkbox"> Docs + handoff</li>
+        <li><input type="checkbox"> Founder product verification</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

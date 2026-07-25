@@ -59,11 +59,11 @@ describe("mapStructureQuickBuildVisible", () => {
     expect(mapStructureQuickBuildVisible("draft", "expanded")).toBe(true);
   });
 
-  it("shows quick build on canvas and split only when expanded", () => {
+  it("hides quick build on canvas and split so the board owns the center", () => {
     expect(mapStructureQuickBuildVisible("canvas", "collapsed")).toBe(false);
-    expect(mapStructureQuickBuildVisible("canvas", "expanded")).toBe(true);
+    expect(mapStructureQuickBuildVisible("canvas", "expanded")).toBe(false);
     expect(mapStructureQuickBuildVisible("split", "collapsed")).toBe(false);
-    expect(mapStructureQuickBuildVisible("split", "expanded")).toBe(true);
+    expect(mapStructureQuickBuildVisible("split", "expanded")).toBe(false);
   });
 });
 

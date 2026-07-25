@@ -10,6 +10,8 @@ import {
   captureInboxMetaLine,
   captureInboxRowTitle,
   captureInboxStatusLabel,
+  DREAMS_IDEA_PROMPT,
+  PLANS_TITLE,
   inboxCaptureSessionControlsDisabled,
   inboxLoadPhase,
   inboxPanelActivity,
@@ -38,9 +40,9 @@ function summary(
 }
 
 describe("captureInboxRowTitle", () => {
-  it("uses Untitled Capture and a formatted updated time", () => {
+  it("uses Untitled idea and a formatted updated time", () => {
     const title = captureInboxRowTitle(summary());
-    expect(title).toContain("Untitled Capture");
+    expect(title).toContain("Untitled idea");
     expect(title).toContain("2026");
   });
 });
@@ -234,5 +236,19 @@ describe("acknowledgementForInboxArchive", () => {
   it("returns archive and restore acknowledgement copy", () => {
     expect(acknowledgementForInboxArchive(true).kind).toBe("archive");
     expect(acknowledgementForInboxArchive(false).kind).toBe("restore");
+    expect(acknowledgementForInboxArchive(true).detail).toMatch(/Plans/);
+    expect(acknowledgementForInboxArchive(false).detail).toMatch(/Plans/);
+  });
+});
+
+describe("Plans writer copy", () => {
+  it("exposes the home title and idea prompt", () => {
+    expect(PLANS_TITLE).toBe("Plans");
+    expect(DREAMS_IDEA_PROMPT).toBe("What do you want to do with this idea?");
+  });
+
+  it("keeps load failure copy free of Inbox chrome", () => {
+    expect(INBOX_LOAD_FAILURE_GENERIC).toMatch(/Plans/);
+    expect(INBOX_LOAD_FAILURE_GENERIC).not.toMatch(/Inbox/);
   });
 });

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cursor-like workspace shell navigation</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan</p>
+      <h1>Cursor-like workspace shell navigation</h1>
+      <p class="meta"><strong>Status:</strong> active<br>
+        <strong>Branch:</strong> <code>feat/capture-to-story-agents</code> (shared; shell chrome only)<br>
+        <strong>Owner:</strong> founder + parent agent</p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Redesign project workspace chrome to work like Cursor: thin activity bar, resizable primary explorer, editor center, and a resizable secondary side for Agent (Chat/MCP) with Properties. Every writer surface must still be reachable without breaking Capture, Dreams, Reader, or propose-only agent rules.</p>
+      <p><strong>Out of scope:</strong> Reader full-screen redesign; production MCP protocol changes; rewriting Canvas board internals; Playwright until founder verifies.</p>
+    </section>
+
+    <section>
+      <h2>Target shell (Cursor mapping)</h2>
+      <table>
+        <thead><tr><th>Cursor</th><th>Ghostwriter</th></tr></thead>
+        <tbody>
+          <tr><td>Activity bar</td><td>32px rail — Explorer, Dreams, Characters, Canvas, Search/Jump, Agent, Settings; Draft is default editor when a scene is selected</td></tr>
+          <tr><td>Primary side</td><td>Manuscript explorer (file-tree icons) or Dreams/Characters view; resizable + collapsible</td></tr>
+          <tr><td>Editor</td><td>Draft / Canvas / Split only (no Inbox center takeover long-term)</td></tr>
+          <tr><td>Secondary side</td><td>Tabbed <strong>Agent</strong> (WorkspaceChatPanel / MCP) + <strong>Properties</strong> (inspector / Context Dock); resizable + collapsible</td></tr>
+          <tr><td>Command palette</td><td>Keep ⌘P / ⌘⇧P overlays</td></tr>
+          <tr><td>Bottom (optional later)</td><td>Unified History</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Page-by-page review (must keep working)</h2>
+      <ul>
+        <li><strong>Project library / Account gate</strong> — outside shell; unchanged.</li>
+        <li><strong>Draft</strong> — editor center; Properties = Context Dock tabs.</li>
+        <li><strong>Canvas / Split</strong> — editor center; secondary may collapse in map-dense.</li>
+        <li><strong>Reader</strong> — stays full-screen escape (not forced into 3-pane).</li>
+        <li><strong>Dreams &amp; Ideas</strong> — migrate from center takeover → primary-side view or editor tab (checkpoint 3).</li>
+        <li><strong>Idea Capture</strong> — keep modal overlay.</li>
+        <li><strong>Settings</strong> — keep modal; gear on activity bar.</li>
+        <li><strong>Characters</strong> — primary-side view preferred over center launchpad swap.</li>
+        <li><strong>History</strong> — later bottom panel; until then rail/overlay remains.</li>
+        <li><strong>Scene Partner</strong> — stays inside Dreams flow; workspace Agent panel is MCP/workspace chat.</li>
+        <li><strong>Jump / Command</strong> — palettes remain.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ul>
+        <li>Wide layout reads as activity bar | primary | editor | secondary.</li>
+        <li>Primary and secondary widths resize with drag; widths persist per project (localStorage).</li>
+        <li>Agent panel mounts live <code>WorkspaceChatPanel</code> (Chat/MCP); Properties keeps inspector/Context Dock.</li>
+        <li>Manuscript explorer uses clearer folder/file-style kind icons and remains scrollable/searchable.</li>
+        <li>Draft, Canvas, Split, Reader, Capture modal, Settings modal, Dreams still reachable.</li>
+        <li>Narrow mode keeps usable tab/rail fallback.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks (vertical checkpoints)</h2>
+      <ol>
+        <li><strong>CP1 — Secondary Agent panel + resize persistence:</strong> tabbed Agent | Properties; mount WorkspaceChatPanel; resize + persist secondary width; Chat rail opens Agent tab.</li>
+        <li><strong>CP2 — Activity bar + explorer icons:</strong> Cursor-like activity grouping; file-explorer style tree glyphs; persist primary width.</li>
+        <li><strong>CP3 — Dreams / Characters as primary views:</strong> stop Inbox center takeover; explorer host switches views.</li>
+        <li><strong>CP4 — Title Page home:</strong> remove Project Structure launchpad; project selection opens a Title Page (series title, book cover shelf, design desk). Persist light <code>BookCover</code> concept/notes; AI proposes cover concepts (BYOK), images preview ephemerally until hosted media exists. Characters stay in the primary Characters view.</li>
+        <li><strong>CP4c — Cover options async + Save details:</strong> Fix Title Page Save details feedback (silent no-op when unchanged; draft reset on navigator re-render). Move cover image gen to async jobs that produce ~3 options; History toast when ready; studio review strip to pick / iterate / apply.</li>
+        <li><strong>CP5 — History bottom (optional) + narrow polish + docs:</strong> PRODUCT/ARCHITECTURE notes; WHERE-I-LEFT-OFF.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li>Vitest for shell layout helpers (clamp widths, persistence keys, view ids).</li>
+        <li>Targeted UI tests for secondary tab switching when practical.</li>
+        <li>Manual: Harry Potter project — resize panes, Agent chat send, Properties still edits metadata, Dreams/Capture/Settings still open.</li>
+        <li><code>pnpm --filter @ghostwriter/ui typecheck</code> + focused tests before handoff.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p>Update <code>docs/PRODUCT.md</code> workspace chrome notes and <code>docs/ARCHITECTURE.md</code> client shell sketch if the three-pane model becomes durable. No new ADR unless we change offline/authority boundaries (unlikely). Living design: Mockups 4.0 grid is closest; Mockups 5.0 Capture modal + Dreams flow preserved.</p>
+      <p><strong>Living design source:</strong>
+        <a href="../../designs/Ghostwriter%20Mockups%204.0.html">Mockups 4.0</a> (activity rail + assist column),
+        <a href="../../designs/Ghostwriter%20Mockups%202.0.html">Mockups 2.0</a> (tree + details),
+        <a href="../../designs/Ghostwriter%20Mockups%205.0.html">Mockups 5.0</a> (Capture/Dreams).</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li><strong>Accepted:</strong> Agent secondary side uses existing workspace MCP chat; Scene Partner remains Dreams-scoped.</li>
+        <li><strong>Accepted:</strong> Reader stays full-screen.</li>
+        <li><strong>Accepted CP3:</strong> Wide Plans (ex–Dreams)/Characters host in primary side historically; Plans later accepted as always-center. Characters still primary browse until Cast studio plan is accepted. Narrow Plans still takes center.</li>
+        <li>Dual chat UIs (Scene Partner vs workspace Agent) must stay clearly labeled.</li>
+        <li><strong>Accepted CP4:</strong> Project home = Title Page, not structure browse. Cover <code>imageUrl</code> is optional HTTP(S) only; AI-generated bitmaps preview in-session and do not write giant data URIs into Lakebase. Concept/notes persist on the book.</li>
+        <li><strong>Accepted CP4b:</strong> BYOK cover image preview (data URI) → Apply puts PNG in private R2 (same Capture bucket) under <code>projects/{projectId}/books/{bookId}/cover.png</code>; Lakebase stores a stable <code>https://ghostwriter.cover/...</code> locator; Title Page resolves a short-lived signed GET (or hermetic data URI) for display.</li>
+        <li><strong>Accepted CP4c:</strong> Cover generation is async (in-process job store for v1; not a durable queue). Default 3 portrait options; writer can leave the studio and get a History acknowledgement when ready. Iterate = new job from selected option + refinement notes. Lakebase still stores only the applied locator.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked> Plan accepted and inventory recorded</li>
+        <li><input type="checkbox" checked> CP1 Agent panel + resize</li>
+        <li><input type="checkbox" checked> Top quick-search (jump + MCP + explorer filter)</li>
+        <li><input type="checkbox" checked> CP2 Activity bar + explorer icons</li>
+        <li><input type="checkbox" checked> CP3 Dreams/Characters primary views</li>
+        <li><input type="checkbox" checked> CP4 Title Page home (replaces Project Structure)</li>
+        <li><input type="checkbox" checked> CP4b BYOK cover image preview → R2 apply</li>
+        <li><input type="checkbox" checked> CP4c Save details + async multi-option covers</li>
+        <li><input type="checkbox" checked> Docs + handoff</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

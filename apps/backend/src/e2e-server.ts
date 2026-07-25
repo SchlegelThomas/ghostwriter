@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { serve } from "@hono/node-server";
 import {
+  accountId,
   createBookReaderServices,
   createCanvasServices,
   createCaptureServices,
@@ -28,14 +29,22 @@ import {
   createPgliteDatabase,
   migratePgliteRepositoryDatabase
 } from "@ghostwriter/storage/pglite";
+import {
+  createFakeStructuredCompletionProvider,
+  createOpenAiProvider
+} from "@ghostwriter/ai";
 import { createApp } from "./app.js";
 import type { AuthGateway, AuthenticatedSession } from "./auth.js";
 import { createTestAgentProviderRuntime } from "./agent-provider-runtime.js";
+import { createTestProviderKekRuntimeConfig } from "./provider-kek-config.js";
+import type { ScenePartnerImageGenerator } from "./scene-partner-routes.js";
+import { seedHermeticHarryPotter } from "./hermetic-seed.js";
 
 if (process.env.GHOSTWRITER_E2E !== "1") {
   throw new Error("The hermetic E2E server requires GHOSTWRITER_E2E=1.");
 }
 
+const liveOpenAi = process.env.GHOSTWRITER_E2E_LIVE_OPENAI === "1";
 const port = Number.parseInt(process.env.PORT ?? "8787", 10);
 const appOrigin = process.env.E2E_APP_ORIGIN ?? "http://127.0.0.1:4173";
 const account = {
@@ -126,11 +135,21 @@ const captures = createCaptureServices({
   ids,
   clock
 });
+await seedHermeticHarryPotter({
+  projects,
+  sceneDocuments,
+  captureDocuments,
+  accountId: accountId(account.id),
+  ids,
+  clock
+});
+console.log("Hermetic seed: Harry Potter series ready for E2E writer.");
+const objectStorage = createMemoryCaptureObjectStorage();
 const captureAttachments = createCaptureAttachmentServices({
   projects,
   captureDocuments,
   attachments: createPostgresCaptureAttachmentRepository(repositoryDatabase),
-  objectStorage: createMemoryCaptureObjectStorage(),
+  objectStorage,
   ids,
   clock
 });
@@ -157,16 +176,125 @@ const reader = createBookReaderServices({
   canvases
 });
 const identity = createIdentityServices({ profiles, clock });
+
+/** Hermetic BYOK + structured completions for local founder / Playwright validation. */
+const hermeticFakeProvider = createFakeStructuredCompletionProvider((input) => {
+  const schemaName = input.outputSchema.name;
+  if (
+    schemaName === "workspace-chat-turn-v1" ||
+    schemaName === "workspace_chat_turn_v1"
+  ) {
+    const projectLine =
+      input.inputText
+        .split("\n")
+        .find((line) => line.startsWith("Project:"))
+        ?.replace(/^Project:\s*/, "")
+        .trim() ?? "this project";
+    return {
+      output: {
+        reply: `Here is a propose-only note about ${projectLine}. I used the open manuscript context and will not claim canon was written.`
+      }
+    };
+  }
+  if (schemaName === "scene_partner_turn_v1" || schemaName === "scene-partner-turn-v1") {
+    return {
+      output: {
+        schemaId: "scene-partner-turn-v1",
+        thinkingSteps: ["Reading idea", "Scanning scenes", "Drafting response"],
+        assistantMessage:
+          "I scanned the manuscript and this idea feels ready to become a new scene.",
+        phase: "new-scene",
+        matchedSceneId: null,
+        proseDraft: "Soft light holds for a breath; the moment waits for the next line.",
+        actions: ["apply-new-scene", "propose-image"],
+        imagePrompt: "Quiet literary study of the capture idea"
+      }
+    };
+  }
+  if (schemaName === "sketch-fields-v1") {
+    return {
+      output: {
+        schemaId: "sketch-fields-v1",
+        purpose: "Force a present-tense choice.",
+        conflict: "The log and the forecast disagree.",
+        turn: "Someone cannot leave without answering."
+      }
+    };
+  }
+  if (schemaName === "character-sheet-v1") {
+    return {
+      output: {
+        schemaId: "character-sheet-v1",
+        storyKnowledgeId: "story_knowledge_e2e_character",
+        desire: "Reach the harbor before the tide turns.",
+        pressure: "A name spoken too soon.",
+        voiceNotes: "Short sentences; salt in the vowels."
+      }
+    };
+  }
+  if (schemaName === "backdrop-fields-v1") {
+    return {
+      output: {
+        schemaId: "backdrop-fields-v1",
+        caption: "Fog presses the glass above the pier.",
+        sensoryNotesFallback: "Wet rope, diesel, gulls."
+      }
+    };
+  }
+  return {
+    output: {
+      schemaId: "capture-reflection-v1",
+      summary: "A harbor signal looking for its scene.",
+      questions: ["Where does this land in the opening?"],
+      possibleStoryJobs: [
+        {
+          label: "Cold open",
+          rationale: "Establishes weather before the first arrival."
+        }
+      ]
+    }
+  };
+});
+
+/** 1×1 PNG — valid for Scene Partner preview and cover apply decode. */
+const HERMETIC_PNG_B64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+const hermeticFakeImage: ScenePartnerImageGenerator = async () => {
+  return {
+    ok: true,
+    b64Json: HERMETIC_PNG_B64,
+    dataUri: `data:image/png;base64,${HERMETIC_PNG_B64}`
+  };
+};
+
+const liveOpenAiFactory = (apiKey: string) => createOpenAiProvider({ apiKey });
+const hermeticProviderFactory = () => hermeticFakeProvider;
+const providerFactory = liveOpenAi ? liveOpenAiFactory : hermeticProviderFactory;
+
 const agentProvider = createTestAgentProviderRuntime({
   db: repositoryDatabase,
   projects,
   captureDocuments,
   ids,
   clock,
-  kekConfig: undefined,
+  kekConfig: createTestProviderKekRuntimeConfig(),
+  defaultValidationProviderFactory: providerFactory,
+  defaultCompletionProviderFactory: providerFactory,
   capturePromotions,
   sceneDocuments
 });
+
+/** Optional local-only seed of BYOK key for the hermetic writer. Never log the value. */
+const seededOpenAiKey = process.env.GHOSTWRITER_E2E_SEED_OPENAI_KEY?.trim();
+if (seededOpenAiKey !== undefined && seededOpenAiKey.length > 0) {
+  await agentProvider.providerCredentials.setOpenAiCredential({
+    accountId: accountId(account.id),
+    plaintext: seededOpenAiKey
+  });
+  console.log("Hermetic seed: OpenAI key loaded for E2E writer (from env).");
+}
+
 const app = createApp({
   services,
   writing,
@@ -178,10 +306,21 @@ const app = createApp({
   identity,
   agentProvider,
   auth: e2eAuthGateway(),
-  allowedOrigins: [appOrigin]
+  allowedOrigins: [appOrigin],
+  objectStorage,
+  ...(liveOpenAi ? {} : { scenePartnerGenerateImage: hermeticFakeImage })
 });
 const server = serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`Ghostwriter E2E backend listening on port ${info.port}`);
+  console.log(`Ghostwriter hermetic backend listening on port ${info.port}`);
+  console.log(`Trusted app origin: ${appOrigin}`);
+  console.log(
+    liveOpenAi
+      ? "OpenAI: LIVE (GHOSTWRITER_E2E_LIVE_OPENAI=1)"
+      : "OpenAI: hermetic fake provider"
+  );
+  if (seededOpenAiKey !== undefined && seededOpenAiKey.length > 0) {
+    console.log("OpenAI: BYOK key seeded for E2E writer");
+  }
 });
 
 async function shutdown(): Promise<void> {

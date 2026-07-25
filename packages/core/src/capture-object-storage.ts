@@ -26,6 +26,13 @@ export interface CaptureObjectStoragePort {
     objectKey: string;
     expiresAt: string;
   }>): Promise<PresignedObjectUrl>;
+  putObject(input: Readonly<{
+    objectKey: string;
+    contentType: string;
+    bytes: Uint8Array;
+  }>): Promise<void>;
+  /** Optional read for hermetic/download streaming; R2 may omit and use presignGet instead. */
+  getObjectBytes?(objectKey: string): Promise<Uint8Array | undefined>;
   inspectObject(objectKey: string): Promise<CaptureObjectInspection | undefined>;
   deleteObject(objectKey: string): Promise<void>;
 }
@@ -72,6 +79,13 @@ export function createMemoryCaptureObjectStorage(): CaptureObjectStoragePort & R
         url: `memory://get/${encodeURIComponent(input.objectKey)}?expires=${encodeURIComponent(input.expiresAt)}`,
         expiresAt: input.expiresAt
       });
+    },
+    async putObject(input) {
+      objects.set(input.objectKey, Uint8Array.from(input.bytes));
+    },
+    async getObjectBytes(objectKey) {
+      const bytes = objects.get(objectKey);
+      return bytes === undefined ? undefined : Uint8Array.from(bytes);
     },
     async inspectObject(objectKey) {
       const bytes = objects.get(objectKey);

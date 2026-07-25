@@ -52,6 +52,12 @@ function setup(options?: Readonly<{ presignFails?: boolean }>) {
         async deleteObject(key: string) {
           return baseStorage.deleteObject(key);
         },
+        async putObject(input: Parameters<typeof objectStorage.putObject>[0]) {
+          return baseStorage.putObject(input);
+        },
+        async getObjectBytes(objectKey: string) {
+          return baseStorage.getObjectBytes?.(objectKey);
+        },
         putObjectForTest: objectStorage.putObjectForTest.bind(objectStorage),
         hasObject: objectStorage.hasObject.bind(objectStorage),
         snapshot: objectStorage.snapshot.bind(objectStorage),

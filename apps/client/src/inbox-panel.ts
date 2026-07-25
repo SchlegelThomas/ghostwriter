@@ -1,7 +1,14 @@
 import { GhostwriterApiError, type CaptureSummaryResponse } from "./api.js";
 
+export const PLANS_TITLE = "Plans" as const;
+/** @deprecated Prefer PLANS_TITLE — kept for transitional imports. */
+export const DREAMS_IDEAS_TITLE = PLANS_TITLE;
+
+export const DREAMS_IDEA_PROMPT =
+  "What do you want to do with this idea?" as const;
+
 export const INBOX_LOAD_FAILURE_GENERIC =
-  "Ghostwriter could not load the Inbox." as const;
+  "Ghostwriter could not load Plans." as const;
 
 export const INBOX_ARCHIVE_FAILURE_GENERIC =
   "Ghostwriter could not update this Capture." as const;
@@ -25,7 +32,7 @@ export type InboxLoadPhase = "loading" | "failure" | "empty" | "ready";
 
 export function messageForInboxLoadFailure(_cause: unknown): string {
   if (_cause instanceof GhostwriterApiError && _cause.status === 401) {
-    return "Your session ended. Sign in again before opening the Inbox.";
+    return "Your session ended. Sign in again before opening Plans.";
   }
   return INBOX_LOAD_FAILURE_GENERIC;
 }
@@ -43,7 +50,7 @@ export function formatCaptureUpdatedTime(updatedAt: string): string {
 }
 
 export function captureInboxRowTitle(summary: CaptureSummaryResponse): string {
-  return `Untitled Capture · ${formatCaptureUpdatedTime(summary.updatedAt)}`;
+  return `Untitled idea · ${formatCaptureUpdatedTime(summary.updatedAt)}`;
 }
 
 export function captureInboxModalityLabel(
@@ -168,7 +175,7 @@ export function inboxPanelProblemEvents(input: Readonly<{
   if (input.loadFailed) {
     events.push({
       id: `inbox-load:${input.projectId}`,
-      title: "Inbox could not load",
+      title: "Plans could not load",
       detail: input.loadFailureMessage ?? INBOX_LOAD_FAILURE_GENERIC,
       tone: "error"
     });
@@ -191,11 +198,12 @@ export function acknowledgementForInboxArchive(
     ? {
         kind: "archive",
         title: "Capture archived",
-        detail: "The Capture stays in your project and can be restored from archived Inbox."
+        detail:
+          "The Capture stays in your project and can be restored from archived Plans."
       }
     : {
         kind: "restore",
         title: "Capture restored",
-        detail: "The Capture returned to your active Inbox."
+        detail: "The Capture returned to your active Plans."
       };
 }

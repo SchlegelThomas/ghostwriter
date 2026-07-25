@@ -171,7 +171,7 @@ describe("capture attachment activity merge", () => {
       recoveryOffer: false,
       attachmentActivity: "idle"
     });
-    expect(saved).toBe("Saved to project");
+    expect(saved).toBe("");
     expect(
       captureComposerSaveStatusText({
         snapshot: snapshot(),

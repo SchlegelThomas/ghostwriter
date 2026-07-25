@@ -68,9 +68,7 @@ describe("capture composer dictation copy", () => {
 describe("captureSaveStatusText", () => {
   it("maps queue phases and recovery to writer-facing save truth", () => {
     expect(captureSaveStatusText(undefined, undefined, false)).toBe("Loading…");
-    expect(captureSaveStatusText(snapshot(), undefined, false)).toBe(
-      "Saved to project"
-    );
+    expect(captureSaveStatusText(snapshot(), undefined, false)).toBe("");
     expect(
       captureSaveStatusText(snapshot({ status: "pending", dirty: true }), undefined, false)
     ).toBe("Waiting to save…");

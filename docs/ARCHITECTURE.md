@@ -177,24 +177,26 @@ metadata persistence now updates stable canonical rows rather than deleting/rebu
   beside `displayName` (migration `0011_writer_publishing`).
 - [ADR 0009](adr/0009-writing-craft-and-assist.md) adds scene sketch + character sheet craft JSON,
   craft-only ink, browser dictation into Tiptap, and propose-only writing-assist proposals.
-- Canonical MCP writes, real-time subscriptions/presence, editor invitations, comments/suggestions,
-  image generation, and full offline access remain explicit later decisions.
+- Canonical MCP writes (beyond propose-only grants), real-time subscriptions/presence, editor
+  invitations, comments/suggestions, and full offline access remain explicit later decisions.
 
-## Accepted Capture and agent architecture (planned, not yet shipped)
+## Accepted Capture and agent architecture (implemented locally)
 
 [ADR 0010](adr/0010-capture-inbox-media-and-promotion.md) and
-[ADR 0011](adr/0011-byok-context-proposals-playbooks-and-mcp-grants.md) govern the active
-Capture-to-Story epic:
+[ADR 0011](adr/0011-byok-context-proposals-playbooks-and-mcp-grants.md) govern Capture-to-Story and
+BYOK agents on `feat/capture-to-story-agents`:
 
 - Capture is a project-owned noncanonical rich document with a dedicated expected-version domain,
-  bounded browser recovery, and immutable integration provenance. Inbox is a projection over
-  captures, runs, and proposals—not another prose owner.
+  bounded browser recovery, and immutable integration provenance. Inbox (writer-facing **Plans**
+  center workspace) is a projection over captures, runs, and proposals—not another prose owner.
 - Deterministic promotion creates or places one canonical scene and optional Canvas card under
   exact Capture/project/Canvas preconditions. Canvas still never owns manuscript order.
-- Private Capture attachments use Cloudflare R2 through an object-storage port and Fly-authorized
-  short-lived object URLs. Binary bytes never enter Postgres project JSON or editor documents.
-- `packages/ai` will provide a provider-neutral boundary with OpenAI BYOK first and a deterministic
-  fake provider in required CI. Writer keys are encrypted under versioned Fly-held root keys.
+- Private Capture attachments and applied book-cover PNGs use Cloudflare R2 through an
+  object-storage port and Fly-authorized short-lived object URLs. Binary bytes never enter Postgres
+  project JSON or editor documents. Hermetic E2E uses a memory fake.
+- `packages/ai` provides a provider-neutral boundary with OpenAI BYOK first (`completeStructured`,
+  `gpt-image-1` images) and a deterministic fake provider in required CI. Writer keys are encrypted
+  under versioned Fly-held root keys (`GHOSTWRITER_PROVIDER_KEK_V1`).
 - Context is assembled server-side into revision-addressed receipts. Fixed product/workflow policy
   outranks optional account preferences, project instructions, declarative playbooks, and the
   assignment; capabilities remain enforced outside the model.
@@ -203,16 +205,27 @@ Capture-to-Story epic:
 - Project-scoped MCP grants persist token hashes (never plaintext), closed Capture/tool allowlists,
   expiry, and revocation. Owner admin routes mint/revoke grants; proposals created under a grant
   appear in the same Inbox projection as first-party UI runs.
+- Workspace Agent dock (`POST /api/workspace/chat`) uses BYOK chat completion with server-assembled
+  navigator/selection context; mode/model/effort are client prefs. Toolkit jobs (Scene Partner,
+  cover options) remain separate propose/apply or apply-cover routes.
 
 Product and operational docs must preserve shipped-vs-local distinctions until each checkpoint is
-founder-accepted in a real browser.
+founder-accepted in a real browser. R2/KEK secrets are not assumed provisioned on production Fly
+until operations confirms them.
 
-The active branch now implements Capture prose/Inbox/promotion plus the mixed-media boundary:
+The active branch implements Capture prose/Inbox/promotion plus the mixed-media boundary:
 `capture_attachments` metadata, transactional quotas, provider-neutral object storage, a private R2
 SigV4 adapter, memory fake, Fly control routes, direct browser upload, backend byte
-hash/type inspection, recorded audio, and attachment UI. R2 resources are not provisioned and
-browser acceptance remains pending, so this remains local implementation rather than shipped
-architecture. Attachments stay outside ProseMirror, scene promotion, and model context.
+hash/type inspection, recorded audio, and attachment UI. Attachments stay outside ProseMirror,
+scene promotion, and model context. Book covers store concept/notes and an optional
+`https://ghostwriter.cover/...` locator (`book.cover`, migration `0018_book_cover`).
+
+## Workspace shell (Cursor-like)
+
+Wide layout is activity rail | resizable primary (Explorer or Characters browse) | editor center
+(Draft / Canvas / Split / Title Page / Plans) | resizable secondary (Agent | Properties). Narrow
+keeps rail/tab fallbacks; Plans may still take the center. Cast center-studio redesign is proposed
+separately and must not be described as shipped until implemented.
 
 ## Accepted product requirements (2026-07-11)
 

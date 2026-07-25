@@ -217,7 +217,8 @@ async function attachmentApp(
       identity,
       agentProvider,
       auth: options?.auth ?? fakeAuth(),
-      allowedOrigins: [TEST_ORIGIN]
+      allowedOrigins: [TEST_ORIGIN],
+      objectStorage
     }),
     objectStorage: objectStorage as ReturnType<typeof createMemoryCaptureObjectStorage>
   };

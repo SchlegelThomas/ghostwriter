@@ -1,14 +1,7 @@
 import type { ProjectNavigator } from "@ghostwriter/core";
 import { ghostwriterTheme } from "@ghostwriter/ui";
 import { useEffect, useRef, useState } from "react";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View
-} from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type {
   CaptureHeadResponse,
   PromoteCaptureToSceneResponse
@@ -16,7 +9,6 @@ import type {
 import {
   buildCaptureHandoffPromoteRequest,
   captureHandoffApplyStatusText,
-  captureHandoffAuthorityReceiptLines,
   captureHandoffCanApply,
   captureHandoffCanvasGeometryHintText,
   captureHandoffDefaultFormState,
@@ -208,16 +200,18 @@ export function CaptureHandoffPanel({
     return (
       <View accessibilityLabel="Capture integration receipt" style={styles.panel}>
         <Text accessibilityRole="header" style={styles.title}>
-          Integration receipt
+          Added to manuscript
         </Text>
         <Text accessibilityLiveRegion="polite" style={styles.status}>
           {statusText}
         </Text>
-        {captureHandoffIntegratedReceiptLines(head).map((line) => (
-          <Text key={line} style={styles.receiptLine}>
-            {line}
-          </Text>
-        ))}
+        {captureHandoffIntegratedReceiptLines(head)
+          .slice(0, 2)
+          .map((line) => (
+            <Text key={line} style={styles.receiptLine}>
+              {line}
+            </Text>
+          ))}
         <View style={styles.actions}>
           {onViewSource !== undefined ? (
             <HandoffButton
@@ -249,9 +243,9 @@ export function CaptureHandoffPanel({
   if (!eligible) {
     return (
       <View style={styles.panel}>
-        <Text style={styles.title}>Handoff unavailable</Text>
+        <Text style={styles.title}>Add to manuscript</Text>
         <Text style={styles.body}>
-          Only acknowledged nonempty Captures can integrate into Draft.
+          This idea is not ready to add yet.
         </Text>
         {onViewSource !== undefined ? (
           <HandoffButton
@@ -265,16 +259,10 @@ export function CaptureHandoffPanel({
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.panel}>
+    <View style={styles.panel}>
       <Text accessibilityRole="header" style={styles.title}>
-        Integrate into Draft
+        Add to manuscript
       </Text>
-      <Text style={styles.eyebrow}>No-AI authority receipt</Text>
-      {captureHandoffAuthorityReceiptLines().map((line) => (
-        <Text key={line} style={styles.receiptLine}>
-          {line}
-        </Text>
-      ))}
 
       <View style={styles.field}>
         <Text nativeID="capture-handoff-title-label" style={styles.label}>
@@ -340,7 +328,7 @@ export function CaptureHandoffPanel({
       </View>
 
       <View accessibilityLabel="Apply preview" style={styles.preview}>
-        <Text style={styles.previewTitle}>Apply preview</Text>
+        <Text style={styles.previewTitle}>Preview</Text>
         {previewLines.map((line) => (
           <Text key={line} style={styles.previewLine}>
             {line}
@@ -371,7 +359,7 @@ export function CaptureHandoffPanel({
           primary
         />
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -381,7 +369,6 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: 10,
     borderWidth: 1,
-    flex: 1,
     gap: 10,
     minWidth: 260,
     padding: 14
@@ -390,13 +377,6 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontFamily: fonts.uiMedium,
     fontSize: 18
-  },
-  eyebrow: {
-    color: colors.muted,
-    fontFamily: fonts.uiMedium,
-    fontSize: 12,
-    letterSpacing: 0.4,
-    textTransform: "uppercase"
   },
   body: {
     color: colors.muted,

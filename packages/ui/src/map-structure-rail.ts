@@ -36,12 +36,11 @@ export function mapStructureRailWidth(
 
 export function mapStructureQuickBuildVisible(
   mode: MapStructureWorkspaceMode,
-  structureRail: MapStructureRailMode
+  _structureRail: MapStructureRailMode
 ): boolean {
-  // Draft keeps Quick Build in the center trail even when the structure rail
-  // is collapsed; Map / Split only expose it with the expanded tree.
-  if (mode === "draft") return true;
-  return structureRail === "expanded";
+  // Draft keeps Quick Build in the center trail. Canvas / Split stay board-first —
+  // add from the Explorer tree instead of a competing ＋ Add chrome control.
+  return mode === "draft";
 }
 
 /** Map mode uses dense board-first chrome (trail in top bar, no center hero). */

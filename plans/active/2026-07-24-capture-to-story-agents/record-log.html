@@ -283,6 +283,46 @@
         <li><strong>Live ops:</strong> R2 bucket/CORS/credentials and provider KEK Fly secrets not provisioned in this session.</li>
       </ul>
     </article>
+
+    <article>
+      <h2>2026-07-25 — Scene Partner becomes conversational (+ images)</h2>
+      <p>Founder rejected Scene Partner interstitial clicks (Help find its place → Start → static apply). Accepted direction:</p>
+      <ul>
+        <li>Job-bound chat with visible thinking; auto-start on Scene Partner entry.</li>
+        <li>Scan manuscript scenes for matches; else propose new scene; interview when unclear.</li>
+        <li>Iterate prose with the writer; optionally propose scene images.</li>
+        <li>Apply remains human-gated. Generated images for Scene Partner are now in epic scope (was out of scope).</li>
+      </ul>
+      <p><strong>Checkpoint 8</strong> opened for this revision. Generic always-on chat remains out of scope.</p>
+      <p><strong>Slice 1 landed:</strong> Scene Partner opens into chat with visible thinking and auto-start (no Help/Start gates). Hermetic fake session covers interview / match / new-scene / prose / apply offer / placeholder image proposal. Human-gated apply via existing promote/reflection helpers. Live OpenAI chat + real image API still open.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-25 — Dreams &amp; Ideas UX pass (founder feedback)</h2>
+      <p>After hermetic local validation, founder found Inbox review layout broken (nested buttons, clipped overflow, Characters framing). Fixes landed, then founder directed a creative UX cleanup before feature polish:</p>
+      <ul>
+        <li>Writer-facing rename <strong>Inbox → Dreams &amp; Ideas</strong> (narrow rail label <strong>Dreams</strong>).</li>
+        <li>Breadcrumb stack navigation (list → idea → partner/integrate) using the full center workspace; wide split removed.</li>
+        <li>Idea step prompt: <em>What do you want to do with this idea?</em> → Scene Partner, Craft Partner, Worldkeeper, plus Add to manuscript.</li>
+        <li>Stripped mockup instructional copy from partner and handoff surfaces; APIs unchanged.</li>
+      </ul>
+      <p><strong>Next:</strong> founder reviews the new flow in the browser; then iterate partner feature UX.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-25 — Live BYOK Scene Partner turns + images</h2>
+      <p>Scene Partner chat now calls live OpenAI when the writer’s BYOK key is configured in Settings:</p>
+      <ul>
+        <li><code>scene-partner-turn-v1</code> structured turns (thinking steps, assistant message, phase, optional prose/actions/image prompt).</li>
+        <li><code>POST …/scene-partner/turns</code> and <code>POST …/scene-partner/images</code>; chat history is not persisted; apply stays human-gated.</li>
+        <li>Hermetic E2E defaults to fake completions + placeholder images. Local live: <code>GHOSTWRITER_E2E=1 GHOSTWRITER_E2E_LIVE_OPENAI=1</code> plus Settings key. Playwright leaves <code>GHOSTWRITER_E2E_LIVE_OPENAI</code> unset.</li>
+      </ul>
+    </article>
+
+    <article>
+      <h2>2026-07-25 — Plans rename + docs/PR handoff</h2>
+      <p>Writer-facing <strong>Dreams &amp; Ideas</strong> rebranded to <strong>Plans</strong> (center workspace). Shell / Title Page / Agent harness follow-ons landed on this branch. Docs sweep updated PRODUCT, ARCHITECTURE, API, OPERATIONS, README, and WHERE-I-LEFT-OFF. Founder verification and Playwright remain open; Cast studio is a separate proposed plan.</p>
+    </article>
   </main>
 </body>
 </html>

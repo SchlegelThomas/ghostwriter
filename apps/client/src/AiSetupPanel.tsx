@@ -81,50 +81,43 @@ export function AiSetupPanel({
     });
   }, []);
 
-  async function saveKey(): Promise<void> {
+  async function saveAndTestKey(): Promise<void> {
     setBusy(true);
     setMessage(undefined);
     try {
-      const next = await setOpenAiProviderCredential({
+      setMessage("Saving OpenAI key…");
+      const saved = await setOpenAiProviderCredential({
         apiKey,
         ...(status?.configured === true
           ? { expectedVersion: status.version }
           : {})
       });
-      setStatus(next);
+      setStatus(saved);
       setApiKey("");
-      setMessage("OpenAI key saved.");
-      onConfigured?.();
-    } catch (error) {
-      setMessage(
-        error instanceof GhostwriterApiError
-          ? error.message
-          : "Ghostwriter could not save that OpenAI key."
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
 
-  async function testKey(): Promise<void> {
-    if (status?.configured !== true) return;
-    setBusy(true);
-    setMessage(undefined);
-    try {
-      const next = await validateOpenAiProviderCredential({
-        expectedVersion: status.version
+      if (!saved.configured) {
+        setMessage("OpenAI key saved, but Ghostwriter could not confirm it.");
+        return;
+      }
+
+      setMessage("Testing OpenAI key…");
+      const validated = await validateOpenAiProviderCredential({
+        expectedVersion: saved.version
       });
-      setStatus(next);
+      setStatus(validated);
+      if (validated.configured && validated.validationState === "valid") {
+        setMessage("OpenAI key saved and verified.");
+        onConfigured?.();
+        return;
+      }
       setMessage(
-        next.configured && next.validationState === "valid"
-          ? "OpenAI key looks valid."
-          : "OpenAI key did not validate."
+        "OpenAI key was saved, but the test call failed. Check the key and try again."
       );
     } catch (error) {
       setMessage(
         error instanceof GhostwriterApiError
           ? error.message
-          : "Ghostwriter could not test that OpenAI key."
+          : "Ghostwriter could not save or test that OpenAI key."
       );
     } finally {
       setBusy(false);
@@ -193,12 +186,7 @@ export function AiSetupPanel({
         <SetupButton
           disabled={busy || apiKey.trim().length < 20}
           label="Save key"
-          onPress={() => void saveKey()}
-        />
-        <SetupButton
-          disabled={busy || status?.configured !== true}
-          label="Test key"
-          onPress={() => void testKey()}
+          onPress={() => void saveAndTestKey()}
         />
         <SetupButton
           disabled={busy || status?.configured !== true}

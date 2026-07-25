@@ -10,13 +10,17 @@ export type CaptureModalShellProps = Readonly<{
   onRequestClose(): void;
   onShow?(): void;
   children: ReactNode;
+  accessibilityLabel?: string;
+  dismissAccessibilityLabel?: string;
 }>;
 
 export function CaptureModalShell({
   visible,
   onRequestClose,
   onShow,
-  children
+  children,
+  accessibilityLabel = "Capture composer",
+  dismissAccessibilityLabel = "Dismiss Capture"
 }: CaptureModalShellProps) {
   useEffect(() => {
     if (!visible || typeof document === "undefined") return;
@@ -38,13 +42,13 @@ export function CaptureModalShell({
       visible={visible}
     >
       <View
-        accessibilityLabel="Capture composer"
+        accessibilityLabel={accessibilityLabel}
         accessibilityViewIsModal
         style={styles.root}
         {...({ "aria-modal": true } as object)}
       >
         <Pressable
-          accessibilityLabel="Dismiss Capture"
+          accessibilityLabel={dismissAccessibilityLabel}
           accessibilityRole="button"
           onPress={onRequestClose}
           style={styles.backdrop}

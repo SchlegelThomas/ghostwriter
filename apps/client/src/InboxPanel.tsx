@@ -1,6 +1,12 @@
 import type { ProjectNavigator } from "@ghostwriter/core";
 import { ghostwriterTheme } from "@ghostwriter/ui";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode
+} from "react";
 import {
   Pressable,
   ScrollView,
@@ -30,10 +36,13 @@ import { AiSetupPanel } from "./AiSetupPanel.js";
 import { CaptureHandoffPanel } from "./CaptureHandoffPanel.js";
 import type { CaptureHandoffPromoteInput } from "./capture-handoff.js";
 import {
+  buildCaptureHandoffPromoteRequest,
+  CAPTURE_HANDOFF_DEFAULT_SCENE_TITLE,
   inboxHandoffLayoutMode,
   inboxHandoffShowsDetailPane,
   inboxHandoffShowsList
 } from "./capture-handoff.js";
+import { ScenePartnerChatPanel } from "./ScenePartnerChatPanel.js";
 import {
   acknowledgementForInboxArchive,
   captureInboxCanArchive,
@@ -44,6 +53,8 @@ import {
   captureInboxMetaLine,
   captureInboxRowTitle,
   captureInboxStatusLabel,
+  DREAMS_IDEA_PROMPT,
+  PLANS_TITLE,
   inboxLoadPhase,
   inboxCaptureSessionControlsDisabled,
   inboxPanelActivity,
@@ -55,12 +66,26 @@ import {
   type InboxPanelProblemEvent
 } from "./inbox-panel.js";
 import { messageForCaptureLoadFailure } from "./capture-composer.js";
+import { sceneDocumentPlainText } from "./draft-desk.js";
 import {
   listManuscriptHandoffChoices,
   resolveManuscriptHandoffPlacement
 } from "./manuscript-handoff-placement.js";
 
 const { colors, fonts } = ghostwriterTheme;
+
+type DreamsWorkflowStep =
+  | "idea"
+  | "scene-partner"
+  | "craft-partner"
+  | "worldkeeper"
+  | "integrate";
+
+type AiSetupResume =
+  | "scene"
+  | "sketch-partner.craft-fields"
+  | "character-coach.sheet-fields"
+  | "worldkeeper.backdrop-fields";
 
 export type InboxPanelProps = Readonly<{
   projectId: string;
@@ -72,7 +97,11 @@ export type InboxPanelProps = Readonly<{
   canvasVersion?: number;
   ensureCanvasVersion?(): Promise<number | undefined>;
   onSelectCapture?(captureId: string | undefined): void;
-  onOpenCapture(captureId: string): void;
+  /** Omit captureId to open a new Idea Capture. */
+  onOpenCapture(captureId?: string): void;
+  onOpenSettings?(): void;
+  /** Bump when Settings may have changed the OpenAI key. */
+  providerStatusSignal?: number;
   onViewSourceCapture?(captureId: string): void;
   onPromote?(
     input: CaptureHandoffPromoteInput
@@ -88,11 +117,13 @@ export type InboxPanelProps = Readonly<{
 function InboxButton({
   label,
   onPress,
-  disabled = false
+  disabled = false,
+  primary = false
 }: Readonly<{
   label: string;
   onPress(): void;
   disabled?: boolean;
+  primary?: boolean;
 }>) {
   return (
     <Pressable
@@ -101,13 +132,64 @@ function InboxButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
+        primary && styles.buttonPrimary,
         pressed && styles.buttonPressed,
         disabled && styles.buttonDisabled
       ]}
     >
-      <Text style={styles.buttonText}>{label}</Text>
+      <Text style={[styles.buttonText, primary && styles.buttonTextPrimary]}>
+        {label}
+      </Text>
     </Pressable>
   );
+}
+
+function ChoiceCard({
+  title,
+  subtitle,
+  onPress,
+  disabled = false,
+  secondary = false
+}: Readonly<{
+  title: string;
+  subtitle: string;
+  onPress(): void;
+  disabled?: boolean;
+  secondary?: boolean;
+}>) {
+  return (
+    <Pressable
+      accessibilityHint={subtitle}
+      accessibilityLabel={title}
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.choiceCard,
+        secondary && styles.choiceCardSecondary,
+        pressed && !disabled && styles.buttonPressed,
+        disabled && styles.buttonDisabled
+      ]}
+    >
+      <Text style={styles.choiceCardTitle}>{title}</Text>
+      <Text style={styles.choiceCardSubtitle}>{subtitle}</Text>
+    </Pressable>
+  );
+}
+
+function workflowStepLabel(step: DreamsWorkflowStep): string {
+  switch (step) {
+    case "scene-partner":
+      return "Scene Partner";
+    case "craft-partner":
+      return "Craft Partner";
+    case "worldkeeper":
+      return "Worldkeeper";
+    case "integrate":
+      return "Add to manuscript";
+    case "idea":
+      return "Idea";
+  }
 }
 
 export function InboxPanel({
@@ -121,6 +203,8 @@ export function InboxPanel({
   ensureCanvasVersion,
   onSelectCapture,
   onOpenCapture,
+  onOpenSettings,
+  providerStatusSignal = 0,
   onViewSourceCapture,
   onPromote,
   onOpenDraft,
@@ -148,8 +232,10 @@ export function InboxPanel({
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailLoadFailed, setDetailLoadFailed] = useState(false);
   const [detailFailureMessage, setDetailFailureMessage] = useState<string>();
+  const [workflowStep, setWorkflowStep] = useState<DreamsWorkflowStep>("idea");
   const [reflectionBusy, setReflectionBusy] = useState(false);
   const [showAiSetup, setShowAiSetup] = useState(false);
+  const [aiSetupResume, setAiSetupResume] = useState<AiSetupResume>();
   const [pendingReceipt, setPendingReceipt] = useState<ContextReceiptResponse>();
   const [reflectionProposal, setReflectionProposal] =
     useState<AgentProposalResponse>();
@@ -238,7 +324,9 @@ export function InboxPanel({
   }, [handoffBusy, loadFailed, loading, reflectionBusy, rowActionBusy]);
 
   useEffect(() => {
+    setWorkflowStep("idea");
     setShowAiSetup(false);
+    setAiSetupResume(undefined);
     setPendingReceipt(undefined);
     setReflectionProposal(undefined);
     setReflectionMessage(undefined);
@@ -365,18 +453,31 @@ export function InboxPanel({
     inboxHandoffShowsDetailPane(compact, selectedCaptureId) &&
     selectedCaptureId !== undefined;
 
+  const selectedSummary =
+    selectedCaptureId === undefined
+      ? undefined
+      : captures.find((capture) => capture.captureId === selectedCaptureId);
+  const ideaTitle =
+    selectedSummary !== undefined
+      ? captureInboxRowTitle(selectedSummary)
+      : detailHead !== undefined
+        ? captureInboxRowTitle(detailHead)
+        : "Idea";
+
   const liveStatus =
     phase === "loading"
-      ? "Loading Inbox…"
+      ? `Loading ${PLANS_TITLE}…`
       : phase === "failure"
-        ? loadFailureMessage ?? "Inbox could not load."
+        ? loadFailureMessage ?? `${PLANS_TITLE} could not load.`
         : phase === "empty"
           ? includeArchived
-            ? "No archived Captures in this project."
-            : "No Captures yet. Acknowledged Captures appear here."
+            ? "No archived ideas in this project."
+            : "No ideas yet. Acknowledged Captures appear here."
           : layoutMode === "detail-only"
-            ? "Reviewing selected Capture."
-            : `${captures.length} Capture${captures.length === 1 ? "" : "s"} in Inbox.`;
+            ? workflowStep === "idea"
+              ? "Choose what to do with this idea."
+              : `${workflowStepLabel(workflowStep)} for this idea.`
+            : `${captures.length} idea${captures.length === 1 ? "" : "s"}.`;
 
   const canRenderHandoffPanel =
     project !== undefined &&
@@ -397,46 +498,31 @@ export function InboxPanel({
     reflectionBusy
   });
 
-  async function beginScenePartnerHelp(): Promise<void> {
-    if (selectedCaptureId === undefined || !captureInboxCanRequestReflection(detailHead)) {
-      return;
-    }
-    setReflectionBusy(true);
-    setReflectionMessage(undefined);
-    setReflectionProposal(undefined);
-    setPendingReceipt(undefined);
-    try {
-      const provider = await getOpenAiProviderStatus();
-      if (provider.callsDisabled) {
-        setReflectionMessage("Provider calls are temporarily disabled.");
-        return;
-      }
-      if (!provider.configured) {
-        setShowAiSetup(true);
-        setReflectionMessage("Add an OpenAI key to ask Scene Partner for help.");
-        return;
-      }
-      setShowAiSetup(false);
-      const receipt = await previewCaptureReflectionContext({
-        projectId,
-        captureId: selectedCaptureId
-      });
-      setPendingReceipt(receipt);
-      setReflectionMessage(
-        `Ready to ask Scene Partner about this Capture (${receipt.resources[0]?.providerTextCharCount ?? 0} characters of context).`
-      );
-    } catch (error) {
-      setReflectionMessage(
-        error instanceof GhostwriterApiError
-          ? error.message
-          : "Ghostwriter could not prepare Scene Partner help."
-      );
-    } finally {
-      setReflectionBusy(false);
-    }
+  function goHome(): void {
+    onSelectCapture?.(undefined);
   }
 
-  async function confirmScenePartnerRun(): Promise<void> {
+  function goIdea(): void {
+    setWorkflowStep("idea");
+    setShowAiSetup(false);
+    setAiSetupResume(undefined);
+    setPendingReceipt(undefined);
+    setReflectionProposal(undefined);
+    setReflectionMessage(undefined);
+    setProposalApplied(false);
+  }
+
+  function enterWorkflow(step: Exclude<DreamsWorkflowStep, "idea">): void {
+    setWorkflowStep(step);
+    setShowAiSetup(false);
+    setAiSetupResume(undefined);
+    setPendingReceipt(undefined);
+    setReflectionProposal(undefined);
+    setReflectionMessage(undefined);
+    setProposalApplied(false);
+  }
+
+  async function confirmPartnerRun(): Promise<void> {
     if (pendingReceipt === undefined) return;
     setReflectionBusy(true);
     setReflectionMessage(undefined);
@@ -452,7 +538,7 @@ export function InboxPanel({
         setReflectionMessage(
           result.proposal.payload.schemaId === "capture-reflection-v1"
             ? "Scene Partner found a place to start."
-            : "Craft partner proposal is ready to review."
+            : "Proposal ready to review."
         );
         return;
       }
@@ -474,7 +560,7 @@ export function InboxPanel({
       setReflectionMessage(
         error instanceof GhostwriterApiError
           ? error.message
-          : "Ghostwriter could not start Scene Partner."
+          : "Ghostwriter could not start the partner."
       );
     } finally {
       setReflectionBusy(false);
@@ -490,7 +576,7 @@ export function InboxPanel({
         proposalId: reflectionProposal.id
       });
       setReflectionProposal(undefined);
-      setReflectionMessage("Proposal rejected. The Capture is unchanged.");
+      setReflectionMessage("Proposal rejected.");
     } catch (error) {
       setReflectionMessage(
         error instanceof GhostwriterApiError
@@ -522,26 +608,26 @@ export function InboxPanel({
         return;
       }
       if (!provider.configured) {
+        setAiSetupResume(workflowId);
         setShowAiSetup(true);
-        setReflectionMessage("Add an OpenAI key before asking a craft partner.");
+        setReflectionMessage("Add an OpenAI key before asking this partner.");
         return;
       }
       setShowAiSetup(false);
+      setAiSetupResume(undefined);
       if (
         (workflowId === "sketch-partner.craft-fields" ||
           workflowId === "worldkeeper.backdrop-fields") &&
         craftSceneId.trim() === ""
       ) {
-        setReflectionMessage("Choose a scene before asking this craft partner.");
+        setReflectionMessage("Choose a scene before asking this partner.");
         return;
       }
       if (
         workflowId === "character-coach.sheet-fields" &&
         craftCharacterId.trim() === ""
       ) {
-        setReflectionMessage(
-          "Choose a cast member before Character Coach can propose sheet updates."
-        );
+        setReflectionMessage("Choose a cast member before Character Coach.");
         return;
       }
       const receipt = await previewCaptureReflectionContext({
@@ -559,9 +645,7 @@ export function InboxPanel({
           : workflowId === "character-coach.sheet-fields"
             ? "Character Coach"
             : "Worldkeeper";
-      setReflectionMessage(
-        `Ready to ask ${label} about this Capture (${receipt.resources[0]?.providerTextCharCount ?? 0} characters of context).`
-      );
+      setReflectionMessage(`Ready to ask ${label}.`);
     } catch (error) {
       setReflectionMessage(
         error instanceof GhostwriterApiError
@@ -570,6 +654,109 @@ export function InboxPanel({
       );
     } finally {
       setReflectionBusy(false);
+    }
+  }
+
+  async function resumeAfterAiSetup(): Promise<void> {
+    setShowAiSetup(false);
+    const resume = aiSetupResume;
+    setAiSetupResume(undefined);
+    if (resume === undefined || resume === "scene") {
+      return;
+    }
+    await beginCraftPartner(resume);
+  }
+
+  async function applyScenePartnerChatAsNewScene(input: Readonly<{
+    title: string;
+    placementKey: string;
+  }>): Promise<void> {
+    if (proposalApplied) {
+      throw new Error("This proposal was already applied.");
+    }
+    if (project === undefined) {
+      throw new Error("Manuscript apply is not wired for this idea yet.");
+    }
+    const placement = resolveManuscriptHandoffPlacement(
+      project,
+      input.placementKey
+    );
+    if (placement === undefined) {
+      throw new Error("Choose a manuscript placement before applying.");
+    }
+    const title = input.title.trim();
+    if (title.length === 0) {
+      throw new Error("Give the new scene a title before applying.");
+    }
+
+    if (
+      reflectionProposal !== undefined &&
+      reflectionProposal.payload.schemaId === "capture-reflection-v1" &&
+      projectVersion !== undefined
+    ) {
+      setReflectionBusy(true);
+      try {
+        const result = await applyAgentProposal({
+          projectId,
+          proposalId: reflectionProposal.id,
+          mode: "new-scene",
+          title,
+          bookId: placement.bookId,
+          ...(placement.kind === "chapter" ? { chapterId: placement.chapterId } : {}),
+          expectedProjectVersion: projectVersion,
+          expectedProposalContentHash: reflectionProposal.contentHash
+        });
+        if (result.mode !== "new-scene") {
+          throw new Error("Unexpected apply response.");
+        }
+        setProposalApplied(true);
+        setReflectionProposal(result.proposal);
+        setDetailHead(result.captureHead);
+        void loadCaptures();
+        if (onOpenDraft !== undefined) {
+          onOpenDraft(result.scene.id);
+        }
+        return;
+      } finally {
+        setReflectionBusy(false);
+      }
+    }
+
+    if (
+      onPromote === undefined ||
+      detailHead === undefined ||
+      selectedCaptureId === undefined ||
+      project === undefined ||
+      projectVersion === undefined
+    ) {
+      throw new Error("Manuscript apply is not wired for this idea yet.");
+    }
+
+    const request = buildCaptureHandoffPromoteRequest({
+      captureId: selectedCaptureId,
+      captureHead: detailHead,
+      projectVersion,
+      project,
+      form: {
+        title,
+        placementKey: input.placementKey,
+        canvasEnabled: false
+      }
+    });
+    if (request === undefined) {
+      throw new Error("Ghostwriter could not prepare that scene apply.");
+    }
+    setHandoffBusy(true);
+    try {
+      const result = await onPromote(request);
+      setDetailHead(result.captureHead);
+      setProposalApplied(true);
+      void loadCaptures();
+      if (onOpenDraft !== undefined) {
+        onOpenDraft(result.scene.id);
+      }
+    } finally {
+      setHandoffBusy(false);
     }
   }
 
@@ -593,9 +780,7 @@ export function InboxPanel({
       });
       setProposalApplied(true);
       setReflectionProposal(result.proposal);
-      setReflectionMessage(
-        "Craft fields applied through project commands. Your prose is unchanged."
-      );
+      setReflectionMessage("Craft fields applied. Your prose is unchanged.");
     } catch (error) {
       setReflectionMessage(
         error instanceof GhostwriterApiError
@@ -648,9 +833,7 @@ export function InboxPanel({
       setProposalApplied(true);
       setReflectionProposal(result.proposal);
       setDetailHead(result.captureHead);
-      setReflectionMessage(
-        `Applied as scene “${result.scene.title}”. Your draft stayed unchanged until this apply.`
-      );
+      setReflectionMessage(`Applied as scene “${result.scene.title}”.`);
       void loadCaptures();
       if (onOpenDraft !== undefined) {
         onOpenDraft(result.scene.id);
@@ -693,9 +876,7 @@ export function InboxPanel({
       }
       setProposalApplied(true);
       setReflectionProposal(result.proposal);
-      setReflectionMessage(
-        `Applied as named variant “${result.variant.name}”. Your draft has not changed.`
-      );
+      setReflectionMessage(`Applied as named variant “${result.variant.name}”.`);
     } catch (error) {
       setReflectionMessage(
         error instanceof GhostwriterApiError
@@ -707,25 +888,474 @@ export function InboxPanel({
     }
   }
 
+  function renderBreadcrumbs(): ReactNode {
+    const crumbs: Array<Readonly<{ key: string; label: string; onPress?(): void }>> = [
+      {
+        key: "home",
+        label: PLANS_TITLE,
+        onPress: selectedCaptureId === undefined ? undefined : goHome
+      }
+    ];
+    if (selectedCaptureId !== undefined) {
+      crumbs.push({
+        key: "idea",
+        label: ideaTitle,
+        onPress: workflowStep === "idea" ? undefined : goIdea
+      });
+      if (workflowStep !== "idea") {
+        crumbs.push({
+          key: workflowStep,
+          label: workflowStepLabel(workflowStep)
+        });
+      }
+    }
+    return (
+      <View
+        accessibilityLabel="Breadcrumb"
+        style={styles.breadcrumb}
+      >
+        {crumbs.map((crumb, index) => (
+          <View key={crumb.key} style={styles.breadcrumbItem}>
+            {index > 0 ? <Text style={styles.breadcrumbSep}>›</Text> : null}
+            {crumb.onPress !== undefined ? (
+              <Pressable
+                accessibilityRole="link"
+                disabled={sessionControlsDisabled}
+                onPress={crumb.onPress}
+                style={({ pressed }) => [
+                  pressed && !sessionControlsDisabled && styles.buttonPressed,
+                  sessionControlsDisabled && styles.buttonDisabled
+                ]}
+              >
+                <Text style={styles.breadcrumbLink}>{crumb.label}</Text>
+              </Pressable>
+            ) : (
+              <Text
+                accessibilityRole={index === 0 ? "header" : undefined}
+                style={styles.breadcrumbCurrent}
+              >
+                {crumb.label}
+              </Text>
+            )}
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  function renderReflectionStatusAndProposal(): ReactNode {
+    return (
+      <>
+        {showAiSetup ? (
+          <AiSetupPanel
+            compact={compact}
+            onConfigured={() => {
+              void resumeAfterAiSetup();
+            }}
+            onDismiss={() => {
+              setShowAiSetup(false);
+              setAiSetupResume(undefined);
+            }}
+          />
+        ) : null}
+        {reflectionMessage !== undefined ? (
+          <Text style={styles.statusCopy}>{reflectionMessage}</Text>
+        ) : null}
+        {pendingReceipt !== undefined ? (
+          <InboxButton
+            disabled={sessionControlsDisabled}
+            label="Start partner"
+            onPress={() => void confirmPartnerRun()}
+            primary
+          />
+        ) : null}
+        {reflectionProposal !== undefined && !proposalApplied ? (
+          <InboxButton
+            disabled={sessionControlsDisabled}
+            label="Reject proposal"
+            onPress={() => void rejectReflectionProposal()}
+          />
+        ) : null}
+        {reflectionProposal !== undefined &&
+        reflectionProposal.payload.schemaId !== "capture-reflection-v1" ? (
+          <View style={styles.proposalCard}>
+            <Text style={styles.proposalSummary}>Typed craft proposal ready</Text>
+            {Object.entries(reflectionProposal.payload)
+              .filter(([key]) => key !== "schemaId")
+              .map(([key, value]) => (
+                <Text key={key} style={styles.statusCopy}>
+                  {key}: {String(value)}
+                </Text>
+              ))}
+            {!proposalApplied && projectVersion !== undefined ? (
+              <InboxButton
+                disabled={sessionControlsDisabled}
+                label="Apply craft fields"
+                onPress={() => void applyCraftProposalFields()}
+                primary
+              />
+            ) : null}
+          </View>
+        ) : null}
+        {reflectionProposal !== undefined &&
+        reflectionProposal.payload.schemaId === "capture-reflection-v1" ? (
+          <View style={styles.proposalCard}>
+            <Text style={styles.proposalSummary}>
+              {reflectionProposal.payload.summary}
+            </Text>
+            {reflectionProposal.payload.questions.map((question) => (
+              <Text key={question} style={styles.statusCopy}>
+                · {question}
+              </Text>
+            ))}
+            {reflectionProposal.payload.possibleStoryJobs.map((job) => (
+              <Text key={job.label} style={styles.statusCopy}>
+                {job.label}: {job.rationale}
+              </Text>
+            ))}
+            {!proposalApplied &&
+            project !== undefined &&
+            projectVersion !== undefined ? (
+              <View style={styles.applyPane}>
+                <Text style={styles.sectionTitle}>Apply as new scene</Text>
+                <TextInput
+                  accessibilityLabel="New scene title"
+                  onChangeText={setApplyTitle}
+                  style={styles.applyInput}
+                  value={applyTitle}
+                />
+                <View style={styles.headerActions}>
+                  {manuscriptChoices.map((choice) => (
+                    <InboxButton
+                      key={choice.key}
+                      disabled={sessionControlsDisabled}
+                      label={
+                        applyPlacementKey === choice.key
+                          ? `✓ ${choice.label}`
+                          : choice.label
+                      }
+                      onPress={() => setApplyPlacementKey(choice.key)}
+                    />
+                  ))}
+                </View>
+                <InboxButton
+                  disabled={sessionControlsDisabled}
+                  label="Apply as new scene"
+                  onPress={() => void applyReflectionAsNewScene()}
+                  primary
+                />
+                <Text style={styles.sectionTitle}>Apply as named variant</Text>
+                <TextInput
+                  accessibilityLabel="Named variant title"
+                  onChangeText={setApplyVariantName}
+                  style={styles.applyInput}
+                  value={applyVariantName}
+                />
+                <View style={styles.headerActions}>
+                  {navigatorScenes.map((scene) => (
+                    <InboxButton
+                      key={scene.id}
+                      disabled={sessionControlsDisabled}
+                      label={
+                        applyVariantSceneId === scene.id
+                          ? `✓ ${scene.label}`
+                          : scene.label
+                      }
+                      onPress={() => setApplyVariantSceneId(scene.id)}
+                    />
+                  ))}
+                </View>
+                <InboxButton
+                  disabled={sessionControlsDisabled}
+                  label="Apply as named variant"
+                  onPress={() => void applyReflectionAsNamedVariant()}
+                />
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+      </>
+    );
+  }
+
+  function renderIdeaChoices(): ReactNode {
+    const canPartner = captureInboxCanRequestReflection(detailHead);
+    const ideaProse =
+      detailHead === undefined
+        ? ""
+        : sceneDocumentPlainText(detailHead.document);
+    return (
+      <View style={styles.ideaStep}>
+        <Text accessibilityRole="header" style={styles.prompt}>
+          {DREAMS_IDEA_PROMPT}
+        </Text>
+        <View
+          accessibilityLabel="Idea Capture contents"
+          style={styles.ideaPreview}
+        >
+          {detailLoading ? (
+            <Text style={styles.statusCopy}>Loading this idea…</Text>
+          ) : ideaProse.length === 0 ? (
+            <Text style={styles.statusCopy}>This idea has no prose yet.</Text>
+          ) : (
+            <Text style={styles.ideaPreviewText}>{ideaProse}</Text>
+          )}
+        </View>
+        <View style={styles.choiceGrid}>
+          {canPartner ? (
+            <>
+              <ChoiceCard
+                disabled={sessionControlsDisabled}
+                onPress={() => enterWorkflow("scene-partner")}
+                subtitle="Find where this idea fits in the story"
+                title="Scene Partner"
+              />
+              <ChoiceCard
+                disabled={sessionControlsDisabled}
+                onPress={() => enterWorkflow("craft-partner")}
+                subtitle="Sketch fields or character coaching"
+                title="Craft Partner"
+              />
+              <ChoiceCard
+                disabled={sessionControlsDisabled}
+                onPress={() => enterWorkflow("worldkeeper")}
+                subtitle="Backdrop and setting notes"
+                title="Worldkeeper"
+              />
+            </>
+          ) : (
+            <Text style={styles.statusCopy}>
+              {detailHead?.status === "integrated"
+                ? "This idea is already in the manuscript."
+                : "Partners are unavailable for this idea."}
+            </Text>
+          )}
+          <ChoiceCard
+            disabled={sessionControlsDisabled || !handoffReady}
+            onPress={() => enterWorkflow("integrate")}
+            secondary
+            subtitle="Place it in Draft yourself"
+            title="Add to manuscript"
+          />
+        </View>
+        {selectedCaptureId !== undefined ? (
+          <View style={styles.headerActions}>
+            <InboxButton
+              disabled={sessionControlsDisabled}
+              label="Edit Idea Capture"
+              onPress={() => openViewSource(selectedCaptureId)}
+            />
+          </View>
+        ) : null}
+      </View>
+    );
+  }
+
+  function renderScenePartnerStep(): ReactNode {
+    if (selectedCaptureId === undefined || detailHead === undefined) {
+      return null;
+    }
+    const ideaProse = sceneDocumentPlainText(detailHead.document);
+    const scenes = navigatorScenes.map((scene) => ({
+      id: scene.id,
+      title: scene.label.includes(" · ")
+        ? (scene.label.split(" · ").at(-1) ?? scene.label)
+        : scene.label,
+      label: scene.label
+    }));
+    return (
+      <ScenePartnerChatPanel
+        captureId={selectedCaptureId}
+        compact={compact}
+        defaultPlacementKey={manuscriptChoices[0]?.key ?? ""}
+        defaultTitle={CAPTURE_HANDOFF_DEFAULT_SCENE_TITLE}
+        disabled={sessionControlsDisabled}
+        ideaProse={ideaProse}
+        onApplyAsNewScene={applyScenePartnerChatAsNewScene}
+        onBusyChange={(busy) => {
+          setReflectionBusy(busy);
+        }}
+        onOpenSettings={onOpenSettings}
+        placementChoices={manuscriptChoices.map((choice) => ({
+          key: choice.key,
+          label: choice.label
+        }))}
+        projectId={projectId}
+        providerStatusSignal={providerStatusSignal}
+        scenes={scenes}
+      />
+    );
+  }
+
+  function renderCraftPartnerStep(): ReactNode {
+    return (
+      <View style={styles.workflowPane}>
+        <Text accessibilityRole="header" style={styles.sectionTitle}>
+          Craft Partner
+        </Text>
+        <Text style={styles.statusCopy}>Choose a secondary partner.</Text>
+        <View style={styles.choiceGrid}>
+          <ChoiceCard
+            disabled={sessionControlsDisabled}
+            onPress={() => void beginCraftPartner("sketch-partner.craft-fields")}
+            subtitle="Scene craft fields from this idea"
+            title="Sketch Partner"
+          />
+          <ChoiceCard
+            disabled={sessionControlsDisabled}
+            onPress={() =>
+              void beginCraftPartner("character-coach.sheet-fields")
+            }
+            subtitle="Character sheet updates from this idea"
+            title="Character Coach"
+          />
+        </View>
+        <Text style={styles.sectionTitle}>Scene</Text>
+        <View style={styles.headerActions}>
+          {navigatorScenes.map((scene) => (
+            <InboxButton
+              key={scene.id}
+              disabled={sessionControlsDisabled}
+              label={
+                craftSceneId === scene.id
+                  ? `✓ ${scene.label}`
+                  : scene.label
+              }
+              onPress={() => setCraftSceneId(scene.id)}
+            />
+          ))}
+        </View>
+        <Text style={styles.sectionTitle}>Cast</Text>
+        <View style={styles.headerActions}>
+          {castChoices.map((cast) => (
+            <InboxButton
+              key={cast.id}
+              disabled={sessionControlsDisabled}
+              label={
+                craftCharacterId === cast.id
+                  ? `✓ ${cast.label}`
+                  : cast.label
+              }
+              onPress={() => setCraftCharacterId(cast.id)}
+            />
+          ))}
+        </View>
+        {renderReflectionStatusAndProposal()}
+      </View>
+    );
+  }
+
+  function renderWorldkeeperStep(): ReactNode {
+    return (
+      <View style={styles.workflowPane}>
+        <Text accessibilityRole="header" style={styles.sectionTitle}>
+          Worldkeeper
+        </Text>
+        <Text style={styles.sectionTitle}>Scene</Text>
+        <View style={styles.headerActions}>
+          {navigatorScenes.map((scene) => (
+            <InboxButton
+              key={scene.id}
+              disabled={sessionControlsDisabled}
+              label={
+                craftSceneId === scene.id
+                  ? `✓ ${scene.label}`
+                  : scene.label
+              }
+              onPress={() => setCraftSceneId(scene.id)}
+            />
+          ))}
+        </View>
+        <InboxButton
+          disabled={sessionControlsDisabled}
+          label="Ask Worldkeeper"
+          onPress={() => void beginCraftPartner("worldkeeper.backdrop-fields")}
+          primary
+        />
+        {renderReflectionStatusAndProposal()}
+      </View>
+    );
+  }
+
+  function renderIntegrateStep(): ReactNode {
+    if (
+      handoffReady &&
+      detailHead !== undefined &&
+      selectedCaptureId !== undefined &&
+      project !== undefined &&
+      projectVersion !== undefined
+    ) {
+      return (
+        <CaptureHandoffPanel
+          canvasVersion={canvasVersion}
+          captureHead={detailHead}
+          captureId={selectedCaptureId}
+          ensureCanvasVersion={ensureCanvasVersion}
+          navigationDisabled={handoffBusy || reflectionBusy}
+          onIntegrated={(head) => {
+            setDetailHead(head);
+            void loadCaptures();
+          }}
+          onOpenDraft={onOpenDraft}
+          onOpenSplit={compact ? undefined : onOpenSplit}
+          onPromote={async (input) => {
+            if (onPromote === undefined) {
+              throw new Error("Capture handoff is not wired.");
+            }
+            setHandoffBusy(true);
+            try {
+              return await onPromote(input);
+            } finally {
+              setHandoffBusy(false);
+            }
+          }}
+          onViewSource={() => openViewSource(selectedCaptureId)}
+          project={project}
+          projectVersion={projectVersion}
+        />
+      );
+    }
+    return (
+      <View style={styles.detailFallback}>
+        <Text style={styles.statusCopy}>
+          Manuscript handoff needs project wiring from the workspace.
+        </Text>
+        {selectedCaptureId !== undefined ? (
+          <InboxButton
+            disabled={sessionControlsDisabled}
+            label="View source"
+            onPress={() => openViewSource(selectedCaptureId)}
+          />
+        ) : null}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.panel}>
       <View style={styles.header}>
-        <View style={styles.headingCopy}>
-          <Text accessibilityRole="header" style={styles.title}>
-            Inbox
-          </Text>
-          <Text style={styles.subtitle}>
-            Noncanonical Captures and future proposals · center workspace
-          </Text>
-        </View>
+        <View style={styles.headingCopy}>{renderBreadcrumbs()}</View>
         <View style={styles.headerActions}>
-          {compact && selectedCaptureId !== undefined ? (
+          {selectedCaptureId !== undefined ? (
             <InboxButton
               disabled={sessionControlsDisabled}
               label="Back"
-              onPress={() => onSelectCapture?.(undefined)}
+              onPress={() => {
+                if (workflowStep !== "idea") {
+                  goIdea();
+                  return;
+                }
+                goHome();
+              }}
             />
-          ) : null}
+          ) : (
+            <InboxButton
+              disabled={sessionControlsDisabled}
+              label="New idea"
+              onPress={() => onOpenCapture()}
+              primary
+            />
+          )}
           <InboxButton
             disabled={sessionControlsDisabled}
             label={includeArchived ? "Show active" : "Show archived"}
@@ -749,7 +1379,7 @@ export function InboxPanel({
       {phase === "failure" ? (
         <View accessibilityRole="alert" style={styles.notice}>
           <Text style={styles.noticeText}>
-            {loadFailureMessage ?? "Ghostwriter could not load the Inbox."}
+            {loadFailureMessage ?? INBOX_LOAD_FALLBACK}
           </Text>
           <InboxButton label="Try again" onPress={() => void loadCaptures()} />
         </View>
@@ -757,29 +1387,27 @@ export function InboxPanel({
 
       {phase === "empty" && !loading ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>Inbox is empty</Text>
+          <Text style={styles.emptyTitle}>No ideas yet</Text>
           <Text style={styles.emptyText}>
             {includeArchived
-              ? "Archived Captures you restore will return to the active list."
-              : "Open Capture from any surface, write, and acknowledged material lands here."}
+              ? "Archived ideas you restore will return to the active list."
+              : "Start with a new idea — typed or dictated — and it will land here."}
           </Text>
+          {includeArchived ? null : (
+            <InboxButton
+              disabled={sessionControlsDisabled}
+              label="New idea"
+              onPress={() => onOpenCapture()}
+              primary
+            />
+          )}
         </View>
       ) : null}
 
       {phase === "ready" ? (
-        <View
-          style={[
-            styles.workspace,
-            layoutMode === "split" && styles.workspaceSplit
-          ]}
-        >
+        <View style={styles.workspace}>
           {showList ? (
-            <ScrollView
-              contentContainerStyle={[
-                styles.list,
-                layoutMode === "split" && styles.listSplit
-              ]}
-            >
+            <ScrollView contentContainerStyle={styles.list}>
               <View accessibilityRole="list" style={styles.listInner}>
                 {captures.map((summary) => {
                   const selected = summary.captureId === selectedCaptureId;
@@ -787,7 +1415,6 @@ export function InboxPanel({
                   const canArchive = captureInboxCanArchive(summary);
                   const canRestore =
                     includeArchived && captureInboxCanRestore(summary);
-
                   const integratedNote = captureInboxIntegratedNote(summary);
                   const rowTitle = captureInboxRowTitle(summary);
 
@@ -796,14 +1423,29 @@ export function InboxPanel({
                       key={summary.captureId}
                       style={[styles.row, selected && styles.rowSelected]}
                     >
-                      <View style={styles.rowMain}>
+                      <Pressable
+                        accessibilityHint="Opens this idea"
+                        accessibilityLabel={rowTitle}
+                        accessibilityRole="button"
+                        accessibilityState={{
+                          disabled: sessionControlsDisabled,
+                          selected
+                        }}
+                        disabled={sessionControlsDisabled}
+                        onPress={() => onSelectCapture?.(summary.captureId)}
+                        style={({ pressed }) => [
+                          styles.rowMain,
+                          pressed && !sessionControlsDisabled && styles.buttonPressed,
+                          sessionControlsDisabled && styles.buttonDisabled
+                        ]}
+                      >
                         <View style={styles.rowLabels}>
-                          <Text style={styles.noncanonicalPill}>
-                            Capture · noncanonical
-                          </Text>
                           {readOnly ? (
                             <Text style={styles.readOnlyPill}>Read-only</Text>
                           ) : null}
+                          <Text style={styles.statusChip}>
+                            {captureInboxStatusLabel(summary.status)}
+                          </Text>
                         </View>
                         <Text style={styles.rowTitle}>{rowTitle}</Text>
                         <Text style={styles.rowMeta}>
@@ -812,45 +1454,13 @@ export function InboxPanel({
                         {integratedNote !== undefined ? (
                           <Text style={styles.integratedNote}>{integratedNote}</Text>
                         ) : null}
-                      </View>
+                      </Pressable>
                       <View style={styles.rowActions}>
-                        <Pressable
-                          accessibilityHint="Opens handoff detail for this Capture"
-                          accessibilityLabel={`Review ${rowTitle}`}
-                          accessibilityRole="button"
-                          accessibilityState={{ disabled: sessionControlsDisabled, selected }}
+                        <InboxButton
                           disabled={sessionControlsDisabled}
-                          onPress={() => onSelectCapture?.(summary.captureId)}
-                          style={({ pressed }) => [
-                            styles.reviewButton,
-                            selected && styles.reviewButtonSelected,
-                            pressed && !sessionControlsDisabled && styles.buttonPressed,
-                            sessionControlsDisabled && styles.buttonDisabled
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.reviewButtonText,
-                              selected && styles.reviewButtonTextSelected
-                            ]}
-                          >
-                            Review
-                          </Text>
-                        </Pressable>
-                        <Pressable
-                          accessibilityHint="Opens this Capture in the composer"
-                          accessibilityLabel={`Open ${rowTitle}`}
-                          accessibilityRole="button"
-                          disabled={sessionControlsDisabled}
+                          label="Edit"
                           onPress={() => onOpenCapture(summary.captureId)}
-                          style={({ pressed }) => [
-                            styles.openButton,
-                            pressed && !sessionControlsDisabled && styles.buttonPressed,
-                            sessionControlsDisabled && styles.buttonDisabled
-                          ]}
-                        >
-                          <Text style={styles.openButtonText}>Open</Text>
-                        </Pressable>
+                        />
                         {canArchive ? (
                           <InboxButton
                             disabled={sessionControlsDisabled}
@@ -865,9 +1475,6 @@ export function InboxPanel({
                             onPress={() => void toggleArchive(summary, false)}
                           />
                         ) : null}
-                        <Text style={styles.statusChip}>
-                          {captureInboxStatusLabel(summary.status)}
-                        </Text>
                       </View>
                     </View>
                   );
@@ -877,15 +1484,19 @@ export function InboxPanel({
           ) : null}
 
           {showDetail ? (
-            <View style={styles.detailPane}>
+            <ScrollView
+              contentContainerStyle={styles.detailPaneContent}
+              keyboardShouldPersistTaps="handled"
+              style={styles.detailPane}
+            >
               {detailLoading ? (
-                <Text style={styles.loadingText}>Loading Capture…</Text>
+                <Text style={styles.loadingText}>Loading idea…</Text>
               ) : null}
               {detailLoadFailed ? (
                 <View accessibilityRole="alert" style={styles.notice}>
                   <Text style={styles.noticeText}>
                     {detailFailureMessage ??
-                      "Ghostwriter could not load this Capture."}
+                      "Ghostwriter could not load this idea."}
                   </Text>
                   <InboxButton
                     disabled={sessionControlsDisabled}
@@ -894,294 +1505,46 @@ export function InboxPanel({
                   />
                 </View>
               ) : null}
-              {detailHead !== undefined &&
-              captureInboxCanRequestReflection(detailHead) ? (
-                <View style={styles.reflectionPane}>
-                  <Text style={styles.reflectionTitle}>Scene Partner</Text>
-                  <Text style={styles.reflectionCopy}>
-                    Ask for a typed summary, questions, and possible story jobs.
-                    Nothing applies until you choose later.
-                  </Text>
-                  <View style={styles.headerActions}>
-                    <InboxButton
-                      disabled={sessionControlsDisabled}
-                      label="Help find its place"
-                      onPress={() => void beginScenePartnerHelp()}
-                    />
-                    {pendingReceipt !== undefined ? (
-                      <InboxButton
-                        disabled={sessionControlsDisabled}
-                        label={
-                          pendingReceipt.workflowId ===
-                          "scene-partner.capture-reflection"
-                            ? "Start Scene Partner"
-                            : "Start craft partner"
-                        }
-                        onPress={() => void confirmScenePartnerRun()}
-                      />
-                    ) : null}
-                    {reflectionProposal !== undefined && !proposalApplied ? (
-                      <InboxButton
-                        disabled={sessionControlsDisabled}
-                        label="Reject proposal"
-                        onPress={() => void rejectReflectionProposal()}
-                      />
-                    ) : null}
-                  </View>
-                  <Text style={styles.reflectionTitle}>Craft partners</Text>
-                  <Text style={styles.reflectionCopy}>
-                    Ask for typed craft deltas only. Nothing enters prose until you
-                    apply a separate prose workflow.
-                  </Text>
-                  <View style={styles.headerActions}>
-                    {navigatorScenes.map((scene) => (
-                      <InboxButton
-                        key={scene.id}
-                        disabled={sessionControlsDisabled}
-                        label={
-                          craftSceneId === scene.id
-                            ? `✓ Scene · ${scene.label}`
-                            : `Scene · ${scene.label}`
-                        }
-                        onPress={() => setCraftSceneId(scene.id)}
-                      />
-                    ))}
-                  </View>
-                  <View style={styles.headerActions}>
-                    {castChoices.map((cast) => (
-                      <InboxButton
-                        key={cast.id}
-                        disabled={sessionControlsDisabled}
-                        label={
-                          craftCharacterId === cast.id
-                            ? `✓ Cast · ${cast.label}`
-                            : `Cast · ${cast.label}`
-                        }
-                        onPress={() => setCraftCharacterId(cast.id)}
-                      />
-                    ))}
-                  </View>
-                  <View style={styles.headerActions}>
-                    <InboxButton
-                      disabled={sessionControlsDisabled}
-                      label="Ask Sketch Partner"
-                      onPress={() =>
-                        void beginCraftPartner("sketch-partner.craft-fields")
-                      }
-                    />
-                    <InboxButton
-                      disabled={sessionControlsDisabled}
-                      label="Ask Character Coach"
-                      onPress={() =>
-                        void beginCraftPartner("character-coach.sheet-fields")
-                      }
-                    />
-                    <InboxButton
-                      disabled={sessionControlsDisabled}
-                      label="Ask Worldkeeper"
-                      onPress={() =>
-                        void beginCraftPartner("worldkeeper.backdrop-fields")
-                      }
-                    />
-                  </View>
-                  {showAiSetup ? (
-                    <AiSetupPanel
-                      compact={compact}
-                      onConfigured={() => {
-                        setShowAiSetup(false);
-                        void beginScenePartnerHelp();
-                      }}
-                      onDismiss={() => setShowAiSetup(false)}
-                    />
-                  ) : null}
-                  {reflectionMessage !== undefined ? (
-                    <Text style={styles.reflectionCopy}>{reflectionMessage}</Text>
-                  ) : null}
-                  {reflectionProposal !== undefined &&
-                  reflectionProposal.payload.schemaId !== "capture-reflection-v1" ? (
-                    <View style={styles.proposalCard}>
-                      <Text style={styles.proposalSummary}>
-                        Typed craft proposal ready
-                      </Text>
-                      {Object.entries(reflectionProposal.payload)
-                        .filter(([key]) => key !== "schemaId")
-                        .map(([key, value]) => (
-                          <Text key={key} style={styles.reflectionCopy}>
-                            {key}: {String(value)}
-                          </Text>
-                        ))}
-                      {!proposalApplied ? (
-                        <Text style={styles.reflectionCopy}>
-                          Your prose is unchanged. Apply the full typed payload or
-                          reject.
-                        </Text>
-                      ) : null}
-                      {!proposalApplied && projectVersion !== undefined ? (
-                        <InboxButton
-                          disabled={sessionControlsDisabled}
-                          label="Apply craft fields"
-                          onPress={() => void applyCraftProposalFields()}
-                        />
-                      ) : null}
-                    </View>
-                  ) : null}
-                  {reflectionProposal !== undefined &&
-                  reflectionProposal.payload.schemaId === "capture-reflection-v1" ? (
-                    <View style={styles.proposalCard}>
-                      <Text style={styles.proposalSummary}>
-                        {reflectionProposal.payload.summary}
-                      </Text>
-                      {reflectionProposal.payload.questions.map((question) => (
-                        <Text key={question} style={styles.reflectionCopy}>
-                          · {question}
-                        </Text>
-                      ))}
-                      {reflectionProposal.payload.possibleStoryJobs.map((job) => (
-                        <Text key={job.label} style={styles.reflectionCopy}>
-                          {job.label}: {job.rationale}
-                        </Text>
-                      ))}
-                      {!proposalApplied ? (
-                        <Text style={styles.reflectionCopy}>
-                          Your draft has not changed. Compare these jobs, then apply
-                          one path or reject.
-                        </Text>
-                      ) : null}
-                      {!proposalApplied &&
-                      project !== undefined &&
-                      projectVersion !== undefined ? (
-                        <View style={styles.applyPane}>
-                          <Text style={styles.reflectionTitle}>Apply as new scene</Text>
-                          <TextInput
-                            accessibilityLabel="New scene title"
-                            onChangeText={setApplyTitle}
-                            style={styles.applyInput}
-                            value={applyTitle}
-                          />
-                          <View style={styles.headerActions}>
-                            {manuscriptChoices.map((choice) => (
-                              <InboxButton
-                                key={choice.key}
-                                disabled={sessionControlsDisabled}
-                                label={
-                                  applyPlacementKey === choice.key
-                                    ? `✓ ${choice.label}`
-                                    : choice.label
-                                }
-                                onPress={() => setApplyPlacementKey(choice.key)}
-                              />
-                            ))}
-                          </View>
-                          <InboxButton
-                            disabled={sessionControlsDisabled}
-                            label="Apply as new scene"
-                            onPress={() => void applyReflectionAsNewScene()}
-                          />
-                          <Text style={styles.reflectionTitle}>
-                            Apply as named variant
-                          </Text>
-                          <TextInput
-                            accessibilityLabel="Named variant title"
-                            onChangeText={setApplyVariantName}
-                            style={styles.applyInput}
-                            value={applyVariantName}
-                          />
-                          <View style={styles.headerActions}>
-                            {navigatorScenes.map((scene) => (
-                              <InboxButton
-                                key={scene.id}
-                                disabled={sessionControlsDisabled}
-                                label={
-                                  applyVariantSceneId === scene.id
-                                    ? `✓ ${scene.label}`
-                                    : scene.label
-                                }
-                                onPress={() => setApplyVariantSceneId(scene.id)}
-                              />
-                            ))}
-                          </View>
-                          <InboxButton
-                            disabled={sessionControlsDisabled}
-                            label="Apply as named variant"
-                            onPress={() => void applyReflectionAsNamedVariant()}
-                          />
-                        </View>
-                      ) : null}
-                    </View>
-                  ) : null}
-                </View>
-              ) : null}
-
-              {handoffReady ? (
-                <CaptureHandoffPanel
-                  canvasVersion={canvasVersion}
-                  captureHead={detailHead}
-                  captureId={selectedCaptureId}
-                  ensureCanvasVersion={ensureCanvasVersion}
-                  navigationDisabled={handoffBusy || reflectionBusy}
-                  onIntegrated={(head) => {
-                    setDetailHead(head);
-                    void loadCaptures();
-                  }}
-                  onOpenDraft={onOpenDraft}
-                  onOpenSplit={compact ? undefined : onOpenSplit}
-                  onPromote={async (input) => {
-                    if (onPromote === undefined) {
-                      throw new Error("Capture handoff is not wired.");
-                    }
-                    setHandoffBusy(true);
-                    try {
-                      return await onPromote(input);
-                    } finally {
-                      setHandoffBusy(false);
-                    }
-                  }}
-                  onViewSource={() => openViewSource(selectedCaptureId)}
-                  project={project}
-                  projectVersion={projectVersion}
-                />
-              ) : null}
-              {!detailLoading &&
-              !detailLoadFailed &&
-              detailHead !== undefined &&
-              !handoffReady ? (
-                <View style={styles.detailFallback}>
-                  <Text style={styles.emptyText}>
-                    Handoff controls require project wiring from the workspace
-                    shell.
-                  </Text>
-                  <InboxButton
-                    disabled={sessionControlsDisabled}
-                    label="View source"
-                    onPress={() => openViewSource(selectedCaptureId)}
-                  />
-                </View>
-              ) : null}
-            </View>
+              {!detailLoading && !detailLoadFailed && detailHead !== undefined
+                ? workflowStep === "idea"
+                  ? renderIdeaChoices()
+                  : workflowStep === "scene-partner"
+                    ? renderScenePartnerStep()
+                    : workflowStep === "craft-partner"
+                      ? renderCraftPartnerStep()
+                      : workflowStep === "worldkeeper"
+                        ? renderWorldkeeperStep()
+                        : renderIntegrateStep()
+                : null}
+            </ScrollView>
           ) : null}
         </View>
       ) : null}
 
       {phase === "loading" ? (
         <View style={styles.loading}>
-          <Text style={styles.loadingText}>Loading Inbox…</Text>
+          <Text style={styles.loadingText}>Loading {PLANS_TITLE}…</Text>
         </View>
       ) : null}
     </View>
   );
 }
 
+const INBOX_LOAD_FALLBACK = "Ghostwriter could not load Plans.";
+
 const styles = StyleSheet.create({
   panel: {
     backgroundColor: colors.paper,
     flex: 1,
     gap: 12,
-    minHeight: 280,
+    minHeight: 0,
+    overflow: "hidden",
     padding: 16
   },
   header: {
     alignItems: "flex-start",
     flexDirection: "row",
+    flexShrink: 0,
     flexWrap: "wrap",
     gap: 12,
     justifyContent: "space-between"
@@ -1191,17 +1554,32 @@ const styles = StyleSheet.create({
     gap: 4,
     minWidth: 200
   },
-  title: {
+  breadcrumb: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6
+  },
+  breadcrumbItem: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    maxWidth: "100%"
+  },
+  breadcrumbSep: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 16
+  },
+  breadcrumbLink: {
+    color: colors.brandDark,
+    fontFamily: fonts.story,
+    fontSize: 22
+  },
+  breadcrumbCurrent: {
     color: colors.ink,
     fontFamily: fonts.story,
-    fontSize: 28
-  },
-  subtitle: {
-    color: colors.muted,
-    flexShrink: 1,
-    fontFamily: fonts.ui,
-    fontSize: 13,
-    lineHeight: 18
+    fontSize: 22
   },
   headerActions: {
     flexDirection: "row",
@@ -1210,6 +1588,7 @@ const styles = StyleSheet.create({
   },
   liveStatus: {
     color: colors.muted,
+    flexShrink: 0,
     fontFamily: fonts.ui,
     fontSize: 12
   },
@@ -1227,19 +1606,63 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18
   },
-  reflectionPane: {
+  ideaStep: {
+    gap: 16
+  },
+  prompt: {
+    color: colors.ink,
+    fontFamily: fonts.story,
+    fontSize: 26,
+    lineHeight: 32
+  },
+  ideaPreview: {
+    backgroundColor: colors.panel,
     borderColor: colors.line,
     borderRadius: 10,
     borderWidth: 1,
-    gap: 10,
-    padding: 12
+    padding: 14
   },
-  reflectionTitle: {
+  ideaPreviewText: {
+    color: colors.ink,
+    fontFamily: fonts.story,
+    fontSize: 17,
+    lineHeight: 26
+  },
+  choiceGrid: {
+    gap: 10
+  },
+  choiceCard: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 14
+  },
+  choiceCardSecondary: {
+    backgroundColor: colors.wash
+  },
+  choiceCardTitle: {
     color: colors.ink,
     fontFamily: fonts.uiMedium,
     fontSize: 16
   },
-  reflectionCopy: {
+  choiceCardSubtitle: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 13,
+    lineHeight: 18
+  },
+  workflowPane: {
+    gap: 12
+  },
+  sectionTitle: {
+    color: colors.ink,
+    fontFamily: fonts.uiMedium,
+    fontSize: 16
+  },
+  statusCopy: {
     color: colors.muted,
     fontFamily: fonts.ui,
     fontSize: 13,
@@ -1298,19 +1721,11 @@ const styles = StyleSheet.create({
   },
   workspace: {
     flex: 1,
-    minHeight: 200
-  },
-  workspaceSplit: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12
+    minHeight: 0,
+    overflow: "hidden"
   },
   list: {
     paddingBottom: 16
-  },
-  listSplit: {
-    flex: 1,
-    minWidth: 280
   },
   listInner: {
     gap: 10
@@ -1334,19 +1749,10 @@ const styles = StyleSheet.create({
     minWidth: 220
   },
   rowLabels: {
+    alignItems: "center",
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8
-  },
-  noncanonicalPill: {
-    backgroundColor: colors.wash,
-    borderRadius: 999,
-    color: colors.ink,
-    fontFamily: fonts.uiMedium,
-    fontSize: 11,
-    overflow: "hidden",
-    paddingHorizontal: 8,
-    paddingVertical: 4
   },
   readOnlyPill: {
     backgroundColor: colors.blueSoft,
@@ -1382,45 +1788,19 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8
   },
-  reviewButton: {
-    backgroundColor: colors.panel,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8
-  },
-  reviewButtonSelected: {
-    borderColor: colors.brandDark
-  },
-  reviewButtonText: {
-    color: colors.ink,
-    fontFamily: fonts.uiMedium,
-    fontSize: 13
-  },
-  reviewButtonTextSelected: {
-    color: colors.brandDark
-  },
-  openButton: {
-    backgroundColor: colors.brandDark,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8
-  },
-  openButtonText: {
-    color: colors.paper,
-    fontFamily: fonts.uiMedium,
-    fontSize: 13
-  },
   statusChip: {
-    alignSelf: "center",
     color: colors.muted,
     fontFamily: fonts.uiMedium,
     fontSize: 12
   },
   detailPane: {
     flex: 1,
-    minWidth: 280
+    minHeight: 0,
+    minWidth: 0
+  },
+  detailPaneContent: {
+    gap: 12,
+    paddingBottom: 16
   },
   detailFallback: {
     gap: 8,
@@ -1434,6 +1814,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8
   },
+  buttonPrimary: {
+    backgroundColor: colors.brandDark,
+    borderColor: colors.brandDark
+  },
   buttonPressed: {
     opacity: 0.85
   },
@@ -1444,5 +1828,8 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontFamily: fonts.uiMedium,
     fontSize: 13
+  },
+  buttonTextPrimary: {
+    color: colors.paper
   }
 });

@@ -236,7 +236,16 @@ const commandSchema = z.discriminatedUnion("type", [
     type: z.literal("book.update"),
     bookId: id,
     title: title.optional(),
-    status: bookStatus.optional()
+    status: bookStatus.optional(),
+    cover: z
+      .object({
+        concept: z.string().trim().min(1).max(5_000).optional(),
+        notes: z.string().trim().min(1).max(5_000).optional(),
+        imageUrl: httpUrl.optional()
+      })
+      .partial()
+      .nullable()
+      .optional()
   }),
   z.object({ type: z.literal("book.reorder"), bookIds: z.array(id).max(100) }),
   z.object({
@@ -1061,6 +1070,79 @@ export const agentStartRunRequestSchema = z.object({
     .trim()
     .regex(/^[a-f0-9]{64}$/u)
 });
+
+const scenePartnerTurnPhaseSchema = z.enum([
+  "interview",
+  "match",
+  "new-scene",
+  "iterate"
+]);
+
+export const scenePartnerTurnRequestSchema = z
+  .object({
+    ideaProse: z.string().max(24_000),
+    scenes: z
+      .array(
+        z
+          .object({
+            id: id,
+            title: z.string().trim().min(1).max(200),
+            label: z.string().trim().min(1).max(400)
+          })
+          .strict()
+      )
+      .max(200),
+    messages: z
+      .array(
+        z
+          .object({
+            role: z.enum(["assistant", "user"]),
+            body: z.string().trim().min(1).max(4_000)
+          })
+          .strict()
+      )
+      .max(40),
+    phase: scenePartnerTurnPhaseSchema.optional(),
+    matchedSceneId: id.nullable().optional()
+  })
+  .strict();
+
+export const scenePartnerImageRequestSchema = z
+  .object({
+    prompt: z.string().trim().min(1).max(4_000)
+  })
+  .strict();
+
+export const bookCoverImageRequestSchema = z
+  .object({
+    prompt: z.string().trim().min(1).max(4_000)
+  })
+  .strict();
+
+export const bookCoverImageJobRequestSchema = z
+  .object({
+    prompt: z.string().trim().min(1).max(4_000),
+    count: z.number().int().min(2).max(4).optional(),
+    refinement: z.string().trim().min(1).max(2_000).optional()
+  })
+  .strict();
+
+export const bookCoverImageApplyRequestSchema = z
+  .object({
+    prompt: z.string().trim().min(1).max(4_000).optional(),
+    previewDataUri: z.string().trim().min(1).max(12_000_000).optional()
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const hasPrompt = value.prompt !== undefined;
+    const hasPreview = value.previewDataUri !== undefined;
+    if (hasPrompt === hasPreview) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Provide exactly one of prompt or previewDataUri."
+      });
+    }
+  });
 
 const agentProposalContentHashSchema = z
   .string()

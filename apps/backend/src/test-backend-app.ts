@@ -39,6 +39,7 @@ import {
   type OpenAiValidationProviderFactory
 } from "./agent-provider-runtime.js";
 import { createTestProviderKekRuntimeConfig } from "./provider-kek-config.js";
+import type { ScenePartnerImageGenerator } from "./scene-partner-routes.js";
 
 export const testBackendClosers: Array<() => Promise<void>> = [];
 export const TEST_BACKEND_ORIGIN = "https://app.example.test";
@@ -74,6 +75,7 @@ export async function createSeededBackendApp(
     callsDisabled?: boolean;
     openAiValidationProviderFactory?: OpenAiValidationProviderFactory;
     openAiCompletionProviderFactory?: OpenAiCompletionProviderFactory;
+    scenePartnerGenerateImage?: ScenePartnerImageGenerator;
   }>
 ) {
   const { db, close } = createPgliteDatabase();
@@ -184,7 +186,11 @@ export async function createSeededBackendApp(
       identity,
       agentProvider,
       auth,
-      allowedOrigins: [TEST_BACKEND_ORIGIN]
+      allowedOrigins: [TEST_BACKEND_ORIGIN],
+      objectStorage,
+      ...(options?.scenePartnerGenerateImage === undefined
+        ? {}
+        : { scenePartnerGenerateImage: options.scenePartnerGenerateImage })
     }),
     objectStorage: objectStorage as ReturnType<typeof createMemoryCaptureObjectStorage>
   };

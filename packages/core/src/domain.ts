@@ -286,6 +286,37 @@ export function createManuscriptStructure(input: ManuscriptStructure): Manuscrip
   });
 }
 
+export type BookCover = Readonly<{
+  concept?: string;
+  notes?: string;
+  imageUrl?: string;
+}>;
+
+export function createBookCover(input: BookCover): BookCover {
+  const concept =
+    input.concept === undefined
+      ? undefined
+      : requireText(input.concept, "Book cover concept");
+  const notes =
+    input.notes === undefined ? undefined : requireText(input.notes, "Book cover notes");
+  const imageUrl =
+    input.imageUrl === undefined
+      ? undefined
+      : requireHttpUrl(input.imageUrl, "Book cover image URL");
+  const cover = Object.freeze({
+    ...(concept === undefined ? {} : { concept }),
+    ...(notes === undefined ? {} : { notes }),
+    ...(imageUrl === undefined ? {} : { imageUrl })
+  });
+  if (Object.keys(cover).length === 0) {
+    throw new DomainValidationError(
+      "EMPTY_VALUE",
+      "Book cover must include at least one field."
+    );
+  }
+  return cover;
+}
+
 export type Book = Readonly<{
   id: BookId;
   projectId: ProjectId;
@@ -293,6 +324,7 @@ export type Book = Readonly<{
   status: BookStatus;
   manuscript: ManuscriptStructure;
   createdAt: string;
+  cover?: BookCover;
   archivedAt?: string;
 }>;
 
@@ -301,6 +333,8 @@ export function createBook(input: Book): Book {
     input.archivedAt === undefined
       ? undefined
       : requireText(input.archivedAt, "Book archive time");
+  const cover =
+    input.cover === undefined ? undefined : createBookCover(input.cover);
   return Object.freeze({
     id: input.id,
     projectId: input.projectId,
@@ -308,6 +342,7 @@ export function createBook(input: Book): Book {
     status: input.status,
     manuscript: createManuscriptStructure(input.manuscript),
     createdAt: requireText(input.createdAt, "Book creation time"),
+    ...(cover === undefined ? {} : { cover }),
     ...(archivedAt === undefined ? {} : { archivedAt })
   });
 }

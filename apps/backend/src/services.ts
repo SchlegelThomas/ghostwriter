@@ -9,6 +9,7 @@ import {
   createCapturePromotionServices,
   createSceneWritingServices,
   type CaptureAttachmentServices,
+  type CaptureObjectStoragePort,
   type CapturePromotionServices,
   type CaptureServices,
   type DomainIdKind,
@@ -47,6 +48,7 @@ export type BackendRuntime = Readonly<{
   identity: IdentityServices;
   agentProvider: AgentProviderRuntime;
   auth: AuthGateway;
+  objectStorage: CaptureObjectStoragePort;
   close(): Promise<void>;
 }>;
 
@@ -139,6 +141,7 @@ export function createBackendRuntime(config: BackendConfig): BackendRuntime {
     identity,
     agentProvider,
     auth,
+    objectStorage,
     close
   };
 }

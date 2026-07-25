@@ -41,3 +41,13 @@ export {
   type OpenAiProviderConfig,
   type OpenAiProviderTestConfig
 } from "./openai/provider.js";
+
+export {
+  generateOpenAiImage,
+  generateOpenAiImageForTests,
+  type OpenAiImageGenerationFailure,
+  type OpenAiImageGenerationInput,
+  type OpenAiImageGenerationResult,
+  type OpenAiImageGenerationSuccess,
+  type OpenAiImageGenerationTestConfig
+} from "./openai/images.js";

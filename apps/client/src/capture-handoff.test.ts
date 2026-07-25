@@ -379,10 +379,12 @@ describe("capture handoff panel session", () => {
 });
 
 describe("inbox handoff layout helpers", () => {
-  it("uses split list/detail on wide layouts and list→detail on compact", () => {
-    expect(inboxHandoffLayoutMode(false, undefined)).toBe("split");
-    expect(inboxHandoffLayoutMode(false, "capture-a")).toBe("split");
-    expect(inboxHandoffShowsList(false, "capture-a")).toBe(true);
+  it("uses stack list→detail for all widths (no wide split)", () => {
+    expect(inboxHandoffLayoutMode(false, undefined)).toBe("list-only");
+    expect(inboxHandoffLayoutMode(false, "capture-a")).toBe("detail-only");
+    expect(inboxHandoffShowsList(false, undefined)).toBe(true);
+    expect(inboxHandoffShowsList(false, "capture-a")).toBe(false);
+    expect(inboxHandoffShowsDetailPane(false, undefined)).toBe(false);
     expect(inboxHandoffShowsDetailPane(false, "capture-a")).toBe(true);
 
     expect(inboxHandoffLayoutMode(true, undefined)).toBe("list-only");

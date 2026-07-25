@@ -127,6 +127,13 @@
       "when": 1784525000000,
       "tag": "0017_mcp_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1784530000000,
+      "tag": "0018_book_cover",
+      "breakpoints": true
     }
   ]
 }

@@ -52,8 +52,8 @@ export function captureReadOnlyStatusText(
   head: CaptureHeadResponse | undefined
 ): string | undefined {
   if (head === undefined) return undefined;
-  if (head.status === "archived") return "Read-only · archived Capture";
-  if (head.status === "integrated") return "Read-only · integrated Capture";
+  if (head.status === "archived") return "Read-only · archived Idea Capture";
+  if (head.status === "integrated") return "Read-only · integrated Idea Capture";
   return undefined;
 }
 
@@ -69,7 +69,7 @@ export function captureSaveStatusText(
   if (snapshot.status === "pending") return "Waiting to save…";
   if (snapshot.status === "paused" && snapshot.dirty) return "Not saved";
   if (snapshot.dirty) return "Not saved";
-  return "Saved to project";
+  return "";
 }
 
 export function captureSaveStatusIsWarning(

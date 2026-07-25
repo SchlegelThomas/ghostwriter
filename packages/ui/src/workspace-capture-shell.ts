@@ -1,6 +1,7 @@
-/** Narrow mode bar labels for Capture / Inbox (checkpoint-1 shell). */
-export const NARROW_CAPTURE_TAB_LABEL = "Capture" as const;
-export const NARROW_INBOX_TAB_LABEL = "Inbox" as const;
+/** Narrow mode bar labels for Capture / Plans (checkpoint-1 shell). */
+export const NARROW_CAPTURE_TAB_LABEL = "Idea Capture" as const;
+/** Short rail/tab label — full chrome uses “Plans”. */
+export const NARROW_INBOX_TAB_LABEL = "Plans" as const;
 
 export type WorkspaceShellNavigationAction =
   | "mode-change"
@@ -8,9 +9,33 @@ export type WorkspaceShellNavigationAction =
   | "manuscript-selection"
   | "project-back";
 
-/** Inbox replaces the center work surface; Capture uses a full-screen modal overlay. */
+/**
+ * Open Plans always replaces the center work surface (wide and narrow).
+ * Capture stays a modal overlay.
+ */
 export function inboxTakesCenterWorkspace(inboxOpen: boolean): boolean {
   return inboxOpen;
+}
+
+/**
+ * Inbox (and dense Draft/Canvas) use a bounded View column — never the
+ * non-dense page ScrollView that buries nested Inbox scroll regions.
+ */
+export function centerUsesDenseColumn(
+  surfaceDense: boolean,
+  inboxOwnsCenter: boolean
+): boolean {
+  return surfaceDense || inboxOwnsCenter;
+}
+
+/**
+ * Opening Inbox leaves the Characters lens so Story knowledge is not the
+ * primary framing while review owns the center.
+ */
+export function inboxOpenLeavesCharactersRail(
+  railDestination: "write" | "characters"
+): boolean {
+  return railDestination === "characters";
 }
 
 /** Mode, tree, Canvas drill, Reader, and project back should dismiss Inbox. */

@@ -60,15 +60,27 @@ export function draftDeskSceneContext(
   };
 }
 
-export function sceneDocumentWordCount(
+function sceneDocumentRawText(
   document: SceneDocumentV1 | undefined
-): number {
-  if (document === undefined) return 0;
+): string {
+  if (document === undefined) return "";
   function text(node: SceneBlockV1 | SceneInlineNodeV1): string {
     if (node.type === "text") return node.text;
     if (node.type === "hardBreak" || node.type === "horizontalRule") return " ";
     return (node.content ?? []).map(text).join(" ");
   }
-  const prose = document.document.content.map(text).join(" ");
+  return document.document.content.map(text).join(" ");
+}
+
+export function sceneDocumentPlainText(
+  document: SceneDocumentV1 | undefined
+): string {
+  return sceneDocumentRawText(document).replace(/\s+/g, " ").trim();
+}
+
+export function sceneDocumentWordCount(
+  document: SceneDocumentV1 | undefined
+): number {
+  const prose = sceneDocumentRawText(document);
   return prose.match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu)?.length ?? 0;
 }

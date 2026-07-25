@@ -22,6 +22,20 @@ import {
   manuscriptSelectionKey,
   type ManuscriptSelection
 } from "./manuscript-selection.js";
+import {
+  defaultManuscriptExpandedKeys,
+  filterManuscriptTreeNode,
+  flattenManuscriptTreeNodes,
+  isManuscriptBookKind,
+  manuscriptTreeIndentPx
+} from "./manuscript-tree-model.js";
+import { ManuscriptKindIcon } from "./manuscript-kind-icon.js";
+import { ManuscriptExplorerContextMenu } from "./ManuscriptExplorerContextMenu.js";
+import {
+  manuscriptExplorerActions,
+  resolveManuscriptExplorerCapabilities,
+  type ManuscriptExplorerActionId
+} from "./manuscript-explorer-actions.js";
 import { ghostwriterTheme } from "./theme.js";
 
 const { colors, fonts } = ghostwriterTheme;
@@ -39,6 +53,13 @@ type TreeKeyEvent = Readonly<{
   stopPropagation(): void;
 }>;
 
+type TreeContextMenuEvent = Readonly<{
+  preventDefault(): void;
+  clientX?: number;
+  clientY?: number;
+  nativeEvent?: { clientX?: number; clientY?: number };
+}>;
+
 type WebTreeItemProps = PressableProps &
   Readonly<{
     role: "treeitem";
@@ -49,6 +70,7 @@ type WebTreeItemProps = PressableProps &
     "aria-expanded"?: boolean;
     "data-tree-key": string;
     onKeyDown(event: TreeKeyEvent): void;
+    onContextMenu?(event: TreeContextMenuEvent): void;
   }>;
 
 type WebTreeProps = ViewProps &
@@ -114,11 +136,27 @@ export type ManuscriptTreeAddRequest = Readonly<{
   requestId: number;
 }>;
 
+export type ManuscriptTreeRenameRequest = Readonly<{
+  selectionKey: string;
+  requestId: number;
+}>;
+
+export type ManuscriptTreeCollapseAllRequest = Readonly<{
+  requestId: number;
+}>;
+
 export type ManuscriptTreeProps = Readonly<{
   project: ProjectNavigator;
   selection: ManuscriptSelection;
   busy?: boolean;
+  /** Hide the panel title when the workspace shell already shows “Manuscript”. */
+  chrome?: "full" | "embedded";
+  /** Controlled explorer filter (e.g. from top quick-search). */
+  searchQuery?: string;
+  onSearchQueryChange?(query: string): void;
   addRequest?: ManuscriptTreeAddRequest;
+  renameRequest?: ManuscriptTreeRenameRequest;
+  collapseAllRequest?: ManuscriptTreeCollapseAllRequest;
   onSelectionChange(selection: ManuscriptSelection): void;
   onOpenScene?(selection: Extract<ManuscriptSelection, { kind: "scene" }>): void;
   onEnterChapter?(
@@ -131,6 +169,11 @@ export type ManuscriptTreeProps = Readonly<{
     selection: Extract<ManuscriptSelection, { kind: "scene" }>,
     destination: SceneMoveDestination
   ): Promise<boolean>;
+  /** Archive / restore from the tree context menu (inspector confirmation). */
+  onArchiveAction?(
+    selection: ManuscriptSelection,
+    archived: boolean
+  ): void;
 }>;
 
 function makeNode(
@@ -344,38 +387,6 @@ function buildTree(
   });
 }
 
-function filterNode(node: TreeNode, query: string): TreeNode | undefined {
-  if (query.length === 0) return node;
-  const children = node.children
-    .map((child) => filterNode(child, query))
-    .filter((child): child is TreeNode => child !== undefined);
-  const matches =
-    node.label.toLocaleLowerCase().includes(query) ||
-    node.kindLabel.toLocaleLowerCase().includes(query) ||
-    node.detail?.toLocaleLowerCase().includes(query) === true;
-  if (!matches && children.length === 0) return undefined;
-  return { ...node, children: matches ? node.children : children };
-}
-
-function flattenTree(
-  root: TreeNode,
-  expandedKeys: ReadonlySet<string>,
-  searchActive: boolean
-): TreeNode[] {
-  const nodes: TreeNode[] = [];
-  function visit(node: TreeNode): void {
-    nodes.push(node);
-    if (
-      node.children.length > 0 &&
-      (searchActive || expandedKeys.has(node.key))
-    ) {
-      node.children.forEach(visit);
-    }
-  }
-  visit(root);
-  return nodes;
-}
-
 function findNodePath(
   node: TreeNode,
   key: string
@@ -388,36 +399,24 @@ function findNodePath(
   return undefined;
 }
 
-function initialExpandedKeys(project: ProjectNavigator): Set<string> {
-  const keys = new Set<string>(["project", "story-knowledge"]);
-  for (const book of project.books) {
-    keys.add(`book:${book.id}`);
-    keys.add(`unassigned:${book.id}`);
-    for (const part of book.parts) {
-      keys.add(`part:${book.id}:${part.id}`);
-      for (const chapter of part.chapters) {
-        keys.add(`chapter:${book.id}:${part.id}:${chapter.id}`);
-      }
-    }
-  }
-  return keys;
-}
-
 function expandedStorageKey(project: ProjectNavigator): string {
-  return `ghostwriter:manuscript-tree:${project.id}:expanded`;
+  return `ghostwriter:manuscript-tree:v2:${project.id}:expanded`;
 }
 
 function readExpandedKeys(project: ProjectNavigator): Set<string> {
-  if (typeof sessionStorage === "undefined") return initialExpandedKeys(project);
+  if (typeof sessionStorage === "undefined") {
+    return defaultManuscriptExpandedKeys(project);
+  }
   try {
     const stored = JSON.parse(
       sessionStorage.getItem(expandedStorageKey(project)) ?? "null"
     ) as unknown;
-    return Array.isArray(stored) && stored.every((value) => typeof value === "string")
+    return Array.isArray(stored) &&
+      stored.every((value) => typeof value === "string")
       ? new Set(stored)
-      : initialExpandedKeys(project);
+      : defaultManuscriptExpandedKeys(project);
   } catch {
-    return initialExpandedKeys(project);
+    return defaultManuscriptExpandedKeys(project);
   }
 }
 
@@ -480,17 +479,31 @@ export function ManuscriptTree({
   project,
   selection,
   busy = false,
+  chrome = "full",
+  searchQuery,
+  onSearchQueryChange,
   addRequest,
+  renameRequest,
+  collapseAllRequest,
   onSelectionChange,
   onOpenScene,
   onEnterChapter,
   onAddChild,
   onRename,
   onReorder,
-  onMoveScene
+  onMoveScene,
+  onArchiveAction
 }: ManuscriptTreeProps) {
   const [showArchived, setShowArchived] = useState(false);
-  const [query, setQuery] = useState("");
+  const [localQuery, setLocalQuery] = useState("");
+  const query = searchQuery ?? localQuery;
+  function setQuery(next: string): void {
+    if (onSearchQueryChange !== undefined) {
+      onSearchQueryChange(next);
+      return;
+    }
+    setLocalQuery(next);
+  }
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() =>
     readExpandedKeys(project)
   );
@@ -505,6 +518,16 @@ export function ManuscriptTree({
   const [inlineBusy, setInlineBusy] = useState(false);
   const [dropTargetKey, setDropTargetKey] = useState<string>();
   const [draggingKey, setDraggingKey] = useState<string>();
+  const [contextMenu, setContextMenu] = useState<
+    | Readonly<{
+        x: number;
+        y: number;
+        selection: ManuscriptSelection;
+        actions: readonly ManuscriptExplorerActionId[];
+        addLabel?: string;
+      }>
+    | undefined
+  >();
   const renameInFlight = useRef(false);
   const addInFlight = useRef(false);
   const skipExpandedWrite = useRef(false);
@@ -514,15 +537,20 @@ export function ManuscriptTree({
     [project, showArchived]
   );
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  const filteredRoot = useMemo(
-    () => filterNode(root, normalizedQuery) ?? root,
-    [normalizedQuery, root]
-  );
-  const visibleNodes = useMemo(
-    () =>
-      flattenTree(filteredRoot, expandedKeys, normalizedQuery.length > 0),
-    [expandedKeys, filteredRoot, normalizedQuery]
-  );
+  const searchActive = normalizedQuery.length > 0;
+  const filteredRoot = useMemo(() => {
+    if (!searchActive) return root;
+    return filterManuscriptTreeNode(root, normalizedQuery);
+  }, [normalizedQuery, root, searchActive]);
+  const searchEmpty = searchActive && filteredRoot === undefined;
+  const visibleNodes = useMemo(() => {
+    if (filteredRoot === undefined) return [] as TreeNode[];
+    return flattenManuscriptTreeNodes(
+      filteredRoot,
+      expandedKeys,
+      searchActive
+    );
+  }, [expandedKeys, filteredRoot, searchActive]);
   const selectedKey = manuscriptSelectionKey(selection);
 
   useEffect(() => {
@@ -531,7 +559,9 @@ export function ManuscriptTree({
     setActiveKey("project");
     setRenameKey(undefined);
     setAddParentKey(undefined);
-  }, [project.id]);
+    setLocalQuery("");
+    onSearchQueryChange?.("");
+  }, [onSearchQueryChange, project.id]);
 
   useEffect(() => {
     if (skipExpandedWrite.current) {
@@ -546,6 +576,22 @@ export function ManuscriptTree({
       setActiveKey(selectedKey);
     }
   }, [selectedKey, visibleNodes]);
+
+  useEffect(() => {
+    const path = findNodePath(root, selectedKey);
+    if (path === undefined || path.length <= 1) return;
+    setExpandedKeys((current) => {
+      let changed = false;
+      const next = new Set(current);
+      for (const ancestor of path.slice(0, -1)) {
+        if (!next.has(ancestor.key)) {
+          next.add(ancestor.key);
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [root, selectedKey]);
 
   useEffect(() => {
     if (!visibleNodes.some((node) => node.key === activeKey)) {
@@ -639,6 +685,91 @@ export function ManuscriptTree({
     });
     beginAdd(node);
   }, [addRequest, root]);
+
+  const handledRenameRequestId = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (
+      renameRequest === undefined ||
+      renameRequest.requestId === handledRenameRequestId.current
+    ) {
+      return;
+    }
+    handledRenameRequestId.current = renameRequest.requestId;
+    const path = findNodePath(root, renameRequest.selectionKey);
+    const node = path?.[path.length - 1];
+    if (path === undefined || node?.renameable !== true) return;
+    setExpandedKeys((current) => {
+      const next = new Set(current);
+      for (const ancestor of path.slice(0, -1)) next.add(ancestor.key);
+      return next;
+    });
+    beginRename(node);
+  }, [renameRequest, root]);
+
+  const handledCollapseAllRequestId = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (
+      collapseAllRequest === undefined ||
+      collapseAllRequest.requestId === handledCollapseAllRequestId.current
+    ) {
+      return;
+    }
+    handledCollapseAllRequestId.current = collapseAllRequest.requestId;
+    setExpandedKeys(new Set([root.key]));
+    setContextMenu(undefined);
+  }, [collapseAllRequest, root.key]);
+
+  function openContextMenu(node: TreeNode, event: TreeContextMenuEvent): void {
+    if (Platform.OS !== "web") return;
+    event.preventDefault();
+    selectNode(node);
+    const caps = resolveManuscriptExplorerCapabilities(project, node.selection);
+    if (caps === undefined) return;
+    const actions = manuscriptExplorerActions(caps);
+    if (actions.length === 0) return;
+    const x = event.clientX ?? event.nativeEvent?.clientX ?? 0;
+    const y = event.clientY ?? event.nativeEvent?.clientY ?? 0;
+    setContextMenu({
+      x,
+      y,
+      selection: node.selection,
+      actions,
+      ...(caps.addLabel === undefined ? {} : { addLabel: caps.addLabel })
+    });
+  }
+
+  function runContextMenuAction(action: ManuscriptExplorerActionId): void {
+    if (contextMenu === undefined) return;
+    const path = findNodePath(
+      root,
+      manuscriptSelectionKey(contextMenu.selection)
+    );
+    const node = path?.[path.length - 1];
+    if (node === undefined) return;
+    switch (action) {
+      case "add":
+        beginAdd(node);
+        return;
+      case "rename":
+        beginRename(node);
+        return;
+      case "move-up":
+        void onReorder(node.selection, -1);
+        return;
+      case "move-down":
+        void onReorder(node.selection, 1);
+        return;
+      case "archive":
+        onArchiveAction?.(node.selection, true);
+        return;
+      case "restore":
+        onArchiveAction?.(node.selection, false);
+        return;
+      case "collapse-all":
+        setExpandedKeys(new Set([root.key]));
+        return;
+    }
+  }
 
   async function commitAdd(node: TreeNode): Promise<void> {
     if (addInFlight.current || addParentKey !== node.key) return;
@@ -785,39 +916,63 @@ export function ManuscriptTree({
 
   return (
     <View accessibilityLabel="Persistent manuscript tree" style={styles.panel}>
-      <View style={styles.heading}>
-        <View style={styles.headingCopy}>
-          <Text style={styles.eyebrow}>Manuscript</Text>
-          <Text numberOfLines={2} style={styles.title}>
-            Story structure
-          </Text>
+      <View style={styles.chrome}>
+        {chrome === "full" ? (
+          <View style={styles.heading}>
+            <View style={styles.headingCopy}>
+              <Text style={styles.eyebrow}>Manuscript</Text>
+              <Text numberOfLines={2} style={styles.title}>
+                Story structure
+              </Text>
+            </View>
+            <Text style={styles.version}>v{project.version}</Text>
+          </View>
+        ) : (
+          <View style={styles.embeddedMeta}>
+            <Text style={styles.version}>v{project.version}</Text>
+          </View>
+        )}
+        <View style={styles.searchRow}>
+          <TextInput
+            accessibilityLabel="Search manuscript tree"
+            editable={!busy}
+            onChangeText={setQuery}
+            placeholder="Find a scene, chapter, or story record"
+            placeholderTextColor={colors.muted}
+            style={styles.search}
+            value={query}
+          />
+          {query.trim().length > 0 ? (
+            <Pressable
+              accessibilityLabel="Clear manuscript search"
+              accessibilityRole="button"
+              disabled={busy}
+              onPress={() => setQuery("")}
+              style={({ pressed }) => [
+                styles.clearSearch,
+                pressed && styles.pressed
+              ]}
+            >
+              <Text style={styles.clearSearchText}>Clear</Text>
+            </Pressable>
+          ) : null}
         </View>
-        <Text style={styles.version}>v{project.version}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ selected: showArchived }}
+          disabled={busy}
+          onPress={() => setShowArchived((current) => !current)}
+          style={({ pressed }) => [
+            styles.archiveToggle,
+            showArchived && styles.archiveToggleSelected,
+            pressed && styles.pressed
+          ]}
+        >
+          <Text style={styles.archiveToggleText}>
+            {showArchived ? "Hide archived records" : "Show archived records"}
+          </Text>
+        </Pressable>
       </View>
-      <TextInput
-        accessibilityLabel="Search manuscript tree"
-        editable={!busy}
-        onChangeText={setQuery}
-        placeholder="Find a scene, chapter, or story record"
-        placeholderTextColor={colors.muted}
-        style={styles.search}
-        value={query}
-      />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ selected: showArchived }}
-        disabled={busy}
-        onPress={() => setShowArchived((current) => !current)}
-        style={({ pressed }) => [
-          styles.archiveToggle,
-          showArchived && styles.archiveToggleSelected,
-          pressed && styles.pressed
-        ]}
-      >
-        <Text style={styles.archiveToggleText}>
-          {showArchived ? "Hide archived records" : "Show archived records"}
-        </Text>
-      </Pressable>
       <ScrollView
         contentContainerStyle={styles.treeContent}
         keyboardShouldPersistTaps="handled"
@@ -829,17 +984,11 @@ export function ManuscriptTree({
             const expanded =
               node.children.length === 0
                 ? undefined
-                : normalizedQuery.length > 0 || expandedKeys.has(node.key);
+                : searchActive || expandedKeys.has(node.key);
             const selected = node.key === selectedKey;
             const focused = node.key === focusedKey;
             const dropHighlight = dropTargetKey === node.key;
             const dragging = draggingKey === node.key;
-            const canMoveUp =
-              node.reorderIndex !== undefined && node.reorderIndex > 0;
-            const canMoveDown =
-              node.reorderIndex !== undefined &&
-              node.reorderCount !== undefined &&
-              node.reorderIndex < node.reorderCount - 1;
             const sceneDraggable =
               node.selection.kind === "scene" && onMoveScene !== undefined;
             return (
@@ -900,6 +1049,7 @@ export function ManuscriptTree({
                   data-tree-key={node.key}
                   disabled={busy || inlineBusy}
                   onBlur={() => setFocusedKey(undefined)}
+                  onContextMenu={(event) => openContextMenu(node, event)}
                   onFocus={() => {
                     setActiveKey(node.key);
                     setFocusedKey(node.key);
@@ -921,7 +1071,7 @@ export function ManuscriptTree({
                   <View
                     style={[
                       styles.rowInner,
-                      { paddingLeft: Math.max(0, node.level - 1) * 13 }
+                      { paddingLeft: manuscriptTreeIndentPx(node.level) }
                     ]}
                   >
                     <Pressable
@@ -940,18 +1090,23 @@ export function ManuscriptTree({
                     >
                       <Text style={styles.chevronText}>
                         {node.children.length === 0
-                          ? "·"
+                          ? ""
                           : expanded === true
                             ? "⌄"
                             : "›"}
                       </Text>
                     </Pressable>
+                    <View style={styles.kindIcon}>
+                      <ManuscriptKindIcon kindLabel={node.kindLabel} />
+                    </View>
                     <View style={styles.rowCopy}>
                       <View style={styles.rowTitleLine}>
                         <Text
                           numberOfLines={1}
                           style={[
                             styles.rowTitle,
+                            isManuscriptBookKind(node.kindLabel) &&
+                              styles.rowTitleBook,
                             selected && styles.rowTitleSelected
                           ]}
                         >
@@ -962,42 +1117,11 @@ export function ManuscriptTree({
                         ) : null}
                       </View>
                       <Text numberOfLines={1} style={styles.rowMeta}>
-                        {node.kindLabel}
-                        {node.detail === undefined ? "" : ` · ${node.detail}`}
+                        {node.detail === undefined
+                          ? node.kindLabel
+                          : `${node.kindLabel} · ${node.detail}`}
                       </Text>
                     </View>
-                    {selected ? (
-                      <View style={styles.rowActions}>
-                        {node.addLabel === undefined ? null : (
-                          <Action
-                            disabled={busy || inlineBusy}
-                            label={`Add ${node.addLabel} to ${node.label}`}
-                            onPress={() => beginAdd(node)}
-                          />
-                        )}
-                        {node.renameable === true ? (
-                          <Action
-                            disabled={busy || inlineBusy}
-                            label={`Rename ${node.kindLabel} ${node.label}`}
-                            onPress={() => beginRename(node)}
-                          />
-                        ) : null}
-                        {node.reorderIndex === undefined ? null : (
-                          <>
-                            <Action
-                              disabled={busy || inlineBusy || !canMoveUp}
-                              label={`Move ${node.kindLabel} up`}
-                              onPress={() => void onReorder(node.selection, -1)}
-                            />
-                            <Action
-                              disabled={busy || inlineBusy || !canMoveDown}
-                              label={`Move ${node.kindLabel} down`}
-                              onPress={() => void onReorder(node.selection, 1)}
-                            />
-                          </>
-                        )}
-                      </View>
-                    ) : null}
                   </View>
                 </TreeItemPressable>
                 {renameKey === node.key ? (
@@ -1063,12 +1187,26 @@ export function ManuscriptTree({
             );
           })}
         </TreeView>
-        {normalizedQuery.length > 0 && visibleNodes.length <= 1 ? (
+        {searchEmpty ? (
           <Text style={styles.empty}>
             No manuscript or story record matches “{query.trim()}”.
           </Text>
         ) : null}
       </ScrollView>
+      {contextMenu === undefined ? null : (
+        <ManuscriptExplorerContextMenu
+          actions={contextMenu.actions}
+          flags={
+            contextMenu.addLabel === undefined
+              ? undefined
+              : { addLabel: contextMenu.addLabel }
+          }
+          onAction={runContextMenuAction}
+          onDismiss={() => setContextMenu(undefined)}
+          x={contextMenu.x}
+          y={contextMenu.y}
+        />
+      )}
     </View>
   );
 }
@@ -1077,16 +1215,27 @@ const styles = StyleSheet.create({
   panel: {
     backgroundColor: "#f8f5ef",
     flex: 1,
+    flexDirection: "column",
     minHeight: 0,
     minWidth: 0,
+    overflow: "hidden",
     paddingHorizontal: 10,
-    paddingTop: 12
+    paddingTop: 12,
+    position: "relative"
+  },
+  chrome: {
+    flexShrink: 0,
+    gap: 8,
+    paddingBottom: 4
   },
   heading: {
     alignItems: "center",
     flexDirection: "row",
     gap: 8,
     justifyContent: "space-between"
+  },
+  embeddedMeta: {
+    alignItems: "flex-end"
   },
   headingCopy: {
     flex: 1,
@@ -1110,19 +1259,35 @@ const styles = StyleSheet.create({
     fontFamily: fonts.uiMedium,
     fontSize: 8
   },
+  searchRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6
+  },
   search: {
     backgroundColor: colors.panel,
     borderColor: colors.line,
     borderRadius: 7,
     borderWidth: 1,
     color: colors.ink,
+    flex: 1,
     fontFamily: fonts.ui,
-    fontSize: 9,
-    marginTop: 10,
+    fontSize: 12,
     minHeight: 36,
     paddingHorizontal: 9,
-    paddingVertical: 7,
-    width: "100%"
+    paddingVertical: 7
+  },
+  clearSearch: {
+    borderColor: colors.line,
+    borderRadius: 7,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 8
+  },
+  clearSearchText: {
+    color: colors.muted,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 11
   },
   archiveToggle: {
     alignItems: "center",
@@ -1131,7 +1296,6 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: 999,
     borderWidth: 1,
-    marginTop: 7,
     paddingHorizontal: 8,
     paddingVertical: 5
   },
@@ -1142,14 +1306,15 @@ const styles = StyleSheet.create({
   archiveToggleText: {
     color: colors.muted,
     fontFamily: fonts.uiSemibold,
-    fontSize: 7
+    fontSize: 10
   },
   treeScroll: {
     flex: 1,
-    marginTop: 7,
+    marginTop: 4,
     minHeight: 0
   },
   treeContent: {
+    flexGrow: 1,
     paddingBottom: 30
   },
   row: {
@@ -1196,6 +1361,11 @@ const styles = StyleSheet.create({
     fontFamily: fonts.uiSemibold,
     fontSize: 14
   },
+  kindIcon: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 16
+  },
   rowCopy: {
     flex: 1,
     minWidth: 0
@@ -1210,7 +1380,11 @@ const styles = StyleSheet.create({
     color: colors.ink,
     flexShrink: 1,
     fontFamily: fonts.uiMedium,
-    fontSize: 9
+    fontSize: 12
+  },
+  rowTitleBook: {
+    fontFamily: fonts.uiSemibold,
+    fontSize: 13
   },
   rowTitleSelected: {
     color: colors.kicker,
@@ -1219,7 +1393,7 @@ const styles = StyleSheet.create({
   rowMeta: {
     color: colors.muted,
     fontFamily: fonts.ui,
-    fontSize: 7,
+    fontSize: 10,
     marginTop: 2
   },
   archivedBadge: {

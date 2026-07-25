@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cursor-shell navigation — record log</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Record log</p>
+      <h1>Cursor-like workspace shell navigation</h1>
+    </header>
+
+    <section>
+      <h2>2026-07-25 — Inventory + plan</h2>
+      <ul>
+        <li>Full chrome inventory: rail, tree, center modes, inspector, palettes, Capture/Settings modals, Reader full-screen.</li>
+        <li>Finding: <code>WorkspaceChatPanel</code> exists but is not mounted; MCP chat currently lives in ⌘⇧P palette only.</li>
+        <li>Target: Cursor 3-pane + activity bar; Agent/MCP on secondary side; Dreams center takeover deferred to CP3.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — CP1 landed</h2>
+      <ul>
+        <li>Secondary panel: tabs <strong>Agent</strong> | <strong>Properties</strong> via <code>WorkspaceSecondaryPanel</code>.</li>
+        <li>Mounted docked <code>WorkspaceChatPanel</code>; rail Chat → Agent (toggle); ⌘⇧P palette kept.</li>
+        <li>Primary + secondary widths resize and persist in localStorage per account/project.</li>
+        <li>Explorer kind glyphs clarified (folder/file-style geometric marks).</li>
+        <li>Dreams still owns center until CP3.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Title Page drill-down studio</h2>
+      <ul>
+        <li>Shelf view only lists books; clicking drills into a book studio with breadcrumbs (<code>Series · Title page · …</code>).</li>
+        <li>Book studio hero is a perspective hardcover (spine + pages + cover face); AI preview paints onto the face before apply.</li>
+        <li>Form fields demoted beside the book; external URL behind disclosure.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — CP4b cover image generate → apply</h2>
+      <ul>
+        <li>Routes: preview / apply / download under <code>/api/projects/:projectId/books/:bookId/cover/...</code>.</li>
+        <li>Apply puts PNG in private object storage; Lakebase stores <code>https://ghostwriter.cover/...</code> locator only.</li>
+        <li>Title Page: Generate cover preview → Apply cover image; shelf resolves display via download (hermetic data URI / R2 signed GET).</li>
+        <li>Requires BYOK OpenAI key; hermetic memory storage works without R2; production apply needs R2 configured.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — CP4 Title Page landed</h2>
+      <ul>
+        <li>Founder: Project Structure page goes away; project home becomes a Title Page for covers, titles, and designs with AI where it fits.</li>
+        <li><code>BookCover</code> on books (migration <code>0018_book_cover</code>); <code>book.update</code> + API contract accept cover.</li>
+        <li><code>ProjectTitlePage</code> replaces project-root launchpad: cover shelf, design desk, rename series/book, Propose cover concept → Agent chat.</li>
+        <li>AI images still preview-only / URL-paste; no data-URI persistence in Lakebase.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Topbar layout</h2>
+      <ul>
+        <li>Three-zone topbar: left = Projects + structure toggle + story trail; center = absolutely centered quick search; right = Saved / Refresh / Reader / Sign out.</li>
+        <li>Wide layouts no longer duplicate breadcrumbs in the editor chrome.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Top search + CP2 + CP3</h2>
+      <ul>
+        <li><code>WorkspaceTopSearch</code>: unified Manuscript / Actions / Tools (MCP capabilities); query mirrors into explorer tree filter.</li>
+        <li>CP2: activity bar grouped as Explorer · Dreams · Characters | Draft · Canvas · Split · Reader | Agent · Jump · History · Settings; Phosphor <code>ManuscriptKindIcon</code> + <code>ExplorerRailIcon</code>.</li>
+        <li>CP3: wide layout hosts Dreams &amp; Ideas and Characters in the primary side (<code>WorkspacePrimaryView</code>); center stays Draft/Canvas. Narrow Dreams still takes center.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — CP4c started (async cover options + Save)</h2>
+      <ul>
+        <li>Save details: silent early-return + draft reset on every <code>focusedBook</code> identity change made the button feel dead; fix inline feedback + fingerprint sync.</li>
+        <li>Cover gen: sync POST too slow (~30s+); move to in-process async jobs (default 3 portrait options), History notify when ready, studio pick/iterate/apply.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — CP4c landed</h2>
+      <ul>
+        <li>Backend: <code>POST/GET …/cover/images/jobs</code> in-memory job store; portrait <code>1024x1536</code>; 2–4 options (default 3).</li>
+        <li>Client: poll ~2s; History toast “Cover options ready” + <strong>Review covers</strong> returns to Title Page studio.</li>
+        <li>Studio: options strip, Apply this cover, Iterate with refinement notes; Save details shows Saved / nothing to save / error without wiping option selection.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Title Page studio polish</h2>
+      <ul>
+        <li>Cover prompts include book title; no franchise/trademark scrubbing — writer owns content rights. Provider blocks stay reported neutrally.</li>
+        <li>Book studio: centered hardcover hero; status dropdown top-right; form column below (title / art direction / notes); primary vs secondary actions.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Canvas full center</h2>
+      <ul>
+        <li>Canvas owns the full center; removed empty “Open a scene to write” sibling pane.</li>
+        <li>Split shows Draft only when a scene is open. Opening a scene (tree or canvas drill) switches to full-center Draft (plan-draft lens still uses Split).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Canvas chrome / chapter strip</h2>
+      <ul>
+        <li>Removed ＋ Add Quick Build from Canvas/Split (add via Explorer tree; Draft keeps Quick Build).</li>
+        <li>Replaced tall Chapter Aggregate card grid with a compact horizontal chapter chip strip so the spatial board gets majority height.</li>
+        <li><strong>Accepted option A:</strong> Canvas chapter nav stays the compact chip strip (not aggregate cards).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Cursor-style Manuscript Explorer actions</h2>
+      <ul>
+        <li>EXPLORER header icon buttons act on the current selection: add child, rename, move up/down, collapse-all.</li>
+        <li>Right-click context menu on tree rows offers the same actions plus archive/restore when SelectionInspector already supports that kind.</li>
+        <li>Removed always-visible selected-row action chips (✎ ↑ ↓ +); F2 rename and Alt+arrows reorder remain.</li>
+        <li>Pure helper: <code>manuscript-explorer-actions.ts</code>; floating menu: <code>ManuscriptExplorerContextMenu</code>.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Docs sweep / handoff</h2>
+      <ul>
+        <li>PRODUCT, ARCHITECTURE, API, OPERATIONS, README, and WHERE-I-LEFT-OFF updated for Title Page, covers, Plans center, Agent dock chat, and shell chrome.</li>
+        <li>Docs + handoff todo checked. Cast center studio tracked in a separate proposed plan (not implemented here).</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

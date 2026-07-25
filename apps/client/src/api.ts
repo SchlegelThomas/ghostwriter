@@ -830,19 +830,43 @@ export function synthesizeReaderSpeech(input: Readonly<{
   );
 }
 
+export type WorkspaceChatMode = "chat" | "plan" | "agent";
+export type WorkspaceChatEffort = "fast" | "standard" | "high";
+
+export type WorkspaceChatSelection = Readonly<{
+  kind: string;
+  bookId?: string;
+  partId?: string;
+  chapterId?: string;
+  sceneId?: string;
+  storyKnowledgeId?: string;
+}>;
+
 export type WorkspaceChatResponse = Readonly<{
   reply: string;
+  mode?: WorkspaceChatMode;
+  model?: AgentModelId;
+  effort?: WorkspaceChatEffort;
+  code?: string;
 }>;
 
 export function sendWorkspaceChat(input: Readonly<{
   message: string;
   projectId?: string;
+  mode?: WorkspaceChatMode;
+  model?: AgentModelId;
+  effort?: WorkspaceChatEffort;
+  selection?: WorkspaceChatSelection;
 }>): Promise<WorkspaceChatResponse> {
   return requestJson(
     "/api/workspace/chat",
     jsonRequest("POST", {
       message: input.message,
-      ...(input.projectId === undefined ? {} : { projectId: input.projectId })
+      ...(input.projectId === undefined ? {} : { projectId: input.projectId }),
+      ...(input.mode === undefined ? {} : { mode: input.mode }),
+      ...(input.model === undefined ? {} : { model: input.model }),
+      ...(input.effort === undefined ? {} : { effort: input.effort }),
+      ...(input.selection === undefined ? {} : { selection: input.selection })
     })
   );
 }
@@ -1321,4 +1345,194 @@ export async function applyAgentProposal(
     ),
     jsonRequest("POST", body)
   );
+}
+
+export type ScenePartnerTurnPhase =
+  | "interview"
+  | "match"
+  | "new-scene"
+  | "iterate";
+
+export type ScenePartnerTurnAction = "apply-new-scene" | "propose-image";
+
+export type ScenePartnerTurnResponse = Readonly<{
+  thinkingSteps: readonly string[];
+  assistantMessage: string;
+  phase: ScenePartnerTurnPhase;
+  matchedSceneId: string | null;
+  proseDraft: string | null;
+  actions: readonly ScenePartnerTurnAction[];
+  imagePrompt: string | null;
+}>;
+
+export type ScenePartnerImageResponse = Readonly<{
+  url: string;
+  alt: string;
+  prompt: string;
+}>;
+
+function scenePartnerPath(
+  projectId: string,
+  captureId: string,
+  suffix: "turns" | "images"
+): string {
+  return `/api/projects/${encodeURIComponent(projectId)}/captures/${encodeURIComponent(captureId)}/scene-partner/${suffix}`;
+}
+
+export async function postScenePartnerTurn(input: Readonly<{
+  projectId: string;
+  captureId: string;
+  ideaProse: string;
+  scenes: readonly Readonly<{ id: string; title: string; label: string }>[];
+  messages: readonly Readonly<{ role: "assistant" | "user"; body: string }>[];
+  phase?: ScenePartnerTurnPhase;
+  matchedSceneId?: string | null;
+}>): Promise<ScenePartnerTurnResponse> {
+  const response = await requestJson<Readonly<{ turn: ScenePartnerTurnResponse }>>(
+    scenePartnerPath(input.projectId, input.captureId, "turns"),
+    jsonRequest("POST", {
+      ideaProse: input.ideaProse,
+      scenes: input.scenes,
+      messages: input.messages,
+      ...(input.phase === undefined ? {} : { phase: input.phase }),
+      ...(input.matchedSceneId === undefined
+        ? {}
+        : { matchedSceneId: input.matchedSceneId })
+    })
+  );
+  return response.turn;
+}
+
+export async function postScenePartnerImage(input: Readonly<{
+  projectId: string;
+  captureId: string;
+  prompt: string;
+}>): Promise<ScenePartnerImageResponse> {
+  return requestJson(
+    scenePartnerPath(input.projectId, input.captureId, "images"),
+    jsonRequest("POST", { prompt: input.prompt })
+  );
+}
+
+export type BookCoverImagePreviewResponse = Readonly<{
+  previewUrl: string;
+  alt: string;
+  prompt: string;
+}>;
+
+export type BookCoverImageApplyResponse = Readonly<{
+  cover: Readonly<{
+    concept?: string;
+    notes?: string;
+    imageUrl?: string;
+  }>;
+  imageUrl: string;
+}>;
+
+export type BookCoverDownloadResponse = Readonly<{
+  download: Readonly<{
+    url: string;
+    expiresAt: string;
+  }>;
+}>;
+
+export type BookCoverImageJobStatus = "queued" | "running" | "ready" | "failed";
+
+export type BookCoverImageJobOption = Readonly<{
+  id: string;
+  previewUrl: string;
+  prompt: string;
+  variationIndex: number;
+}>;
+
+export type BookCoverImageJobStartResponse = Readonly<{
+  jobId: string;
+  status: "queued";
+}>;
+
+export type BookCoverImageJobResponse = Readonly<{
+  jobId: string;
+  status: BookCoverImageJobStatus;
+  basePrompt: string;
+  createdAt: string;
+  updatedAt: string;
+  options?: readonly BookCoverImageJobOption[];
+  error?: Readonly<{
+    code: string;
+    message: string;
+  }>;
+}>;
+
+function bookCoverImagePath(
+  projectId: string,
+  bookId: string,
+  suffix: "images" | "images/apply" | "images/jobs" | "download" | `images/jobs/${string}`
+): string {
+  return `/api/projects/${encodeURIComponent(projectId)}/books/${encodeURIComponent(bookId)}/cover/${suffix}`;
+}
+
+export async function postBookCoverImagePreview(input: Readonly<{
+  projectId: string;
+  bookId: string;
+  prompt: string;
+}>): Promise<BookCoverImagePreviewResponse> {
+  return requestJson(
+    bookCoverImagePath(input.projectId, input.bookId, "images"),
+    jsonRequest("POST", { prompt: input.prompt })
+  );
+}
+
+export async function postBookCoverImageJob(input: Readonly<{
+  projectId: string;
+  bookId: string;
+  prompt: string;
+  count?: number;
+  refinement?: string;
+}>): Promise<BookCoverImageJobStartResponse> {
+  return requestJson(
+    bookCoverImagePath(input.projectId, input.bookId, "images/jobs"),
+    jsonRequest("POST", {
+      prompt: input.prompt,
+      ...(input.count === undefined ? {} : { count: input.count }),
+      ...(input.refinement === undefined ? {} : { refinement: input.refinement })
+    })
+  );
+}
+
+export async function getBookCoverImageJob(input: Readonly<{
+  projectId: string;
+  bookId: string;
+  jobId: string;
+}>): Promise<BookCoverImageJobResponse> {
+  return requestJson(
+    bookCoverImagePath(
+      input.projectId,
+      input.bookId,
+      `images/jobs/${encodeURIComponent(input.jobId)}`
+    )
+  );
+}
+
+export async function postBookCoverImageApply(input: Readonly<{
+  projectId: string;
+  bookId: string;
+  previewDataUri?: string;
+  prompt?: string;
+}>): Promise<BookCoverImageApplyResponse> {
+  return requestJson(
+    bookCoverImagePath(input.projectId, input.bookId, "images/apply"),
+    jsonRequest("POST", {
+      ...(input.previewDataUri === undefined
+        ? {}
+        : { previewDataUri: input.previewDataUri }),
+      ...(input.prompt === undefined ? {} : { prompt: input.prompt })
+    })
+  );
+}
+
+export async function getBookCoverDownload(input: Readonly<{
+  projectId: string;
+  bookId: string;
+}>): Promise<BookCoverDownloadResponse> {
+  return requestJson(bookCoverImagePath(input.projectId, input.bookId, "download"));
 }

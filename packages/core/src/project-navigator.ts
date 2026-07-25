@@ -1,5 +1,6 @@
 import {
   DomainValidationError,
+  type BookCover,
   type BookId,
   type ChapterId,
   type EditionId,
@@ -63,6 +64,7 @@ export type ProjectNavigatorBook = Readonly<{
   unassignedScenes: readonly ProjectNavigatorScene[];
   editions: readonly ProjectNavigatorEdition[];
   sceneCount: number;
+  cover?: BookCover;
   archivedAt?: string;
 }>;
 
@@ -185,6 +187,7 @@ export function projectNavigatorFromRecords(records: ProjectRecords): ProjectNav
       ),
       editions: freezeList(editions),
       sceneCount: records.scenes.filter((scene) => scene.bookId === book.id).length,
+      ...(book.cover === undefined ? {} : { cover: book.cover }),
       ...(book.archivedAt === undefined ? {} : { archivedAt: book.archivedAt })
     });
   });

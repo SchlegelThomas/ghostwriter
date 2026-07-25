@@ -82,7 +82,7 @@ On `feat/writing-experience-ux-4`, writers also get:
 - Writer profile publishing details (pen name, legal/contact, mailing address, bio, representation) edited from a pencil modal on the project library;
 - Sign-in gate led by the brand lockup with short “Bring your ideas to life” copy.
 
-Agents still never silent-write canon. OpenAI completion remains optional/unconfigured; proposals are labeled `deterministic-local` until a provider ADR lands.
+Agents still never silent-write canon. BYOK OpenAI powers Agent dock chat and toolkit jobs when configured; deterministic-local proposals remain available without a key.
 
 ## Current writing milestone — Capture to Story (implemented locally 2026-07-24)
 
@@ -104,9 +104,29 @@ On `feat/capture-to-story-agents`, writers can Capture first and integrate with 
   the same Inbox; external clients cannot apply canon or retrieve credentials.
 
 Agents still never silent-write canon. Mockups 5.0, ADR 0010, and ADR 0011 govern the design.
-Repository verification is green (712 unit/integration tests). Real-browser founder acceptance,
-live R2/KEK provisioning, and post-gate Playwright remain pending before calling this shipped on
-production.
+Repository verification is green. Real-browser founder acceptance, live R2/KEK provisioning on
+Fly, and post-gate Playwright remain pending before calling Capture shipped on production.
+
+## Current writing milestone — Cursor shell, Title Page, Agent harness (2026-07-25)
+
+On the same branch, the workspace shell and Agent dock advanced:
+
+- Cursor-like chrome: activity rail, resizable Explorer primary, editor center, secondary
+  **Agent | Properties** (Agent defaults open);
+- **Plans** (ex–Dreams & Ideas) opens as a center workspace; Capture stays modal; primary side on
+  wide remains Explorer or Characters browse;
+- project home is a **Title Page** (series/book titles, hardcover studio, cover concept/notes);
+- BYOK cover image options via async jobs (`gpt-image-1` portrait); Apply stores a private object
+  locator (R2 when configured; hermetic memory fake for E2E) — never a data URI in Lakebase;
+- Agent dock composer: modes **chat** / **Plan** / **agent**, model (Luna/Terra/Sol) + effort,
+  persisted per project; **chat** completes with BYOK OpenAI and server-assembled project context;
+  Settings owns the OpenAI key; capability ids still invoke read tools;
+- Manuscript Explorer: header icons + right-click context menu; Canvas owns full center with a
+  compact chapter chip strip (no canvas Quick Build).
+
+**Proposed next (not implemented):** richer Cast & relationships as a center studio
+(`plans/active/2026-07-25-cast-relationships-studio/`). Harness CP3–CP5 (tools in the loop,
+toolkit agent deep-link, Plan→Plans persistence) remain open.
 
 ## Prior writing milestone — implemented locally 2026-07-12
 
@@ -122,12 +142,10 @@ The active branch now proves the first owner-only version of the core promise:
   placements per drill layer, and a manuscript-derived spine that exposes drift without reordering
   prose;
 - Parts and chapters carry optional descriptions; structure launchpads list openable children with
-  Draft / Reader / Canvas actions; the Characters rail browses cast sheets and typed knowledge links;
+  Draft / Reader / Canvas actions when a folder (not the project root) is selected;
 - Chapters act as named scene folders with objectives/cast notes; scenes may carry URL backdrop,
   music, and image references; story knowledge supports notes, aliases, and typed knowledge links;
 - Reader presents bound-book spreads with optional ElevenLabs voice packs (server-side TTS);
-- An in-app MCP chat dock lists capabilities and can invoke read tools; OpenAI completion waits on
-  a configured key;
 - wide web supports spatial writing and tree drag-and-drop; narrow web uses an ordered
   keyboard/screen-reader Canvas posture instead of pretending freeform drag fits a phone;
 - Map (Canvas) mode defaults to a collapsed ~36px structure rail with `[` / »| expand, icon tool
@@ -136,9 +154,8 @@ The active branch now proves the first owner-only version of the core promise:
   when reduced motion is preferred).
 
 This milestone does not yet deliver collaborators, comments/suggestions, real-time subscriptions or
-presence, AI/image generation, binary media hosting (R2), import/export, account exit, permanent
-purge, or native freeform Canvas editing. Product copy must not imply those later outcomes already
-ship.
+presence, import/export, account exit, permanent purge, or production-provisioned R2/KEK (adapters
+and hermetic fakes exist locally). Product copy must not imply those later outcomes already ship.
 
 ## Product principles
 

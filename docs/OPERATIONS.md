@@ -85,6 +85,21 @@ callback, so required CI uses the hermetic identity boundary; a real Google logi
 local or production acceptance check. The test identity server refuses to start unless
 `GHOSTWRITER_E2E=1` and is never part of the production entry point.
 
+Hermetic E2E backend (`apps/backend/src/e2e-server.ts`) defaults to a fake OpenAI validation and
+structured-completion provider so CI/Playwright never spend tokens. Cover-image preview uses that
+same injected fake and does **not** require a saved key. Set
+`GHOSTWRITER_E2E_LIVE_OPENAI=1` (with `GHOSTWRITER_E2E=1`) to use the real OpenAI adapter for local
+founder checks. For live images/completions, supply a BYOK key either via **Settings** in the app
+or (local only) `GHOSTWRITER_E2E_SEED_OPENAI_KEY` in the hermetic process environment — never commit
+the key, and never paste it into chat/logs. Playwright must leave
+`GHOSTWRITER_E2E_LIVE_OPENAI` and `GHOSTWRITER_E2E_SEED_OPENAI_KEY` unset.
+
+On boot, the hermetic server seeds a **Harry Potter** multi-book project for the E2E writer
+account (seven books, chapters/scenes with original placeholder prose, cast/locations/threads, and
+a few Plans (Inbox) captures). Fixture source: `packages/core/src/harry-potter-fixture.ts`;
+orchestration: `apps/backend/src/hermetic-seed.ts`. Restarting the hermetic process resets PGlite
+and reseeds from scratch.
+
 ### Capture media implemented locally; R2 provisioning pending
 
 ADR 0010 and ADR 0011 accept the following boundaries for the active Capture-to-Story epic. They
@@ -92,9 +107,11 @@ are not required by the shipped product until release. The private-object adapte
 migration, direct-upload client, memory fake, and refusal tests are implemented locally; no bucket,
 credentials, Fly secrets, or deployment were created in this branch:
 
-- Private Cloudflare R2 stores Capture attachment bytes. Fly holds `R2_ACCOUNT_ID`,
+- Private Cloudflare R2 stores Capture attachment bytes and applied book-cover PNGs
+  (`projects/{projectId}/books/{bookId}/cover.png`). Fly holds `R2_ACCOUNT_ID`,
   `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME`, authorizes every object
-  operation, and issues short-lived single-object URLs. Required CI uses a memory object-store fake.
+  operation, and issues short-lived single-object URLs. Hermetic E2E uses a memory object-store
+  fake (cover download returns a PNG data URI for display). Required CI uses the same memory fake.
 - Writer OpenAI keys are encrypted in Lakebase under a versioned AES-GCM envelope. Root keys such as
   `GHOSTWRITER_PROVIDER_KEK_V1` live only as Fly secrets; they are distinct from an optional
   Ghostwriter-operated `OPENAI_API_KEY`.

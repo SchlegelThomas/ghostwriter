@@ -90,6 +90,10 @@ export type AgentProviderRuntime = Readonly<{
     CaptureReflectionStructuredCompletionProvider &
       CraftPartnerStructuredCompletionProvider
   >;
+  /** Decrypts the writer's OpenAI key for ephemeral provider calls (never log/return). */
+  resolveOpenAiApiKey(input: Readonly<{
+    accountId: AccountId;
+  }>): Promise<string>;
 }>;
 
 export type CreateAgentProviderRuntimeInput = Readonly<{
@@ -335,7 +339,9 @@ export function createAgentProviderRuntime(
       const factory =
         completionInput.createProvider ?? defaultCompletionProviderFactory;
       return toStructuredCompletionProvider(factory(plaintext));
-    }
+    },
+    resolveOpenAiApiKey: async (resolveInput) =>
+      decryptOpenAiApiKey(resolveInput.accountId)
   });
 }
 

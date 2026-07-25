@@ -11,13 +11,16 @@
   },
   "dependencies": {
     "@ghostwriter/core": "workspace:*",
-    "@ghostwriter/editor": "workspace:*"
+    "@ghostwriter/editor": "workspace:*",
+    "phosphor-react-native": "^3.0.6"
   },
   "peerDependencies": {
     "react": "*",
-    "react-native": "*"
+    "react-native": "*",
+    "react-native-svg": "*"
   },
   "devDependencies": {
-    "@types/react": "latest"
+    "@types/react": "latest",
+    "react-native-svg": "^15.15.5"
   }
 }

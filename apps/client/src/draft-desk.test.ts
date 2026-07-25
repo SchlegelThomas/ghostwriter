@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 import {
   draftDeskSceneContext,
   projectScenes,
+  sceneDocumentPlainText,
   sceneDocumentWordCount
 } from "./draft-desk.js";
 
@@ -181,6 +182,21 @@ describe("Draft desk helpers", () => {
       nextScene: undefined,
       povLabel: undefined
     });
+  });
+
+  it("extracts plain prose for idea previews", () => {
+    expect(sceneDocumentPlainText(undefined)).toBe("");
+    expect(
+      sceneDocumentPlainText(
+        sceneDocument([
+          {
+            type: "paragraph",
+            attrs: { id: blockId("block-preview") },
+            content: [{ type: "text", text: "I have an idea about two twin characters." }]
+          }
+        ])
+      )
+    ).toBe("I have an idea about two twin characters.");
   });
 
   it("counts words across empty, punctuated, unicode, and nested prose structures", () => {

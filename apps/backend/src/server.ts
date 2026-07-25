@@ -16,7 +16,8 @@ const app = createApp({
   identity: runtime.identity,
   agentProvider: runtime.agentProvider,
   auth: runtime.auth,
-  allowedOrigins: config.auth.trustedOrigins
+  allowedOrigins: config.auth.trustedOrigins,
+  objectStorage: runtime.objectStorage
 });
 
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
