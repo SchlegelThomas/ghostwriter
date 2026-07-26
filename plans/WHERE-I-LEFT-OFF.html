@@ -11,23 +11,23 @@
     <header>
       <p class="eyebrow">Session handoff</p>
       <h1>Where we left off</h1>
-      <p><strong>Last updated:</strong> 2026-07-25 · <strong>Current branch:</strong> <code>feat/character-screens-depth</code></p>
+      <p><strong>Last updated:</strong> 2026-07-25 · <strong>Current branch:</strong> <code>main</code></p>
     </header>
 
     <section>
       <h2>Done recently</h2>
       <ul>
-        <li>Cast center studio, dossier, constellation, scene presence, Split Sheet handoff, character visual gallery.</li>
-        <li>Harry Potter seed portraits (6 per cast) + manuscript chronology desk.</li>
-        <li><strong>D7:</strong> Idempotent demo seed on prod/dev boot; unmarked login double-click → <code>account-demo-seed</code> (<code>POST /api/demo/sign-in</code>). Disable with <code>GHOSTWRITER_DEMO_SEED=0</code>.</li>
+        <li><a href="https://github.com/SchlegelThomas/ghostwriter/pull/13">PR #13</a> merged — Cast studio depth, character visuals, manuscript chronology, multi-env demo seed + login double-click.</li>
+        <li>Production deploy green: backend (Fly) + web (Cloudflare Pages); migration <code>0019</code> on Lakebase; main CI green.</li>
+        <li>Plans archived: <code>plans/archive/2026-07-25-character-screens-depth/</code> (superseded thin cast studio also archived).</li>
       </ul>
     </section>
 
     <section>
       <h2>Proposed next</h2>
       <ul>
-        <li>Merge <a href="https://github.com/SchlegelThomas/ghostwriter/pull/13">PR #13</a> → production deploy (migration <code>0019</code> already applied to Lakebase production via owner profile; demo seed runs on backend boot; R2 required for portraits).</li>
-        <li>Founder verify: double-click login → Harry Potter → Cast gallery + chronology desk.</li>
+        <li>Founder verify on production: bottom-right double-click login → Harry Potter → Cast gallery + chronology desk (portraits need R2).</li>
+        <li>Resume writing-agent harness or pick a new plan — do not assume pickup.</li>
         <li>Playwright only after explicit user-verified gate.</li>
       </ul>
     </section>
@@ -36,7 +36,7 @@
       <h2>Incomplete</h2>
       <ol>
         <li>Create-character auto-select; R2 GC on visual delete.</li>
-        <li>Writing-agent harness CP3–CP5 (separate plan).</li>
+        <li><a href="active/2026-07-25-writing-agent-harness/plan.html">Writing-agent harness</a> CP3–CP5.</li>
         <li>Post-gate Playwright for Cast / demo login if desired.</li>
       </ol>
     </section>
