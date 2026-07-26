@@ -134,6 +134,13 @@
       "when": 1784530000000,
       "tag": "0018_book_cover",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1784535000000,
+      "tag": "0019_character_visuals",
+      "breakpoints": true
     }
   ]
 }

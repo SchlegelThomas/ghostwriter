@@ -3,10 +3,13 @@ import {
   aggregateProjectChangesIdle,
   captureReturnStateFromScene,
   captureShellChangesIdle,
+  castOpenClosesInbox,
+  castTakesCenterWorkspace,
   centerUsesDenseColumn,
   finalizeCaptureShellActivityOnClose,
   inboxOpenLeavesCharactersRail,
   inboxTakesCenterWorkspace,
+  manuscriptSelectionLeavesCharactersLens,
   NARROW_CAPTURE_TAB_LABEL,
   NARROW_INBOX_TAB_LABEL,
   restoreCaptureReturnFocus,
@@ -26,7 +29,19 @@ describe("workspace capture shell helpers", () => {
     expect(inboxTakesCenterWorkspace(true)).toBe(true);
   });
 
-  it("uses a dense center column whenever Inbox owns the center", () => {
+  it("opens Cast in the center when Characters lens is on and Plans is closed", () => {
+    expect(
+      castTakesCenterWorkspace({ charactersLens: true, inboxOpen: false })
+    ).toBe(true);
+    expect(
+      castTakesCenterWorkspace({ charactersLens: true, inboxOpen: true })
+    ).toBe(false);
+    expect(
+      castTakesCenterWorkspace({ charactersLens: false, inboxOpen: false })
+    ).toBe(false);
+  });
+
+  it("uses a dense center column for surface density or exclusive center owners", () => {
     expect(centerUsesDenseColumn(false, false)).toBe(false);
     expect(centerUsesDenseColumn(true, false)).toBe(true);
     expect(centerUsesDenseColumn(false, true)).toBe(true);
@@ -36,6 +51,23 @@ describe("workspace capture shell helpers", () => {
   it("leaves the Characters rail when Inbox opens", () => {
     expect(inboxOpenLeavesCharactersRail("characters")).toBe(true);
     expect(inboxOpenLeavesCharactersRail("write")).toBe(false);
+  });
+
+  it("closes Inbox when Cast opens", () => {
+    expect(castOpenClosesInbox(true)).toBe(true);
+    expect(castOpenClosesInbox(false)).toBe(false);
+  });
+
+  it("yields Cast when manuscript structure is selected, keeps Cast for knowledge", () => {
+    expect(manuscriptSelectionLeavesCharactersLens("scene")).toBe(true);
+    expect(manuscriptSelectionLeavesCharactersLens("chapter")).toBe(true);
+    expect(manuscriptSelectionLeavesCharactersLens("project")).toBe(true);
+    expect(manuscriptSelectionLeavesCharactersLens("storyKnowledge")).toBe(
+      false
+    );
+    expect(manuscriptSelectionLeavesCharactersLens("storyKnowledgeRoot")).toBe(
+      false
+    );
   });
 
   it("closes Inbox on primary workspace navigation actions", () => {

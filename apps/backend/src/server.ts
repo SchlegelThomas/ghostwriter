@@ -5,6 +5,12 @@ import { createBackendRuntime } from "./services.js";
 
 const config = loadConfig();
 const runtime = createBackendRuntime(config);
+
+if (config.demoSeed.enabled) {
+  await runtime.ensureDemoSeed();
+  console.log("Demo seed: Harry Potter project ready for demo account.");
+}
+
 const app = createApp({
   services: runtime.services,
   writing: runtime.writing,
@@ -17,7 +23,8 @@ const app = createApp({
   agentProvider: runtime.agentProvider,
   auth: runtime.auth,
   allowedOrigins: config.auth.trustedOrigins,
-  objectStorage: runtime.objectStorage
+  objectStorage: runtime.objectStorage,
+  demoSeed: config.demoSeed
 });
 
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => {

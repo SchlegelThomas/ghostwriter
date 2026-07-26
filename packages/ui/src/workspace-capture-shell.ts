@@ -18,14 +18,25 @@ export function inboxTakesCenterWorkspace(inboxOpen: boolean): boolean {
 }
 
 /**
- * Inbox (and dense Draft/Canvas) use a bounded View column — never the
- * non-dense page ScrollView that buries nested Inbox scroll regions.
+ * Characters rail opens Cast in the center while Plans is closed.
+ * Inbox/Plans wins when both would otherwise claim the surface.
+ */
+export function castTakesCenterWorkspace(input: Readonly<{
+  charactersLens: boolean;
+  inboxOpen: boolean;
+}>): boolean {
+  return input.charactersLens && !input.inboxOpen;
+}
+
+/**
+ * Exclusive center owners (Inbox/Plans or Cast) densify the work column —
+ * never the non-dense page ScrollView that buries nested scroll regions.
  */
 export function centerUsesDenseColumn(
   surfaceDense: boolean,
-  inboxOwnsCenter: boolean
+  exclusiveCenterOwner: boolean
 ): boolean {
-  return surfaceDense || inboxOwnsCenter;
+  return surfaceDense || exclusiveCenterOwner;
 }
 
 /**
@@ -36,6 +47,34 @@ export function inboxOpenLeavesCharactersRail(
   railDestination: "write" | "characters"
 ): boolean {
   return railDestination === "characters";
+}
+
+/** Opening Cast should dismiss Plans so only one exclusive center owner remains. */
+export function castOpenClosesInbox(inboxOpen: boolean): boolean {
+  return inboxOpen;
+}
+
+/**
+ * Manuscript structure selection yields Cast center back to Write.
+ * Story-knowledge selection keeps the Characters lens.
+ */
+export function manuscriptSelectionLeavesCharactersLens(
+  selectionKind: string
+): boolean {
+  switch (selectionKind) {
+    case "project":
+    case "book":
+    case "part":
+    case "chapter":
+    case "scene":
+    case "unassigned":
+      return true;
+    case "storyKnowledge":
+    case "storyKnowledgeRoot":
+      return false;
+    default:
+      return false;
+  }
 }
 
 /** Mode, tree, Canvas drill, Reader, and project back should dismiss Inbox. */

@@ -60,7 +60,9 @@ const TEST_SESSION: AuthenticatedSession = {
 function fakeAuth(session: AuthenticatedSession | null = TEST_SESSION): AuthGateway {
   return {
     handler: () => Response.json({ auth: "handled" }),
-    getSession: async () => session
+    getSession: async () => session,
+    ensureDemoCredentialAccount: async () => {},
+    signInDemo: async () => Response.json({ ok: true })
   };
 }
 

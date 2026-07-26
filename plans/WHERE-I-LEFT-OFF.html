@@ -11,36 +11,33 @@
     <header>
       <p class="eyebrow">Session handoff</p>
       <h1>Where we left off</h1>
-      <p><strong>Last updated:</strong> 2026-07-25 · <strong>Current branch:</strong> <code>feat/capture-to-story-agents</code></p>
+      <p><strong>Last updated:</strong> 2026-07-25 · <strong>Current branch:</strong> <code>feat/character-screens-depth</code></p>
     </header>
 
     <section>
       <h2>Done recently</h2>
       <ul>
-        <li>Capture → Story inbox, attachments, BYOK agents, propose-only MCP (ADR 0010 / 0011) on this branch.</li>
-        <li>Cursor shell CP1–CP4c: Title Page, async cover options, Explorer actions, Plans center host.</li>
-        <li>Writing agent harness CP1+CP2: Agent dock chat / Plan / agent modes + BYOK project chat.</li>
-        <li><strong>Docs sweep:</strong> PRODUCT, ARCHITECTURE, API, OPERATIONS, plan records, and this handoff updated for shell / Title Page / Agent / covers. Cast studio remains proposed only.</li>
+        <li>Cast center studio, dossier, constellation, scene presence, Split Sheet handoff, character visual gallery.</li>
+        <li>Harry Potter seed portraits (6 per cast) + manuscript chronology desk.</li>
+        <li><strong>D7:</strong> Idempotent demo seed on prod/dev boot; unmarked login double-click → <code>account-demo-seed</code> (<code>POST /api/demo/sign-in</code>). Disable with <code>GHOSTWRITER_DEMO_SEED=0</code>.</li>
       </ul>
     </section>
 
     <section>
       <h2>Proposed next</h2>
-      <p>Founder starting new work elsewhere — pick up from open plans after merge/review:</p>
       <ul>
-        <li><a href="active/2026-07-25-writing-agent-harness/plan.html">Writing agent harness</a> — CP3 tools in the loop, CP4 toolkit deep-link, CP5 Plan→Plans.</li>
-        <li><a href="active/2026-07-25-cast-relationships-studio/plan.html">Cast &amp; relationships studio</a> — proposed center-pane Cast (not started).</li>
-        <li><a href="active/2026-07-25-cursor-shell-navigation/plan.html">Cursor-shell</a> — implementation complete; docs todo closed with this sweep.</li>
+        <li>Merge <a href="https://github.com/SchlegelThomas/ghostwriter/pull/13">PR #13</a> → production deploy (migration <code>0019</code> already applied to Lakebase production via owner profile; demo seed runs on backend boot; R2 required for portraits).</li>
+        <li>Founder verify: double-click login → Harry Potter → Cast gallery + chronology desk.</li>
+        <li>Playwright only after explicit user-verified gate.</li>
       </ul>
     </section>
 
     <section>
       <h2>Incomplete</h2>
       <ol>
-        <li>Harness CP3–CP5.</li>
-        <li>Cast center studio (plan proposed; awaiting accept + build).</li>
-        <li>Founder browser acceptance for Title Page / Agent chat / Capture; rotate any OpenAI key pasted in chat.</li>
-        <li>Production R2 + provider KEK provisioning on Fly; post-gate Playwright only after founder verifies.</li>
+        <li>Create-character auto-select; R2 GC on visual delete.</li>
+        <li>Writing-agent harness CP3–CP5 (separate plan).</li>
+        <li>Post-gate Playwright for Cast / demo login if desired.</li>
       </ol>
     </section>
   </main>

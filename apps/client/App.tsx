@@ -13,10 +13,16 @@ import type {
   ProjectCommand,
   ProjectNavigator,
   SceneId,
+  StoryKnowledgeId,
   StoryProjectSummary,
   WriterPublishingDetails
 } from "@ghostwriter/core";
-import { GHOSTWRITER_CAPABILITIES, parseBookCoverLocatorUrl } from "@ghostwriter/core";
+import {
+  GHOSTWRITER_CAPABILITIES,
+  parseBookCoverLocatorUrl,
+  parseCharacterVisualLocatorUrl,
+  storyKnowledgeId as toStoryKnowledgeId
+} from "@ghostwriter/core";
 import {
   AccountGateScreen,
   AuthenticatedProjectWorkspace,
@@ -64,7 +70,8 @@ import {
 } from "./src/DraftPanel.js";
 import {
   draftDeskSceneContext,
-  projectScenes
+  projectScenes,
+  sceneDocumentPlainText
 } from "./src/draft-desk.js";
 import {
   StoryCanvasPanel,
@@ -72,6 +79,7 @@ import {
 } from "./src/StoryCanvasPanel.js";
 import {
   beginGoogleSignIn,
+  signInDemoSeed,
   createSceneFromCanvas,
   createProject,
   executeCanvasCommand,
@@ -81,14 +89,19 @@ import {
   getCanvasBoard,
   getCanvasHistory,
   getCanvasPreference,
+  getCharacterVisualDownload,
+  getCharacterVisualJob,
   getCurrentWriter,
   getOpenAiProviderStatus,
   getProject,
+  getSceneWorkspace,
   GhostwriterApiError,
   listProjects,
   getBookCoverImageJob,
   postBookCoverImageApply,
   postBookCoverImageJob,
+  postCharacterVisualApply,
+  postCharacterVisualJob,
   promoteCaptureToScene,
   releaseSceneLease,
   restoreCanvasRevision,
@@ -100,6 +113,8 @@ import {
   updateWriterProfile,
   type BookCoverImageJobOption,
   type BookCoverImageJobStatus,
+  type CharacterVisualJobOption,
+  type CharacterVisualJobStatus,
   type BookReaderResponse,
   type CanvasPreferenceResponse,
   type CanvasHistoryResponse,
@@ -171,6 +186,19 @@ type ActiveCoverOptionsJob = Readonly<{
   basePrompt?: string;
 }>;
 
+type ActiveCharacterVisualJob = Readonly<{
+  projectId: string;
+  knowledgeId: StoryKnowledgeId;
+  jobId: string;
+  status: CharacterVisualJobStatus;
+  options?: readonly CharacterVisualJobOption[];
+  error?: Readonly<{
+    code: string;
+    message: string;
+  }>;
+  basePrompt?: string;
+}>;
+
 type ReaderReturnState = Readonly<{
   workspaceMode: ProjectWorkspaceMode;
   selectedSceneId?: SceneId;
@@ -231,6 +259,12 @@ export default function App() {
   const [workflowLens, setWorkflowLens] =
     useState<CanvasWorkflowLens>("outline");
   const [selectedSceneId, setSelectedSceneId] = useState<SceneId>();
+  const [chronologySceneIds, setChronologySceneIds] = useState<
+    readonly SceneId[]
+  >([]);
+  const [sceneProseById, setSceneProseById] = useState<
+    Readonly<Record<string, string>>
+  >({});
   const [canvasWorkspace, setCanvasWorkspace] =
     useState<CanvasWorkspaceResponse>();
   const [canvasPreference, setCanvasPreference] =
@@ -326,12 +360,21 @@ export default function App() {
   const [coverOptionsJob, setCoverOptionsJob] = useState<
     ActiveCoverOptionsJob | undefined
   >();
+  const [characterVisualJob, setCharacterVisualJob] = useState<
+    ActiveCharacterVisualJob | undefined
+  >();
   const [coverReviewBookId, setCoverReviewBookId] = useState<
     BookId | undefined
+  >();
+  const [castFocusKnowledgeId, setCastFocusKnowledgeId] = useState<
+    StoryKnowledgeId | undefined
   >();
   const coverJobPollRef = useRef<ReturnType<typeof setInterval> | undefined>(
     undefined
   );
+  const characterVisualJobPollRef = useRef<
+    ReturnType<typeof setInterval> | undefined
+  >(undefined);
 
   function focusTargetFromDocument():
     | CaptureReturnState["focusTarget"]
@@ -687,17 +730,69 @@ export default function App() {
     coverJobPollRef.current = undefined;
   }
 
+  function clearCharacterVisualJobPoll(): void {
+    if (characterVisualJobPollRef.current === undefined) return;
+    clearInterval(characterVisualJobPollRef.current);
+    characterVisualJobPollRef.current = undefined;
+  }
+
   useEffect(() => {
     return () => {
       clearCoverJobPoll();
+      clearCharacterVisualJobPoll();
     };
   }, []);
 
   useEffect(() => {
     clearCoverJobPoll();
+    clearCharacterVisualJobPoll();
     setCoverOptionsJob(undefined);
+    setCharacterVisualJob(undefined);
     setCoverReviewBookId(undefined);
+    setCastFocusKnowledgeId(undefined);
+    setChronologySceneIds([]);
+    setSceneProseById({});
   }, [selectedProject?.id]);
+
+  const sceneProseByIdRef = useRef(sceneProseById);
+  sceneProseByIdRef.current = sceneProseById;
+
+  useEffect(() => {
+    if (selectedProject === undefined || chronologySceneIds.length === 0) {
+      return;
+    }
+    let cancelled = false;
+    const projectId = selectedProject.id;
+    const missing = chronologySceneIds.filter(
+      (sceneId) => sceneProseByIdRef.current[String(sceneId)] === undefined
+    );
+    if (missing.length === 0) return;
+
+    void (async () => {
+      const loaded: Record<string, string> = {};
+      await Promise.all(
+        missing.map(async (sceneId) => {
+          try {
+            const workspace = await getSceneWorkspace({
+              projectId,
+              sceneId
+            });
+            loaded[String(sceneId)] = sceneDocumentPlainText(
+              workspace.head.document
+            );
+          } catch {
+            loaded[String(sceneId)] = "";
+          }
+        })
+      );
+      if (cancelled) return;
+      setSceneProseById((current) => ({ ...current, ...loaded }));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProject?.id, selectedProject?.version, chronologySceneIds]);
 
   useEffect(() => {
     if (selectedProject === undefined) {
@@ -854,6 +949,19 @@ export default function App() {
       }
     } catch (cause) {
       handleError(cause, "Google sign-in could not start.");
+      setBusy(false);
+    }
+  }
+
+  async function startDemoSignIn(): Promise<void> {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await signInDemoSeed();
+      await bootstrap();
+    } catch (cause) {
+      handleError(cause, "Demo sign-in could not complete.");
+    } finally {
       setBusy(false);
     }
   }
@@ -1101,6 +1209,149 @@ export default function App() {
     const download = await getBookCoverDownload({
       projectId: locator.projectId,
       bookId: locator.bookId
+    });
+    return download.download.url;
+  }
+
+  function beginCharacterVisualJobPolling(input: Readonly<{
+    projectId: string;
+    knowledgeId: StoryKnowledgeId;
+    jobId: string;
+  }>): void {
+    clearCharacterVisualJobPoll();
+    const pollOnce = (): void => {
+      void (async () => {
+        try {
+          const snapshot = await getCharacterVisualJob({
+            projectId: input.projectId,
+            knowledgeId: input.knowledgeId,
+            jobId: input.jobId
+          });
+          if (snapshot.status === "ready") {
+            clearCharacterVisualJobPoll();
+            setCharacterVisualJob((current) =>
+              current?.jobId === input.jobId
+                ? {
+                    ...current,
+                    status: snapshot.status,
+                    options: snapshot.options,
+                    basePrompt: snapshot.basePrompt,
+                    error: undefined
+                  }
+                : current
+            );
+            return;
+          }
+          if (snapshot.status === "failed") {
+            clearCharacterVisualJobPoll();
+            setCharacterVisualJob((current) =>
+              current?.jobId === input.jobId
+                ? {
+                    ...current,
+                    status: snapshot.status,
+                    error: snapshot.error,
+                    basePrompt: snapshot.basePrompt,
+                    options: undefined
+                  }
+                : current
+            );
+            return;
+          }
+          setCharacterVisualJob((current) =>
+            current?.jobId === input.jobId
+              ? {
+                  ...current,
+                  status: snapshot.status,
+                  basePrompt: snapshot.basePrompt
+                }
+              : current
+          );
+        } catch {
+          clearCharacterVisualJobPoll();
+          setCharacterVisualJob((current) =>
+            current?.jobId === input.jobId
+              ? {
+                  ...current,
+                  status: "failed",
+                  error: {
+                    code: "CHARACTER_VISUAL_POLL_FAILED",
+                    message: "Could not check portrait generation status."
+                  }
+                }
+              : current
+          );
+        }
+      })();
+    };
+    pollOnce();
+    characterVisualJobPollRef.current = setInterval(pollOnce, 2000);
+  }
+
+  async function startCharacterVisualJob(input: Readonly<{
+    knowledgeId: StoryKnowledgeId;
+    count?: number;
+    refinement?: string;
+  }>): Promise<void> {
+    if (selectedProject === undefined) return;
+    const projectId = selectedProject.id;
+    clearCharacterVisualJobPoll();
+    const started = await postCharacterVisualJob({
+      projectId,
+      knowledgeId: input.knowledgeId,
+      count: input.count ?? 3,
+      ...(input.refinement === undefined || input.refinement.trim() === ""
+        ? {}
+        : { refinement: input.refinement.trim() })
+    });
+    setCharacterVisualJob({
+      projectId,
+      knowledgeId: input.knowledgeId,
+      jobId: started.jobId,
+      status: "queued"
+    });
+    beginCharacterVisualJobPolling({
+      projectId,
+      knowledgeId: input.knowledgeId,
+      jobId: started.jobId
+    });
+  }
+
+  async function applyCharacterVisual(input: Readonly<{
+    knowledgeId: StoryKnowledgeId;
+    previewDataUri: string;
+    alt: string;
+    source: "generated" | "upload";
+  }>): Promise<void> {
+    if (selectedProject === undefined) return;
+    await postCharacterVisualApply({
+      projectId: selectedProject.id,
+      knowledgeId: input.knowledgeId,
+      previewDataUri: input.previewDataUri,
+      alt: input.alt,
+      source: input.source
+    });
+    if (
+      characterVisualJob !== undefined &&
+      characterVisualJob.knowledgeId === input.knowledgeId
+    ) {
+      setCharacterVisualJob(undefined);
+    }
+    await refreshCurrentProject();
+  }
+
+  async function resolveCharacterVisualDisplayUrl(input: Readonly<{
+    knowledgeId: StoryKnowledgeId;
+    visualId: string;
+    imageUrl: string;
+  }>): Promise<string | undefined> {
+    const locator = parseCharacterVisualLocatorUrl(input.imageUrl);
+    if (locator === undefined) {
+      return input.imageUrl;
+    }
+    const download = await getCharacterVisualDownload({
+      projectId: locator.projectId,
+      knowledgeId: locator.knowledgeId,
+      visualId: locator.visualId
     });
     return download.download.url;
   }
@@ -2242,6 +2493,7 @@ export default function App() {
       <AccountGateScreen
         error={error}
         loading={phase === "loading"}
+        onDemoSignIn={() => void startDemoSignIn()}
         onSignIn={() => void startGoogleSignIn()}
         signingIn={busy && phase === "signedOut"}
       />
@@ -2362,10 +2614,35 @@ export default function App() {
               }
         }
         coverReviewBookId={coverReviewBookId}
+        castFocusKnowledgeId={castFocusKnowledgeId}
         onApplyCoverImage={(input) => applyBookCoverImage(input)}
+        onApplyCharacterVisual={(input) => applyCharacterVisual(input)}
+        onCastFocusConsumed={() => setCastFocusKnowledgeId(undefined)}
         onCoverReviewConsumed={() => setCoverReviewBookId(undefined)}
         onResolveCoverDisplayUrl={(input) => resolveBookCoverDisplayUrl(input)}
+        onResolveCharacterVisualDisplayUrl={(input) =>
+          resolveCharacterVisualDisplayUrl(input)
+        }
         onStartCoverOptionsJob={(input) => startBookCoverOptionsJob(input)}
+        onStartCharacterVisualJob={(input) => startCharacterVisualJob(input)}
+        characterVisualJob={
+          characterVisualJob === undefined
+            ? undefined
+            : {
+                knowledgeId: characterVisualJob.knowledgeId,
+                jobId: characterVisualJob.jobId,
+                status: characterVisualJob.status,
+                ...(characterVisualJob.options === undefined
+                  ? {}
+                  : { options: characterVisualJob.options }),
+                ...(characterVisualJob.error === undefined
+                  ? {}
+                  : { error: characterVisualJob.error }),
+                ...(characterVisualJob.basePrompt === undefined
+                  ? {}
+                  : { basePrompt: characterVisualJob.basePrompt })
+              }
+        }
         onBack={() => void leaveProject()}
         onChatSend={handleChatSend}
         onCommand={runCommand}
@@ -2485,6 +2762,9 @@ export default function App() {
                   ? undefined
                   : () => void selectWorkspaceScene(previousSceneId)
               }
+              onOpenCastStudio={(knowledgeId) => {
+                setCastFocusKnowledgeId(toStoryKnowledgeId(knowledgeId));
+              }}
               onProblem={handleDraftProblem}
               onProblemResolved={dismissToast}
               onProjectCommand={runCommand}
@@ -2541,6 +2821,8 @@ export default function App() {
             />
           );
         }}
+        sceneProseById={sceneProseById}
+        onChronologySceneIdsChange={setChronologySceneIds}
         selectedSceneId={selectedSceneId}
         workflowLens={workflowLens}
       />

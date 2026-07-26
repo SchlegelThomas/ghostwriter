@@ -100,6 +100,17 @@ a few Plans (Inbox) captures). Fixture source: `packages/core/src/harry-potter-f
 orchestration: `apps/backend/src/hermetic-seed.ts`. Restarting the hermetic process resets PGlite
 and reseeds from scratch.
 
+### Founder demo seed (production / dev)
+
+Production and ordinary local backends also idempotently ensure a Harry Potter demo project owned
+by the fixed demo seed account (`account-demo-seed` / `demo@ghostwriter.app`) on boot. Character
+portrait PNGs are uploaded to object storage when the project is newly created; production needs
+R2 configured for those portraits. The signed-out account gate keeps Google as the only visible
+sign-in; an unmarked bottom-right double-click/double-tap calls `POST /api/demo/sign-in`, which
+uses a server-only password derived from `BETTER_AUTH_SECRET` (no extra Fly secret) and sets a
+normal session cookie. Hermetic E2E exposes the same route but sets the fake `ghostwriter-e2e`
+session cookie. Disable seed + route with `GHOSTWRITER_DEMO_SEED=0`. See ADR 0005 demo exception.
+
 ### Capture media implemented locally; R2 provisioning pending
 
 ADR 0010 and ADR 0011 accept the following boundaries for the active Capture-to-Story epic. They

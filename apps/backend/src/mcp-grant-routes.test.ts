@@ -126,7 +126,9 @@ describe("MCP grant admin routes", () => {
     const { app } = await createSeededBackendApp(
       {
         handler: () => Response.json({ auth: "handled" }),
-        getSession: async () => null
+        getSession: async () => null,
+        ensureDemoCredentialAccount: async () => {},
+        signInDemo: async () => Response.json({ ok: true })
       },
       { kekConfig: createTestProviderKekRuntimeConfig() }
     );

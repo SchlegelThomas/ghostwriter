@@ -29,8 +29,9 @@ online-only and server-authoritative.
 
 - Self-host **Better Auth** inside the existing Node/Hono backend and use its Drizzle/Postgres
   adapter against the Lakebase database selected by ADR 0004.
-- Enable **Google only** in this slice. Passwords, magic links, passkeys, and additional social
-  providers require later plans.
+- Enable **Google only** as the public sign-in path. Passwords, magic links, passkeys, and
+  additional social providers require later plans, except for the intentional demo-seed exception
+  below.
 - Request only the identity scopes needed for login (`openid`, email, and basic profile). Google
   provider tokens and secrets remain server-side and are never project data, browser application
   state, logs, diagnostics, MCP output, or exports.
@@ -118,6 +119,22 @@ online-only and server-authoritative.
   that clearly treats it as temporary noncanonical input and does not imply offline projects.
 - **Permanent deletion now** — rejected until export, retention, backup, and account-exit guarantees
   make irreversible removal informed and recoverable where promised.
+
+### Demo seed exception
+
+Founder demos (including production) may use one fixed credential account
+(`account-demo-seed` / `demo@ghostwriter.app`) owned by the server:
+
+- Better Auth `emailAndPassword` is enabled with `disableSignUp: true` so there is no public
+  password registration or password login UI.
+- The demo password is derived server-side from `BETTER_AUTH_SECRET` (HMAC) and never sent to
+  clients or logged.
+- `POST /api/demo/sign-in` (trusted Origin required) ensures the credential row exists and sets a
+  normal Better Auth session cookie. The signed-out account gate exposes only an unmarked
+  bottom-right double-click/double-tap hit target for this path.
+- Disable the seed and route with `GHOSTWRITER_DEMO_SEED=0`.
+- This does not change Google OAuth, authorize arbitrary password logins, or seed Harry Potter for
+  every Google account.
 
 ## Consequences
 

@@ -29,6 +29,7 @@ import {
   type SceneMusic,
   type SceneSketch,
   type SceneStatus,
+  type CharacterVisual,
   type StoryKnowledge,
   type StoryKnowledgeAuthority,
   type StoryKnowledgeId,
@@ -177,6 +178,7 @@ export type ProjectCommand =
       notes?: string | null;
       aliases?: readonly string[] | null;
       characterSheet?: CharacterSheet | null;
+      visuals?: readonly CharacterVisual[] | null;
     }>
   | Readonly<{
       type: "storyKnowledge.setSceneLink";
@@ -783,6 +785,13 @@ export function applyProjectCommandToRecords(
           command.characterSheet === null
             ? withoutSheet
             : { ...withoutSheet, characterSheet: command.characterSheet };
+      }
+      if (command.visuals !== undefined) {
+        const { visuals: _ignored, ...withoutVisuals } = updatedFields;
+        updatedFields =
+          command.visuals === null
+            ? withoutVisuals
+            : { ...withoutVisuals, visuals: command.visuals };
       }
       const updated = createStoryKnowledge(updatedFields);
       storyKnowledge = storyKnowledge.map((record) =>

@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -7,6 +8,7 @@ import {
   View
 } from "react-native";
 import brandLockup from "./Ghostwriter.png";
+import { createDoublePressHandler } from "./double-press.js";
 import { ghostwriterTheme } from "./theme.js";
 
 export type AccountGateScreenProps = Readonly<{
@@ -14,17 +16,29 @@ export type AccountGateScreenProps = Readonly<{
   signingIn?: boolean;
   error?: string;
   onSignIn(): void;
+  /** Obscure founder demo entry. When omitted, no hit target is rendered. */
+  onDemoSignIn?(): void;
 }>;
 
 const { colors, fonts } = ghostwriterTheme;
+
+export { createDoublePressHandler } from "./double-press.js";
 
 export function AccountGateScreen({
   loading = false,
   signingIn = false,
   error,
-  onSignIn
+  onSignIn,
+  onDemoSignIn
 }: AccountGateScreenProps) {
   const busy = loading || signingIn;
+  const onDemoSignInRef = useRef(onDemoSignIn);
+  onDemoSignInRef.current = onDemoSignIn;
+  const handleDemoPress = useRef(
+    createDoublePressHandler(() => {
+      onDemoSignInRef.current?.();
+    })
+  ).current;
 
   return (
     <View style={styles.screen}>
@@ -58,6 +72,14 @@ export function AccountGateScreen({
           )}
         </Pressable>
       </View>
+      {onDemoSignIn === undefined ? null : (
+        <Pressable
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          onPress={handleDemoPress}
+          style={styles.demoHitTarget}
+        />
+      )}
     </View>
   );
 }
@@ -130,5 +152,12 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontFamily: fonts.uiSemibold,
     fontSize: 13
+  },
+  demoHitTarget: {
+    bottom: 12,
+    height: 48,
+    position: "absolute",
+    right: 12,
+    width: 48
   }
 });

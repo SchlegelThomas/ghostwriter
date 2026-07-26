@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Character screens depth — Cast studio</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan · Structure / cast</p>
+      <h1>Character screens depth</h1>
+      <p class="lede">Make Cast a first-class center workspace with a readable character dossier, deterministic role summary, relationship constellation, and scene presence — far deeper than today’s cramped primary-side browse panel — without inventing a second story store or confusing knowledge links with Canvas Thread Trace.</p>
+      <p class="meta"><strong>Status:</strong> active — founder directed implement-everything 2026-07-25; D1–D6 accepted with plan<br>
+        <strong>Branch:</strong> <code>feat/character-screens-depth</code><br>
+        <strong>Owner:</strong> founder + parent agent<br>
+        <strong>Supersedes:</strong>
+        <a href="../2026-07-25-cast-relationships-studio/plan.html">Cast &amp; relationships studio</a> (thin prior proposal)<br>
+        <strong>Related:</strong>
+        <a href="../2026-07-25-cursor-shell-navigation/plan.html">Cursor-shell navigation</a>,
+        <a href="../2026-07-19-structure-cast-browse/plan.html">Structure / cast browse</a>,
+        <a href="../2026-07-25-writing-agent-harness/plan.html">Writing agent harness</a><br>
+        <strong>Living designs:</strong>
+        <a href="../../designs/Ghostwriter%20Mockups%203.0.html#cast">Mockups 3.0 · Cast studio</a> ·
+        <a href="../../designs/Ghostwriter%20Mockups%204.0.html">Mockups 4.0 · Split Sheet / Coach</a> ·
+        <a href="../../designs/in-depth-user-journeys/cast-dossier-harry-potter.html">In-depth journey · Harry Potter Cast</a></p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Writers need to <em>see</em> who a character is in the story: role, desire/pressure/voice, aliases, bonds, and where they appear — without losing the manuscript tree. Today Characters rail replaces Explorer with a flat <code>CharacterBrowsePanel</code>. This plan moves Cast into the center (same hosting class as Title Page / Plans), keeps Explorer as the only wide primary content, and deepens the dossier with a composed Role summary, static ego constellation for knowledge links, and a scene presence strip that jumps to Draft on the same scene ID.</p>
+      <p><strong>Explicitly out of scope:</strong> force-directed / physics graph libraries; AI-authored role summaries (Role remains deterministic composition); new canonical relationship kinds; Canvas board rewrite or Thread Trace changes; evidence-chip passage domain (UI may show proposed chips in Split Sheet only; persistence waits a later ADR); Character Coach conversation redesign (stays Mockups 4.0 / harness); Playwright until founder verifies the complete outcome. Character visual gallery (generate / upload / delete) was added by founder revision 2026-07-25.</p>
+    </section>
+
+    <section>
+      <h2>Product thesis and authority</h2>
+      <ul>
+        <li><strong>Center for people, tree for structure:</strong> Characters rail opens Cast in the center; Explorer stays primary on wide.</li>
+        <li><strong>One knowledge ID:</strong> Tree, Cast, Split Sheet, Canvas story-record card, and Draft cast share <code>StoryKnowledgeId</code>.</li>
+        <li><strong>Dossier over form soup:</strong> Identity → Role → sheet → notes → constellation → scenes, not a cramped sidebar scroll of equal-weight fields.</li>
+        <li><strong>Two relationship UIs stay distinct:</strong> Cast constellation edits story-knowledge links (K↔K). Map Relationships lens projects canvas links. Never one store pretending to be both.</li>
+        <li><strong>Role is composed:</strong> Deterministic projection from notes + desire/pressure/voice. Opening Cast never calls a provider.</li>
+        <li><strong>Craft ≠ prose:</strong> Sheet and knowledge mutations use existing project metadata / storyKnowledge commands; scene working revision stays untouched.</li>
+        <li><strong>Write handoff:</strong> Scene presence and “Open in Split Sheet” reuse Mockups 4.0 Write chrome; Coach remains propose → apply.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ol>
+        <li>On wide, Characters rail opens Cast in the <strong>center</strong>; primary side remains Explorer (tree visible). Plans / Title Page center ownership closes or yields cleanly when Cast opens and vice versa.</li>
+        <li>Cast studio shows a browseable roster of all non-archived characters with scene count, link count, and authority; selecting one shows the dossier without leaving center.</li>
+        <li>Selected character dossier shows: label, aliases, authority, Notes, Character sheet (desire / pressure / voice), and a <strong>Role in the story</strong> summary composed deterministically from notes + sheet (no provider call).</li>
+        <li>Relationships render as a static ego constellation (center + peers with kind-labeled edges) with click-to-open peer and existing add/remove knowledge-link commands. Narrow may use a kind-grouped list fallback. Empty relationship state is explicit.</li>
+        <li>UI copy and empty states make clear that Cast links are knowledge links — not Canvas Thread Trace.</li>
+        <li>Linked scenes render as a presence strip/list with POV marker when the scene’s <code>povStoryKnowledgeId</code> matches; Open Draft jumps to that scene ID; return to Cast preserves selection when practical.</li>
+        <li>Create character, archive/restore (visible archived treatment), and edit notes/sheet/aliases remain available from the studio with truthful save/conflict behavior (command applied nothing on conflict).</li>
+        <li>Narrow layout stacks roster → detail with no blank center; constellation may collapse to list; scene rows remain tappable.</li>
+        <li>Split · Sheet (Write) retains scene-scoped cast link/unlink and gains an “Open in Cast studio” affordance that lands on the same character in center Cast (Mockups 4.0 alignment).</li>
+        <li>MCP navigator read model includes <code>characterSheet</code> fields already present on web navigator (parity fix) or documents an explicit exception — no silent omission after this plan.</li>
+        <li>Focused Vitest for host helpers, role-summary / constellation projections, roster selection; typecheck; <code>pnpm verify</code> before handoff. Playwright deferred until founder verifies.</li>
+        <li>Keyboard and screen-reader paths exist for roster, dossier fields, peer open, and scene jump; reduced-motion does not rely on constellation animation.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Domain and design audit</h2>
+      <h3>Canonical objects (authoritative: ADR 0008 / 0009 + <code>domain.ts</code>)</h3>
+      <ul>
+        <li><strong>StoryKnowledge</strong> (<code>kind: character</code>): <code>StoryKnowledgeId</code>, label, authority, notes, aliases, <code>characterSheet</code> { desire, pressure, voiceNotes }, archivedAt.</li>
+        <li><strong>Knowledge links:</strong> directed <code>linkedKnowledge[]</code> with kinds <code>cast</code> | <code>theme</code> | <code>development-cycle</code> | <code>breadcrumb</code> | <code>related</code>.</li>
+        <li><strong>Scene presence:</strong> <code>linkedSceneIds</code> + optional <code>Scene.povStoryKnowledgeId</code>.</li>
+        <li><strong>Not in scope as new tables:</strong> portraits, evidence passage links, relationship strength scores, per-book character forks (ADR 0003 shared series characters).</li>
+      </ul>
+      <h3>Concurrency / persistence</h3>
+      <ul>
+        <li>Mutations via existing <code>storyKnowledge.*</code> project commands and <code>project.version</code> metadata domain — no new optimistic domain.</li>
+        <li>Role summary and constellation models are pure projections (client or shared helpers); not stored rows.</li>
+      </ul>
+      <h3>Design map</h3>
+      <ul>
+        <li><strong>Wide:</strong> rail Characters → Explorer primary + Cast center (roster | dossier).</li>
+        <li><strong>Narrow:</strong> Cast center stack; no claim of freeform constellation drag.</li>
+        <li><strong>Living design:</strong> Mockups 3.0 <code>#cast</code> owns Cast studio chrome; Mockups 4.0 owns Split Sheet / Coach handoff; <a href="../../designs/in-depth-user-journeys/cast-dossier-harry-potter.html">Harry Potter Cast journey</a> is the end-to-end storyboard against the hermetic seed.</li>
+        <li><strong>Authority on conflict:</strong> Accepted ADRs + this plan beat unlabeled mockup flourishes (e.g. evidence chips remain proposed UI until a later ADR).</li>
+      </ul>
+      <h3>Binding map (implementation checkpoints)</h3>
+      <ul>
+        <li>Core: projection helpers for role summary + constellation graph model.</li>
+        <li>UI: <code>CastRelationshipsStudio</code> (or equivalent), workspace center-owner, retire wide <code>charactersPrimary</code> browse replace.</li>
+        <li>Reuse: <code>CharacterBrowsePanel</code> edit commands folded into dossier sections.</li>
+        <li>API: existing commands; MCP navigator sheet parity.</li>
+        <li>Capabilities: no new mutation capability; Coach stays existing writing-assist / craft path.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks</h2>
+      <ol>
+        <li><strong>CP0 — Design + plan accept:</strong> Living mockups in Mockups 3.0 <code>#cast</code> + 4.0 Split Sheet deepen; founder reviews and accepts this plan. No product code before accept.</li>
+        <li><strong>CP1 — Center hosting:</strong> Characters rail → keep Explorer primary; introduce Cast center-owner (prefer shared center-workspace owner helper over stacking booleans). Close Plans when Cast opens and vice versa; Title Page coexistence rules recorded. Update shell layout helpers/tests + PRODUCT wording.</li>
+        <li><strong>CP2 — Cast studio shell + dossier:</strong> Roster + detail; notes, aliases, authority, sheet edit parity; archive/create; remove duplicate cramped primary scroll.</li>
+        <li><strong>CP3 — Role + constellation + scenes:</strong> Pure projection helpers; SVG/CSS ego constellation; scene presence + POV + Draft jump; narrow list fallback; empty states.</li>
+        <li><strong>CP4 — Write handoff + MCP parity:</strong> Open in Cast studio from Split Sheet; MCP navigator includes characterSheet (or documented exception).</li>
+        <li><strong>CP5 — Docs + handoff:</strong> PRODUCT / ARCHITECTURE shell notes; supersede thin cast plan; record log + WHERE-I-LEFT-OFF; coherence review.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Feature checkpoints (writer-visible)</h2>
+      <ol>
+        <li><strong>Center Cast host</strong> — Characters rail opens studio in center; tree remains primary.</li>
+        <li><strong>Dossier + roster</strong> — pick a character; edit notes/aliases/sheet/links in the studio.</li>
+        <li><strong>Role + map + scenes</strong> — summary, constellation, scene presence with Draft jump.</li>
+        <li><strong>Write handoff</strong> — Split Sheet opens the same character in Cast; MCP sheet parity.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li>Vitest: cast center-host helpers; role-summary / relationship-graph projections; roster selection keys; narrow fallback model.</li>
+        <li>Manual browser: Harry Potter or Cognition fixture — Characters rail → tree still left; open character → role, constellation, scenes → Draft → back; narrow stack; conflict refusal.</li>
+        <li>Open Split Sheet → Open in Cast studio lands correctly.</li>
+        <li><code>pnpm --filter @ghostwriter/ui typecheck</code> + focused tests; full <code>pnpm verify</code> before handoff.</li>
+        <li>Playwright only after founder verifies complete outcome (<code>GHOSTWRITER_PLAYWRIGHT_GATE=user-verified</code>).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <ul>
+        <li>Update <code>docs/PRODUCT.md</code> workspace chrome: Cast center studio; retire “Characters primary view” as the wide story.</li>
+        <li>Light <code>docs/ARCHITECTURE.md</code> shell note if center-owner enum/helper is introduced.</li>
+        <li><code>docs/API.md</code> / MCP notes if navigator payload gains explicit characterSheet parity.</li>
+        <li><strong>No new ADR</strong> for v1 — reuse ADR 0008 knowledge links + ADR 0009 character sheet. New ADR only if evidence-passage links or portraits become in-scope later.</li>
+        <li><strong>Living design source:</strong>
+          <a href="../../designs/Ghostwriter%20Mockups%203.0.html#cast">Mockups 3.0 · Cast studio</a> (project Cast),
+          <a href="../../designs/Ghostwriter%20Mockups%204.0.html">Mockups 4.0</a> (Split Sheet / Coach). Preserve files; additive only.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li><strong>D1 (accepted):</strong> Reverses cursor-shell CP3 preference that Characters host in primary side — Cast joins Title Page / Plans as a center workspace; Explorer stays the only primary content on wide.</li>
+        <li><strong>D2 (accepted):</strong> Relationship viz v1 = static ego constellation (SVG/CSS), not a Canvas force-graph or new dependency. Narrow uses ordered kind-grouped list.</li>
+        <li><strong>D3 (accepted):</strong> Role summary is writer-authored field composition (notes + desire/pressure/voice), not BYOK generation in this plan.</li>
+        <li><strong>D4 (accepted):</strong> Primary side does not get a second cast list; roster lives inside the center studio.</li>
+        <li><strong>D5 (accepted):</strong> Evidence chips remain proposed Write UI only; no new passage-link persistence in this plan.</li>
+        <li><strong>D6 (revised 2026-07-25):</strong> Character <em>visual gallery</em> is in scope — optional <code>visuals[]</code> on story knowledge with BYOK generate, PNG upload, delete, and R2 locators (<code>https://ghostwriter.character/…</code>). Distinct from Title Page book covers.</li>
+        <li><strong>D7 (accepted 2026-07-25):</strong> Idempotent Harry Potter demo seed (project + portraits + captures) runs in production/dev backends for a fixed demo account; signed-out gate gains an unmarked bottom-right double-click that signs into that account via a dedicated demo route (Better Auth credential session; not Google). Amends ADR 0005 with an explicit demo exception. Disable with <code>GHOSTWRITER_DEMO_SEED=0</code>.</li>
+        <li><strong>Risk:</strong> Center-owner proliferation (Inbox/Plans/Title/Cast) — prefer one shared owner helper/enum when implementing CP1.</li>
+        <li><strong>Risk:</strong> Writers confuse Cast constellation with Canvas Relationships — mockup + PRODUCT must name both stores.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked> CP0a — Additive Cast mockups in Mockups 3.0 <code>#cast</code> + 4.0 Split Sheet deepen</li>
+        <li><input type="checkbox" checked> CP0b — Delivery plan + record log authored on <code>feat/character-screens-depth</code></li>
+        <li><input type="checkbox" checked> CP0c — Harry Potter in-depth Cast storyboard under <code>plans/designs/in-depth-user-journeys/</code></li>
+        <li><input type="checkbox" checked> Plan accepted by founder</li>
+        <li><input type="checkbox" checked> CP1 center hosting</li>
+        <li><input type="checkbox" checked> CP2 studio shell + dossier edit parity</li>
+        <li><input type="checkbox" checked> CP3 role summary + constellation + scene presence</li>
+        <li><input type="checkbox" checked> CP4 Write handoff + MCP sheet parity</li>
+        <li><input type="checkbox" checked> Docs + handoff + coherence review</li>
+        <li><input type="checkbox" checked> Shell fix — Explorer manuscript selection leaves Cast; Reader exits Cast lens</li>
+        <li><input type="checkbox" checked> Character visual gallery (domain, routes, Cast UI)</li>
+        <li><input type="checkbox" checked> CP6 — Multi-env demo seed + login double-click (D7)</li>
+        <li><input type="checkbox" checked> Docs/ADR 0005 demo amendment + handoff</li>
+        <li><input type="checkbox"> Founder product verification</li>
+        <li><input type="checkbox"> Post-gate Playwright (only after verification)</li>
+        <li><input type="checkbox" checked> Commit / PR / green CI (PR #13)</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

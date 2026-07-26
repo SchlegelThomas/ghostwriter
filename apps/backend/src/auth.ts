@@ -4,10 +4,12 @@ import {
   type RepositoryDatabase
 } from "@ghostwriter/storage";
 import { betterAuth } from "better-auth";
+import { hashPassword } from "better-auth/crypto";
 import {
   pagesPreviewCookieDomain,
   type BackendConfig
 } from "./config.js";
+import { DEMO_SEED_ACCOUNT, deriveDemoSeedPassword } from "./demo-identity.js";
 
 export type AuthenticatedAccount = Readonly<{
   id: string;
@@ -27,6 +29,28 @@ export type AuthenticatedSession = Readonly<{
 export interface AuthGateway {
   handler(request: Request): Response | Promise<Response>;
   getSession(headers: Headers): Promise<AuthenticatedSession | null>;
+  /** Idempotently ensures the fixed demo user + credential account exist. */
+  ensureDemoCredentialAccount(): Promise<void>;
+  /**
+   * Signs in the demo seed account via Better Auth email/password and returns a
+   * response that includes session `Set-Cookie` headers. Never exposes the password.
+   */
+  signInDemo(request: Request): Promise<Response>;
+}
+
+function copySetCookieHeaders(from: Headers, to: Headers): void {
+  const multi =
+    typeof from.getSetCookie === "function" ? from.getSetCookie() : undefined;
+  if (multi !== undefined && multi.length > 0) {
+    for (const cookie of multi) {
+      to.append("set-cookie", cookie);
+    }
+    return;
+  }
+  const single = from.get("set-cookie");
+  if (single !== null && single.length > 0) {
+    to.append("set-cookie", single);
+  }
 }
 
 export function createBetterAuthGateway(
@@ -43,6 +67,10 @@ export function createBetterAuthGateway(
       provider: "pg",
       schema: ghostwriterSchema
     }),
+    emailAndPassword: {
+      enabled: true,
+      disableSignUp: true
+    },
     socialProviders: {
       google: {
         clientId: config.googleClientId,
@@ -115,6 +143,69 @@ export function createBetterAuthGateway(
           expiresAt: result.session.expiresAt.toISOString()
         })
       });
+    },
+    async ensureDemoCredentialAccount(): Promise<void> {
+      const ctx = await auth.$context;
+      const hashed = await hashPassword(deriveDemoSeedPassword(config.secret));
+
+      const existingById = await ctx.internalAdapter.findUserById(
+        DEMO_SEED_ACCOUNT.id
+      );
+      if (existingById === null) {
+        const existingByEmail = await ctx.internalAdapter.findUserByEmail(
+          DEMO_SEED_ACCOUNT.email
+        );
+        if (existingByEmail !== null) {
+          throw new Error(
+            "Demo seed email is already owned by a different account id."
+          );
+        }
+        await ctx.internalAdapter.createUser({
+          id: DEMO_SEED_ACCOUNT.id,
+          email: DEMO_SEED_ACCOUNT.email,
+          name: DEMO_SEED_ACCOUNT.name,
+          emailVerified: true
+        });
+      }
+
+      const accounts = await ctx.internalAdapter.findAccounts(DEMO_SEED_ACCOUNT.id);
+      const credential = accounts.find(
+        (entry) => entry.providerId === "credential"
+      );
+      if (credential === undefined) {
+        await ctx.internalAdapter.linkAccount({
+          userId: DEMO_SEED_ACCOUNT.id,
+          providerId: "credential",
+          accountId: DEMO_SEED_ACCOUNT.id,
+          password: hashed
+        });
+      } else {
+        // Keep the hash aligned with the current BETTER_AUTH_SECRET derivation.
+        await ctx.internalAdapter.updatePassword(DEMO_SEED_ACCOUNT.id, hashed);
+      }
+    },
+    async signInDemo(request: Request): Promise<Response> {
+      const password = deriveDemoSeedPassword(config.secret);
+      const signInResponse = await auth.api.signInEmail({
+        body: {
+          email: DEMO_SEED_ACCOUNT.email,
+          password,
+          rememberMe: true
+        },
+        headers: request.headers,
+        asResponse: true
+      });
+
+      if (!signInResponse.ok) {
+        return Response.json(
+          { error: "Demo sign-in failed.", code: "DEMO_SIGN_IN_FAILED" },
+          { status: 500 }
+        );
+      }
+
+      const headers = new Headers();
+      copySetCookieHeaders(signInResponse.headers, headers);
+      return Response.json({ ok: true }, { headers });
     }
   });
 }

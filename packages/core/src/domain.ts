@@ -396,6 +396,16 @@ export type CharacterSheet = Readonly<{
   voiceNotes?: string;
 }>;
 
+export type CharacterVisualSource = "generated" | "upload" | "url";
+
+export type CharacterVisual = Readonly<{
+  id: string;
+  url: string;
+  alt: string;
+  caption?: string;
+  source: CharacterVisualSource;
+}>;
+
 export type Scene = Readonly<{
   id: SceneId;
   projectId: ProjectId;
@@ -540,6 +550,32 @@ export function createSceneSketch(input: SceneSketch): SceneSketch {
   return sketch;
 }
 
+const CHARACTER_VISUAL_SOURCES = new Set<CharacterVisualSource>([
+  "generated",
+  "upload",
+  "url"
+]);
+
+export function createCharacterVisual(input: CharacterVisual): CharacterVisual {
+  if (!CHARACTER_VISUAL_SOURCES.has(input.source)) {
+    throw new DomainValidationError(
+      "INVALID_CRAFT",
+      "Character visual source must be generated, upload, or url."
+    );
+  }
+  const caption =
+    input.caption === undefined
+      ? undefined
+      : requireText(input.caption, "Character visual caption");
+  return Object.freeze({
+    id: requireText(input.id, "Character visual id"),
+    url: requireHttpUrl(input.url, "Character visual URL"),
+    alt: requireText(input.alt, "Character visual alt text"),
+    ...(caption === undefined ? {} : { caption }),
+    source: input.source
+  });
+}
+
 export function createCharacterSheet(input: CharacterSheet): CharacterSheet {
   const desire = createOptionalSketchText(input.desire, "Character sheet desire");
   const pressure = createOptionalSketchText(
@@ -631,6 +667,7 @@ export type StoryKnowledge = Readonly<{
   notes?: string;
   aliases?: readonly string[];
   characterSheet?: CharacterSheet;
+  visuals?: readonly CharacterVisual[];
   archivedAt?: string;
 }>;
 
@@ -668,6 +705,28 @@ export function createStoryKnowledge(input: StoryKnowledge): StoryKnowledge {
     input.characterSheet === undefined
       ? undefined
       : createCharacterSheet(input.characterSheet);
+  const visuals =
+    input.visuals === undefined
+      ? undefined
+      : freezeList(input.visuals.map(createCharacterVisual));
+  if (visuals !== undefined) {
+    if (visuals.length === 0) {
+      throw new DomainValidationError(
+        "EMPTY_VALUE",
+        "Story knowledge visuals must include at least one image when set."
+      );
+    }
+    if (visuals.length > 24) {
+      throw new DomainValidationError(
+        "VALUE_TOO_LONG",
+        "Story knowledge visuals are limited to 24 images."
+      );
+    }
+    assertUniqueReferences(
+      visuals.map((visual) => visual.id),
+      `Story knowledge "${input.id}" visuals`
+    );
+  }
 
   return Object.freeze({
     id: input.id,
@@ -680,6 +739,7 @@ export function createStoryKnowledge(input: StoryKnowledge): StoryKnowledge {
     ...(notes === undefined ? {} : { notes }),
     ...(aliases === undefined ? {} : { aliases }),
     ...(characterSheet === undefined ? {} : { characterSheet }),
+    ...(visuals === undefined ? {} : { visuals }),
     ...(archivedAt === undefined ? {} : { archivedAt })
   });
 }

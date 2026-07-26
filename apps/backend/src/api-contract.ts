@@ -155,6 +155,16 @@ const sceneSketch = z
       (value.inkPaths !== undefined && value.inkPaths.length > 0),
     "Sketch must include at least one craft field"
   );
+const characterVisual = z
+  .object({
+    id,
+    url: z.string().trim().url().max(2_000),
+    alt: z.string().trim().min(1).max(500),
+    caption: z.string().trim().min(1).max(2_000).optional(),
+    source: z.enum(["generated", "upload", "url"])
+  })
+  .strict();
+
 const characterSheet = z
   .object({
     desire: z.string().trim().min(1).max(2_000).optional(),
@@ -355,7 +365,8 @@ const commandSchema = z.discriminatedUnion("type", [
     authority: knowledgeAuthority.optional(),
     notes: longText.nullable().optional(),
     aliases: z.array(alias).max(50).nullable().optional(),
-    characterSheet: characterSheet.nullable().optional()
+    characterSheet: characterSheet.nullable().optional(),
+    visuals: z.array(characterVisual).min(1).max(24).nullable().optional()
   }),
   z.object({
     type: z.literal("storyKnowledge.setSceneLink"),
@@ -1143,6 +1154,23 @@ export const bookCoverImageApplyRequestSchema = z
       });
     }
   });
+
+export const characterVisualJobRequestSchema = z
+  .object({
+    prompt: z.string().trim().min(1).max(4_000).optional(),
+    count: z.number().int().min(2).max(4).optional(),
+    refinement: z.string().trim().min(1).max(2_000).optional()
+  })
+  .strict();
+
+export const characterVisualApplyRequestSchema = z
+  .object({
+    previewDataUri: z.string().trim().min(1).max(12_000_000),
+    alt: z.string().trim().min(1).max(500),
+    source: z.enum(["generated", "upload"]),
+    caption: z.string().trim().min(1).max(2_000).optional()
+  })
+  .strict();
 
 const agentProposalContentHashSchema = z
   .string()

@@ -450,6 +450,7 @@ export const storyKnowledge = pgTable("story_knowledge", {
   notes: text("notes"),
   aliases: jsonb("aliases"),
   characterSheet: jsonb("character_sheet"),
+  visuals: jsonb("visuals"),
   archivedAt: text("archived_at")
 });
 

@@ -28,6 +28,7 @@ import {
   type ProjectMembership,
   type ProjectRole,
   type CharacterSheet,
+  type CharacterVisual,
   type Scene,
   type SceneBackdrop,
   type SceneImageRef,
@@ -284,6 +285,7 @@ async function persistBuffer(
         notes: knowledge.notes ?? null,
         aliases: knowledge.aliases === undefined ? null : [...knowledge.aliases],
         characterSheet: knowledge.characterSheet ?? null,
+        visuals: knowledge.visuals === undefined ? null : [...knowledge.visuals],
         archivedAt: knowledge.archivedAt ?? null
       }))
     );
@@ -455,6 +457,7 @@ function replacementRows(records: ProjectRecords): ReplacementRows {
       notes: knowledge.notes ?? null,
       aliases: knowledge.aliases === undefined ? null : [...knowledge.aliases],
       characterSheet: knowledge.characterSheet ?? null,
+      visuals: knowledge.visuals === undefined ? null : [...knowledge.visuals],
       archivedAt: knowledge.archivedAt ?? null
     });
 
@@ -624,6 +627,7 @@ async function persistStableReplacementRows(
           notes: row.notes,
           aliases: row.aliases,
           characterSheet: row.characterSheet,
+          visuals: row.visuals,
           archivedAt: row.archivedAt
         })
         .where(eq(storyKnowledge.id, row.id));
@@ -1010,6 +1014,9 @@ async function queryStoryKnowledge(
         ...(knowledge.characterSheet === null
           ? {}
           : { characterSheet: knowledge.characterSheet as CharacterSheet }),
+        ...(knowledge.visuals === null
+          ? {}
+          : { visuals: knowledge.visuals as CharacterVisual[] }),
         ...(knowledge.archivedAt === null
           ? {}
           : { archivedAt: knowledge.archivedAt })

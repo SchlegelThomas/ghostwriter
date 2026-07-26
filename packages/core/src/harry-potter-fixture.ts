@@ -15,7 +15,13 @@ import {
   type BookStatus,
   type SceneStatus
 } from "./domain.js";
+import { harryPotterSeedVisualsForKnowledge } from "./harry-potter-visual-seeds.js";
 import { projectNavigatorFromRecords } from "./project-navigator.js";
+
+function seedVisuals(knowledgeId: { toString(): string }) {
+  const visuals = harryPotterSeedVisualsForKnowledge(String(knowledgeId));
+  return visuals.length === 0 ? {} : { visuals: [...visuals] };
+}
 
 export const HARRY_POTTER_FIXTURE_PROJECT_ID = projectId(
   "project-harry-potter-series"
@@ -494,7 +500,8 @@ export const HARRY_POTTER_FIXTURE = defineProjectRecords({
         desire: "Protect the people he loves and end Voldemort's return.",
         pressure: "Prophecy, fame, and a war that keeps choosing him.",
         voiceNotes: "Direct, stubborn, braver aloud than he feels."
-      }
+      },
+      ...seedVisuals(harryId)
     },
     {
       id: hermioneId,
@@ -513,7 +520,8 @@ export const HARRY_POTTER_FIXTURE = defineProjectRecords({
         desire: "Know enough to keep her friends alive.",
         pressure: "Rules that fail exactly when courage is required.",
         voiceNotes: "Precise, urgent, allergic to half-answers."
-      }
+      },
+      ...seedVisuals(hermioneId)
     },
     {
       id: ronId,
@@ -531,7 +539,8 @@ export const HARRY_POTTER_FIXTURE = defineProjectRecords({
         desire: "Matter as much as his famous friend — and stay loyal anyway.",
         pressure: "Comparison, scarcity, and jokes that hide fear.",
         voiceNotes: "Warm, blunt, funny until the stakes get quiet."
-      }
+      },
+      ...seedVisuals(ronId)
     },
     {
       id: dumbledoreId,
@@ -550,7 +559,8 @@ export const HARRY_POTTER_FIXTURE = defineProjectRecords({
         desire: "Guide Harry without claiming his choices.",
         pressure: "Secrets kept too long for reasons that once seemed kind.",
         voiceNotes: "Gentle, lateral, heavy with unfinished plans."
-      }
+      },
+      ...seedVisuals(dumbledoreId)
     },
     {
       id: voldemortId,
@@ -564,7 +574,8 @@ export const HARRY_POTTER_FIXTURE = defineProjectRecords({
         desire: "Conquer death and command what he cannot understand.",
         pressure: "A prophecy and a boy who keeps surviving him.",
         voiceNotes: "Cold, theatrical, allergic to equality."
-      }
+      },
+      ...seedVisuals(voldemortId)
     },
     {
       id: snapeId,
@@ -578,7 +589,8 @@ export const HARRY_POTTER_FIXTURE = defineProjectRecords({
         desire: "Keep a promise no one is allowed to see.",
         pressure: "Every side suspects him for different reasons.",
         voiceNotes: "Cutting, controlled, meaning buried under disdain."
-      }
+      },
+      ...seedVisuals(snapeId)
     },
     {
       id: hagridId,
@@ -597,7 +609,8 @@ export const HARRY_POTTER_FIXTURE = defineProjectRecords({
         desire: "Protect magical creatures and the boy he delivered.",
         pressure: "A soft heart in a war that punishes softness.",
         voiceNotes: "Booming, earnest, secretly careful."
-      }
+      },
+      ...seedVisuals(hagridId)
     },
     {
       id: hogwartsId,
