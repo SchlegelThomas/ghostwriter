@@ -1348,12 +1348,18 @@ export default function App() {
     if (locator === undefined) {
       return input.imageUrl;
     }
-    const download = await getCharacterVisualDownload({
-      projectId: locator.projectId,
-      knowledgeId: locator.knowledgeId,
-      visualId: locator.visualId
-    });
-    return download.download.url;
+    try {
+      const download = await getCharacterVisualDownload({
+        projectId: locator.projectId,
+        knowledgeId: locator.knowledgeId,
+        visualId: locator.visualId
+      });
+      return download.download.url;
+    } catch {
+      // Storage may be unavailable (503) or the object missing; thumbnails keep
+      // the locator and must not throw into an effect retry loop.
+      return undefined;
+    }
   }
 
   async function makeProject(input: {

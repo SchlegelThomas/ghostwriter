@@ -288,25 +288,33 @@ function CharacterVisualThumb({
   onDelete(): void;
 }>) {
   const [uri, setUri] = useState(visual.url);
+  // Parent often passes an inline resolver; keep it out of effect deps so we
+  // resolve once per visual id/url instead of re-downloading every render.
+  const resolveDisplayUrlRef = useRef(resolveDisplayUrl);
+  resolveDisplayUrlRef.current = resolveDisplayUrl;
 
   useEffect(() => {
     let cancelled = false;
-    if (resolveDisplayUrl === undefined) {
+    const resolve = resolveDisplayUrlRef.current;
+    if (resolve === undefined) {
       setUri(visual.url);
       return;
     }
-    void resolveDisplayUrl({
+    void resolve({
       visualId: visual.id,
       imageUrl: visual.url
-    }).then((resolved) => {
-      if (!cancelled && resolved !== undefined) {
-        setUri(resolved);
-      }
-    });
+    })
+      .then((resolved) => {
+        if (cancelled || resolved === undefined) return;
+        setUri((current) => (current === resolved ? current : resolved));
+      })
+      .catch(() => {
+        // Keep the locator URL; do not retry on parent re-render.
+      });
     return () => {
       cancelled = true;
     };
-  }, [resolveDisplayUrl, visual.id, visual.url]);
+  }, [visual.id, visual.url]);
 
   return (
     <View style={styles.visualThumbWrap}>
