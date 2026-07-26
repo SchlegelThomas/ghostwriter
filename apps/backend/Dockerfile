@@ -9,6 +9,7 @@ WORKDIR /app
 
 # Workspace manifests first for cached installs.
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY packages/ai/package.json ./packages/ai/package.json
 COPY packages/core/package.json ./packages/core/package.json
 COPY packages/editor/package.json ./packages/editor/package.json
 COPY packages/storage/package.json ./packages/storage/package.json
@@ -18,6 +19,7 @@ COPY apps/backend/package.json ./apps/backend/package.json
 RUN pnpm install --frozen-lockfile --filter "@ghostwriter/backend..."
 
 # Source for the backend and the packages it depends on.
+COPY packages/ai ./packages/ai
 COPY packages/core ./packages/core
 COPY packages/editor ./packages/editor
 COPY packages/storage ./packages/storage
