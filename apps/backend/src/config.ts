@@ -28,6 +28,8 @@ export type BackendConfig = Readonly<{
     trustedOrigins: readonly string[];
     secureCookies: boolean;
   }>;
+  /** Founder demo Harry Potter seed + obscure sign-in. Default on; set `GHOSTWRITER_DEMO_SEED=0` to disable. */
+  demoSeed: Readonly<{ enabled: boolean }>;
   r2: R2CaptureObjectStorageConfig | undefined;
   provider: Readonly<{
     kek: ProviderKekRuntimeConfig | undefined;
@@ -154,6 +156,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
     trustedOrigins: Object.freeze([...new Set([baseUrl, ...trustedOrigins])]),
     secureCookies: new URL(baseUrl).protocol === "https:"
   } as const;
+  const demoSeed = Object.freeze({
+    enabled: env.GHOSTWRITER_DEMO_SEED !== "0"
+  });
   const r2 = parseR2CaptureObjectStorageConfig(env);
   const provider = Object.freeze({
     kek: parseProviderKekConfig(env),
@@ -170,6 +175,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
     return {
       port,
       auth,
+      demoSeed,
       r2,
       provider,
       database: {
@@ -199,6 +205,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
   return {
     port,
     auth,
+    demoSeed,
     r2,
     provider,
     database: { mode: "url", connectionString, ssl: env.DATABASE_SSL === "require" }

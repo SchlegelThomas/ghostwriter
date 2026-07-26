@@ -106,6 +106,24 @@ const projectNavigatorOutputSchema = z.object({
       ),
       notes: z.string().optional(),
       aliases: z.array(z.string()).optional(),
+      characterSheet: z
+        .object({
+          desire: z.string().optional(),
+          pressure: z.string().optional(),
+          voiceNotes: z.string().optional()
+        })
+        .optional(),
+      visuals: z
+        .array(
+          z.object({
+            id: z.string(),
+            url: z.string(),
+            alt: z.string(),
+            caption: z.string().optional(),
+            source: z.enum(["generated", "upload", "url"])
+          })
+        )
+        .optional(),
       linkedSceneCount: z.number().int().nonnegative(),
       archivedAt: z.string().optional()
     })
@@ -175,6 +193,32 @@ function projectNavigatorOutput(): z.infer<typeof projectNavigatorOutputSchema> 
       ...(knowledge.aliases === undefined
         ? {}
         : { aliases: [...knowledge.aliases] }),
+      ...(knowledge.characterSheet === undefined
+        ? {}
+        : {
+            characterSheet: {
+              ...(knowledge.characterSheet.desire === undefined
+                ? {}
+                : { desire: knowledge.characterSheet.desire }),
+              ...(knowledge.characterSheet.pressure === undefined
+                ? {}
+                : { pressure: knowledge.characterSheet.pressure }),
+              ...(knowledge.characterSheet.voiceNotes === undefined
+                ? {}
+                : { voiceNotes: knowledge.characterSheet.voiceNotes })
+            }
+          }),
+      ...(knowledge.visuals === undefined
+        ? {}
+        : {
+            visuals: knowledge.visuals.map((visual) => ({
+              id: visual.id,
+              url: visual.url,
+              alt: visual.alt,
+              ...(visual.caption === undefined ? {} : { caption: visual.caption }),
+              source: visual.source
+            }))
+          }),
       ...(knowledge.archivedAt === undefined
         ? {}
         : { archivedAt: knowledge.archivedAt })

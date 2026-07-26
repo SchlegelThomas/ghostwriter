@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Character screens depth · record log</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Record log</p>
+      <h1>Character screens depth</h1>
+      <p class="meta"><strong>Started:</strong> 2026-07-25 · <strong>Branch:</strong> <code>feat/character-screens-depth</code></p>
+    </header>
+
+    <section>
+      <h2>2026-07-25 — Session start</h2>
+      <p>Founder asked to use the feature-delivery skill to build character screens with much more depth, starting with design mockups and scope (agent mode, not Plan mode). Switched to latest <code>main</code> (includes merged Capture PR #12) and branched <code>feat/character-screens-depth</code>.</p>
+      <p>Prior thin proposal <a href="../2026-07-25-cast-relationships-studio/plan.html">cast-relationships-studio</a> remained proposed/parked; this plan supersedes it with deeper dossier scope and living mockups.</p>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Domain / design audit</h2>
+      <p>Read-only inventory (Composer explore): characters are <code>StoryKnowledge</code> <code>kind: character</code> with notes, aliases, <code>characterSheet</code>, scene links, typed knowledge links. Wide Cast still mounts <code>CharacterBrowsePanel</code> as <code>charactersPrimary</code> (replaces Explorer). No <code>CastRelationshipsStudio</code> in code. Canvas “relationships” lens ≠ K↔K links. MCP navigator omits <code>characterSheet</code>. Sheet model is three strings — depth v1 is UX composition + constellation, not a new bible schema.</p>
+      <p>Living designs: no prior Cast center frame; 4.0 owns Split Sheet / Coach; 3.0 owns Map/structure. Decision: additive <code>#cast</code> section in Mockups 3.0; small Split Sheet deepen in 4.0.</p>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Mockups authored (CP0a)</h2>
+      <p>Added <code>plans/designs/Ghostwriter Mockups 3.0.html#cast</code>: principles, wide shell (Explorer + roster + dossier + constellation + scene presence), narrow stack, state cards, journeys, Cast invariants, demo toggles (wide / list / empty / select Theo). Updated Implementation gate to point at this plan.</p>
+      <p>Additive Mockups 4.0 Split · Sheet: aliases, link/unlink, proposed evidence chips, Open in Cast studio; F3 + Cast a scene journey cross-link to 3.0 <code>#cast</code>.</p>
+      <p>Opus escalation for mockup authorship hit API usage limit; parent authored living-design HTML directly.</p>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Plan authored (CP0b)</h2>
+      <p>Created this delivery plan with intent, acceptance, domain/design/binding audit, CP0–CP5 tasks, decisions D1–D6, and todos. Product code waits on founder accept.</p>
+      <p><strong>Ask founder:</strong> Accept scope (especially D1 center host reverse of cursor-shell primary Characters, D3 no AI role summary, D5 evidence chips UI-only, D6 no portraits)? Resume implementation on CP1 after accept, or revise mockups first?</p>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Harry Potter in-depth journey (CP0c)</h2>
+      <p>Founder asked to iterate designs with a full storyboard user-journey using Harry Potter seeds, in a new folder beside mockups:
+        <code>plans/designs/in-depth-user-journeys/</code>.</p>
+      <p>Added <a href="../../designs/in-depth-user-journeys/index.html">index</a> and
+        <a href="../../designs/in-depth-user-journeys/cast-dossier-harry-potter.html">cast-dossier-harry-potter.html</a>
+        — 12 interactive beats: seed roster, center Cast host, Harry dossier from fixture sheet fields, writer-created constellation (fixture <code>linkedKnowledge</code> is empty), Snape disputed + empty scenes, Draft on “The cave”, Split handoff, narrow stack, conflict refusal, acceptance lock.</p>
+      <p>Linked from Mockups 3.0 <code>#cast</code>, this plan, README living designs, and WHERE-I-LEFT-OFF. Still awaiting founder design accept before CP1 product code.</p>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Plan accepted · implement everything</h2>
+      <p>Founder directed implementation of the full character-screens-depth plan. D1–D6 accepted. CP0 design artifacts already in tree. Parent frames CP1–CP4 for delegated development; Playwright remains deferred until founder product verification.</p>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Seed portraits + manuscript chronology desk</h2>
+      <p>Founder asked for seed images for all characters and a center manuscript view focused on cohesive chronological writing (not Story Knowledge / structure cards).</p>
+      <ul>
+        <li>Generated 7 literary portraits → <code>packages/core/fixtures/harry-potter-visuals/</code>; fixture <code>visuals[]</code> + hermetic <code>putObject</code> seed.</li>
+        <li><code>ManuscriptChronologyDesk</code> replaces Write-rail launchpad for book/part/chapter/unassigned/storyKnowledgeRoot; Edit opens single-scene Draft; Project Title Page + Cast unchanged.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Shell nav fixes + character visual gallery</h2>
+      <p><strong>Founder feedback:</strong> Explorer clicks didn’t change Cast center; Reader rail started disabled; want gallery at top of dossier (generate/upload/delete). D6 revised to allow character visuals.</p>
+      <p><strong>Shell:</strong> <code>manuscriptSelectionLeavesCharactersLens</code> — project/book/part/chapter/scene/unassigned clear Characters lens so center returns to Write; knowledge selection keeps Cast. <code>requestOpenReader</code> sets rail to write (same Reader control, Cast yields).</p>
+      <p><strong>Gallery:</strong> <code>visuals[]</code> on story knowledge; migration <code>0019_character_visuals</code>; BYOK job/apply/download routes; Cast dossier gallery above Role. <code>pnpm verify</code> green — <strong>817</strong> tests.</p>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — CP1–CP4 implemented (Grok) + CP5 docs</h2>
+      <p><strong>Route:</strong> <code>GHOSTWRITER_ROUTE=grok</code> for product code; parent owned plan accept, docs, and verify.</p>
+      <p>Landed: <code>castTakesCenterWorkspace</code>; <code>CastRelationshipsStudio</code> + <code>cast-studio-model</code> (role summary, constellation, scene presence); Characters rail keeps Explorer primary; Split Sheet <em>Open in Cast studio</em> via <code>castFocusKnowledgeId</code>; MCP navigator <code>characterSheet</code>.</p>
+      <p><strong>Evidence:</strong> focused UI tests 24/24; MCP tests 2/2; full <code>pnpm verify</code> — typecheck + lint + <strong>806</strong> Vitest tests passed.</p>
+      <p><strong>Docs:</strong> PRODUCT, ARCHITECTURE, API updated; plan todos CP1–CP5 docs checked; Playwright still deferred.</p>
+      <p><strong>Open:</strong> founder browser walkthrough; create-character auto-select; commit/PR when authorized.</p>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — D7 multi-env demo seed + login</h2>
+      <p>Founder asked for Harry Potter seed (incl. portraits) in production/dev, plus an unmarked bottom-right double-click on the login gate into the seeded demo account, then harness wrap-up + PR.</p>
+      <ul>
+        <li>Idempotent <code>ensureDemoHarryPotterSeed</code> on production <code>server.ts</code> boot (disable <code>GHOSTWRITER_DEMO_SEED=0</code>).</li>
+        <li>Fixed account <code>account-demo-seed</code> / <code>demo@ghostwriter.app</code>; Better Auth credential (signup disabled); password derived from <code>BETTER_AUTH_SECRET</code>.</li>
+        <li><code>POST /api/demo/sign-in</code> (trusted Origin); hermetic e2e sets fake cookie on same path.</li>
+        <li><code>AccountGateScreen</code> transparent 48×48 bottom-right double-press → client <code>signInDemoSeed</code>.</li>
+        <li>ADR 0005 demo exception + OPERATIONS/PRODUCT notes. Six seed portraits per cast character for gallery scale.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-07-25 — Beats 08–10 practical space + blowout</h2>
+      <p>Founder feedback on beat 08 screenshot: too much empty Draft space; need practical UX and a nothing→something blowout for adding data/links/story points.</p>
+      <p>Revised journey beats 08–10 in <code>cast-dossier-harry-potter.html</code>:</p>
+      <ul>
+        <li><strong>08</strong> — Draft workspace with toolbar, prose measure, 300px Sheet; companion starts empty (POV ≠ auto-cast).</li>
+        <li><strong>09</strong> — Interactive blowout states A–F: empty → pick cast → linked blank → fill sheet → add K↔K link → story points.</li>
+        <li><strong>10</strong> — Filled Sheet handoff beside narrow stack (same IDs, less chrome).</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

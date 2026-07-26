@@ -50,7 +50,9 @@ All product and onboarding surfaces require an authenticated account in the firs
 release. Google is the initial sign-in method; first login creates a provider-neutral Ghostwriter
 writer profile. There is no public fixture workspace or locally saved pre-auth project. A future
 temporary Spark-before-sign-in flow requires its own accepted product plan and cannot imply a
-canonical local or offline project. See ADR 0005.
+canonical local or offline project. The signed-out gate still shows only Google; an unmarked
+founder demo entry (double-click hit target) may sign into a fixed demo account that owns a Harry
+Potter sample project — see ADR 0005.
 
 ## Core experience
 
@@ -114,8 +116,17 @@ On the same branch, the workspace shell and Agent dock advanced:
 - Cursor-like chrome: activity rail, resizable Explorer primary, editor center, secondary
   **Agent | Properties** (Agent defaults open);
 - **Plans** (ex–Dreams & Ideas) opens as a center workspace; Capture stays modal; primary side on
-  wide remains Explorer or Characters browse;
-- project home is a **Title Page** (series/book titles, hardcover studio, cover concept/notes);
+  wide remains Explorer (manuscript tree);
+- **Cast** (Characters rail) opens as a center workspace — roster + dossier with visual gallery
+  (BYOK generate / upload / delete), Role in the story, desire/pressure/voice, knowledge-link
+  constellation (not Canvas Thread Trace), and scene presence with Draft jump; Explorer stays
+  visible on wide. Manuscript tree selection leaves Cast for Write; a Write-rail click on a
+  character record switches into Cast on that dossier. Split · Sheet can
+  **Open in Cast studio** on the same story-knowledge id; Reader rail uses the same scene pin as
+  elsewhere and exits Cast when opened;
+- project home is a **Title Page**; Write-rail structure folders and Story Knowledge root use a
+  **manuscript chronology** scroll (not BookReader, not launchpad cards);
+- hardcover studio remains on the Title Page (cover concept/notes);
 - BYOK cover image options via async jobs (`gpt-image-1` portrait); Apply stores a private object
   locator (R2 when configured; hermetic memory fake for E2E) — never a data URI in Lakebase;
 - Agent dock composer: modes **chat** / **Plan** / **agent**, model (Luna/Terra/Sol) + effort,
@@ -124,9 +135,9 @@ On the same branch, the workspace shell and Agent dock advanced:
 - Manuscript Explorer: header icons + right-click context menu; Canvas owns full center with a
   compact chapter chip strip (no canvas Quick Build).
 
-**Proposed next (not implemented):** richer Cast & relationships as a center studio
-(`plans/active/2026-07-25-cast-relationships-studio/`). Harness CP3–CP5 (tools in the loop,
-toolkit agent deep-link, Plan→Plans persistence) remain open.
+**Proposed next:** Writing agent harness CP3–CP5 (tools in the loop, toolkit agent deep-link,
+Plan→Plans persistence). Cast studio founder browser verification and post-gate Playwright remain
+open (`plans/active/2026-07-25-character-screens-depth/`).
 
 ## Prior writing milestone — implemented locally 2026-07-12
 
@@ -141,8 +152,10 @@ The active branch now proves the first owner-only version of the core promise:
   confirmed or provisional links, personal viewport state, snapshot restore/undo, scope-keyed
   placements per drill layer, and a manuscript-derived spine that exposes drift without reordering
   prose;
-- Parts and chapters carry optional descriptions; structure launchpads list openable children with
-  Draft / Reader / Canvas actions when a folder (not the project root) is selected;
+- Parts and chapters carry optional descriptions; on the Write rail, book / part / chapter /
+  unassigned / Story Knowledge root selections open a chronological manuscript scroll (scene
+  blocks in tree order with plain-text prose) instead of structure card launchpads — structure
+  stays in Explorer, Cast stays on the Characters rail, and a single scene still opens Draft;
 - Chapters act as named scene folders with objectives/cast notes; scenes may carry URL backdrop,
   music, and image references; story knowledge supports notes, aliases, and typed knowledge links;
 - Reader presents bound-book spreads with optional ElevenLabs voice packs (server-side TTS);

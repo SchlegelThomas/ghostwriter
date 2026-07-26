@@ -357,7 +357,15 @@ describe("project commands", () => {
       type: "storyKnowledge.update",
       storyKnowledgeId: storyKnowledgeId("knowledge-one"),
       notes: "Answers every late-night call.",
-      aliases: ["Caller", "M. Venn"]
+      aliases: ["Caller", "M. Venn"],
+      visuals: [
+        {
+          id: "visual-one",
+          url: "https://ghostwriter.character/projects/project-one/story-knowledge/knowledge-one/visuals/visual-one",
+          alt: "Caller portrait",
+          source: "generated"
+        }
+      ]
     });
     navigator = await execute(navigator.version, {
       type: "storyKnowledge.setKnowledgeLink",
@@ -392,6 +400,14 @@ describe("project commands", () => {
     ).toMatchObject({
       notes: "Answers every late-night call.",
       aliases: ["Caller", "M. Venn"],
+      visuals: [
+        {
+          id: "visual-one",
+          url: "https://ghostwriter.character/projects/project-one/story-knowledge/knowledge-one/visuals/visual-one",
+          alt: "Caller portrait",
+          source: "generated"
+        }
+      ],
       linkedKnowledge: [
         { toId: storyKnowledgeId("knowledge-two"), kind: "cast" }
       ]
@@ -430,7 +446,8 @@ describe("project commands", () => {
       type: "storyKnowledge.update",
       storyKnowledgeId: storyKnowledgeId("knowledge-one"),
       notes: null,
-      aliases: null
+      aliases: null,
+      visuals: null
     });
 
     expect(navigator.books[0]?.parts[0]?.chapters[0]?.summary).toBeUndefined();
@@ -446,6 +463,11 @@ describe("project commands", () => {
       navigator.storyKnowledge.find(
         (knowledge) => knowledge.id === storyKnowledgeId("knowledge-one")
       )?.notes
+    ).toBeUndefined();
+    expect(
+      navigator.storyKnowledge.find(
+        (knowledge) => knowledge.id === storyKnowledgeId("knowledge-one")
+      )?.visuals
     ).toBeUndefined();
   });
 

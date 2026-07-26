@@ -128,6 +128,7 @@ export type DraftPanelProps = Readonly<{
   onActivityChange?(activity: DraftActivity): void;
   onProblem?(problem: DraftProblemEvent): void;
   onProblemResolved?(id: string): void;
+  onOpenCastStudio?(storyKnowledgeId: string): void;
 }>;
 
 export type DraftActivity = "idle" | "saving" | "problem";
@@ -656,7 +657,8 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
       onAcknowledgement,
       onActivityChange,
       onProblem,
-      onProblemResolved
+      onProblemResolved,
+      onOpenCastStudio
     },
     ref
   ) {
@@ -1843,6 +1845,7 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
               disabled={readOnly || !editorIsEditable}
               linkCandidates={linkableCast}
               onClose={() => onWriteCompositionChange?.("page")}
+              onOpenCastStudio={onOpenCastStudio}
               onOpenContext={() => onContextDockOpenChange?.(true)}
               onSetCastLink={
                 onProjectCommand === undefined

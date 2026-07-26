@@ -46,4 +46,20 @@ describe("Harry Potter hermetic fixture", () => {
     expect(harryPotterSceneProse(firstSceneId)?.length).toBeGreaterThan(20);
     expect(HARRY_POTTER_SEED_CAPTURES).toHaveLength(3);
   });
+
+  it("attaches six seed portrait visuals to every cast character", () => {
+    const characters = HARRY_POTTER_FIXTURE.storyKnowledge.filter(
+      (row) => row.kind === "character"
+    );
+    expect(characters).toHaveLength(7);
+    for (const character of characters) {
+      expect(character.visuals).toHaveLength(6);
+      for (const visual of character.visuals ?? []) {
+        expect(visual.url).toContain(
+          `/story-knowledge/${String(character.id)}/visuals/`
+        );
+        expect(visual.id).toMatch(/^visual-seed-portrait-[1-6]$/);
+      }
+    }
+  });
 });

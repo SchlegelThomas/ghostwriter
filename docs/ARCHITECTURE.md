@@ -222,10 +222,15 @@ scene promotion, and model context. Book covers store concept/notes and an optio
 
 ## Workspace shell (Cursor-like)
 
-Wide layout is activity rail | resizable primary (Explorer or Characters browse) | editor center
-(Draft / Canvas / Split / Title Page / Plans) | resizable secondary (Agent | Properties). Narrow
-keeps rail/tab fallbacks; Plans may still take the center. Cast center-studio redesign is proposed
-separately and must not be described as shipped until implemented.
+Wide layout is activity rail | resizable primary (Explorer tree) | editor center
+(Draft / Canvas / Split / Title Page / Plans / Cast) | resizable secondary (Agent | Properties).
+Plans and Cast are mutually exclusive center workspaces (`inboxTakesCenterWorkspace` /
+`castTakesCenterWorkspace`); Title Page yields when Cast owns the center. Narrow keeps rail/tab
+fallbacks with Cast as a stacked roster→dossier. Cast relationship viz is a static knowledge-link
+constellation (K↔K), separate from Canvas Thread Trace / `canvas_links`. Character `visuals[]`
+use private object-storage locators (`https://ghostwriter.character/…`, migration
+`0019_character_visuals`) with BYOK generate / upload / delete from the Cast dossier — parallel to
+book-cover locators, not Title Page covers.
 
 ## Accepted product requirements (2026-07-11)
 

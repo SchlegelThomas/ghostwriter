@@ -62,7 +62,18 @@ export function fakeBackendAuth(
 ): AuthGateway {
   return {
     handler: () => Response.json({ auth: "handled" }),
-    getSession: async () => session
+    getSession: async () => session,
+    ensureDemoCredentialAccount: async () => {},
+    signInDemo: async () =>
+      Response.json(
+        { ok: true },
+        {
+          headers: {
+            "set-cookie":
+              "ghostwriter.session_token=fake-demo; HttpOnly; SameSite=Lax; Path=/"
+          }
+        }
+      )
   };
 }
 
@@ -76,6 +87,7 @@ export async function createSeededBackendApp(
     openAiValidationProviderFactory?: OpenAiValidationProviderFactory;
     openAiCompletionProviderFactory?: OpenAiCompletionProviderFactory;
     scenePartnerGenerateImage?: ScenePartnerImageGenerator;
+    demoSeed?: Readonly<{ enabled: boolean }>;
   }>
 ) {
   const { db, close } = createPgliteDatabase();
@@ -188,6 +200,7 @@ export async function createSeededBackendApp(
       auth,
       allowedOrigins: [TEST_BACKEND_ORIGIN],
       objectStorage,
+      ...(options?.demoSeed === undefined ? {} : { demoSeed: options.demoSeed }),
       ...(options?.scenePartnerGenerateImage === undefined
         ? {}
         : { scenePartnerGenerateImage: options.scenePartnerGenerateImage })

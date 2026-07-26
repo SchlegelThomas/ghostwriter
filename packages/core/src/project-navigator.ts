@@ -15,6 +15,7 @@ import {
   type SceneMusic,
   type SceneSketch,
   type SceneStatus,
+  type CharacterVisual,
   type StoryKnowledgeAuthority,
   type StoryKnowledgeId,
   type StoryKnowledgeKind,
@@ -79,6 +80,7 @@ export type ProjectNavigatorKnowledge = Readonly<{
   notes?: string;
   aliases?: readonly string[];
   characterSheet?: CharacterSheet;
+  visuals?: readonly CharacterVisual[];
   archivedAt?: string;
 }>;
 
@@ -209,6 +211,9 @@ export function projectNavigatorFromRecords(records: ProjectRecords): ProjectNav
         ...(knowledge.characterSheet === undefined
           ? {}
           : { characterSheet: knowledge.characterSheet }),
+        ...(knowledge.visuals === undefined
+          ? {}
+          : { visuals: freezeList(knowledge.visuals) }),
         ...(knowledge.archivedAt === undefined
           ? {}
           : { archivedAt: knowledge.archivedAt })

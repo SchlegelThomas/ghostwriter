@@ -110,6 +110,7 @@ import {
   type ScenePartnerImageGenerator
 } from "./scene-partner-routes.js";
 import { registerBookCoverImageRoutes } from "./book-cover-image-routes.js";
+import { registerCharacterVisualRoutes } from "./character-visual-routes.js";
 import { registerMcpGrantRoutes } from "./mcp-grant-routes.js";
 import { registerWorkspaceChatRoutes } from "./workspace-chat-routes.js";
 import {
@@ -134,6 +135,11 @@ export type BackendDependencies = Readonly<{
   objectStorage: CaptureObjectStoragePort;
   /** Optional Scene Partner / cover image generator (hermetic/tests inject fakes). */
   scenePartnerGenerateImage?: ScenePartnerImageGenerator;
+  /**
+   * Founder demo seed sign-in. Default enabled in production/dev; disable with
+   * `GHOSTWRITER_DEMO_SEED=0`. When omitted, the route is treated as disabled.
+   */
+  demoSeed?: Readonly<{ enabled: boolean }>;
 }>;
 
 const readerSpeakRequestSchema = z.object({
@@ -351,6 +357,26 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
   app.on(["GET", "POST"], "/api/auth/*", (context) =>
     dependencies.auth.handler(context.req.raw)
   );
+
+  app.post("/api/demo/sign-in", async (context) => {
+    if (dependencies.demoSeed?.enabled !== true) {
+      return context.json(
+        { error: "Demo seed is disabled.", code: "DEMO_SEED_DISABLED" },
+        404
+      );
+    }
+
+    const origin = context.req.header("origin");
+    if (origin === undefined || !allowedOrigins.has(origin)) {
+      return context.json(
+        { error: "Request origin is not trusted.", code: "UNTRUSTED_ORIGIN" },
+        403
+      );
+    }
+
+    await dependencies.auth.ensureDemoCredentialAccount();
+    return dependencies.auth.signInDemo(context.req.raw);
+  });
 
   app.use("/api/*", async (context, next) => {
     const session = await dependencies.auth.getSession(context.req.raw.headers);
@@ -1390,6 +1416,14 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
       : { generateImage: dependencies.scenePartnerGenerateImage })
   });
   registerBookCoverImageRoutes(app, {
+    agentProvider: dependencies.agentProvider,
+    services: dependencies.services,
+    objectStorage: dependencies.objectStorage,
+    ...(dependencies.scenePartnerGenerateImage === undefined
+      ? {}
+      : { generateImage: dependencies.scenePartnerGenerateImage })
+  });
+  registerCharacterVisualRoutes(app, {
     agentProvider: dependencies.agentProvider,
     services: dependencies.services,
     objectStorage: dependencies.objectStorage,

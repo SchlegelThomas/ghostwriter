@@ -65,7 +65,9 @@ describe("provider and agent guidance routes", () => {
       kekConfig: createTestProviderKekRuntimeConfig(),
       auth: {
         handler: () => Response.json({ auth: "handled" }),
-        getSession: async () => null
+        getSession: async () => null,
+        ensureDemoCredentialAccount: async () => {},
+        signInDemo: async () => Response.json({ ok: true })
       }
     });
     expect((await app.request("/api/me/provider/openai")).status).toBe(401);
@@ -239,7 +241,9 @@ describe("provider and agent guidance routes", () => {
               id: "session-stranger",
               expiresAt: "2026-07-18T19:00:00.000Z"
             }
-          })
+          }),
+          ensureDemoCredentialAccount: async () => {},
+          signInDemo: async () => Response.json({ ok: true })
         }
       })
     ).app;

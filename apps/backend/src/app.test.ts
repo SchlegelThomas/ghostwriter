@@ -42,7 +42,9 @@ function switchableAuth(initial: AuthenticatedSession) {
   return {
     gateway: {
       handler: () => Response.json({ auth: "handled" }),
-      getSession: async () => current
+      getSession: async () => current,
+      ensureDemoCredentialAccount: async () => {},
+      signInDemo: async () => Response.json({ ok: true })
     } satisfies AuthGateway,
     use(session: AuthenticatedSession) {
       current = session;

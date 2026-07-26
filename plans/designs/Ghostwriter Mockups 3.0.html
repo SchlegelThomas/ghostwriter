@@ -835,11 +835,370 @@
       font-weight: 600;
     }
 
+    /* Cast studio — additive structure depth (Characters center workspace) */
+    .cast-shell {
+      display: grid;
+      grid-template-columns: 36px 220px minmax(0, 1fr);
+      min-height: 620px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      overflow: hidden;
+      background: #efe9df;
+      box-shadow: var(--shadow);
+    }
+    .cast-shell .rail button[aria-current="true"] { background: #4a423c; color: #fff; }
+    .cast-tree {
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      padding: 10px 10px 14px;
+      overflow: auto;
+    }
+    .cast-tree__eyebrow {
+      margin: 0 0 4px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+    .cast-tree__title {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 22px;
+      margin-bottom: 10px;
+    }
+    .cast-tree__row {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: 0;
+      background: transparent;
+      padding: 7px 8px;
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--ink);
+    }
+    .cast-tree__row[aria-current="true"] { background: var(--brand-soft); font-weight: 600; }
+    .cast-studio {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr);
+      min-width: 0;
+      background: var(--paper);
+    }
+    .cast-roster {
+      border-right: 1px solid var(--line);
+      padding: 12px 10px;
+      overflow: auto;
+      background: #faf7f2;
+    }
+    .cast-roster__head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .cast-roster__head h3 {
+      font-size: 20px;
+      margin: 0;
+    }
+    .cast-roster__count {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+    .cast-roster__item {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      width: 100%;
+      text-align: left;
+      border: 1px solid transparent;
+      background: transparent;
+      border-radius: 10px;
+      padding: 9px 10px;
+      margin-bottom: 4px;
+    }
+    .cast-roster__item:hover { background: #fff; border-color: var(--line); }
+    .cast-roster__item[aria-current="true"] {
+      background: #fff;
+      border-color: #e4cfc6;
+      box-shadow: 0 0 0 2px rgba(110, 63, 50, .1);
+    }
+    .cast-roster__name {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 18px;
+    }
+    .cast-roster__meta {
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .cast-chip {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      background: var(--green-soft);
+      color: var(--green);
+    }
+    .cast-chip--planned { background: var(--amber-soft); color: var(--amber); }
+    .cast-chip--disputed { background: var(--red-soft); color: var(--red); }
+    .cast-detail {
+      padding: 16px 18px 22px;
+      overflow: auto;
+      min-width: 0;
+    }
+    .cast-detail__eyebrow {
+      margin: 0 0 4px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+    .cast-detail__title {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 34px;
+      margin: 0 0 6px;
+      letter-spacing: -.03em;
+    }
+    .cast-detail__aliases {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .cast-detail__actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+    .cast-detail__actions button {
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .cast-detail__actions button.primary {
+      background: var(--brand);
+      border-color: var(--brand);
+      color: #fff;
+    }
+    .cast-panel {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      background: #fff;
+    }
+    .cast-panel h4 {
+      margin: 0 0 8px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--brand);
+    }
+    .cast-role {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 18px;
+      color: #5f554d;
+      margin: 0;
+      line-height: 1.35;
+    }
+    .cast-sheet-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .cast-sheet-grid article {
+      background: var(--panel);
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .cast-sheet-grid strong {
+      display: block;
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .cast-sheet-grid p {
+      margin: 0;
+      font-size: 13px;
+      color: var(--ink);
+    }
+    .cast-constellation {
+      position: relative;
+      height: 220px;
+      border-radius: 12px;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(110, 63, 50, .06), transparent 55%),
+        var(--panel);
+      border: 1px dashed #e4d9cc;
+      overflow: hidden;
+    }
+    .cast-ego,
+    .cast-peer {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: 0 8px 18px rgba(40, 35, 31, .06);
+      white-space: nowrap;
+    }
+    .cast-ego {
+      left: 50%;
+      top: 50%;
+      background: var(--brand);
+      border-color: var(--brand);
+      color: #fff;
+      z-index: 2;
+    }
+    .cast-peer[data-pos="1"] { left: 18%; top: 28%; }
+    .cast-peer[data-pos="2"] { left: 82%; top: 30%; }
+    .cast-peer[data-pos="3"] { left: 22%; top: 74%; }
+    .cast-peer[data-pos="4"] { left: 78%; top: 72%; }
+    .cast-edge {
+      position: absolute;
+      height: 1px;
+      background: #c9b8a8;
+      transform-origin: left center;
+      z-index: 1;
+    }
+    .cast-edge span {
+      position: absolute;
+      left: 50%;
+      top: -10px;
+      transform: translateX(-50%);
+      background: var(--amber-soft);
+      color: var(--amber);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    .cast-edge[data-e="1"] { left: 50%; top: 50%; width: 120px; transform: rotate(-155deg); }
+    .cast-edge[data-e="2"] { left: 50%; top: 50%; width: 118px; transform: rotate(-28deg); }
+    .cast-edge[data-e="3"] { left: 50%; top: 50%; width: 118px; transform: rotate(150deg); }
+    .cast-edge[data-e="4"] { left: 50%; top: 50%; width: 116px; transform: rotate(28deg); }
+    .cast-link-list {
+      display: none;
+      margin-top: 10px;
+    }
+    .cast-link-list[data-visible="true"] { display: block; }
+    .cast-link-list li {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 13px;
+    }
+    .cast-scenes {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .cast-scene {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      font-size: 13px;
+    }
+    .cast-scene b {
+      font-weight: 700;
+      color: var(--blue);
+      font-size: 10px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+    .cast-scene button {
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .cast-compare {
+      display: grid;
+      grid-template-columns: 1.4fr .9fr;
+      gap: 14px;
+      margin-top: 16px;
+    }
+    .cast-phone {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: #fff;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      min-height: 420px;
+    }
+    .cast-phone__top {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    .cast-phone__tabs {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      font-size: 11px;
+    }
+    .cast-phone__tabs span {
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #efe8dc;
+    }
+    .cast-phone__tabs span[aria-current="true"] {
+      background: #2f2a26;
+      color: #fff;
+    }
+    .cast-phone__body { padding: 12px; }
+    .cast-demo-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0 0;
+    }
+    .cast-demo-bar button[aria-pressed="true"] {
+      background: var(--brand-soft);
+      border-color: #e4cfc6;
+      color: var(--brand);
+      font-weight: 700;
+    }
+    .cast-note-callout {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: var(--blue-soft);
+      border: 1px solid #c9d8e2;
+      font-size: 13px;
+      color: #334859;
+    }
     @media (max-width: 980px) {
-      .grid-4, .journeys, .invariant-grid, .state-grid, .responsive, .nav-compare, .motion-grid { grid-template-columns: 1fr; }
+      .grid-4, .journeys, .invariant-grid, .state-grid, .responsive, .nav-compare, .motion-grid, .cast-compare, .cast-sheet-grid { grid-template-columns: 1fr; }
       .board-wrap { grid-template-columns: 36px minmax(0, 1fr); }
       .dock { display: none; }
       .tip::after { display: none; }
+      .cast-shell { grid-template-columns: 36px minmax(0, 1fr); }
+      .cast-tree { display: none; }
+      .cast-studio { grid-template-columns: 1fr; }
     }
     @media (prefers-reduced-motion: reduce) {
       .app-shell, .board, .board-wrap, .dock, .node, .edge, .selectionbar, .tool, .rail button, .tree__collapse-only button {
@@ -874,6 +1233,7 @@
       <a href="#layers">Layer zoom</a>
       <a href="#invariants">Invariants</a>
       <a href="#responsive">Responsive</a>
+      <a href="#cast">Cast studio</a>
     </nav>
 
     <section class="section" id="principles">
@@ -1374,10 +1734,234 @@
       </div>
     </section>
 
+    <section class="section" id="cast">
+      <p class="kicker">Additive · Cast &amp; relationships</p>
+      <h2>Give characters a center stage, not a cramped sidebar.</h2>
+      <p class="lede">Characters rail opens a Cast studio in the editor center. The manuscript Explorer stays in the primary side — tree for structure, Cast for people. A dossier shows role, craft sheet, relationship constellation, and scene presence without inventing a second story store.</p>
+      <div class="note">
+        <strong>Proposed additive 2026-07-25:</strong> This section deepens structure/cast beyond Map board chrome.
+        Characters are <code>story_knowledge</code> records (<code>kind: character</code>) with notes, aliases, desire/pressure/voice, typed knowledge links, and scene links — see ADR 0008 / 0009.
+        <strong>Not this section:</strong> Canvas Relationships lens / Thread Trace (spatial canvas links), character portraits, or BYOK role summaries.
+        Write-time Split · Sheet and Character Coach stay in <a href="Ghostwriter%20Mockups%204.0.html">Mockups 4.0</a>.
+        <strong>Full seed storyboard:</strong>
+        <a href="in-depth-user-journeys/cast-dossier-harry-potter.html">In-depth journey · Cast with Harry Potter seed</a>
+        (roster, constellation, Snape disputed, Draft on “The cave”, narrow, conflict).
+      </div>
+
+      <div class="grid-4">
+        <article class="card"><span>01</span><strong>Center host</strong><p>Characters rail keeps Explorer primary and mounts Cast in the center — same hosting class as Title Page / Plans.</p></article>
+        <article class="card"><span>02</span><strong>Dossier, not form soup</strong><p>Identity, Role in the story, sheet fields, and notes read as one composition before link CRUD.</p></article>
+        <article class="card"><span>03</span><strong>Ego constellation</strong><p>Static center + peers with kind-labeled edges. Not a force graph. Not the Canvas relationships lens.</p></article>
+        <article class="card"><span>04</span><strong>Scene presence</strong><p>Linked scenes as a strip with POV markers and jump to Draft on the same scene ID.</p></article>
+        <article class="card"><span>05</span><strong>Deterministic role</strong><p>Role summary composes writer notes + desire/pressure/voice. No provider call in Cast browse.</p></article>
+        <article class="card"><span>06</span><strong>Craft ≠ prose</strong><p>Sheet and knowledge edits use project metadata versioning; they never dirty the scene working revision.</p></article>
+        <article class="card"><span>07</span><strong>Narrow stack</strong><p>Roster then detail; constellation may collapse to a kind-grouped list. No blank center.</p></article>
+        <article class="card"><span>08</span><strong>Handoff to Write</strong><p>From a scene row: open Draft or Split · Sheet. Coach proposals remain propose → apply in 4.0 / 5.0.</p></article>
+      </div>
+
+      <div class="cast-shell" id="cast-app" aria-label="Cast studio wide shell">
+        <aside class="rail" aria-label="Activity rail">
+          <div class="rail__mark">g</div>
+          <button type="button" aria-label="Explorer">E</button>
+          <button type="button" aria-current="true" aria-label="Characters">C</button>
+          <button type="button" aria-label="Plans">P</button>
+        </aside>
+        <aside class="cast-tree" aria-label="Manuscript Explorer">
+          <p class="cast-tree__eyebrow">Explorer</p>
+          <div class="cast-tree__title">Cognition</div>
+          <button class="cast-tree__row" type="button">Book · Cognition</button>
+          <button class="cast-tree__row" type="button" aria-current="true">Chapter · Ray Ray</button>
+          <button class="cast-tree__row" type="button">◇ The mirror answers</button>
+          <button class="cast-tree__row" type="button">◇ A name in the static</button>
+          <button class="cast-tree__row" type="button">Story knowledge</button>
+        </aside>
+        <div class="cast-studio" aria-label="Cast studio">
+          <div class="cast-roster" aria-label="Cast roster">
+            <div class="cast-roster__head">
+              <h3>Cast</h3>
+              <span class="cast-roster__count">4 people</span>
+            </div>
+            <button class="cast-roster__item" type="button" aria-current="true" data-cast="mara">
+              <span class="cast-roster__name">Mara Ellison</span>
+              <span class="cast-roster__meta">3 scenes · 4 links · <span class="cast-chip">Confirmed</span></span>
+            </button>
+            <button class="cast-roster__item" type="button" data-cast="theo">
+              <span class="cast-roster__name">Theo Vale</span>
+              <span class="cast-roster__meta">2 scenes · 2 links · <span class="cast-chip cast-chip--planned">Planned</span></span>
+            </button>
+            <button class="cast-roster__item" type="button" data-cast="iris">
+              <span class="cast-roster__name">Iris Quill</span>
+              <span class="cast-roster__meta">1 scene · 1 link · <span class="cast-chip">Confirmed</span></span>
+            </button>
+            <button class="cast-roster__item" type="button" data-cast="future">
+              <span class="cast-roster__name">Future Mara</span>
+              <span class="cast-roster__meta">1 scene · 1 link · <span class="cast-chip cast-chip--disputed">Disputed</span></span>
+            </button>
+          </div>
+          <div class="cast-detail" id="cast-detail">
+            <p class="cast-detail__eyebrow">Character · Confirmed</p>
+            <h3 class="cast-detail__title" id="cast-detail-title">Mara Ellison</h3>
+            <p class="cast-detail__aliases" id="cast-detail-aliases">Aliases: Keeper · the lamp woman</p>
+            <div class="cast-detail__actions">
+              <button class="primary" type="button">Add relationship</button>
+              <button type="button">Link scene</button>
+              <button type="button">Open in Split Sheet</button>
+              <button type="button">Archive</button>
+            </div>
+
+            <div class="cast-panel">
+              <h4>Role in the story</h4>
+              <p class="cast-role" id="cast-role">Keeper of the island light who wants one more honest season — while a future self presses her to darken the lamp. Speaks spare and practical until mysticism bruises her.</p>
+            </div>
+
+            <div class="cast-panel">
+              <h4>Character sheet</h4>
+              <div class="cast-sheet-grid">
+                <article><strong>Desire</strong><p id="cast-desire">Keep the island lit for one more season.</p></article>
+                <article><strong>Pressure</strong><p id="cast-pressure">A future self demands darkness.</p></article>
+                <article><strong>Voice</strong><p id="cast-voice">Spare, practical; refuses mysticism until it bruises her.</p></article>
+              </div>
+            </div>
+
+            <div class="cast-panel">
+              <h4>Notes</h4>
+              <p id="cast-notes" style="margin:0;font-size:13px;color:var(--muted);">Confirmed lighthouse keeper. Will not abandon the station for prophecy — yet hears the static each dusk.</p>
+            </div>
+
+            <div class="cast-panel">
+              <h4>Relationships · ego constellation</h4>
+              <p style="margin:0 0 10px;font-size:12px;color:var(--muted);">Knowledge links (<code>cast</code>, <code>theme</code>, <code>development-cycle</code>, <code>breadcrumb</code>, <code>related</code>) — not Canvas Thread Trace.</p>
+              <div class="cast-constellation" id="cast-constellation" aria-label="Relationship constellation">
+                <div class="cast-edge" data-e="1"><span>cast</span></div>
+                <div class="cast-edge" data-e="2"><span>related</span></div>
+                <div class="cast-edge" data-e="3"><span>theme</span></div>
+                <div class="cast-edge" data-e="4"><span>development-cycle</span></div>
+                <button class="cast-ego" type="button" aria-current="true">Mara</button>
+                <button class="cast-peer" type="button" data-pos="1" data-open="theo">Theo Vale</button>
+                <button class="cast-peer" type="button" data-pos="2" data-open="iris">Iris Quill</button>
+                <button class="cast-peer" type="button" data-pos="3" data-open="future">Future Mara</button>
+                <button class="cast-peer" type="button" data-pos="4">Duty vs light</button>
+              </div>
+              <ul class="cast-link-list" id="cast-link-list" data-visible="false" aria-label="Relationship list fallback">
+                <li><span>Theo Vale</span><span class="cast-chip cast-chip--planned">cast</span></li>
+                <li><span>Iris Quill</span><span class="cast-chip">related</span></li>
+                <li><span>Future Mara</span><span class="cast-chip cast-chip--disputed">development-cycle</span></li>
+                <li><span>Duty vs light</span><span class="cast-chip">theme</span></li>
+              </ul>
+            </div>
+
+            <div class="cast-panel">
+              <h4>Scene presence</h4>
+              <div class="cast-scenes" id="cast-scenes">
+                <div class="cast-scene"><span>◇ The mirror answers <b>POV</b></span><button type="button">Open Draft</button></div>
+                <div class="cast-scene"><span>◇ A name in the static</span><button type="button">Open Draft</button></div>
+                <div class="cast-scene"><span>◇ Hold the explanation</span><button type="button">Open Draft</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cast-demo-bar" role="toolbar" aria-label="Cast studio demo controls">
+        <button type="button" id="cast-demo-wide" aria-pressed="true">Wide dossier</button>
+        <button type="button" id="cast-demo-list" aria-pressed="false">List relationships</button>
+        <button type="button" id="cast-demo-empty" aria-pressed="false">Empty relationships</button>
+        <button type="button" id="cast-demo-theo" aria-pressed="false">Select Theo</button>
+      </div>
+
+      <div class="cast-compare">
+        <div>
+          <p class="kicker" style="margin-top:8px;">Narrow</p>
+          <h3 style="font-size:28px;">Roster, then the person.</h3>
+          <p style="color:var(--muted);font-size:14px;max-width:46ch;">On narrow web, Cast owns the center as a stack: pick from the roster, then scroll the dossier. Constellation may become a kind-grouped list; scene rows stay tappable jumps to Draft.</p>
+          <div class="state-grid" style="margin-top:14px;">
+            <article class="state"><strong>Empty cast</strong><span>Create character · no fake roster rows</span></article>
+            <article class="state"><strong>No relationships</strong><span>Constellation empty + Add relationship</span></article>
+            <article class="state"><strong>No scenes</strong><span>Presence empty + Link scene / open Canvas place</span></article>
+            <article class="state"><strong>Archived</strong><span>Visible treatment; restore path; not silently hidden</span></article>
+            <article class="state"><strong>Conflict</strong><span>Command applied nothing; reload offered</span></article>
+            <article class="state"><strong>Evidence chips</strong><span>Proposed in Split Sheet (4.0) — optional later domain</span></article>
+          </div>
+        </div>
+        <div class="cast-phone" aria-label="Narrow Cast stack">
+          <div class="cast-phone__top">
+            <div class="phone__title" style="font-family:'Cormorant Garamond',Georgia,serif;font-size:22px;">Cast</div>
+            <div class="cast-phone__tabs"><span>Explorer</span><span aria-current="true">Characters</span><span>Draft</span></div>
+          </div>
+          <div class="cast-phone__body">
+            <p style="margin:0 0 8px;color:var(--muted);font-size:12px;">Mara Ellison · Confirmed</p>
+            <div class="phone__row"><span>Role in the story</span><b>›</b></div>
+            <div class="phone__row"><span>Desire · Pressure · Voice</span><b>›</b></div>
+            <div class="phone__row"><span>Relationships (4)</span><b>›</b></div>
+            <div class="phone__row"><span>Scenes (3) · POV on Mirror</span><b>›</b></div>
+            <div class="phone__sheet" style="margin:12px 0 0;">
+              <strong>Open Draft</strong>
+              <p style="margin:6px 0 0;font-size:12px;color:var(--muted);">The mirror answers — same scene ID as Canvas / Split.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cast-note-callout">
+        <strong>Two relationship UIs:</strong> Cast constellation edits <em>story-knowledge links</em> (K↔K).
+        Map’s Relationships lens / Thread Trace projects <em>canvas links</em>. Same names in the writer’s mouth; different stores. Never imply one graph owns both.
+      </div>
+
+      <p class="kicker" style="margin-top:28px;">Cast journeys</p>
+      <h3 style="margin-bottom:12px;">What this mockup must make obvious.</h3>
+      <div class="journeys">
+        <article class="journey" id="journey-cast-open">
+          <h3>1 · Open Cast</h3>
+          <ol>
+            <li>Characters rail.</li>
+            <li>Explorer remains left.</li>
+            <li>Center shows roster + Mara dossier.</li>
+            <li>Role, sheet, constellation, scenes visible without leaving center.</li>
+          </ol>
+        </article>
+        <article class="journey" id="journey-cast-link">
+          <h3>2 · Deepen a bond</h3>
+          <ol>
+            <li>Add relationship → pick Theo · kind <code>cast</code>.</li>
+            <li>Constellation gains a labeled edge.</li>
+            <li>Click Theo opens Theo’s dossier.</li>
+            <li>Remove link reverses only the knowledge edge.</li>
+          </ol>
+        </article>
+        <article class="journey" id="journey-cast-scene">
+          <h3>3 · Scene → Draft → back</h3>
+          <ol>
+            <li>Scene presence → Open Draft on Mirror.</li>
+            <li>Same scene lease as Split / Focus.</li>
+            <li>Return to Cast with Mara still selected.</li>
+          </ol>
+        </article>
+        <article class="journey" id="journey-cast-write">
+          <h3>4 · Hand off to Write</h3>
+          <ol>
+            <li>Open in Split Sheet (Mockups 4.0).</li>
+            <li>Link/unlink cast beside prose.</li>
+            <li>Character Coach may propose sheet deltas.</li>
+            <li>Apply stays human-gated; Cast browse stays deterministic.</li>
+          </ol>
+        </article>
+      </div>
+
+      <p class="kicker" style="margin-top:28px;">Cast invariants</p>
+      <div class="invariant-grid">
+        <article class="invariant"><strong>Explorer stays tree</strong><p>Wide primary side does not become a second cast list. Roster lives inside the center studio.</p></article>
+        <article class="invariant"><strong>One knowledge ID</strong><p>Tree, Cast, Split Sheet, Canvas story-record card, and Draft cast use the same <code>StoryKnowledgeId</code>.</p></article>
+        <article class="invariant"><strong>Links ≠ Thread Trace</strong><p>Knowledge-link constellation never mutates canvas_links or claims manuscript order.</p></article>
+        <article class="invariant"><strong>Sheet ≠ prose</strong><p>Desire/pressure/voice updates never dirty scene document version.</p></article>
+        <article class="invariant"><strong>Role is composed</strong><p>No silent provider egress from opening Cast or rendering Role in the story.</p></article>
+        <article class="invariant"><strong>Keyboard path</strong><p>Roster, dossier fields, constellation peers, and scene jumps are reachable without pointer-only traps.</p></article>
+      </div>
+    </section>
+
     <section class="section">
       <p class="kicker">Implementation gate</p>
       <h2>Design first.</h2>
-      <p class="lede" style="font-size:18px;">Product code waits on founder acceptance of this mockup and the delivery plan in <code>plans/active/2026-07-18-canvas-structure-ux-3/</code>. Until then, treat this file as the living Map/structure design source alongside Mockups 2.0 for shipped 2.1 Write flows.</p>
+      <p class="lede" style="font-size:18px;">Map/structure product code follows founder acceptance of this mockup and the Canvas structure plan. <strong>Cast studio</strong> product code waits on acceptance of the <code>#cast</code> section above and <code>plans/active/2026-07-25-character-screens-depth/</code>. Until then, treat this file as the living Map/structure + Cast design source alongside Mockups 2.0 for shipped Write flows and Mockups 4.0 for Split Sheet / Coach.</p>
     </section>
   </main>
 
@@ -1580,6 +2164,102 @@
           const target = document.querySelector('.tool[data-tool="' + tool + '"]');
           if (target) target.click();
         }
+      });
+
+      // Cast studio demo (additive; independent of Map shell state)
+      const castPeople = {
+        mara: {
+          title: "Mara Ellison",
+          eyebrow: "Character · Confirmed",
+          aliases: "Aliases: Keeper · the lamp woman",
+          role: "Keeper of the island light who wants one more honest season — while a future self presses her to darken the lamp. Speaks spare and practical until mysticism bruises her.",
+          desire: "Keep the island lit for one more season.",
+          pressure: "A future self demands darkness.",
+          voice: "Spare, practical; refuses mysticism until it bruises her.",
+          notes: "Confirmed lighthouse keeper. Will not abandon the station for prophecy — yet hears the static each dusk."
+        },
+        theo: {
+          title: "Theo Vale",
+          eyebrow: "Character · Planned",
+          aliases: "Aliases: the cartographer",
+          role: "Maps the static so Mara does not have to believe it alone. Planned ally whose loyalty is still untested in Draft.",
+          desire: "Name every signal before it names them.",
+          pressure: "Truth may cost the only friend who feeds him.",
+          voice: "Curious, half-joking, records everything.",
+          notes: "Planned — not yet confirmed in manuscript continuity."
+        }
+      };
+
+      function setCastPerson(id) {
+        const person = castPeople[id] || castPeople.mara;
+        const set = (elId, text) => {
+          const el = document.getElementById(elId);
+          if (el) el.textContent = text;
+        };
+        const eyebrow = document.querySelector("#cast-detail .cast-detail__eyebrow");
+        if (eyebrow) eyebrow.textContent = person.eyebrow;
+        set("cast-detail-title", person.title);
+        set("cast-detail-aliases", person.aliases);
+        set("cast-role", person.role);
+        set("cast-desire", person.desire);
+        set("cast-pressure", person.pressure);
+        set("cast-voice", person.voice);
+        set("cast-notes", person.notes);
+        document.querySelectorAll(".cast-roster__item").forEach((btn) => {
+          btn.setAttribute("aria-current", btn.getAttribute("data-cast") === id ? "true" : "false");
+        });
+        const ego = document.querySelector(".cast-ego");
+        if (ego) ego.textContent = person.title.split(" ")[0];
+      }
+
+      document.querySelectorAll(".cast-roster__item").forEach((btn) => {
+        btn.addEventListener("click", () => setCastPerson(btn.getAttribute("data-cast") || "mara"));
+      });
+      document.querySelectorAll(".cast-peer[data-open]").forEach((btn) => {
+        btn.addEventListener("click", () => setCastPerson(btn.getAttribute("data-open") || "mara"));
+      });
+
+      const castList = document.getElementById("cast-link-list");
+      const castConstellation = document.getElementById("cast-constellation");
+      const castListDefaultHtml = castList ? castList.innerHTML : "";
+      function pressCastDemo(id) {
+        ["cast-demo-wide", "cast-demo-list", "cast-demo-empty", "cast-demo-theo"].forEach((key) => {
+          const el = document.getElementById(key);
+          if (el) el.setAttribute("aria-pressed", String(key === id));
+        });
+      }
+      function showConstellation() {
+        if (castConstellation) castConstellation.hidden = false;
+        if (castList) {
+          castList.dataset.visible = "false";
+          castList.innerHTML = castListDefaultHtml;
+        }
+      }
+      document.getElementById("cast-demo-wide")?.addEventListener("click", () => {
+        pressCastDemo("cast-demo-wide");
+        showConstellation();
+        setCastPerson("mara");
+      });
+      document.getElementById("cast-demo-list")?.addEventListener("click", () => {
+        pressCastDemo("cast-demo-list");
+        if (castConstellation) castConstellation.hidden = true;
+        if (castList) {
+          castList.innerHTML = castListDefaultHtml;
+          castList.dataset.visible = "true";
+        }
+      });
+      document.getElementById("cast-demo-empty")?.addEventListener("click", () => {
+        pressCastDemo("cast-demo-empty");
+        if (castConstellation) castConstellation.hidden = true;
+        if (castList) {
+          castList.dataset.visible = "true";
+          castList.innerHTML = "<li><span>No relationships yet</span><span class=\"cast-chip cast-chip--planned\">Add</span></li>";
+        }
+      });
+      document.getElementById("cast-demo-theo")?.addEventListener("click", () => {
+        pressCastDemo("cast-demo-theo");
+        showConstellation();
+        setCastPerson("theo");
       });
     })();
   </script>

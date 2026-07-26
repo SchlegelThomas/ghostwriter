@@ -1,0 +1,1751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cast depth journey · Harry Potter seed</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,500&family=Jost:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #28231f;
+      --muted: #766c63;
+      --line: #d8d0c5;
+      --paper: #fdfcf9;
+      --canvas: #f5f1ea;
+      --panel: #f8f5ef;
+      --brand: #6e3f32;
+      --brand-soft: #f3e7e2;
+      --green: #3f684f;
+      --green-soft: #e7f0e9;
+      --blue: #3f6175;
+      --blue-soft: #e8f0f4;
+      --amber: #80622c;
+      --amber-soft: #f5ecd9;
+      --red: #89514b;
+      --red-soft: #f5e5e3;
+      --shadow: 0 18px 40px rgba(40, 35, 31, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: Jost, ui-sans-serif, system-ui, sans-serif;
+      line-height: 1.45;
+    }
+    a { color: var(--brand); }
+    button {
+      cursor: pointer;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 8px;
+      color: var(--ink);
+      font: inherit;
+    }
+    button:focus-visible,
+    a:focus-visible {
+      outline: 3px solid #9e5e4d;
+      outline-offset: 3px;
+    }
+    .wrap { margin: 0 auto; max-width: 1180px; padding: 40px 24px 120px; }
+    .topnav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 18px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 22px;
+    }
+    .topnav a { font-size: 13px; font-weight: 600; text-decoration: none; }
+    .flag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #2f2a26;
+      color: #fff;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 8px 13px;
+    }
+    .flag::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #e8aa90;
+    }
+    .kicker {
+      color: var(--brand);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+      margin: 0 0 8px;
+    }
+    h1, h2, h3 {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-weight: 500;
+      letter-spacing: -.03em;
+      line-height: 1.05;
+      margin: 0 0 10px;
+    }
+    h1 { font-size: clamp(36px, 5vw, 56px); }
+    .lede {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 21px;
+      color: #5f554d;
+      max-width: 780px;
+      margin: 0 0 18px;
+    }
+    .note {
+      background: var(--brand-soft);
+      border: 1px solid #e4cfc6;
+      border-radius: 14px;
+      padding: 14px 16px;
+      font-size: 13px;
+      margin-bottom: 22px;
+      max-width: 900px;
+    }
+    .storyboard {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .beat-list {
+      position: sticky;
+      top: 16px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      box-shadow: var(--shadow);
+      max-height: calc(100vh - 32px);
+      overflow: auto;
+    }
+    .beat-list h2 {
+      font-size: 20px;
+      margin: 4px 8px 10px;
+    }
+    .beat {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 8px;
+      width: 100%;
+      text-align: left;
+      border: 1px solid transparent;
+      background: transparent;
+      border-radius: 10px;
+      padding: 8px;
+      margin-bottom: 4px;
+    }
+    .beat:hover { background: #fff; border-color: var(--line); }
+    .beat[aria-current="true"] {
+      background: var(--brand-soft);
+      border-color: #e4cfc6;
+    }
+    .beat__n {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: #efe8dc;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .beat[aria-current="true"] .beat__n {
+      background: var(--brand);
+      color: #fff;
+    }
+    .beat__t {
+      font-size: 13px;
+      font-weight: 600;
+      margin: 0 0 2px;
+    }
+    .beat__d {
+      margin: 0;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .stage {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      min-height: 640px;
+      display: flex;
+      flex-direction: column;
+    }
+    .stage__meta {
+      padding: 16px 18px 12px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #fbf8f3, var(--paper));
+    }
+    .stage__meta .step {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--brand);
+      margin: 0 0 6px;
+    }
+    .stage__meta h2 { font-size: 30px; margin-bottom: 6px; }
+    .stage__meta p { margin: 0; color: var(--muted); font-size: 14px; max-width: 62ch; }
+    .stage__frame {
+      padding: 16px;
+      flex: 1;
+      background:
+        radial-gradient(circle at 12% 0%, rgba(110, 63, 50, .05), transparent 40%),
+        var(--canvas);
+    }
+    .stage__footer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      border-top: 1px solid var(--line);
+      background: var(--panel);
+    }
+    .stage__footer .hint {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .nav-btns { display: flex; gap: 8px; }
+    .nav-btns button { padding: 8px 12px; font-size: 13px; font-weight: 600; }
+    .nav-btns button.primary {
+      background: var(--brand);
+      border-color: var(--brand);
+      color: #fff;
+    }
+
+    /* Fake product chrome */
+    .shell {
+      display: grid;
+      grid-template-columns: 36px 200px minmax(0, 1fr);
+      min-height: 520px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      background: #efe9df;
+    }
+    .shell--narrow {
+      grid-template-columns: 1fr;
+      max-width: 340px;
+      margin: 0 auto;
+      min-height: 480px;
+    }
+    .rail {
+      background: #2f2a26;
+      color: #f4eee7;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 8px 2px;
+      align-items: center;
+    }
+    .rail__mark {
+      width: 24px;
+      height: 24px;
+      border-radius: 7px;
+      background: var(--brand);
+      display: grid;
+      place-items: center;
+      font-size: 9px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+    .rail span {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 7px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #d8cfc3;
+    }
+    .rail span[aria-current="true"] { background: #4a423c; color: #fff; }
+    .tree {
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      padding: 10px;
+      font-size: 12px;
+    }
+    .tree__title {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+    .tree__row {
+      padding: 5px 6px;
+      border-radius: 6px;
+      color: var(--ink);
+    }
+    .tree__row.is-current { background: var(--brand-soft); font-weight: 600; }
+    .tree__row.is-muted { color: var(--muted); }
+    .center {
+      background: var(--paper);
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .center__bar {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .center__bar h3 {
+      font-size: 22px;
+      margin: 0;
+    }
+    .center__bar span {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+    .cast {
+      display: grid;
+      grid-template-columns: 200px minmax(0, 1fr);
+      flex: 1;
+      min-height: 0;
+    }
+    .roster {
+      border-right: 1px solid var(--line);
+      padding: 8px;
+      background: #faf7f2;
+      overflow: auto;
+    }
+    .roster__item {
+      padding: 8px 9px;
+      border-radius: 9px;
+      border: 1px solid transparent;
+      margin-bottom: 3px;
+    }
+    .roster__item.is-current {
+      background: #fff;
+      border-color: #e4cfc6;
+      box-shadow: 0 0 0 2px rgba(110, 63, 50, .08);
+    }
+    .roster__name {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 16px;
+    }
+    .roster__meta { font-size: 10px; color: var(--muted); }
+    .chip {
+      display: inline-flex;
+      border-radius: 999px;
+      padding: 1px 6px;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      background: var(--green-soft);
+      color: var(--green);
+    }
+    .chip--disputed { background: var(--red-soft); color: var(--red); }
+    .chip--planned { background: var(--amber-soft); color: var(--amber); }
+    .dossier {
+      padding: 12px 14px 16px;
+      overflow: auto;
+    }
+    .dossier__eyebrow {
+      margin: 0 0 2px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .dossier__title {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 28px;
+      margin: 0 0 4px;
+    }
+    .dossier__aliases {
+      margin: 0 0 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .actions span, .actions b {
+      display: inline-block;
+      padding: 5px 9px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .actions b {
+      background: var(--brand);
+      border-color: var(--brand);
+      color: #fff;
+    }
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      background: #fff;
+    }
+    .panel h4 {
+      margin: 0 0 6px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--brand);
+    }
+    .role {
+      margin: 0;
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 16px;
+      color: #5f554d;
+      line-height: 1.35;
+    }
+    .sheet {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .sheet article {
+      background: var(--panel);
+      border-radius: 8px;
+      padding: 8px;
+    }
+    .sheet strong {
+      display: block;
+      font-size: 9px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .sheet p { margin: 0; font-size: 12px; }
+    .constellation {
+      position: relative;
+      height: 190px;
+      border-radius: 10px;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(110, 63, 50, .07), transparent 55%),
+        var(--panel);
+      border: 1px dashed #e4d9cc;
+      overflow: hidden;
+    }
+    .ego, .peer {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+      box-shadow: 0 6px 14px rgba(40, 35, 31, .06);
+    }
+    .ego {
+      left: 50%;
+      top: 50%;
+      background: var(--brand);
+      border-color: var(--brand);
+      color: #fff;
+      z-index: 2;
+    }
+    .peer[data-p="1"] { left: 16%; top: 28%; }
+    .peer[data-p="2"] { left: 84%; top: 28%; }
+    .peer[data-p="3"] { left: 20%; top: 78%; }
+    .peer[data-p="4"] { left: 80%; top: 76%; }
+    .peer[data-p="5"] { left: 50%; top: 14%; }
+    .peer.is-hot {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px rgba(110, 63, 50, .15);
+    }
+    .edge {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      height: 1px;
+      background: #c9b8a8;
+      transform-origin: left center;
+      z-index: 1;
+    }
+    .edge span {
+      position: absolute;
+      left: 50%;
+      top: -9px;
+      transform: translateX(-50%);
+      background: var(--amber-soft);
+      color: var(--amber);
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      padding: 1px 5px;
+      border-radius: 999px;
+    }
+    .edge[data-e="1"] { width: 130px; transform: rotate(-150deg); }
+    .edge[data-e="2"] { width: 128px; transform: rotate(-28deg); }
+    .edge[data-e="3"] { width: 120px; transform: rotate(145deg); }
+    .edge[data-e="4"] { width: 118px; transform: rotate(32deg); }
+    .edge[data-e="5"] { width: 70px; transform: rotate(-90deg); }
+    .scenes { display: flex; flex-direction: column; gap: 5px; }
+    .scene {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 9px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      font-size: 12px;
+    }
+    .scene b {
+      color: var(--blue);
+      font-size: 9px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+    .scene em {
+      font-style: normal;
+      color: var(--muted);
+      font-size: 10px;
+    }
+    .toast {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: var(--green-soft);
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .toast--warn {
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+    .toast--err {
+      background: var(--red-soft);
+      color: var(--red);
+    }
+    .title-page {
+      padding: 28px 24px;
+      min-height: 480px;
+      background:
+        linear-gradient(160deg, #2f2a26 0%, #4a3a34 42%, #6e3f32 100%);
+      color: #f7f0e8;
+    }
+    .title-page .k {
+      font-size: 11px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      opacity: .7;
+      margin-bottom: 10px;
+    }
+    .title-page h3 {
+      font-size: 48px;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .title-page p { margin: 0 0 18px; max-width: 40ch; opacity: .85; }
+    .title-page .pills { display: flex; flex-wrap: wrap; gap: 8px; }
+    .title-page .pills span {
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+    .draft {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      min-height: 540px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .draft__toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      background: #f3eee6;
+      font-size: 11px;
+    }
+    .draft__toolbar .seg {
+      display: inline-flex;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+    }
+    .draft__toolbar .seg span {
+      padding: 5px 8px;
+      border-right: 1px solid var(--line);
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .draft__toolbar .seg span:last-child { border-right: 0; }
+    .draft__toolbar .seg span[aria-current="true"] {
+      background: var(--brand-soft);
+      color: var(--brand);
+    }
+    .draft__toolbar .spacer { flex: 1; }
+    .draft__toolbar .save {
+      font-weight: 700;
+      color: var(--green);
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      font-size: 10px;
+    }
+    .draft__body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 300px;
+      min-height: 0;
+    }
+    .draft__prose {
+      padding: 14px 18px 16px;
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+      overflow: auto;
+    }
+    .draft__prose .crumb {
+      font-size: 11px;
+      color: var(--muted);
+      margin: 0;
+    }
+    .draft__prose h3 { font-size: 26px; margin: 0; }
+    .draft__prose .measure {
+      flex: 1;
+      max-width: 58ch;
+    }
+    .draft__prose p {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 17px;
+      line-height: 1.55;
+      color: #3b342f;
+      margin: 0 0 10px;
+    }
+    .draft__prose .caret-line {
+      border-left: 2px solid var(--brand);
+      padding-left: 8px;
+      margin-left: -2px;
+    }
+    .draft__status {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      padding: 7px 10px;
+      border-top: 1px solid var(--line);
+      background: var(--panel);
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .draft__status strong { color: var(--green); font-weight: 700; }
+    .draft__sheet {
+      padding: 10px;
+      background: var(--panel);
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .draft__sheet > h4 {
+      margin: 0;
+      font-size: 10px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .sheet-card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .sheet-card.is-empty {
+      border-style: dashed;
+      background: #fbfaf7;
+      text-align: center;
+      padding: 18px 12px;
+    }
+    .sheet-card.is-empty p {
+      margin: 0 0 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .sheet-card__head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .sheet-card__head strong {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 18px;
+      font-weight: 500;
+    }
+    .field {
+      margin-bottom: 8px;
+    }
+    .field label {
+      display: block;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 3px;
+    }
+    .field .box {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 7px 8px;
+      font-size: 12px;
+      background: var(--paper);
+      min-height: 38px;
+      color: var(--ink);
+    }
+    .field .box.is-placeholder { color: #a3988e; font-style: italic; }
+    .field .box.is-editing {
+      border-color: #c99582;
+      box-shadow: 0 0 0 2px rgba(110, 63, 50, .12);
+    }
+    .picker {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      overflow: hidden;
+    }
+    .picker__search {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+      color: var(--muted);
+      background: #faf7f2;
+    }
+    .picker__row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+    }
+    .picker__row:last-child { border-bottom: 0; }
+    .picker__row b {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--brand);
+    }
+    .kind-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin: 6px 0 8px;
+    }
+    .kind-row span {
+      padding: 3px 7px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      background: #fff;
+    }
+    .kind-row span[aria-current="true"] {
+      background: var(--amber-soft);
+      border-color: #e2d0a8;
+      color: var(--amber);
+    }
+    .blowout {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .blowout__tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .blowout__tabs button {
+      padding: 6px 9px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .blowout__tabs button[aria-current="true"] {
+      background: var(--brand);
+      border-color: var(--brand);
+      color: #fff;
+    }
+    .blowout__grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .blowout__tile {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      padding: 8px;
+      text-align: left;
+      min-height: 92px;
+    }
+    .blowout__tile[aria-current="true"] {
+      border-color: #e4cfc6;
+      box-shadow: 0 0 0 2px rgba(110, 63, 50, .12);
+    }
+    .blowout__tile .n {
+      display: block;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--brand);
+      margin-bottom: 4px;
+    }
+    .blowout__tile strong {
+      display: block;
+      font-size: 12px;
+      margin-bottom: 3px;
+    }
+    .blowout__tile p {
+      margin: 0;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .blowout__stage {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--paper);
+    }
+    .story-points {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .story-points .point {
+      display: grid;
+      grid-template-columns: 16px 1fr auto;
+      gap: 8px;
+      align-items: start;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      font-size: 12px;
+    }
+    .story-points .point input { margin-top: 2px; }
+    .narrow-practical {
+      max-width: 360px;
+      margin: 0 auto;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      overflow: hidden;
+      background: #fff;
+      box-shadow: var(--shadow);
+    }
+    .narrow-practical__top {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    .narrow-practical__tabs {
+      display: flex;
+      gap: 4px;
+      margin-top: 8px;
+      font-size: 10px;
+    }
+    .narrow-practical__tabs span {
+      padding: 4px 7px;
+      border-radius: 999px;
+      background: #efe8dc;
+      font-weight: 600;
+    }
+    .narrow-practical__tabs span[aria-current="true"] {
+      background: #2f2a26;
+      color: #fff;
+    }
+    .narrow-practical__body { padding: 10px 12px 14px; }
+    .empty-constellation {
+      height: 120px;
+      border-radius: 10px;
+      border: 1px dashed #e4d9cc;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font-size: 13px;
+      background: var(--panel);
+    }
+    .callout {
+      margin-top: 16px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: var(--blue-soft);
+      border: 1px solid #c9d8e2;
+      font-size: 13px;
+      color: #334859;
+    }
+    .seed-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    .seed-table th, .seed-table td {
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      padding: 6px 4px;
+      vertical-align: top;
+    }
+    .seed-table th { color: var(--muted); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+    .hidden { display: none !important; }
+    @media (max-width: 960px) {
+      .storyboard { grid-template-columns: 1fr; }
+      .beat-list { position: static; max-height: none; }
+      .cast, .sheet { grid-template-columns: 1fr; }
+      .draft__body { grid-template-columns: 1fr; }
+      .draft__prose { border-right: 0; border-bottom: 1px solid var(--line); }
+      .blowout__grid { grid-template-columns: 1fr 1fr; }
+      .shell { grid-template-columns: 36px minmax(0, 1fr); }
+      .tree { display: none; }
+      .handoff-split { grid-template-columns: 1fr !important; }
+    }
+    .handoff-split {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) 340px;
+      gap: 12px;
+      align-items: start;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .card, .beat { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="topnav">
+      <div>
+        <a href="index.html">← In-depth user journeys</a>
+        ·
+        <a href="../Ghostwriter%20Mockups%203.0.html#cast">Mockups 3.0 · Cast</a>
+      </div>
+      <span class="flag">Storyboard · Harry Potter seed</span>
+    </div>
+
+    <p class="kicker">Journey 01 · Character screens depth</p>
+    <h1>Deepen a character in Cast.</h1>
+    <p class="lede">A full writer path through the proposed Cast studio, staged on the hermetic <em>Harry Potter</em> project — real cast labels, desire/pressure/voice, POV scenes, and book titles from <code>harry-potter-fixture.ts</code>.</p>
+    <div class="note">
+      <strong>Seed truth:</strong> characters ship with sheet fields and POV scene links; <code>linkedKnowledge</code> is empty in the fixture today.
+      This journey shows the writer <em>creating</em> knowledge links (cast / related / development-cycle / theme) as the depth feature — constellation is the destination, not pre-baked seed data.
+      Aliases below are storyboard enrichment (not yet on the seed rows).
+    </div>
+
+    <div class="storyboard">
+      <nav class="beat-list" aria-label="Journey beats">
+        <h2>Beats</h2>
+        <div id="beat-buttons"></div>
+      </nav>
+
+      <section class="stage" aria-live="polite">
+        <header class="stage__meta">
+          <p class="step" id="step-label">Beat 01</p>
+          <h2 id="step-title">Title</h2>
+          <p id="step-copy">Copy</p>
+        </header>
+        <div class="stage__frame" id="frame"></div>
+        <footer class="stage__footer">
+          <span class="hint">← → or buttons · Esc returns to beat 1</span>
+          <div class="nav-btns">
+            <button type="button" id="prev">Previous</button>
+            <button type="button" class="primary" id="next">Next</button>
+          </div>
+        </footer>
+      </section>
+    </div>
+
+    <div class="callout">
+      <strong>Delivery plan:</strong>
+      <a href="../../active/2026-07-25-character-screens-depth/plan.html">character-screens-depth</a>
+      · Shell frames also in
+      <a href="../Ghostwriter%20Mockups%203.0.html#cast">Mockups 3.0 #cast</a>.
+      Component language for Split Sheet / Coach remains Mockups 4.0.
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      const SEED = {
+        project: "Harry Potter",
+        books: [
+          "Philosopher's Stone",
+          "Chamber of Secrets",
+          "Prisoner of Azkaban",
+          "Goblet of Fire",
+          "Order of the Phoenix",
+          "Half-Blood Prince",
+          "Deathly Hallows"
+        ],
+        cast: [
+          {
+            id: "harry",
+            label: "Harry Potter",
+            authority: "confirmed",
+            aliases: "The Boy Who Lived · the Chosen One",
+            desire: "Protect the people he loves and end Voldemort's return.",
+            pressure: "Prophecy, fame, and a war that keeps choosing him.",
+            voice: "Direct, stubborn, braver aloud than he feels.",
+            role: "A boy the war keeps choosing — stubborn enough to protect the people he loves, even when prophecy and fame try to write him first.",
+            scenes: [
+              { title: "Morning on Privet Drive", book: "Philosopher's Stone", pov: true },
+              { title: "The first letter", book: "Philosopher's Stone", pov: true },
+              { title: "Ollivanders", book: "Philosopher's Stone", pov: true },
+              { title: "A visitor with socks", book: "Chamber of Secrets", pov: true },
+              { title: "The chamber door", book: "Chamber of Secrets", pov: true },
+              { title: "Cold in the compartment", book: "Prisoner of Azkaban", pov: true },
+              { title: "A fourth name", book: "Goblet of Fire", pov: true },
+              { title: "The first task", book: "Goblet of Fire", pov: true },
+              { title: "A return", book: "Goblet of Fire", pov: true },
+              { title: "The hidden house", book: "Order of the Phoenix", pov: true },
+              { title: "Annotated margins", book: "Half-Blood Prince", pov: true },
+              { title: "The cave", book: "Half-Blood Prince", pov: true },
+              { title: "The weight of a horcrux", book: "Deathly Hallows", pov: true },
+              { title: "The final stand", book: "Deathly Hallows", pov: true }
+            ]
+          },
+          {
+            id: "hermione",
+            label: "Hermione Granger",
+            authority: "confirmed",
+            aliases: "—",
+            desire: "Know enough to keep her friends alive.",
+            pressure: "Rules that fail exactly when courage is required.",
+            voice: "Precise, urgent, allergic to half-answers.",
+            role: "The friend who reads ahead of danger — precise enough to keep Harry and Ron alive when rules stop being enough.",
+            scenes: [
+              { title: "Writing on the wall", book: "Chamber of Secrets", pov: true },
+              { title: "The pink office", book: "Order of the Phoenix", pov: true },
+              { title: "Dumbledore's Army", book: "Order of the Phoenix", pov: true },
+              { title: "Leaving everything named", book: "Deathly Hallows", pov: true }
+            ]
+          },
+          {
+            id: "ron",
+            label: "Ron Weasley",
+            authority: "confirmed",
+            aliases: "—",
+            desire: "Matter as much as his famous friend — and stay loyal anyway.",
+            pressure: "Comparison, scarcity, and jokes that hide fear.",
+            voice: "Warm, blunt, funny until the stakes get quiet.",
+            role: "Loyalty under comparison — warm and blunt until the joke thins and fear shows.",
+            scenes: [{ title: "Truth in the shack", book: "Prisoner of Azkaban", pov: true }]
+          },
+          {
+            id: "dumbledore",
+            label: "Albus Dumbledore",
+            authority: "confirmed",
+            aliases: "Headmaster",
+            desire: "Guide Harry without claiming his choices.",
+            pressure: "Secrets kept too long for reasons that once seemed kind.",
+            voice: "Gentle, lateral, heavy with unfinished plans.",
+            role: "A guide who will not seize Harry's choices — and still carries secrets kept too long.",
+            scenes: [{ title: "A borrowed memory", book: "Half-Blood Prince", pov: true }]
+          },
+          {
+            id: "voldemort",
+            label: "Lord Voldemort",
+            authority: "confirmed",
+            aliases: "He-Who-Must-Not-Be-Named · Tom Riddle",
+            desire: "Conquer death and command what he cannot understand.",
+            pressure: "A prophecy and a boy who keeps surviving him.",
+            voice: "Cold, theatrical, allergic to equality.",
+            role: "Death's rival — theatrical, unequal, haunted by a boy who will not stay dead in the story.",
+            scenes: []
+          },
+          {
+            id: "snape",
+            label: "Severus Snape",
+            authority: "disputed",
+            aliases: "The Half-Blood Prince",
+            desire: "Keep a promise no one is allowed to see.",
+            pressure: "Every side suspects him for different reasons.",
+            voice: "Cutting, controlled, meaning buried under disdain.",
+            role: "A promise kept in plain sight as disdain — disputed because every side reads him wrong for different reasons.",
+            scenes: []
+          },
+          {
+            id: "hagrid",
+            label: "Rubeus Hagrid",
+            authority: "confirmed",
+            aliases: "—",
+            desire: "Protect magical creatures and the boy he delivered.",
+            pressure: "A soft heart in a war that punishes softness.",
+            voice: "Booming, earnest, secretly careful.",
+            role: "The keeper who delivered Harry — booming warmth with a careful soft heart.",
+            scenes: [{ title: "Through the Leaky Cauldron", book: "Philosopher's Stone", pov: true }]
+          }
+        ],
+        caveProse:
+          "The boat barely held two. Every stroke toward the island cost something Harry could not name until the potion began to ask for payment."
+      };
+
+      function chip(authority) {
+        if (authority === "disputed") return '<span class="chip chip--disputed">Disputed</span>';
+        if (authority === "planned") return '<span class="chip chip--planned">Planned</span>';
+        return '<span class="chip">Confirmed</span>';
+      }
+
+      function rosterHtml(currentId) {
+        return SEED.cast.map((c) => `
+          <div class="roster__item ${c.id === currentId ? "is-current" : ""}">
+            <div class="roster__name">${c.label}</div>
+            <div class="roster__meta">${c.scenes.length} POV scenes · ${chip(c.authority)}</div>
+          </div>
+        `).join("");
+      }
+
+      function sceneRows(person, limit) {
+        const rows = person.scenes.slice(0, limit ?? 5);
+        if (!rows.length) {
+          return `<div class="empty-constellation">No POV scenes linked yet · Link scene</div>`;
+        }
+        return `<div class="scenes">${rows.map((s) => `
+          <div class="scene">
+            <span>◇ ${s.title} <em>· ${s.book}</em> ${s.pov ? "<b>POV</b>" : ""}</span>
+            <span style="font-size:11px;font-weight:600;color:var(--brand);">Open Draft</span>
+          </div>
+        `).join("")}${person.scenes.length > rows.length ? `<div class="scene"><span>+ ${person.scenes.length - rows.length} more POV scenes in seed…</span><span></span></div>` : ""}</div>`;
+      }
+
+      function sheetHtml(person) {
+        return `
+          <div class="sheet">
+            <article><strong>Desire</strong><p>${person.desire}</p></article>
+            <article><strong>Pressure</strong><p>${person.pressure}</p></article>
+            <article><strong>Voice</strong><p>${person.voice}</p></article>
+          </div>`;
+      }
+
+      function shell(opts) {
+        const {
+          rail = "C",
+          treeCurrent = "Story knowledge",
+          centerTitle = "Cast",
+          centerMeta = "7 characters · seed",
+          body = "",
+          narrow = false
+        } = opts;
+        if (narrow) {
+          return `
+            <div class="shell shell--narrow" aria-label="Narrow Cast">
+              <div class="center">
+                <div class="center__bar"><h3>${centerTitle}</h3><span>${centerMeta}</span></div>
+                ${body}
+              </div>
+            </div>`;
+        }
+        return `
+          <div class="shell" aria-label="Wide Cast shell">
+            <aside class="rail" aria-label="Activity rail">
+              <div class="rail__mark">g</div>
+              <span ${rail === "E" ? 'aria-current="true"' : ""}>E</span>
+              <span ${rail === "C" ? 'aria-current="true"' : ""}>C</span>
+              <span>P</span>
+            </aside>
+            <aside class="tree" aria-label="Explorer">
+              <div class="tree__title">${SEED.project}</div>
+              <div class="tree__row">Books · 7</div>
+              <div class="tree__row">Half-Blood Prince</div>
+              <div class="tree__row">Chapter · Memories in the pensieve</div>
+              <div class="tree__row">◇ The cave</div>
+              <div class="tree__row ${treeCurrent === "Story knowledge" ? "is-current" : "is-muted"}">Story knowledge</div>
+            </aside>
+            <div class="center">
+              <div class="center__bar"><h3>${centerTitle}</h3><span>${centerMeta}</span></div>
+              ${body}
+            </div>
+          </div>`;
+      }
+
+      function dossier(person, extras = {}) {
+        const {
+          showConstellation = false,
+          emptyLinks = false,
+          highlightPeer = null,
+          toast = null,
+          actionsPrimary = "Add relationship"
+        } = extras;
+        let constellation = "";
+        if (emptyLinks) {
+          constellation = `<div class="empty-constellation">No knowledge links yet — Add relationship</div>`;
+        } else if (showConstellation) {
+          constellation = `
+            <div class="constellation" aria-label="Ego constellation">
+              <div class="edge" data-e="1"><span>cast</span></div>
+              <div class="edge" data-e="2"><span>development-cycle</span></div>
+              <div class="edge" data-e="3"><span>related</span></div>
+              <div class="edge" data-e="4"><span>related</span></div>
+              <div class="edge" data-e="5"><span>theme</span></div>
+              <div class="ego">Harry</div>
+              <div class="peer ${highlightPeer === "hermione" ? "is-hot" : ""}" data-p="1">Hermione</div>
+              <div class="peer ${highlightPeer === "voldemort" ? "is-hot" : ""}" data-p="2">Voldemort</div>
+              <div class="peer ${highlightPeer === "snape" ? "is-hot" : ""}" data-p="3">Snape</div>
+              <div class="peer" data-p="4">Dumbledore</div>
+              <div class="peer" data-p="5">The Prophecy</div>
+            </div>
+            <p style="margin:8px 0 0;font-size:11px;color:var(--muted);">Knowledge links (K↔K) — not Canvas Thread Trace. Seed ships with empty <code>linkedKnowledge</code>; edges above are the writer’s work in this journey.</p>`;
+        }
+
+        return `
+          <div class="cast">
+            <div class="roster">${rosterHtml(person.id)}</div>
+            <div class="dossier">
+              <p class="dossier__eyebrow">Character · ${person.authority}</p>
+              <h3 class="dossier__title">${person.label}</h3>
+              <p class="dossier__aliases">Aliases: ${person.aliases}</p>
+              <div class="actions">
+                <b>${actionsPrimary}</b>
+                <span>Link scene</span>
+                <span>Open in Split Sheet</span>
+                <span>Archive</span>
+              </div>
+              <div class="panel">
+                <h4>Role in the story</h4>
+                <p class="role">${person.role}</p>
+                <p style="margin:8px 0 0;font-size:11px;color:var(--muted);">Composed from seed desire / pressure / voice — no provider call.</p>
+              </div>
+              <div class="panel">
+                <h4>Character sheet · from seed</h4>
+                ${sheetHtml(person)}
+              </div>
+              <div class="panel">
+                <h4>Relationships</h4>
+                ${constellation || `<div class="empty-constellation">Constellation appears after links exist</div>`}
+              </div>
+              <div class="panel">
+                <h4>Scene presence · POV from seed</h4>
+                ${sceneRows(person, 5)}
+              </div>
+              ${toast ? `<div class="toast ${toast.tone ? "toast--" + toast.tone : ""}">${toast.text}</div>` : ""}
+            </div>
+          </div>`;
+      }
+
+      const harry = SEED.cast.find((c) => c.id === "harry");
+      const snape = SEED.cast.find((c) => c.id === "snape");
+      const dumbledore = SEED.cast.find((c) => c.id === "dumbledore");
+
+      function draftWorkspace({ sheet, statusHtml }) {
+        return `
+          <div class="draft" aria-label="Draft workspace · The cave">
+            <div class="draft__toolbar">
+              <div class="seg" aria-label="Density">
+                <span aria-current="true">Draft</span>
+                <span>Focus</span>
+              </div>
+              <div class="seg" aria-label="Split">
+                <span>Map</span>
+                <span aria-current="true">Chr</span>
+                <span>Bd</span>
+              </div>
+              <span class="spacer"></span>
+              <span class="save">Saved</span>
+            </div>
+            <div class="draft__body">
+              <div class="draft__prose">
+                <p class="crumb">Half-Blood Prince · Memories in the pensieve · ◇ The cave · POV Harry · from Cast</p>
+                <h3>The cave</h3>
+                <div class="measure">
+                  <p>${SEED.caveProse}</p>
+                  <p class="caret-line">Dumbledore’s hand did not shake on the boat’s rim. Harry watched the water take the light and tried not to ask what the island would cost before they reached it.</p>
+                  <p style="color:var(--muted);font-size:14px;font-family:Jost,sans-serif;margin:0;">Caret stays in prose · Sheet is the sibling column, not a modal covering the page.</p>
+                </div>
+              </div>
+              <aside class="draft__sheet">${sheet}</aside>
+            </div>
+            <div class="draft__status">${statusHtml || `<strong>Opened from Cast</strong><span>Same scene ID as Canvas / Split / Focus · Harry still selected in Cast</span>`}</div>
+          </div>`;
+      }
+
+      const blowStates = [
+        {
+          label: "A · Empty",
+          sheet: `
+            <h4>Split · Sheet · A</h4>
+            <div class="sheet-card is-empty">
+              <p><strong style="display:block;font-size:13px;color:var(--ink);margin-bottom:6px;">Nothing here yet</strong>
+              Scene cast is empty. Writer must link someone before sheet fields appear — no ghost Harry card.</p>
+              <div class="actions" style="justify-content:center;margin:0;"><b>Link cast…</b></div>
+            </div>
+            <div class="sheet-card">
+              <div class="sheet-card__head"><strong>Empty rules</strong></div>
+              <p style="margin:0;font-size:11px;color:var(--muted);">POV crumb ≠ cast link. Don’t auto-inject the POV character into Sheet without an explicit Link.</p>
+            </div>`
+        },
+        {
+          label: "B · Pick cast",
+          sheet: `
+            <h4>Split · Sheet · B</h4>
+            <div class="picker" aria-label="Cast picker">
+              <div class="picker__search">Search cast · “dum”</div>
+              <div class="picker__row"><span>Albus Dumbledore · confirmed</span><b>Link</b></div>
+              <div class="picker__row"><span>Harry Potter · confirmed · POV</span><b>Link</b></div>
+              <div class="picker__row"><span>Severus Snape · disputed</span><b>Link</b></div>
+              <div class="picker__row"><span>Create character…</span><b>+</b></div>
+            </div>
+            <p style="margin:0;font-size:11px;color:var(--muted);">Picker lists seed cast. Link runs <code>storyKnowledge.setSceneLink</code> with current scene id.</p>`
+        },
+        {
+          label: "C · Linked blank",
+          sheet: `
+            <h4>Split · Sheet · C</h4>
+            <div class="sheet-card">
+              <div class="sheet-card__head">
+                <strong>Albus Dumbledore</strong>
+                ${chip("confirmed")}
+              </div>
+              <p style="margin:0 0 8px;font-size:11px;color:var(--muted);">Linked to The cave · sheet fields still empty for this walkthrough (writer clearing / first fill).</p>
+              <div class="field"><label>Desire</label><div class="box is-placeholder">What do they want in this story?</div></div>
+              <div class="field"><label>Pressure</label><div class="box is-placeholder">What costs them if they fail?</div></div>
+              <div class="field"><label>Voice</label><div class="box is-placeholder">How do they sound on the page?</div></div>
+              <div class="actions" style="margin:0;"><span>Unlink</span><span>Open in Cast studio</span></div>
+            </div>`
+        },
+        {
+          label: "D · Fill sheet",
+          sheet: `
+            <h4>Split · Sheet · D</h4>
+            <div class="sheet-card">
+              <div class="sheet-card__head">
+                <strong>Albus Dumbledore</strong>
+                ${chip("confirmed")}
+              </div>
+              <div class="field"><label>Desire</label><div class="box">${dumbledore.desire}</div></div>
+              <div class="field"><label>Pressure</label><div class="box is-editing">${dumbledore.pressure}<span style="display:inline-block;width:1px;height:12px;background:var(--brand);margin-left:2px;vertical-align:middle;"></span></div></div>
+              <div class="field"><label>Voice</label><div class="box is-placeholder">How do they sound on the page?</div></div>
+              <div class="toast" style="margin:0;">Editing pressure · blur saves · prose revision untouched</div>
+            </div>`
+        },
+        {
+          label: "E · Add link",
+          sheet: `
+            <h4>Split · Sheet · E</h4>
+            <div class="sheet-card">
+              <div class="sheet-card__head"><strong>Add relationship</strong><span class="chip chip--planned">K↔K</span></div>
+              <p style="margin:0 0 6px;font-size:11px;color:var(--muted);">From Dumbledore → Harry. Kind chips are ADR 0008 link kinds — not Canvas Thread Trace.</p>
+              <div class="kind-row">
+                <span aria-current="true">cast</span>
+                <span>theme</span>
+                <span>development-cycle</span>
+                <span>breadcrumb</span>
+                <span>related</span>
+              </div>
+              <div class="picker">
+                <div class="picker__search">Peer · Harry Potter</div>
+                <div class="picker__row"><span>Harry Potter</span><b>Add link</b></div>
+              </div>
+              <div class="toast" style="margin-top:8px;">Will run setKnowledgeLink · shows on Cast constellation</div>
+            </div>`
+        },
+        {
+          label: "F · Story points",
+          sheet: `
+            <h4>Split · Sheet · F</h4>
+            <div class="sheet-card">
+              <div class="sheet-card__head"><strong>Story points · The cave</strong></div>
+              <div class="story-points">
+                <label class="point"><input type="checkbox" checked disabled><span>Boat holds two — cost begins before the island</span><em style="color:var(--muted);font-size:10px;">scene</em></label>
+                <label class="point"><input type="checkbox" checked disabled><span>Dumbledore guides without claiming Harry’s choice</span><em style="color:var(--muted);font-size:10px;">sheet</em></label>
+                <label class="point"><input type="checkbox" disabled><span>Evidence chip → ¶2 “ask for payment” <span class="chip chip--planned">proposed</span></span><em style="color:var(--muted);font-size:10px;">later</em></label>
+              </div>
+              <p style="margin:8px 0 0;font-size:11px;color:var(--muted);">Scene presence in Cast lists this scene under Harry (POV) and Dumbledore (linked cast). Chapter “objectives / cast notes” stay on the folder — not duplicated here.</p>
+              <div class="actions" style="margin:8px 0 0;">
+                <b>Open in Cast studio</b>
+                <span>Link another</span>
+              </div>
+            </div>`
+        }
+      ];
+
+      function bindBlowout(root) {
+        const stage = root.querySelector("#blowout-stage");
+        if (!stage) return;
+        let current = 0;
+        function paint(i) {
+          current = i;
+          root.querySelectorAll("[data-blow]").forEach((el) => {
+            el.setAttribute("aria-current", String(el.getAttribute("data-blow") === String(i)));
+          });
+          stage.innerHTML = draftWorkspace({
+            sheet: blowStates[i].sheet,
+            statusHtml: `<strong>State ${blowStates[i].label}</strong><span>Nothing → something · each control maps to an existing command</span>`
+          });
+        }
+        root.querySelectorAll("[data-blow]").forEach((el) => {
+          el.addEventListener("click", () => paint(Number(el.getAttribute("data-blow") || 0)));
+        });
+        paint(0);
+      }
+
+      const beats = [
+        {
+          title: "Seed the room",
+          copy: "We are in the hermetic Harry Potter series project — seven books, seeded cast with desire/pressure/voice, POV scenes already linked. Depth work starts from this truth, not a toy cast.",
+          render() {
+            return `
+              <div class="title-page">
+                <div class="k">Project · Title Page</div>
+                <h3>${SEED.project}</h3>
+                <p>Multi-book series seed used for local/hermetic demos. Cast and scenes below match <code>HARRY_POTTER_FIXTURE</code>.</p>
+                <div class="pills">
+                  <span>7 books</span>
+                  <span>7 characters</span>
+                  <span>3 locations</span>
+                  <span>2 threads</span>
+                </div>
+              </div>
+              <table class="seed-table">
+                <thead><tr><th>Character</th><th>Authority</th><th>Seed desire (truncated)</th><th>POV scenes</th></tr></thead>
+                <tbody>
+                  ${SEED.cast.map((c) => `<tr>
+                    <td>${c.label}</td>
+                    <td>${c.authority}</td>
+                    <td>${c.desire.slice(0, 48)}…</td>
+                    <td>${c.scenes.length}</td>
+                  </tr>`).join("")}
+                </tbody>
+              </table>`;
+          }
+        },
+        {
+          title: "Characters rail → Cast owns the center",
+          copy: "Writer hits Characters. Explorer stays left on the manuscript tree. Cast opens in the center — same hosting class as Title Page / Plans. No more replacing the tree with a cramped sidebar.",
+          render() {
+            return shell({
+              rail: "C",
+              centerTitle: "Cast",
+              centerMeta: "Roster · pick someone",
+              body: `
+                <div class="cast">
+                  <div class="roster">${rosterHtml(null)}</div>
+                  <div class="dossier">
+                    <div class="empty-constellation" style="height:280px;">
+                      Select a character to open their dossier
+                    </div>
+                  </div>
+                </div>`
+            });
+          }
+        },
+        {
+          title: "Open Harry Potter",
+          copy: "Harry is confirmed with fourteen POV scenes across the series. Sheet fields come straight from the seed. Role in the story is a deterministic composition — still no relationships.",
+          render() {
+            return shell({
+              body: dossier(harry, { emptyLinks: true })
+            });
+          }
+        },
+        {
+          title: "Read the sheet as craft, not prose",
+          copy: "Desire, pressure, and voice are craft fields on story knowledge. Editing them must never dirty a scene’s working revision. Writer skims Harry’s seed sheet before touching bonds.",
+          render() {
+            return shell({
+              body: dossier(harry, {
+                emptyLinks: true,
+                toast: { text: "Saved · storyKnowledge.update (metadata) — scene prose unchanged" }
+              })
+            });
+          }
+        },
+        {
+          title: "Add relationships (seed starts empty)",
+          copy: "Fixture ships linkedKnowledge: []. Writer adds the bonds Cast is for: Hermione · cast, Voldemort · development-cycle, Snape · related, Dumbledore · related, The Prophecy · theme.",
+          render() {
+            return shell({
+              body: dossier(harry, {
+                showConstellation: true,
+                highlightPeer: "hermione",
+                actionsPrimary: "Add relationship",
+                toast: { text: "Linked Hermione Granger · kind cast" }
+              })
+            });
+          }
+        },
+        {
+          title: "Constellation becomes the map of people",
+          copy: "Static ego constellation — Harry at center, kind-labeled edges. Not a force-directed graph. Not Canvas Thread Trace. Click a peer to open that dossier without leaving Cast.",
+          render() {
+            return shell({
+              body: dossier(harry, {
+                showConstellation: true,
+                highlightPeer: "snape"
+              })
+            });
+          }
+        },
+        {
+          title: "Land on Snape — disputed on purpose",
+          copy: "Seed marks Severus Snape authority: disputed, with zero POV scenes. Cast must show disputed loudly and keep empty scene presence honest — not fake rows.",
+          render() {
+            return shell({
+              body: dossier(snape, {
+                emptyLinks: false,
+                showConstellation: false,
+                toast: { text: "Disputed · every side suspects him for different reasons", tone: "warn" }
+              }).replace(
+                `<div class="empty-constellation">Constellation appears after links exist</div>`,
+                `<div class="constellation" aria-label="Snape constellation">
+                  <div class="edge" data-e="2"><span>related</span></div>
+                  <div class="edge" data-e="3"><span>related</span></div>
+                  <div class="ego">Snape</div>
+                  <div class="peer is-hot" data-p="1">Harry</div>
+                  <div class="peer" data-p="2">Dumbledore</div>
+                </div>
+                <p style="margin:8px 0 0;font-size:11px;color:var(--muted);">Writer-added edges from the previous beat; Snape still has no POV scenes in the seed.</p>`
+              )
+            });
+          }
+        },
+        {
+          title: "Jump to Draft — work the space",
+          copy: "From Harry’s scene presence, open “The cave”. Practical Split: toolbar + prose measure + 300px Sheet. Companion starts empty for this scene’s craft work — POV chip is not the same as linked cast/sheet.",
+          render() {
+            return draftWorkspace({
+              sheet: `
+                <h4>Split · Sheet</h4>
+                <div class="sheet-card is-empty">
+                  <p><strong style="display:block;font-size:13px;color:var(--ink);margin-bottom:6px;">No cast on this scene yet</strong>
+                  Link people so desire / pressure / voice sit beside the paragraph you’re writing. POV on the crumb is manuscript metadata — Sheet is who you’re actively casting.</p>
+                  <div class="actions" style="justify-content:center;margin:0;">
+                    <b>Link cast…</b>
+                    <span>Open Cast studio</span>
+                  </div>
+                </div>
+                <div class="sheet-card">
+                  <div class="sheet-card__head"><strong>Why this pane</strong><span class="chip">Craft</span></div>
+                  <p style="margin:0;font-size:11px;color:var(--muted);">Sheet edits use storyKnowledge commands. Prose save stays on the scene revision. Don’t spend the column on a second manuscript.</p>
+                </div>`
+            });
+          }
+        },
+        {
+          title: "Blowout — nothing → something",
+          copy: "Scrub the states: empty Sheet → pick cast → empty fields → fill desire/pressure/voice → add a knowledge link → attach story points. Each step is a real control, not a magic populate.",
+          render() {
+            return `
+              <div class="blowout" data-blowout>
+                <div class="blowout__tabs" role="tablist" aria-label="Nothing to something states">
+                  <button type="button" data-blow="0" aria-current="true">A Empty</button>
+                  <button type="button" data-blow="1">B Pick cast</button>
+                  <button type="button" data-blow="2">C Linked · blank</button>
+                  <button type="button" data-blow="3">D Fill sheet</button>
+                  <button type="button" data-blow="4">E Add link</button>
+                  <button type="button" data-blow="5">F Story points</button>
+                </div>
+                <div class="blowout__grid" aria-label="State map">
+                  <button type="button" class="blowout__tile" data-blow="0" aria-current="true"><span class="n">A</span><strong>Empty Sheet</strong><p>CTA only · no fake cards</p></button>
+                  <button type="button" class="blowout__tile" data-blow="1"><span class="n">B</span><strong>Pick cast</strong><p>Search seed roster · Link</p></button>
+                  <button type="button" class="blowout__tile" data-blow="2"><span class="n">C</span><strong>Linked · blank</strong><p>Placeholders invite typing</p></button>
+                  <button type="button" class="blowout__tile" data-blow="3"><span class="n">D</span><strong>Fill sheet</strong><p>Blur → storyKnowledge.update</p></button>
+                  <button type="button" class="blowout__tile" data-blow="4"><span class="n">E</span><strong>Add link</strong><p>Kind chip + peer → constellation</p></button>
+                  <button type="button" class="blowout__tile" data-blow="5"><span class="n">F</span><strong>Story points</strong><p>Scene notes · presence · evidence</p></button>
+                </div>
+                <div class="blowout__stage" id="blowout-stage"></div>
+              </div>`;
+          },
+          afterRender(root) {
+            bindBlowout(root);
+          }
+        },
+        {
+          title: "Handoff + narrow — same IDs, less chrome",
+          copy: "Wide: Open in Cast studio keeps Harry selected with new link + sheet. Narrow: one column — cast strip, active sheet fields, relationships, scene jumps. No second empty pane.",
+          render() {
+            return `
+              <div class="handoff-split">
+                ${draftWorkspace({
+                  statusHtml: `<strong>Saved</strong><span>Sheet + cast link acknowledged · Open Cast preserves Harry</span><span class="chip">Hand-off</span>`,
+                  sheet: `
+                    <h4>Split · Sheet · filled</h4>
+                    <div class="sheet-card">
+                      <div class="sheet-card__head">
+                        <strong>Harry Potter</strong>
+                        ${chip("confirmed")}
+                      </div>
+                      <div class="field"><label>Desire</label><div class="box">${harry.desire}</div></div>
+                      <div class="field"><label>Pressure</label><div class="box">${harry.pressure}</div></div>
+                      <div class="field"><label>Voice</label><div class="box">${harry.voice}</div></div>
+                      <div class="field"><label>Linked</label>
+                        <div class="scenes">
+                          <div class="scene"><span>Dumbledore</span><span class="chip">cast</span></div>
+                          <div class="scene"><span>The Horcruxes</span><span class="chip chip--planned">theme</span></div>
+                        </div>
+                      </div>
+                      <div class="actions" style="margin:0;">
+                        <b>Open in Cast studio</b>
+                        <span>Unlink</span>
+                      </div>
+                    </div>`
+                })}
+                <div class="narrow-practical" aria-label="Narrow stack">
+                  <div class="narrow-practical__top">
+                    <div style="font-family:'Cormorant Garamond',Georgia,serif;font-size:22px;">The cave</div>
+                    <div class="narrow-practical__tabs">
+                      <span>Draft</span>
+                      <span aria-current="true">Sheet</span>
+                      <span>Cast</span>
+                    </div>
+                  </div>
+                  <div class="narrow-practical__body">
+                    <div class="actions" style="margin-bottom:8px;">
+                      <b>Harry</b><span>+ Cast</span><span>Unlink</span>
+                    </div>
+                    <div class="field"><label>Desire</label><div class="box" style="min-height:auto;">${harry.desire}</div></div>
+                    <div class="field"><label>Pressure</label><div class="box" style="min-height:auto;">${harry.pressure}</div></div>
+                    <div class="field"><label>Relationships</label>
+                      <div class="scenes">
+                        <div class="scene"><span>Dumbledore</span><span class="chip">cast</span></div>
+                        <div class="scene"><span>Horcruxes</span><span class="chip chip--planned">theme</span></div>
+                      </div>
+                    </div>
+                    <div class="field" style="margin:0;"><label>Jump</label>
+                      <div class="scene"><span>◇ Open Cast · Harry</span><span style="color:var(--brand);font-weight:700;font-size:11px;">›</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>`;
+          }
+        },
+        {
+          title: "Refusal — conflict applies nothing",
+          copy: "If project.version is stale while saving a new Snape link, the command applies nothing. Cast stays honest: no silent merge, no fake constellation edge.",
+          render() {
+            return shell({
+              body: dossier(snape, {
+                emptyLinks: true,
+                toast: {
+                  tone: "err",
+                  text: "Not saved · version conflict · command applied nothing · Reload cast"
+                }
+              })
+            });
+          }
+        },
+        {
+          title: "What this journey locks for CP1–CP4",
+          copy: "Acceptance: center host, seed dossier, composed role, writer-built constellation, practical Draft/Sheet space, nothing→something blowout (link cast, fill fields, add K↔K, story points), narrow handoff, conflict honesty.",
+          render() {
+            return `
+              <div class="panel">
+                <h4>Ships with seed today</h4>
+                <table class="seed-table">
+                  <tbody>
+                    <tr><td>Project title</td><td>Harry Potter</td></tr>
+                    <tr><td>Cast labels + authority</td><td>Harry…Hagrid; Snape disputed</td></tr>
+                    <tr><td>characterSheet</td><td>desire / pressure / voiceNotes</td></tr>
+                    <tr><td>POV scene links</td><td>via povStoryKnowledgeId</td></tr>
+                    <tr><td>linkedKnowledge</td><td>[] empty — journey creates edges</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="panel">
+                <h4>Write / Sheet blowout (beats 08–10)</h4>
+                <p style="margin:0;font-size:13px;color:var(--muted);">Practical Split uses toolbar + prose measure + ~300px Sheet. Empty Sheet does not auto-inject POV. States A–F: empty → picker → blank fields → fill → knowledge link → story points. Evidence chips remain proposed.</p>
+              </div>
+              <div class="panel">
+                <h4>Still out of scope</h4>
+                <p style="margin:0;font-size:13px;color:var(--muted);">Force graphs, AI role summaries, character portraits, evidence-passage persistence, Canvas Thread Trace rewrite.</p>
+              </div>`;
+          }
+        }
+      ];
+
+      let index = 0;
+      const beatButtons = document.getElementById("beat-buttons");
+      const stepLabel = document.getElementById("step-label");
+      const stepTitle = document.getElementById("step-title");
+      const stepCopy = document.getElementById("step-copy");
+      const frame = document.getElementById("frame");
+      const prev = document.getElementById("prev");
+      const next = document.getElementById("next");
+
+      beats.forEach((beat, i) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "beat";
+        btn.innerHTML = `
+          <span class="beat__n">${String(i + 1).padStart(2, "0")}</span>
+          <span>
+            <p class="beat__t">${beat.title}</p>
+            <p class="beat__d">${beat.copy.slice(0, 64)}…</p>
+          </span>`;
+        btn.addEventListener("click", () => show(i));
+        beatButtons.appendChild(btn);
+      });
+
+      function show(i) {
+        index = Math.max(0, Math.min(beats.length - 1, i));
+        const beat = beats[index];
+        stepLabel.textContent = `Beat ${String(index + 1).padStart(2, "0")} / ${String(beats.length).padStart(2, "0")}`;
+        stepTitle.textContent = beat.title;
+        stepCopy.textContent = beat.copy;
+        frame.innerHTML = beat.render();
+        if (typeof beat.afterRender === "function") beat.afterRender(frame);
+        [...beatButtons.children].forEach((el, n) => {
+          el.setAttribute("aria-current", n === index ? "true" : "false");
+        });
+        prev.disabled = index === 0;
+        next.textContent = index === beats.length - 1 ? "Start over" : "Next";
+      }
+
+      prev.addEventListener("click", () => show(index - 1));
+      next.addEventListener("click", () => {
+        if (index === beats.length - 1) show(0);
+        else show(index + 1);
+      });
+      document.addEventListener("keydown", (event) => {
+        const tag = (event.target && event.target.tagName) || "";
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        if (event.key === "ArrowRight" || event.key === "j") {
+          event.preventDefault();
+          if (index === beats.length - 1) show(0);
+          else show(index + 1);
+        }
+        if (event.key === "ArrowLeft" || event.key === "k") {
+          event.preventDefault();
+          show(index - 1);
+        }
+        if (event.key === "Escape") show(0);
+      });
+
+      show(0);
+    })();
+  </script>
+</body>
+</html>

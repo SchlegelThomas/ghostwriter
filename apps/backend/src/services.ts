@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  accountId,
   createCanvasServices,
   createBookReaderServices,
   createIdentityServices,
@@ -35,6 +36,8 @@ import {
 import { createBetterAuthGateway, type AuthGateway } from "./auth.js";
 import type { BackendConfig } from "./config.js";
 import { createAgentProviderRuntime, type AgentProviderRuntime } from "./agent-provider-runtime.js";
+import { DEMO_SEED_ACCOUNT } from "./demo-identity.js";
+import { ensureDemoHarryPotterSeed } from "./hermetic-seed.js";
 import { createCaptureObjectStorageFromConfig } from "./r2-capture-object-storage.js";
 
 export type BackendRuntime = Readonly<{
@@ -49,6 +52,11 @@ export type BackendRuntime = Readonly<{
   agentProvider: AgentProviderRuntime;
   auth: AuthGateway;
   objectStorage: CaptureObjectStoragePort;
+  /**
+   * Ensures the demo credential account and Harry Potter fixture exist.
+   * Portrait bytes are uploaded only when R2 is configured and the project is newly created.
+   */
+  ensureDemoSeed(): Promise<void>;
   close(): Promise<void>;
 }>;
 
@@ -142,6 +150,18 @@ export function createBackendRuntime(config: BackendConfig): BackendRuntime {
     agentProvider,
     auth,
     objectStorage,
+    async ensureDemoSeed(): Promise<void> {
+      await auth.ensureDemoCredentialAccount();
+      await ensureDemoHarryPotterSeed({
+        projects: repository,
+        sceneDocuments,
+        captureDocuments,
+        accountId: accountId(DEMO_SEED_ACCOUNT.id),
+        ids,
+        clock,
+        ...(config.r2 === undefined ? {} : { objectStorage })
+      });
+    },
     close
   };
 }

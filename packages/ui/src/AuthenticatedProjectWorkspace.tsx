@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   useWindowDimensions,
   View
 } from "react-native";
@@ -25,7 +24,8 @@ import type {
   ProjectNavigator,
   ProjectNavigatorScene,
   SceneId,
-  BookId
+  BookId,
+  StoryKnowledgeId
 } from "@ghostwriter/core";
 import {
   type AcknowledgementToast
@@ -75,17 +75,19 @@ import {
   toggleMapStructureRail,
   type MapStructureRailMode
 } from "./map-structure-rail.js";
-import { CharacterBrowsePanel } from "./CharacterBrowsePanel.js";
 import {
   ProjectTitlePage,
   type CoverOptionsJobSnapshot
 } from "./ProjectTitlePage.js";
+import { ManuscriptChronologyDesk } from "./ManuscriptChronologyDesk.js";
 import {
-  projectCharacterLaunchpad,
+  chronologySceneIds,
+  manuscriptChronology
+} from "./manuscript-chronology.js";
+import {
   quickBuildOptions,
   sceneTimeline,
   storyTrail,
-  structureLaunchpad,
   type QuickBuildOption
 } from "./workspace-structure.js";
 import {
@@ -129,6 +131,9 @@ import {
   type WorkspaceJumpTarget
 } from "./workspace-quick-nav.js";
 import {
+  castOpenClosesInbox,
+  castTakesCenterWorkspace,
+  manuscriptSelectionLeavesCharactersLens,
   centerUsesDenseColumn,
   inboxOpenLeavesCharactersRail,
   inboxTakesCenterWorkspace,
@@ -136,6 +141,11 @@ import {
   workspaceNavigationClosesInbox,
   type WorkspaceShellNavigationAction
 } from "./workspace-capture-shell.js";
+import {
+  CastRelationshipsStudio,
+  type CharacterVisualOptionsJobSnapshot
+} from "./CastRelationshipsStudio.js";
+import { selectedCastKnowledge } from "./cast-studio-model.js";
 import {
   CanvasRailIcon,
   CharactersRailIcon,
@@ -231,6 +241,10 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
     scene: ProjectNavigatorScene | undefined,
     presentation: DraftWorkspacePresentation
   ): ReactNode;
+  /** Plain-text scene bodies for ManuscriptChronologyDesk (loaded by App). */
+  sceneProseById?: Readonly<Record<string, string>>;
+  /** Scoped chronology scene ids when the manuscript scroll is visible. */
+  onChronologySceneIdsChange?(sceneIds: readonly SceneId[]): void;
   inboxOpen?: boolean;
   settingsOpen?: boolean;
   renderInbox?(presentation: InboxWorkspacePresentation): ReactNode;
@@ -257,6 +271,9 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   coverOptionsJob?: CoverOptionsJobSnapshot;
   coverReviewBookId?: BookId;
   onCoverReviewConsumed?(): void;
+  /** Split Sheet → Cast studio handoff (mirrors coverReviewBookId). */
+  castFocusKnowledgeId?: StoryKnowledgeId;
+  onCastFocusConsumed?(): void;
   onGenerateCoverPreview?(input: Readonly<{
     bookId: BookId;
     prompt: string;
@@ -267,6 +284,23 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   }>): Promise<void>;
   onResolveCoverDisplayUrl?(input: Readonly<{
     bookId: BookId;
+    imageUrl: string;
+  }>): Promise<string | undefined>;
+  characterVisualJob?: CharacterVisualOptionsJobSnapshot;
+  onStartCharacterVisualJob?(input: Readonly<{
+    knowledgeId: StoryKnowledgeId;
+    count?: number;
+    refinement?: string;
+  }>): Promise<void>;
+  onApplyCharacterVisual?(input: Readonly<{
+    knowledgeId: StoryKnowledgeId;
+    previewDataUri: string;
+    alt: string;
+    source: "generated" | "upload";
+  }>): Promise<void>;
+  onResolveCharacterVisualDisplayUrl?(input: Readonly<{
+    knowledgeId: StoryKnowledgeId;
+    visualId: string;
     imageUrl: string;
   }>): Promise<string | undefined>;
 }>;
@@ -399,6 +433,8 @@ export function AuthenticatedProjectWorkspace({
   storageAccountId,
   renderCanvas,
   renderDraft,
+  sceneProseById = {},
+  onChronologySceneIdsChange,
   inboxOpen = false,
   settingsOpen = false,
   renderInbox,
@@ -420,16 +456,21 @@ export function AuthenticatedProjectWorkspace({
   coverOptionsJob,
   coverReviewBookId,
   onCoverReviewConsumed,
+  castFocusKnowledgeId,
+  onCastFocusConsumed,
   onGenerateCoverPreview,
   onApplyCoverImage,
-  onResolveCoverDisplayUrl
+  onResolveCoverDisplayUrl,
+  characterVisualJob,
+  onStartCharacterVisualJob,
+  onApplyCharacterVisual,
+  onResolveCharacterVisualDisplayUrl
 }: AuthenticatedProjectWorkspaceProps) {
   const { width } = useWindowDimensions();
   const wide = width >= 1240;
   const narrow = width < 760;
   const [primarySideView, setPrimarySideView] =
     useState<WorkspacePrimaryView>("explorer");
-  const charactersInPrimary = !narrow && primarySideView === "characters";
   const centerShowsInbox =
     inboxTakesCenterWorkspace(inboxOpen) && renderInbox !== undefined;
   const inboxOwnsCenter = centerShowsInbox;
@@ -452,12 +493,13 @@ export function AuthenticatedProjectWorkspace({
   }
 
   function openCharactersPrimary(): void {
-    setPrimarySideView("characters");
+    // Cast owns the center; Explorer stays the only wide primary content.
+    setPrimarySideView("explorer");
     setRailDestination("characters");
     requestModeChange("draft");
     chooseSelection({ kind: "storyKnowledgeRoot" });
     if (structureCollapsible) setStructureRail("expanded");
-    if (inboxOpen) onCloseInbox?.();
+    if (castOpenClosesInbox(inboxOpen)) onCloseInbox?.();
   }
 
   function openExplorerPrimary(): void {
@@ -474,6 +516,9 @@ export function AuthenticatedProjectWorkspace({
 
   function requestOpenReader(): void {
     closeInboxForNavigation("reader");
+    // Same Reader rail as Draft/Title Page — leave Cast lens so center yields.
+    setRailDestination("write");
+    setPrimarySideView("explorer");
     onOpenReader?.();
   }
 
@@ -582,7 +627,6 @@ export function AuthenticatedProjectWorkspace({
   // Draft matches Map density: trail in topbar, no hero heading stack.
   const draftDense = mode === "draft";
   const surfaceDense = mapDense || draftDense;
-  const denseCenter = centerUsesDenseColumn(surfaceDense, inboxOwnsCenter);
   const drillScope = currentDrillScope(drillStack);
   const drillTrail = drillBreadcrumbs(drillStack, project);
   const structureWidth =
@@ -770,6 +814,16 @@ export function AuthenticatedProjectWorkspace({
 
   function chooseSelection(next: ManuscriptSelection): void {
     closeInboxForNavigation("manuscript-selection");
+    // Write-rail character records open Cast; structure selection returns to Write.
+    if (next.kind === "storyKnowledge") {
+      setPrimarySideView("explorer");
+      setRailDestination("characters");
+      if (mode !== "draft") {
+        onModeChange("draft");
+      }
+    } else if (manuscriptSelectionLeavesCharactersLens(next.kind)) {
+      setRailDestination("write");
+    }
     setSelection(next);
     if (next.kind === "scene") onSelectedSceneIdChange(next.sceneId);
   }
@@ -799,6 +853,16 @@ export function AuthenticatedProjectWorkspace({
     chooseSelection({ kind: "project" });
     // coverReviewBookId is the gate; ProjectTitlePage opens the book studio.
   }, [coverReviewBookId]);
+  // Split Sheet → Cast studio handoff (same knowledge id).
+  useEffect(() => {
+    if (castFocusKnowledgeId === undefined) return;
+    openCharactersPrimary();
+    chooseSelection({
+      kind: "storyKnowledge",
+      storyKnowledgeId: castFocusKnowledgeId
+    });
+    onCastFocusConsumed?.();
+  }, [castFocusKnowledgeId]);
   // Inbox review is a first-class center workspace — leave Characters framing.
   useEffect(() => {
     if (!inboxOpen) return;
@@ -807,33 +871,43 @@ export function AuthenticatedProjectWorkspace({
   }, [inboxOpen, railDestination]);
   const trail = storyTrail(project, selection);
   const quickOptions = quickBuildOptions(project, selection);
-  const charactersLens =
-    primarySideView === "characters" || railDestination === "characters";
-  const launchpad = charactersLens
-    ? projectCharacterLaunchpad(project)
-    : structureLaunchpad(project, selection);
-  const launchpadVisible =
+  const charactersLens = railDestination === "characters";
+  const castOwnsCenter = castTakesCenterWorkspace({
+    charactersLens,
+    inboxOpen
+  });
+  const exclusiveCenterOwner = inboxOwnsCenter || castOwnsCenter;
+  const denseCenter = centerUsesDenseColumn(surfaceDense, exclusiveCenterOwner);
+  const castSelectedKnowledge = selectedCastKnowledge(project, selection);
+  const chronology = manuscriptChronology(project, selection);
+  const manuscriptChronologyVisible =
     mode === "draft" &&
-    !charactersInPrimary &&
-    !inboxOwnsCenter &&
-    (charactersLens ||
-      (selection.kind !== "scene" && launchpad !== undefined));
+    !exclusiveCenterOwner &&
+    chronology !== undefined;
   const projectTitlePageVisible =
-    launchpadVisible &&
     mode === "draft" &&
-    selection.kind === "project" &&
-    !charactersLens;
+    !exclusiveCenterOwner &&
+    selection.kind === "project";
 
   const timeline = sceneTimeline(project, selection);
-  const resolvedSelection = resolveManuscriptSelection(project, selection);
-  const moveCandidates =
-    selection.kind === "chapter"
-      ? (resolvedSelection?.book?.unassignedScenes.filter(
-          (scene) => scene.archivedAt === undefined
-        ) ?? [])
-      : [];
-
   const selectionKey = manuscriptSelectionKey(selection);
+
+  useEffect(() => {
+    if (!manuscriptChronologyVisible) {
+      onChronologySceneIdsChange?.([]);
+      return;
+    }
+    onChronologySceneIdsChange?.(
+      chronologySceneIds(manuscriptChronology(project, selection))
+    );
+  }, [
+    manuscriptChronologyVisible,
+    onChronologySceneIdsChange,
+    project,
+    selection,
+    selectionKey
+  ]);
+
   useEffect(() => {
     setQuickBuildOpen(false);
   }, [selectionKey, project.id]);
@@ -1061,19 +1135,6 @@ export function AuthenticatedProjectWorkspace({
       default:
         return undefined;
     }
-  }
-
-  async function moveSceneToLaunchpadChapter(
-    scene: ProjectNavigatorScene
-  ): Promise<void> {
-    if (selection.kind !== "chapter") return;
-    await onCommand({
-      type: "scene.move",
-      sceneId: scene.id,
-      bookId: selection.bookId,
-      chapterId: selection.chapterId,
-      position: launchpad?.scenes.length ?? 0
-    });
   }
 
   async function addChild(
@@ -1306,89 +1367,8 @@ export function AuthenticatedProjectWorkspace({
       selection={selection}
     />
   );
-  const charactersPrimary = (
-    <ScrollView
-      accessibilityLabel="Characters browse"
-      contentContainerStyle={styles.primaryViewContent}
-      keyboardShouldPersistTaps="handled"
-      style={styles.primaryViewScroll}
-    >
-      <Text style={styles.launchpadEyebrow}>Characters</Text>
-      <Text style={styles.launchpadTitle}>Cast & relationships</Text>
-      <Text style={styles.launchpadDescription}>
-        {launchpad?.description ??
-          "Browse character sheets without leaving the sidebar."}
-      </Text>
-      <View style={styles.primaryViewActions}>
-        <Button
-          disabled={busy}
-          label="Characters on Canvas"
-          onPress={() => {
-            setPrimarySideView("explorer");
-            setRailDestination("write");
-            chooseSelection({ kind: "storyKnowledgeRoot" });
-            requestModeChange("canvas");
-          }}
-        />
-      </View>
-      {selection.kind === "storyKnowledge" &&
-      resolvedSelection?.knowledge !== undefined ? (
-        <CharacterBrowsePanel
-          busy={busy}
-          knowledge={resolvedSelection.knowledge}
-          onCommand={onCommand}
-          onOpenRecord={(storyKnowledgeId) => {
-            setRailDestination("characters");
-            chooseSelection({
-              kind: "storyKnowledge",
-              storyKnowledgeId
-            });
-          }}
-          onOpenScene={(sceneId) => {
-            const next = sceneSelection(project, sceneId);
-            if (next === undefined) return;
-            openExplorerPrimary();
-            setRailDestination("write");
-            chooseSelection(next);
-            requestModeChange("draft");
-          }}
-          project={project}
-        />
-      ) : (
-        <View style={styles.primaryViewList}>
-          {(launchpad?.entries ?? []).map((entry) => (
-            <Pressable
-              accessibilityLabel={`Open character ${entry.title}`}
-              accessibilityRole="button"
-              disabled={busy}
-              key={entry.id}
-              onPress={() => {
-                setRailDestination("characters");
-                chooseSelection(entry.selection);
-              }}
-              style={({ pressed }) => [
-                styles.primaryViewRow,
-                pressed && styles.pressed
-              ]}
-            >
-              <Text numberOfLines={1} style={styles.launchpadSceneTitle}>
-                {entry.title}
-              </Text>
-              {entry.description === undefined ? null : (
-                <Text numberOfLines={2} style={styles.launchpadEntryDescription}>
-                  {entry.description}
-                </Text>
-              )}
-              <Text style={styles.launchpadSceneMeta}>
-                {entry.kind} · {entry.meta}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
-    </ScrollView>
-  );
-  const primarySideContent = charactersInPrimary ? charactersPrimary : tree;
+  // Explorer stays the only wide primary content; Cast hosts in the center.
+  const primarySideContent = tree;
   const inspector = (
     <SelectionInspector
       busy={busy}
@@ -1402,14 +1382,13 @@ export function AuthenticatedProjectWorkspace({
   );
   const draftHomeVisible =
     mode === "draft" &&
-    (projectTitlePageVisible ||
-      (launchpadVisible && launchpad !== undefined));
+    (projectTitlePageVisible || manuscriptChronologyVisible);
   const showDraftPane = workspaceShowsDraftPane({
     mode,
     hasSelectedScene: selectedScene !== undefined,
     draftHomeVisible
   });
-  const showCanvasPane = canvasVisible && !inboxOwnsCenter;
+  const showCanvasPane = canvasVisible && !exclusiveCenterOwner;
   const splitPanesActive = workspaceSplitPanesActive({
     mode,
     wide,
@@ -1535,8 +1514,8 @@ export function AuthenticatedProjectWorkspace({
   );
   const centerTitle = projectTitlePageVisible
     ? project.title
-    : launchpadVisible
-      ? (launchpad?.title ?? "Browse structure")
+    : manuscriptChronologyVisible
+      ? (chronology?.title ?? "Manuscript")
       : drillScope.kind === "scene"
         ? (drillTrail[drillTrail.length - 1]?.label ?? selectedScene?.title)
         : drillScope.kind === "chapter"
@@ -1544,8 +1523,8 @@ export function AuthenticatedProjectWorkspace({
           : (selectedScene?.title ?? "Shape the manuscript");
   const centerEyebrow = projectTitlePageVisible
     ? "Title page"
-    : launchpadVisible
-      ? (launchpad?.eyebrow ?? "Structure")
+    : manuscriptChronologyVisible
+      ? (chronology?.eyebrow ?? "Manuscript")
       : mode === "draft"
         ? "Focused Draft"
         : mode === "canvas"
@@ -2178,9 +2157,9 @@ export function AuthenticatedProjectWorkspace({
         </View>
 
         {(() => {
-          // InboxPanel owns its heading; never compete with Write trail/hero.
+          // Inbox / Cast own their headings; never compete with Write trail/hero.
           const centerChrome =
-            focusHalo || inboxOwnsCenter ? null : (
+            focusHalo || exclusiveCenterOwner ? null : (
             <>
               {!wide ? (
                 <View style={styles.storyTrailRow}>
@@ -2302,7 +2281,9 @@ export function AuthenticatedProjectWorkspace({
                   </View>
                 </View>
               )}
-              {surfaceDense || projectTitlePageVisible ? null : (
+              {surfaceDense ||
+              projectTitlePageVisible ||
+              manuscriptChronologyVisible ? null : (
                 <View style={styles.centerHeading}>
                   <View style={styles.centerHeadingCopy}>
                     <Text style={styles.centerEyebrow}>{centerEyebrow}</Text>
@@ -2333,7 +2314,7 @@ export function AuthenticatedProjectWorkspace({
             ref={splitSurfaceRef}
             style={[
               styles.workSurface,
-              (surfaceDense || inboxOwnsCenter) && styles.workSurfaceMap,
+              (surfaceDense || exclusiveCenterOwner) && styles.workSurfaceMap,
               splitPanesActive && styles.workSurfaceSplit,
               narrow && styles.workSurfaceNarrow
             ]}
@@ -2344,6 +2325,48 @@ export function AuthenticatedProjectWorkspace({
                 style={[styles.workSurfacePane, styles.workSurfaceInbox]}
               >
                 {renderInbox?.(inboxPresentation)}
+              </View>
+            ) : castOwnsCenter ? (
+              <View
+                key="cast"
+                style={[styles.workSurfacePane, styles.workSurfaceInbox]}
+              >
+                <CastRelationshipsStudio
+                  busy={busy}
+                  characterVisualJob={characterVisualJob}
+                  layout={narrow ? "narrow" : "wide"}
+                  onApplyCharacterVisual={onApplyCharacterVisual}
+                  onCommand={onCommand}
+                  onOpenRecord={(storyKnowledgeId) => {
+                    chooseSelection({
+                      kind: "storyKnowledge",
+                      storyKnowledgeId
+                    });
+                  }}
+                  onOpenScene={(sceneId) => {
+                    const next = sceneSelection(project, sceneId);
+                    if (next === undefined) return;
+                    setRailDestination("write");
+                    chooseSelection(next);
+                    requestModeChange("draft");
+                  }}
+                  onResolveCharacterVisualDisplayUrl={
+                    onResolveCharacterVisualDisplayUrl
+                  }
+                  onSelectKnowledge={(storyKnowledgeId) => {
+                    if (storyKnowledgeId === undefined) {
+                      chooseSelection({ kind: "storyKnowledgeRoot" });
+                      return;
+                    }
+                    chooseSelection({
+                      kind: "storyKnowledge",
+                      storyKnowledgeId
+                    });
+                  }}
+                  onStartCharacterVisualJob={onStartCharacterVisualJob}
+                  project={project}
+                  selectedKnowledgeId={castSelectedKnowledge?.id}
+                />
               </View>
             ) : (
               <>
@@ -2387,423 +2410,38 @@ export function AuthenticatedProjectWorkspace({
                     : undefined
                 ]}
               >
-                {launchpadVisible && mode === "draft" && launchpad !== undefined ? (
-                  projectTitlePageVisible ? (
-                    <ProjectTitlePage
-                      busy={busy}
-                      coverOptionsJob={coverOptionsJob}
-                      coverReviewBookId={coverReviewBookId}
-                      onApplyCoverImage={onApplyCoverImage}
-                      onCommand={onCommand}
-                      onCoverReviewConsumed={onCoverReviewConsumed}
-                      onGenerateCoverPreview={onGenerateCoverPreview}
-                      onOpenBook={(bookSelection) => {
-                        setRailDestination("write");
-                        chooseSelection(bookSelection);
-                      }}
-                      onProposeCoverConcept={
-                        onChatSend === undefined ? undefined : proposeCoverConcept
-                      }
-                      onResolveCoverDisplayUrl={onResolveCoverDisplayUrl}
-                      onStartCoverOptionsJob={onStartCoverOptionsJob}
-                      project={project}
-                    />
-                  ) : (
-                  <View
-                    accessibilityLabel={
-                      charactersLens ? "Characters browse" : "Scene Launchpad"
+                {projectTitlePageVisible ? (
+                  <ProjectTitlePage
+                    busy={busy}
+                    coverOptionsJob={coverOptionsJob}
+                    coverReviewBookId={coverReviewBookId}
+                    onApplyCoverImage={onApplyCoverImage}
+                    onCommand={onCommand}
+                    onCoverReviewConsumed={onCoverReviewConsumed}
+                    onGenerateCoverPreview={onGenerateCoverPreview}
+                    onOpenBook={(bookSelection) => {
+                      setRailDestination("write");
+                      chooseSelection(bookSelection);
+                    }}
+                    onProposeCoverConcept={
+                      onChatSend === undefined ? undefined : proposeCoverConcept
                     }
-                    style={styles.launchpad}
-                  >
-                    <View style={styles.launchpadHeaderRow}>
-                      <View style={styles.launchpadHeaderCopy}>
-                        <Text style={styles.launchpadEyebrow}>
-                          {launchpad.eyebrow}
-                        </Text>
-                        <Text numberOfLines={1} style={styles.launchpadTitle}>
-                          {launchpad.title}
-                        </Text>
-                        <Text numberOfLines={1} style={styles.launchpadDescription}>
-                          {launchpad.description}
-                        </Text>
-                      </View>
-                      <View style={styles.launchpadActions}>
-                        {quickOptions[0] === undefined ? null : (
-                          <Button
-                            disabled={busy}
-                            label={quickOptions[0].label}
-                            onPress={() => {
-                              const first = quickOptions[0];
-                              if (first !== undefined) dispatchQuickBuild(first);
-                            }}
-                            primary
-                          />
-                        )}
-                        {charactersLens ? (
-                          <Button
-                            disabled={busy}
-                            label="Characters on Canvas"
-                            onPress={() => {
-                              setRailDestination("write");
-                              chooseSelection({ kind: "storyKnowledgeRoot" });
-                              requestModeChange("canvas");
-                            }}
-                          />
-                        ) : null}
-                        {launchpad.storyboardChapter === undefined ? null : (
-                          <Button
-                            disabled={busy}
-                            label="Storyboard on Canvas"
-                            onPress={() => {
-                              const chapter = launchpad.storyboardChapter;
-                              if (chapter === undefined) return;
-                              setRailDestination("write");
-                              chooseSelection(chapter);
-                              onEnterChapter(chapter);
-                              requestModeChange("canvas");
-                            }}
-                          />
-                        )}
-                      </View>
-                    </View>
-                    {(selection.kind === "part" || selection.kind === "chapter") &&
-                    !charactersLens ? (
-                      <View style={styles.launchpadDescriptionEdit}>
-                        <Text style={styles.launchpadSectionTitle}>
-                          Description
-                        </Text>
-                        <TextInput
-                          accessibilityLabel="Structure description"
-                          editable={!busy}
-                          multiline
-                          defaultValue={
-                            selection.kind === "part"
-                              ? (resolvedSelection?.part?.summary ?? "")
-                              : (resolvedSelection?.chapter?.summary ?? "")
-                          }
-                          key={`desc:${manuscriptSelectionKey(selection)}:${
-                            selection.kind === "part"
-                              ? (resolvedSelection?.part?.summary ?? "")
-                              : (resolvedSelection?.chapter?.summary ?? "")
-                          }`}
-                          onEndEditing={(event) => {
-                            const next = event.nativeEvent.text.trim();
-                            if (selection.kind === "part") {
-                              const current =
-                                resolvedSelection?.part?.summary ?? "";
-                              if (next === current) return;
-                              void onCommand({
-                                type: "part.update",
-                                bookId: selection.bookId,
-                                partId: selection.partId,
-                                summary: next === "" ? null : next
-                              });
-                              return;
-                            }
-                            if (selection.kind === "chapter") {
-                              const current =
-                                resolvedSelection?.chapter?.summary ?? "";
-                              if (next === current) return;
-                              void onCommand({
-                                type: "chapter.update",
-                                bookId: selection.bookId,
-                                partId: selection.partId,
-                                chapterId: selection.chapterId,
-                                summary: next === "" ? null : next
-                              });
-                            }
-                          }}
-                          placeholder="Add a short description for this folder"
-                          style={styles.launchpadDescriptionInput}
-                        />
-                      </View>
-                    ) : null}
-                    {selection.kind === "storyKnowledge" &&
-                    resolvedSelection?.knowledge !== undefined ? (
-                      <CharacterBrowsePanel
-                        busy={busy}
-                        knowledge={resolvedSelection.knowledge}
-                        onCommand={onCommand}
-                        onOpenRecord={(storyKnowledgeId) => {
-                          setRailDestination("characters");
-                          chooseSelection({
-                            kind: "storyKnowledge",
-                            storyKnowledgeId
-                          });
-                        }}
-                        onOpenScene={(sceneId) => {
-                          const next = sceneSelection(project, sceneId);
-                          if (next === undefined) return;
-                          setRailDestination("write");
-                          chooseSelection(next);
-                          requestModeChange("draft");
-                        }}
-                        project={project}
-                      />
-                    ) : null}
-                    {launchpad.entries.length === 0 ? null : (
-                      <View
-                        accessibilityLabel="Browse manuscript entries"
-                        style={styles.launchpadScenes}
-                      >
-                        {launchpad.entries.map((entry) => (
-                          <View key={entry.id} style={styles.launchpadScene}>
-                            <Pressable
-                              accessibilityLabel={`Open ${entry.kind} ${entry.title}`}
-                              accessibilityRole="button"
-                              disabled={busy}
-                              onPress={() => {
-                                if (entry.kind === "character") {
-                                  setRailDestination("characters");
-                                } else {
-                                  setRailDestination("write");
-                                }
-                                chooseSelection(entry.selection);
-                                if (entry.kind === "scene") {
-                                  requestModeChange("draft");
-                                }
-                              }}
-                              style={({ pressed }) => [
-                                styles.launchpadScenePrimary,
-                                pressed && styles.pressed
-                              ]}
-                            >
-                              <Text
-                                numberOfLines={1}
-                                style={styles.launchpadSceneTitle}
-                              >
-                                {entry.title}
-                              </Text>
-                              {entry.description === undefined ? null : (
-                                <Text
-                                  numberOfLines={2}
-                                  style={styles.launchpadEntryDescription}
-                                >
-                                  {entry.description}
-                                </Text>
-                              )}
-                              <Text style={styles.launchpadSceneMeta}>
-                                {entry.kind} · {entry.meta}
-                              </Text>
-                            </Pressable>
-                            <View style={styles.launchpadEntryActions}>
-                              {entry.kind === "scene" ? (
-                                <>
-                                  <Pressable
-                                    accessibilityLabel={`Draft ${entry.title}`}
-                                    accessibilityRole="button"
-                                    disabled={busy}
-                                    onPress={() => {
-                                      setRailDestination("write");
-                                      chooseSelection(entry.selection);
-                                      requestModeChange("draft");
-                                    }}
-                                    style={({ pressed }) => [
-                                      styles.launchpadEntryActionButton,
-                                      pressed && styles.pressed
-                                    ]}
-                                  >
-                                    <Text style={styles.launchpadEntryAction}>Draft</Text>
-                                  </Pressable>
-                                  {onOpenReader === undefined ? null : (
-                                    <Pressable
-                                      accessibilityLabel={`Read ${entry.title}`}
-                                      accessibilityRole="button"
-                                      disabled={busy}
-                                      onPress={() => {
-                                        setRailDestination("write");
-                                        chooseSelection(entry.selection);
-                                        requestOpenReader();
-                                      }}
-                                      style={({ pressed }) => [
-                                        styles.launchpadEntryActionButton,
-                                        pressed && styles.pressed
-                                      ]}
-                                    >
-                                      <Text style={styles.launchpadEntryAction}>Reader</Text>
-                                    </Pressable>
-                                  )}
-                                  <Pressable
-                                    accessibilityLabel={`Canvas ${entry.title}`}
-                                    accessibilityRole="button"
-                                    disabled={busy}
-                                    onPress={() => {
-                                      setRailDestination("write");
-                                      chooseSelection(entry.selection);
-                                      requestModeChange("canvas");
-                                    }}
-                                    style={({ pressed }) => [
-                                      styles.launchpadEntryActionButton,
-                                      pressed && styles.pressed
-                                    ]}
-                                  >
-                                    <Text style={styles.launchpadEntryAction}>Canvas</Text>
-                                  </Pressable>
-                                </>
-                              ) : entry.kind === "chapter" &&
-                                entry.selection.kind === "chapter" ? (
-                                <>
-                                  <Pressable
-                                    accessibilityLabel={`Open ${entry.title}`}
-                                    accessibilityRole="button"
-                                    disabled={busy}
-                                    onPress={() => {
-                                      if (entry.selection.kind !== "chapter") {
-                                        return;
-                                      }
-                                      setRailDestination("write");
-                                      chooseSelection(entry.selection);
-                                    }}
-                                    style={({ pressed }) => [
-                                      styles.launchpadEntryActionButton,
-                                      pressed && styles.pressed
-                                    ]}
-                                  >
-                                    <Text style={styles.launchpadEntryAction}>Open</Text>
-                                  </Pressable>
-                                  <Pressable
-                                    accessibilityLabel={`Canvas ${entry.title}`}
-                                    accessibilityRole="button"
-                                    disabled={busy}
-                                    onPress={() => {
-                                      if (entry.selection.kind !== "chapter") {
-                                        return;
-                                      }
-                                      const chapterSelection = entry.selection;
-                                      setRailDestination("write");
-                                      chooseSelection(chapterSelection);
-                                      onEnterChapter(chapterSelection);
-                                      requestModeChange("canvas");
-                                    }}
-                                    style={({ pressed }) => [
-                                      styles.launchpadEntryActionButton,
-                                      pressed && styles.pressed
-                                    ]}
-                                  >
-                                    <Text style={styles.launchpadEntryAction}>Canvas</Text>
-                                  </Pressable>
-                                </>
-                              ) : entry.kind === "character" ? (
-                                <Pressable
-                                  accessibilityLabel={`Open character ${entry.title}`}
-                                  accessibilityRole="button"
-                                  disabled={busy}
-                                  onPress={() => {
-                                    setRailDestination("characters");
-                                    chooseSelection(entry.selection);
-                                  }}
-                                  style={({ pressed }) => [
-                                    styles.launchpadEntryActionButton,
-                                    pressed && styles.pressed
-                                  ]}
-                                >
-                                  <Text style={styles.launchpadEntryAction}>Sheet · Links</Text>
-                                </Pressable>
-                              ) : (
-                                <Pressable
-                                  accessibilityLabel={`Open ${entry.title}`}
-                                  accessibilityRole="button"
-                                  disabled={busy}
-                                  onPress={() => {
-                                    setRailDestination("write");
-                                    chooseSelection(entry.selection);
-                                  }}
-                                  style={({ pressed }) => [
-                                    styles.launchpadEntryActionButton,
-                                    pressed && styles.pressed
-                                  ]}
-                                >
-                                  <Text style={styles.launchpadEntryAction}>Open</Text>
-                                </Pressable>
-                              )}
-                            </View>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                    {!charactersLens && launchpad.characters.length > 0 ? (
-                      <View
-                        accessibilityLabel="Characters in this scope"
-                        style={styles.launchpadScenes}
-                      >
-                        <Text style={styles.launchpadSectionTitle}>
-                          Characters in this scope
-                        </Text>
-                        {launchpad.characters.map((character) => (
-                          <Pressable
-                            accessibilityLabel={`Open character ${character.label}`}
-                            accessibilityRole="button"
-                            disabled={busy}
-                            key={character.id}
-                            onPress={() => {
-                              setRailDestination("characters");
-                              chooseSelection(character.selection);
-                            }}
-                            style={({ pressed }) => [
-                              styles.launchpadScene,
-                              pressed && styles.pressed
-                            ]}
-                          >
-                            <Text
-                              numberOfLines={1}
-                              style={styles.launchpadSceneTitle}
-                            >
-                              {character.label}
-                            </Text>
-                            {character.desire === undefined &&
-                            character.description === undefined ? null : (
-                              <Text
-                                numberOfLines={2}
-                                style={styles.launchpadEntryDescription}
-                              >
-                                {character.desire ?? character.description}
-                              </Text>
-                            )}
-                            <Text style={styles.launchpadSceneMeta}>
-                              {character.linkedSceneCount} scenes ·{" "}
-                              {character.linkedRecordCount} links
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    ) : null}
-                    {moveCandidates.length === 0 ? null : (
-                      <View
-                        accessibilityLabel="Move an existing scene here"
-                        style={styles.launchpadScenes}
-                      >
-                        <Text style={styles.launchpadSectionTitle}>
-                          Move an unassigned scene into this chapter
-                        </Text>
-                        {moveCandidates.slice(0, 6).map((scene) => (
-                          <Pressable
-                            accessibilityLabel={`Move scene ${scene.title} here`}
-                            accessibilityRole="button"
-                            disabled={busy}
-                            key={scene.id}
-                            onPress={() =>
-                              void moveSceneToLaunchpadChapter(scene)
-                            }
-                            style={({ pressed }) => [
-                              styles.launchpadScene,
-                              pressed && styles.pressed
-                            ]}
-                          >
-                            <Text
-                              numberOfLines={1}
-                              style={styles.launchpadSceneTitle}
-                            >
-                              {scene.title}
-                            </Text>
-                            <Text style={styles.launchpadSceneMeta}>
-                              Move here · keeps one canonical order
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                  )
+                    onResolveCoverDisplayUrl={onResolveCoverDisplayUrl}
+                    onStartCoverOptionsJob={onStartCoverOptionsJob}
+                    project={project}
+                  />
+                ) : manuscriptChronologyVisible && chronology !== undefined ? (
+                  <ManuscriptChronologyDesk
+                    busy={busy}
+                    onOpenScene={(sceneSelectionNext) => {
+                      setRailDestination("write");
+                      chooseSelection(sceneSelectionNext);
+                      requestModeChange("draft");
+                    }}
+                    project={project}
+                    sceneProseById={sceneProseById}
+                    selection={selection}
+                  />
                 ) : selectedScene !== undefined ? (
                   (renderDraft?.(selectedScene, draftPresentation) ?? null)
                 ) : null}

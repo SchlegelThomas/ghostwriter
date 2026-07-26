@@ -93,8 +93,9 @@ export type WorkspaceCenterMode = "draft" | "canvas" | "split";
 
 /**
  * Draft pane visibility for the center work surface.
- * Canvas owns the full center alone; Draft home (Title Page / launchpad) only in
- * draft mode; Split shows Draft only when a scene is open (no empty placeholder).
+ * Canvas owns the full center alone; Draft home (Title Page / manuscript
+ * chronology) only in draft mode; Split shows Draft only when a scene is open
+ * (no empty placeholder).
  */
 export function workspaceShowsDraftPane(input: Readonly<{
   mode: WorkspaceCenterMode;

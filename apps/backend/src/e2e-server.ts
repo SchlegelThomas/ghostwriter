@@ -102,6 +102,19 @@ function e2eAuthGateway(): AuthGateway {
       return headers.get("cookie")?.includes(`${cookieName}=authenticated`)
         ? session
         : null;
+    },
+    async ensureDemoCredentialAccount() {
+      // Hermetic E2E keeps the fake Google path; demo sign-in only sets the e2e cookie.
+    },
+    async signInDemo() {
+      return Response.json(
+        { ok: true },
+        {
+          headers: {
+            "set-cookie": `${cookieName}=authenticated; HttpOnly; SameSite=Lax; Path=/`
+          }
+        }
+      );
     }
   };
 }
@@ -135,16 +148,19 @@ const captures = createCaptureServices({
   ids,
   clock
 });
+const objectStorage = createMemoryCaptureObjectStorage();
 await seedHermeticHarryPotter({
   projects,
   sceneDocuments,
   captureDocuments,
   accountId: accountId(account.id),
   ids,
-  clock
+  clock,
+  objectStorage
 });
-console.log("Hermetic seed: Harry Potter series ready for E2E writer.");
-const objectStorage = createMemoryCaptureObjectStorage();
+console.log(
+  "Hermetic seed: Harry Potter series + character portraits ready for E2E writer."
+);
 const captureAttachments = createCaptureAttachmentServices({
   projects,
   captureDocuments,
@@ -308,6 +324,7 @@ const app = createApp({
   auth: e2eAuthGateway(),
   allowedOrigins: [appOrigin],
   objectStorage,
+  demoSeed: { enabled: process.env.GHOSTWRITER_DEMO_SEED !== "0" },
   ...(liveOpenAi ? {} : { scenePartnerGenerateImage: hermeticFakeImage })
 });
 const server = serve({ fetch: app.fetch, port }, (info) => {

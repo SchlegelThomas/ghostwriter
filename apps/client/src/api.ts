@@ -357,6 +357,11 @@ export async function beginGoogleSignIn(callbackURL: string): Promise<string> {
   return result.url;
 }
 
+/** Signs into the fixed founder demo seed account. Password never reaches the client. */
+export function signInDemoSeed(): Promise<Readonly<{ ok: true }>> {
+  return requestJson("/api/demo/sign-in", jsonRequest("POST", {}));
+}
+
 export function signOut(): Promise<unknown> {
   return requestJson("/api/auth/sign-out", jsonRequest("POST", {}));
 }
@@ -1535,4 +1540,127 @@ export async function getBookCoverDownload(input: Readonly<{
   bookId: string;
 }>): Promise<BookCoverDownloadResponse> {
   return requestJson(bookCoverImagePath(input.projectId, input.bookId, "download"));
+}
+
+export type CharacterVisualRecord = Readonly<{
+  id: string;
+  url: string;
+  alt: string;
+  caption?: string;
+  source: "generated" | "upload" | "url";
+}>;
+
+export type CharacterVisualApplyResponse = Readonly<{
+  visual: CharacterVisualRecord;
+  visuals: readonly CharacterVisualRecord[];
+}>;
+
+export type CharacterVisualDownloadResponse = Readonly<{
+  download: Readonly<{
+    url: string;
+    expiresAt: string;
+  }>;
+}>;
+
+export type CharacterVisualJobStatus = "queued" | "running" | "ready" | "failed";
+
+export type CharacterVisualJobOption = Readonly<{
+  id: string;
+  previewUrl: string;
+  prompt: string;
+  variationIndex: number;
+}>;
+
+export type CharacterVisualJobStartResponse = Readonly<{
+  jobId: string;
+  status: "queued";
+}>;
+
+export type CharacterVisualJobResponse = Readonly<{
+  jobId: string;
+  status: CharacterVisualJobStatus;
+  basePrompt: string;
+  createdAt: string;
+  updatedAt: string;
+  options?: readonly CharacterVisualJobOption[];
+  error?: Readonly<{
+    code: string;
+    message: string;
+  }>;
+}>;
+
+function characterVisualPath(
+  projectId: string,
+  knowledgeId: string,
+  suffix:
+    | "visuals/apply"
+    | "visuals/jobs"
+    | `visuals/jobs/${string}`
+    | `visuals/${string}/download`
+): string {
+  return `/api/projects/${encodeURIComponent(projectId)}/story-knowledge/${encodeURIComponent(knowledgeId)}/${suffix}`;
+}
+
+export async function postCharacterVisualJob(input: Readonly<{
+  projectId: string;
+  knowledgeId: string;
+  prompt?: string;
+  count?: number;
+  refinement?: string;
+}>): Promise<CharacterVisualJobStartResponse> {
+  return requestJson(
+    characterVisualPath(input.projectId, input.knowledgeId, "visuals/jobs"),
+    jsonRequest("POST", {
+      ...(input.prompt === undefined ? {} : { prompt: input.prompt }),
+      ...(input.count === undefined ? {} : { count: input.count }),
+      ...(input.refinement === undefined ? {} : { refinement: input.refinement })
+    })
+  );
+}
+
+export async function getCharacterVisualJob(input: Readonly<{
+  projectId: string;
+  knowledgeId: string;
+  jobId: string;
+}>): Promise<CharacterVisualJobResponse> {
+  return requestJson(
+    characterVisualPath(
+      input.projectId,
+      input.knowledgeId,
+      `visuals/jobs/${encodeURIComponent(input.jobId)}`
+    )
+  );
+}
+
+export async function postCharacterVisualApply(input: Readonly<{
+  projectId: string;
+  knowledgeId: string;
+  previewDataUri: string;
+  alt: string;
+  source: "generated" | "upload";
+  caption?: string;
+}>): Promise<CharacterVisualApplyResponse> {
+  return requestJson(
+    characterVisualPath(input.projectId, input.knowledgeId, "visuals/apply"),
+    jsonRequest("POST", {
+      previewDataUri: input.previewDataUri,
+      alt: input.alt,
+      source: input.source,
+      ...(input.caption === undefined ? {} : { caption: input.caption })
+    })
+  );
+}
+
+export async function getCharacterVisualDownload(input: Readonly<{
+  projectId: string;
+  knowledgeId: string;
+  visualId: string;
+}>): Promise<CharacterVisualDownloadResponse> {
+  return requestJson(
+    characterVisualPath(
+      input.projectId,
+      input.knowledgeId,
+      `visuals/${encodeURIComponent(input.visualId)}/download`
+    )
+  );
 }

@@ -83,6 +83,7 @@ export type WritingStudioCompanionPaneProps = Readonly<{
   onOpenContext?(): void;
   onClose?(): void;
   onSetCastLink?(memberId: string, linked: boolean): void;
+  onOpenCastStudio?(storyKnowledgeId: string): void;
 }>;
 
 /** Side companion for Sheet / Place — rendered beside the editor, not above it. */
@@ -95,7 +96,8 @@ export function WritingStudioCompanionPane({
   disabled = false,
   onOpenContext,
   onClose,
-  onSetCastLink
+  onSetCastLink,
+  onOpenCastStudio
 }: WritingStudioCompanionPaneProps) {
   const companion = companionForComposition(composition);
   if (companion === "none") return null;
@@ -163,6 +165,23 @@ export function WritingStudioCompanionPane({
                 <Text style={styles.companionBody}>
                   Voice: {member.characterSheet?.voiceNotes ?? "—"}
                 </Text>
+                {onOpenCastStudio === undefined ? null : (
+                  <Pressable
+                    accessibilityLabel={`Open ${member.label} in Cast studio`}
+                    accessibilityRole="button"
+                    disabled={disabled}
+                    onPress={() => onOpenCastStudio(member.id)}
+                    style={({ pressed }) => [
+                      styles.companionAction,
+                      pressed && styles.pressed,
+                      disabled && styles.disabled
+                    ]}
+                  >
+                    <Text style={styles.companionActionText}>
+                      Open in Cast studio
+                    </Text>
+                  </Pressable>
+                )}
               </View>
             ))
           )}

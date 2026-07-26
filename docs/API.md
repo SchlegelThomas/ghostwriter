@@ -40,7 +40,8 @@ Publishing contact fields are writer-owned profile data, not authorization.
 - `POST /api/projects` accepts `title` and `firstBookTitle`, then atomically creates the project,
   first book, and owner membership.
 - `GET /api/projects/{projectId}/navigator` returns the versioned project/book/manuscript
-  structure/scene metadata/story-knowledge projection.
+  structure/scene metadata/story-knowledge projection. Story-knowledge entries may include
+  `notes`, `aliases`, and optional `characterSheet` (`desire`, `pressure`, `voiceNotes`).
 - `POST /api/projects/{projectId}/commands` accepts an `expectedVersion` and one typed command. A
   successful command returns the complete navigator at the next version.
 
@@ -237,6 +238,24 @@ storage after Apply.
 
 Jobs are in-process for v1 (not a durable queue). History may acknowledge when options are ready.
 
+## Character visuals (Cast gallery)
+
+`storyKnowledge.update` may set optional `visuals` — an array of
+`{ id, url, alt, caption?, source: generated|upload|url }` (1–24 when set; `null` clears).
+Applied generate/upload images use stable `https://ghostwriter.character/...` locators; bitmap
+bytes live in private object storage. Navigator and MCP reads include `visuals` when present.
+
+- `POST /api/projects/{projectId}/story-knowledge/{knowledgeId}/visuals/jobs` — start async BYOK
+  image job (prompt from label + sheet + notes).
+- `GET /api/projects/{projectId}/story-knowledge/{knowledgeId}/visuals/jobs/{jobId}` — poll status/options.
+- `POST /api/projects/{projectId}/story-knowledge/{knowledgeId}/visuals/apply` — write PNG (data URI)
+  to object storage and append a visual via `storyKnowledge.update` (`source` generated|upload).
+- `GET /api/projects/{projectId}/story-knowledge/{knowledgeId}/visuals/{visualId}/download` —
+  short-lived display URL (or hermetic data URI) for a locator visual.
+
+Delete removes the visual from `visuals` via `storyKnowledge.update` (metadata); object GC is
+best-effort later. Jobs are in-process for v1 like book covers.
+
 ## Writing assist
 
 - `POST /api/projects/{projectId}/writing-assist` accepts a role (`scene-partner`,
@@ -379,7 +398,9 @@ request bodies.
 
 ## MCP parity
 
-The existing fixture MCP navigator uses the same core projection. All 24 project commands plus
+The existing fixture MCP navigator (`ghostwriter_project_navigator`) uses the same core projection,
+including those story-knowledge read fields (`notes`, `aliases`, `characterSheet`). All 24 project
+commands plus
 scene lease/save/checkpoint/variant/restore web bindings are registered with explicit MCP
 exceptions: direct external-agent writes remain unavailable until scoped grants and remote/local
 MCP authorization are accepted. Authenticated scene workspace/history reads and prose-bearing

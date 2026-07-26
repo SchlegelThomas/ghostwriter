@@ -31,7 +31,16 @@ describe("backend auth configuration", () => {
       ],
       secureCookies: true
     });
+    expect(config.demoSeed).toEqual({ enabled: true });
     expect(config.r2).toBeUndefined();
+  });
+
+  it("disables demo seed when GHOSTWRITER_DEMO_SEED=0", () => {
+    const config = loadConfig({
+      ...baseEnv,
+      GHOSTWRITER_DEMO_SEED: "0"
+    });
+    expect(config.demoSeed).toEqual({ enabled: false });
   });
 
   it("rejects an auth URL with a path", () => {
