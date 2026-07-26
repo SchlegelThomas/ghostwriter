@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Image,
   Pressable,
@@ -173,20 +173,24 @@ function useCoverDisplayUrl(
   onResolve?: ProjectTitlePageProps["onResolveCoverDisplayUrl"]
 ): string | undefined {
   const [resolved, setResolved] = useState<string | undefined>();
+  // Keep unstable parent callbacks out of effect deps (same pattern as Cast visuals).
+  const onResolveRef = useRef(onResolve);
+  onResolveRef.current = onResolve;
 
   useEffect(() => {
     if (bookId === undefined || imageUrl === undefined) {
       setResolved(undefined);
       return;
     }
-    if (onResolve === undefined) {
+    const resolve = onResolveRef.current;
+    if (resolve === undefined) {
       setResolved(externalHttpsCoverUrl(imageUrl));
       return;
     }
     let cancelled = false;
     void (async () => {
       try {
-        const next = await onResolve({ bookId, imageUrl });
+        const next = await resolve({ bookId, imageUrl });
         if (cancelled) return;
         setResolved(next ?? externalHttpsCoverUrl(imageUrl));
       } catch {
@@ -198,7 +202,7 @@ function useCoverDisplayUrl(
     return () => {
       cancelled = true;
     };
-  }, [bookId, imageUrl, onResolve]);
+  }, [bookId, imageUrl]);
 
   return resolved ?? externalHttpsCoverUrl(imageUrl);
 }

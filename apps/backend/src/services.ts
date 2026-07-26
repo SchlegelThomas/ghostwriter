@@ -159,7 +159,7 @@ export function createBackendRuntime(config: BackendConfig): BackendRuntime {
         accountId: accountId(DEMO_SEED_ACCOUNT.id),
         ids,
         clock,
-        ...(config.r2 === undefined ? {} : { objectStorage })
+        objectStorage
       });
     },
     close

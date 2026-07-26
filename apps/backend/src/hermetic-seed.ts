@@ -21,6 +21,7 @@ import {
   type SceneDocumentRepository
 } from "@ghostwriter/core";
 import { seedProject } from "@ghostwriter/storage";
+import { CaptureObjectStorageError } from "./capture-object-storage-error.js";
 
 export type HermeticSeedDependencies = Readonly<{
   projects: ProjectRepository;
@@ -82,18 +83,7 @@ export async function seedHermeticHarryPotter(
     await dependencies.sceneDocuments.initialize(initial);
   }
 
-  if (dependencies.objectStorage !== undefined) {
-    for (const seed of HARRY_POTTER_CHARACTER_VISUAL_SEEDS) {
-      const bytes = new Uint8Array(
-        await readFile(join(VISUAL_FIXTURES_DIR, seed.filename))
-      );
-      await dependencies.objectStorage.putObject({
-        objectKey: seed.objectKey,
-        contentType: "image/png",
-        bytes
-      });
-    }
-  }
+  await putHarryPotterCharacterVisualObjects(dependencies.objectStorage);
 
   const captures = createCaptureServices({
     projects: dependencies.projects,
@@ -130,10 +120,34 @@ export async function seedHermeticHarryPotter(
   }
 }
 
+async function putHarryPotterCharacterVisualObjects(
+  objectStorage: CaptureObjectStoragePort | undefined
+): Promise<void> {
+  if (objectStorage === undefined) return;
+  try {
+    for (const seed of HARRY_POTTER_CHARACTER_VISUAL_SEEDS) {
+      const bytes = new Uint8Array(
+        await readFile(join(VISUAL_FIXTURES_DIR, seed.filename))
+      );
+      await objectStorage.putObject({
+        objectKey: seed.objectKey,
+        contentType: "image/png",
+        bytes
+      });
+    }
+  } catch (error) {
+    if (error instanceof CaptureObjectStorageError) {
+      // R2 may be unprovisioned in some environments; seed metadata still lands.
+      return;
+    }
+    throw error;
+  }
+}
+
 /**
  * Idempotent Harry Potter demo seed for production/dev backends.
- * If the fixture project already exists, skips structure/prose/captures/portrait
- * re-upload and only ensures the demo account has owner membership.
+ * If the fixture project already exists, skips structure/prose/captures and
+ * re-puts portrait objects (cheap overwrite) plus ensures demo ownership.
  */
 export async function ensureDemoHarryPotterSeed(
   dependencies: HermeticSeedDependencies
@@ -145,6 +159,8 @@ export async function ensureDemoHarryPotterSeed(
     await seedHermeticHarryPotter(dependencies);
     return;
   }
+
+  await putHarryPotterCharacterVisualObjects(dependencies.objectStorage);
 
   const owner = accountId(dependencies.accountId);
   const membership = await dependencies.projects.getProjectMembership(
