@@ -1,0 +1,12 @@
+{
+  "object": "list",
+  "data": [
+    { "id": "llama-3.3-70b-versatile" },
+    { "id": "llama-3.1-8b-instant" },
+    { "id": "deepseek-chat" },
+    { "id": "mistral-large-latest" },
+    { "id": "grok-3-mini" },
+    { "id": "text-embedding-ada-002" },
+    { "id": "openai/gpt-4.1" }
+  ]
+}

@@ -5,3 +5,5 @@ allowBuilds:
   esbuild: true
   sharp: true
   workerd: true
+minimumReleaseAgeExclude:
+  - '@ai-sdk/anthropic@4.0.21'

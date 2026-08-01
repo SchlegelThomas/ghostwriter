@@ -22,11 +22,7 @@ import {
 } from "./api-contract.js";
 import type { AuthenticatedSession } from "./auth.js";
 import type { AgentProviderRuntime } from "./agent-provider-runtime.js";
-import {
-  ProviderCallsDisabledError,
-  ProviderEncryptionUnavailableError
-} from "./agent-provider-runtime.js";
-import { mapAgentRunRouteError } from "./agent-run-api.js";
+import { resolveCatalogImageGeneration } from "./catalog-image-generation.js";
 import {
   composeCharacterVisualPrompt,
   createCharacterVisualJob,
@@ -36,6 +32,7 @@ import {
   trackCharacterVisualJobRun
 } from "./character-visual-jobs.js";
 import { CaptureObjectStorageError } from "./capture-object-storage-error.js";
+import { mapAgentRunRouteError } from "./agent-run-api.js";
 import { providerAgentErrorStatusAndBody } from "./provider-agent-api.js";
 import type { ScenePartnerImageGenerator } from "./scene-partner-routes.js";
 
@@ -74,13 +71,18 @@ function invalidRequestResponse(
   );
 }
 
-function assertProviderCallable(agentProvider: AgentProviderRuntime): void {
-  if (agentProvider.policy.callsDisabled) {
-    throw new ProviderCallsDisabledError();
-  }
-  if (!agentProvider.policy.encryptionAvailable) {
-    throw new ProviderEncryptionUnavailableError();
-  }
+async function resolveImageGeneration(
+  agentProvider: AgentProviderRuntime,
+  account: ReturnType<typeof accountId>,
+  usingInjectedGenerator: boolean,
+  imageModel?: string
+): Promise<{ apiKey: string; model: string }> {
+  return resolveCatalogImageGeneration({
+    agentProvider,
+    accountId: account,
+    imageModel,
+    usingInjectedGenerator
+  });
 }
 
 function bytesToPngDataUri(bytes: Uint8Array): string {
@@ -107,18 +109,6 @@ async function loadKnowledgeInProject(input: Readonly<{
     return Object.freeze({ navigator, knowledge: undefined as undefined });
   }
   return Object.freeze({ navigator, knowledge });
-}
-
-async function resolveImageApiKey(
-  agentProvider: AgentProviderRuntime,
-  account: ReturnType<typeof accountId>,
-  usingInjectedGenerator: boolean
-): Promise<string> {
-  if (usingInjectedGenerator) {
-    return "injected-image-generator";
-  }
-  assertProviderCallable(agentProvider);
-  return agentProvider.resolveOpenAiApiKey({ accountId: account });
 }
 
 function appendVisual(
@@ -173,10 +163,11 @@ export function registerCharacterVisualRoutes(
           );
         }
 
-        const apiKey = await resolveImageApiKey(
+        const { apiKey, model } = await resolveImageGeneration(
           agentProvider,
           account,
-          usingInjectedGenerator
+          usingInjectedGenerator,
+          parsed.data.imageModel
         );
         const basePrompt = composeCharacterVisualPrompt({
           label: loaded.knowledge.label,
@@ -199,6 +190,7 @@ export function registerCharacterVisualRoutes(
             jobId: job.id,
             generateImage,
             apiKey,
+            model,
             size: CHARACTER_IMAGE_SIZE,
             now
           })

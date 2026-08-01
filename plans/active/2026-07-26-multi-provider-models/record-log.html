@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Multi-provider models — record log</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter record log</p>
+      <h1>Multi-provider models &amp; available catalog</h1>
+      <p class="meta"><a href="plan.html">Return to delivery plan</a> · <strong>Branch:</strong> <code>feat/multi-provider-models</code></p>
+    </header>
+
+    <article>
+      <h2>2026-07-26 — Plan opened from updated main</h2>
+      <p>Founder asked to pull latest <code>main</code>, use the ghostwriter-feature-delivery skill, research multi-provider options (including open-source gateways), and produce a plan for review in agent mode (Plan mode switch was declined).</p>
+      <p>Local <code>main</code> fast-forwarded to <code>7612a27</code> (includes PR #15 character-visual download-loop fix). Feature branch <code>feat/multi-provider-models</code> created. No product implementation yet — plan status is <strong>proposed</strong>.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-26 — Current harness inventory</h2>
+      <p>Read-only audit (explore agent) confirmed Ghostwriter is OpenAI-BYOK-only:</p>
+      <ul>
+        <li><code>packages/ai</code> has a thin neutral port and one OpenAI Responses/Images adapter + hermetic fake; no streaming/tools; no third-party LLM SDKs.</li>
+        <li>Credentials: <code>provider_credentials.account_id</code> primary key (one slot); AES-GCM + Fly KEKs; routes under <code>/api/me/provider/openai</code>.</li>
+        <li>Agent dock prefs hard-code <code>gpt-5.6-luna|terra|sol</code>; Settings AI panel is OpenAI key entry only.</li>
+        <li>Writing-agent harness CP1–CP2 done; CP3–CP5 open; multi-provider was explicitly out of scope there.</li>
+        <li>ADR 0011 remains authoritative for BYOK, receipts, propose-only, and “OpenAI first / port stays neutral.”</li>
+      </ul>
+    </article>
+
+    <article>
+      <h2>2026-07-26 — Gateway research synthesis</h2>
+      <p>Parallel research covered LiteLLM, Portkey, OpenRouter, Helicone, Cloudflare AI Gateway, Vercel AI SDK (+ hosted AI Gateway BYOK), LangChain/LangGraph, Kong, Bifrost, TrueFoundry, LLMWare.</p>
+      <p><strong>Parent synthesis / recommendation for the plan:</strong></p>
+      <ol>
+        <li><strong>Primary:</strong> Direct provider calls via Ghostwriter registry + Vercel AI SDK <em>packages</em> inside <code>packages/ai</code> adapters. Per-request BYOK from decrypted envelopes. Do not require Vercel’s hosted AI Gateway (team-scoped BYOK is the wrong tenancy model).</li>
+        <li><strong>Hybrid escape hatch:</strong> OpenRouter as one optional named provider for long-tail + rich <code>/models</code> metadata. Not the sole upstream. Note workspace BYOK fee after free monthly allowance.</li>
+        <li><strong>LiteLLM:</strong> Strongest OSS OpenAI-compat proxy with clientside key forward, but Python sidecar + hop fights the current Node/Fly shape. Defer unless org-gateway needs appear (D6).</li>
+        <li><strong>Avoid as core:</strong> Portkey (acquisition trajectory), Helicone/Kong/Bifrost/TrueFoundry as the writer BYOK plane, LangChain as the provider layer.</li>
+        <li><strong>Available models:</strong> curated Ghostwriter catalog ∩ providers with valid keys (+ light validate/discovery on save), not live-only noisy lists and not probe-on-every-paint.</li>
+      </ol>
+    </article>
+
+    <article>
+      <h2>2026-07-26 — Decisions pending founder review</h2>
+      <p>Plan encodes proposed D0–D6. Implementation must not start until the founder accepts or revises them — especially provider wave set (D1), catalog identity / Luna·Terra·Sol fate (D2), and sequencing vs harness CP3 (D4).</p>
+    </article>
+
+    <article>
+      <h2>2026-08-01 — Founder verify + ship prep</h2>
+      <p>Founder confirmed Settings tabs, model toggles, floating Agent picker, and
+        Defaults modal. Fixed AccountGate: session bootstrap uses a neutral loader so
+        the Google button spinner only appears after Continue is pressed (prod looked
+        like auto Google sign-in). Shipping via PR on this branch.</p>
+    </article>
+
+    <article>
+      <h2>2026-08-01 — Defaults task picker uses Modal</h2>
+      <p>Replaced absolute in-page task-default dropdowns (which stacked under sibling
+        rows and looked faded) with an opaque Modal picker + search.</p>
+    </article>
+
+    <article>
+      <h2>2026-08-01 — Agent model picker floats over workspace</h2>
+      <p>Model menu uses <code>position: fixed</code> + high z-index so it overlays
+        neighboring panes (~520px). Side-by-side list/detail with fixed body height
+        so hover copy no longer resizes/bounces the menu.</p>
+    </article>
+
+    <article>
+      <h2>2026-08-01 — Settings tabs + Agent picker clip fix</h2>
+      <p>Settings split into Providers / Models / Defaults tabs with fill-height
+        panels. Agent model menu stays in-bounds (no negative offsets) and stacks
+        list + hover detail so names are not clipped. “Manage models…” opens the
+        Models tab via <code>openSettings("models")</code>.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-26 — Settings enable toggles → Agent picker</h2>
+      <p>Models section uses switch toggles (not checkboxes). Enablement persists via
+        <code>toggleModelEnabled</code> / localStorage and filters
+        <code>chatAvailableModels</code> for the Agent dock picker. Provider cards show
+        unlock counts and point writers to Models below.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-26 — Live per-provider model discovery</h2>
+      <p>Wired provider <code>listModels</code> into <code>GET /api/me/available-models</code> (OpenAI /
+        Anthropic / Google / compat), merge with curated metadata, filter noise, cache ~10m,
+        fallback to curated on failure. Settings Models list uses discovered catalog. Focused
+        tests green; live hermetic smoke expected to show dozens of models per keyed provider.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-26 — Model enablement prefs + picker layout</h2>
+      <p>Picker: wider names, fixed 280px scroll list, detail pane, “Manage models in Settings…”.
+        Settings Models section: searchable/filterable checkboxes per catalog model (localStorage
+        prefs), plus task defaults (chat/Plan/agent/image/capture/scene partner). Dock filters to
+        enabled∩unlocked models.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-26 — Settings + model picker usability</h2>
+      <p>Founder could not see the full model list in the Agent dock short menu. Added searchable,
+        provider-grouped <code>AgentModelPickerMenu</code>; Settings AI setup shows summary,
+        configured-first providers with unlocked model chips, and no longer auto-closes on key save
+        (refresh only). Catalog +1 <code>gemini-2.0-flash</code>.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-26 — Implementation complete; verify green</h2>
+      <p>Vertical delivery finished on <code>feat/multi-provider-models</code>:</p>
+      <ul>
+        <li>CP1: composite <code>(account_id, provider)</code> credentials + <code>/api/me/providers*</code> (migration <code>0020</code>).</li>
+        <li>CP2: curated model catalog + <code>GET /api/me/available-models</code>; real model ids; default <code>gpt-4.1</code>.</li>
+        <li>CP3–CP4: Settings multi-provider keys; Agent dock picker from available models; agent-mode tool gating.</li>
+        <li>CP5–CP6: AI SDK adapters for Anthropic/Google/Groq/xAI/Mistral/DeepSeek/OpenRouter; image model pickers on cover + Cast visuals.</li>
+        <li>CP7: ADR 0012; PRODUCT/ARCHITECTURE/API/OPERATIONS updates.</li>
+      </ul>
+      <p><strong>Evidence:</strong> <code>pnpm verify</code> — typecheck + lint + 850 tests passed (2026-07-26). Playwright deferred until founder verifies in a real browser.</p>
+      <p><strong>Hermetic API smoke (2026-07-26):</strong> restarted e2e-server on :8787; demo sign-in →
+        <code>GET /api/me/providers</code> returns 8 provider slots with seeded OpenAI configured;
+        <code>GET /api/me/available-models</code> returns only OpenAI catalog models
+        (<code>gpt-4.1</code>, <code>gpt-4.1-mini</code>, <code>o4-mini</code>, <code>gpt-image-1</code>).</p>
+      <p><strong>Founder UI walkthrough still required:</strong> Settings add Anthropic → dock lists Claude models → chat → image model picker on Title/Cast → remove key → picker updates.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-26 — Plan accepted; implementation authorized</h2>
+      <p>Founder confirmed D0 (AI SDK packages in Fly Node), D4 (multi-provider before harness tools), and D6 (ignore LiteLLM). D1–D3/D5 already accepted. Directed full e2e delivery via feature-delivery harness. Plan status → active. Commits not explicitly requested; implement on <code>feat/multi-provider-models</code>.</p>
+    </article>
+
+    <article>
+      <h2>2026-07-26 — Founder Q&amp;A on D0–D6</h2>
+      <ul>
+        <li><strong>D0 clarified:</strong> “Vercel” means the open-source AI SDK npm packages used in our Node backend — not hosting on Vercel, not Vercel AI Gateway. Awaiting explicit confirm.</li>
+        <li><strong>D1 accepted:</strong> Wave A + Wave B provider set as proposed.</li>
+        <li><strong>D2 accepted:</strong> Real provider model ids (drop Luna/Terra/Sol as stored identity).</li>
+        <li><strong>D3 accepted:</strong> Gate agent mode by tool/structured capability flags.</li>
+        <li><strong>D4 clarifying:</strong> Founder asked what sequencing means — recorded as “multi-provider before harness tool-loop rewrite” vs continue harness now.</li>
+        <li><strong>D5 revised/accepted:</strong> Allow model selection for images (not OpenAI-images-only).</li>
+        <li><strong>D6 clarifying:</strong> LiteLLM revisit is optional future ops escape hatch; no work in this epic by default.</li>
+      </ul>
+    </article>
+  </main>
+</body>
+</html>

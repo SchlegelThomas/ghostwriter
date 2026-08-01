@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Multi-provider models &amp; available catalog</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan · Agents / BYOK</p>
+      <h1>Multi-provider models &amp; available catalog</h1>
+      <p class="lede">Let writers bring keys for many model labs, see only the models they can actually use in Settings and the Agent dock, and keep Ghostwriter’s propose-only harness provider-neutral — without making a Python gateway the product control plane.</p>
+      <p class="meta"><strong>Status:</strong> complete — shipping on <code>feat/multi-provider-models</code><br>
+        <strong>Branch:</strong> <code>feat/multi-provider-models</code> (from <code>main</code> @ <code>7612a27</code>)<br>
+        <strong>Owner:</strong> founder + parent agent<br>
+        <strong>Related:</strong>
+        <a href="../2026-07-25-writing-agent-harness/plan.html">Writing agent harness</a> (CP3–CP5 still open; OpenAI-only v1),
+        <a href="../2026-07-24-capture-to-story-agents/plan.html">Capture to Story</a> (BYOK foundation),
+        <a href="../../../docs/adr/0011-byok-context-proposals-playbooks-and-mcp-grants.md">ADR 0011</a><br>
+        <strong>Living designs:</strong>
+        <a href="../../designs/Ghostwriter%20Mockups%204.0.html">Mockups 4.0</a> ·
+        <a href="../../designs/Ghostwriter%20Mockups%205.0.html">Mockups 5.0</a></p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Today Ghostwriter is <strong>OpenAI-BYOK-only</strong>: one encrypted credential slot, Settings that only accept an OpenAI key, and an Agent dock model picker hard-coded to Ghostwriter aliases (<code>gpt-5.6-luna|terra|sol</code>) passed verbatim upstream. Writers who already pay Anthropic, Google, Groq, xAI, Mistral, DeepSeek, or an aggregator cannot use those models in the harness.</p>
+      <p>This plan expands the credential + catalog layer so Settings can store multiple provider keys, the Agent panel lists only models the account can reach, and <code>packages/ai</code> gains first-class adapters (or OpenAI-compatible bridges) for a broad provider set — while preserving ADR 0011 (encrypted BYOK, decrypt only in the backend adapter, propose-only apply, server-assembled receipts, hermetic fake in CI).</p>
+      <p><strong>Explicitly out of scope:</strong> ChatGPT/Claude browser OAuth token reuse; marketplace / org billing; replacing the writing-agent harness CP3 tool loop (parallel plan); making LiteLLM or OpenRouter the sole credential home; local Ollama/desktop-only providers in v1; Playwright until founder verifies the complete outcome.</p>
+    </section>
+
+    <section>
+      <h2>Research summary (gateway options)</h2>
+      <p>Deep research compared open-source and hosted gateways against Ghostwriter’s real constraints: TypeScript/Node on Fly, per-writer encrypted BYOK, Settings-driven “available models,” and an existing provider-neutral port in <code>packages/ai</code>.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Option</th>
+            <th>Fit</th>
+            <th>Verdict</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Vercel AI SDK</strong> (<code>ai</code> + <code>@ai-sdk/*</code>) — in-process, not the hosted AI Gateway</td>
+            <td>Native TS streaming/tools/structured output; <code>createProviderRegistry</code>; per-request <code>createOpenAI({ apiKey })</code> / Anthropic / Google / Groq / xAI / OpenAI-compatible</td>
+            <td><strong>Primary recommendation</strong></td>
+          </tr>
+          <tr>
+            <td><strong>OpenRouter</strong> (hosted aggregator)</td>
+            <td>Huge catalog + rich <code>/models</code> capability flags; OpenAI-compat; workspace BYOK with fee after free tier — not ideal as the only key store for every writer</td>
+            <td><strong>Runner-up #1</strong> — optional long-tail provider</td>
+          </tr>
+          <tr>
+            <td><strong>LiteLLM</strong> (MIT Python proxy)</td>
+            <td>Widest provider map; OpenAI-compat; clientside key forward for BYOK; Fly Docker possible — but adds a second runtime, hop, and ops surface beside the Node backend</td>
+            <td><strong>Runner-up #2</strong> — defer as org gateway, not default</td>
+          </tr>
+          <tr>
+            <td>Portkey Gateway (OSS)</td>
+            <td>Node-friendly OpenAI-compat; BYOK via headers — acquired by Palo Alto (2026); gravity toward enterprise security control plane</td>
+            <td>Avoid as core dependency</td>
+          </tr>
+          <tr>
+            <td>Helicone / Bifrost / Kong AI / TrueFoundry</td>
+            <td>Observability or enterprise gateway patterns; weak match for multi-tenant writer-key passthrough on a small Fly app</td>
+            <td>Defer / out of scope</td>
+          </tr>
+          <tr>
+            <td>Cloudflare AI Gateway</td>
+            <td>Fits CF footprint later for cache/logs; account-scoped store keys ≠ Ghostwriter KEK BYOK</td>
+            <td>Optional middle hop later</td>
+          </tr>
+          <tr>
+            <td>LangChain / LangGraph JS</td>
+            <td>Agent graph framework, not a credential/catalog layer</td>
+            <td>Not the provider plane</td>
+          </tr>
+        </tbody>
+      </table>
+      <p><strong>Recommended architecture (proposed D0):</strong> extend Ghostwriter’s own registry on top of <code>packages/ai</code>, implement adapters with Vercel AI SDK provider packages (and <code>@ai-sdk/openai-compatible</code> for long-tail), call providers <em>directly</em> with per-request decrypted BYOK. Optionally add <strong>OpenRouter as one named provider</strong> for long-tail models. Do <strong>not</strong> self-host LiteLLM as the v1 control plane; revisit only if we need a shared OpenAI-compatible org gateway for non-UI clients.</p>
+      <pre><code>Settings / Agent panel
+  → Ghostwriter model registry (curated catalog ∩ account entitlements)
+  → packages/ai ports (structured + future stream/tools)
+  → @ai-sdk/* adapters with per-request BYOK
+  → [optional] OpenRouter | other OpenAI-compatible as named providers</code></pre>
+    </section>
+
+    <section>
+      <h2>Product thesis and authority</h2>
+      <ul>
+        <li><strong>Providers are interchangeable backends.</strong> Ghostwriter owns workflows, receipts, playbooks, propose-only apply, and the available-model catalog UX.</li>
+        <li><strong>BYOK stays first-class.</strong> Writer keys encrypt under existing Fly KEKs; plaintext decrypts only in the backend adapter immediately before an authorized call (ADR 0011).</li>
+        <li><strong>Available = curated ∩ reachable.</strong> Settings and Agent dock never dump raw provider /models noise. Ghostwriter ships a pinned catalog with capability flags; UI shows models only for providers with a valid key (and optional discovery refresh).</li>
+        <li><strong>No silent authority.</strong> Multi-provider does not weaken propose-only, receipt confirm for egress, or MCP propose-only grants.</li>
+        <li><strong>Gateway is optional infrastructure, not product policy.</strong> LiteLLM/OpenRouter must not own allowlists, playbooks, or context assembly.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ol>
+        <li>Settings AI setup lets a writer add/validate/remove keys for <strong>multiple providers</strong> (not only OpenAI), with masked hints and validation state per provider.</li>
+        <li>A server endpoint returns the writer’s <strong>available model catalog</strong>: curated entries filtered to providers with configured + valid credentials (and capability flags for chat / tools / structured / image).</li>
+        <li>Agent dock model picker lists only available models; empty/disabled states point to Settings when none are configured; last preference falls back safely if a key is removed.</li>
+        <li>Chat / agent runs / Scene Partner use the selected provider+model via the shared runtime; receipts and runs record real <code>provider</code> + model ids (not OpenAI-only types).</li>
+        <li>At least the accepted v1 provider set completes structured completion through hermetic fake in CI and live adapters behind BYOK (see D1).</li>
+        <li>Credential storage supports one encrypted envelope per <code>(account, provider)</code> (schema migration from today’s <code>account_id</code> PK).</li>
+        <li>Kill switch, KEK custody, and “never return plaintext / never log keys” invariants hold for every new provider.</li>
+        <li>Docs: PRODUCT / ARCHITECTURE / API / OPERATIONS + ADR amendment (or ADR 0012) describe multi-provider registry and gateway decision.</li>
+        <li>Focused Vitest + <code>pnpm verify</code>; browser walkthrough recorded; Playwright deferred until founder verifies.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Domain and design audit</h2>
+      <h3>Current state (authoritative code)</h3>
+      <ul>
+        <li><code>packages/ai</code>: provider-neutral <code>StructuredCompletionProvider</code> + one live OpenAI Responses/Images adapter + fake; no streaming/tools yet; no Anthropic/Google/OpenRouter.</li>
+        <li><code>provider_credentials</code>: PK = <code>account_id</code> only — one credential row per account.</li>
+        <li>Types: <code>AgentProviderId = "openai"</code>; <code>AgentModelId = gpt-5.6-luna|terra|sol</code>; egress <code>openai-responses</code>.</li>
+        <li>UI: <code>AiSetupPanel</code> / Settings OpenAI-only; <code>workspace-agent-prefs.ts</code> hard-coded three aliases; <code>WorkspaceChatPanel</code> chips.</li>
+        <li>Runtime: <code>agent-provider-runtime.ts</code> always <code>createOpenAiProvider</code> after decrypt.</li>
+      </ul>
+      <h3>Canonical objects to extend</h3>
+      <ul>
+        <li><strong>Provider credential envelope</strong> — per account+provider; existing AES-GCM + AAD pattern.</li>
+        <li><strong>Model catalog entry</strong> — Ghostwriter id, provider id, upstream model id, labels, tier/effort map, capability flags, optional image model binding.</li>
+        <li><strong>Available catalog view</strong> — noncanonical projection for Settings + dock (not a second store of truth).</li>
+        <li><strong>Context receipt / run / proposal</strong> — widen provider + model fields; keep receipt hash rules.</li>
+      </ul>
+      <h3>Concurrency / persistence</h3>
+      <ul>
+        <li>Credential mutations are account-scoped with version/precondition (existing pattern generalized to provider id).</li>
+        <li>Migration: move existing OpenAI rows to composite identity <code>(account_id, provider)</code>; no data loss.</li>
+        <li>Agent prefs in localStorage must tolerate model ids disappearing when a key is deleted.</li>
+      </ul>
+      <h3>Design map</h3>
+      <ul>
+        <li><strong>Settings:</strong> multi-provider AI setup — provider cards/list, key entry, validate, remove; progressive (skip until agent help).</li>
+        <li><strong>Agent dock:</strong> model picker grouped by provider (or flat with provider badge); effort chips remain Fast/Standard/High mapped per-provider.</li>
+        <li><strong>Living design:</strong> Mockups 5.0 owns BYOK / progressive setup; Mockups 4.0 owns writing-agent chrome. Preserve files; additive Settings/dock language only if founder asks.</li>
+        <li><strong>Authority on conflict:</strong> ADR 0011 + this plan beat mockup flourishes that imply ChatGPT/Claude login reuse.</li>
+      </ul>
+      <h3>Binding map</h3>
+      <ul>
+        <li>Core: multi-provider credential services; model registry; available-catalog query; widen receipt/run types.</li>
+        <li>Storage: migration for <code>provider_credentials</code> PK; repository methods by provider.</li>
+        <li>AI: registry + adapters (AI SDK under the port); keep fake provider.</li>
+        <li>API: <code>/api/me/providers</code> (list/status), <code>/api/me/providers/:id</code> CRUD/validate, <code>/api/me/available-models</code>; deprecate OpenAI-only paths with compatibility shims.</li>
+        <li>UI: Settings + Agent dock + prefs; client API helpers.</li>
+        <li>Capabilities/MCP: same runtime; no credential disclosure via MCP.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks (vertical checkpoints)</h2>
+      <ol>
+        <li><strong>CP0 — Plan accept + decisions:</strong> Founder accepts D0–D4 (or revises). Branch already created. No product code before accept.</li>
+        <li><strong>CP1 — Credential multi-slot foundation:</strong> Schema + core/storage for <code>(account, provider)</code>; generalize crypto AAD; keep OpenAI working via shim routes; Vitest + migration-from-empty.</li>
+        <li><strong>CP2 — Model registry + available-models API:</strong> Curated catalog module; entitlement intersect; <code>GET /api/me/available-models</code> + provider status list; hermetic tests.</li>
+        <li><strong>CP3 — Settings multi-provider UI:</strong> Add/validate/remove keys for accepted providers; empty/progressive states; only show configured providers’ health.</li>
+        <li><strong>CP4 — Agent dock catalog wiring:</strong> Model picker from available-models; prefs migration; refusal when model not available; provider badge.</li>
+        <li><strong>CP5 — First wave adapters:</strong> Anthropic + Google (Gemini) structured completion behind the port (AI SDK); runtime selects adapter by provider; receipts record provider; CI fake covers multi-provider ids.</li>
+        <li><strong>CP6 — Long-tail wave:</strong> OpenAI-compatible + optional OpenRouter provider; Groq / xAI / Mistral / DeepSeek (or accepted subset) via catalog + compatible bridge; image path remains OpenAI (or accepted image providers) with clear UI gating.</li>
+        <li><strong>CP7 — Docs + ADR + handoff:</strong> ADR 0012 (or 0011 amendment), PRODUCT/ARCHITECTURE/API/OPERATIONS, WHERE-I-LEFT-OFF; coherence review; founder verify walkthrough.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Feature checkpoints (writer-visible)</h2>
+      <ol>
+        <li><strong>Many keys in Settings</strong> — save Anthropic (and other accepted) keys beside OpenAI; validate/remove independently.</li>
+        <li><strong>Available models only</strong> — dock picker shows Terra-equivalent Claude / Gemini / etc. only when that key is valid; removing a key removes its models.</li>
+        <li><strong>Chat on a non-OpenAI model</strong> — with BYOK, dock chat answers using the selected provider; receipt shows destination; propose-only unchanged.</li>
+        <li><strong>Long-tail optional</strong> — if D1 includes OpenRouter/compat providers, writer can enable that key and pick a catalog-approved long-tail model.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li>Vitest: credential multi-slot; catalog intersect; available-models route auth; adapter selection; OpenAI shim compatibility; fake multi-provider completion.</li>
+        <li>Migration test: existing single OpenAI row → composite key without loss.</li>
+        <li>Manual browser: Settings add OpenAI + Anthropic → dock lists both families → chat with each → delete Anthropic → picker updates / prefs fallback.</li>
+        <li>Refusal: no keys → clear Settings CTA; invalid key → validation_state + models hidden; kill switch still blocks calls.</li>
+        <li><code>pnpm verify</code> before handoff. Playwright only after founder verifies (<code>GHOSTWRITER_PLAYWRIGHT_GATE=user-verified</code>).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <ul>
+        <li><strong>New ADR 0012</strong> (preferred) or amendment to ADR 0011: multi-provider registry, AI SDK direct adapters as default, LiteLLM deferred, OpenRouter optional, available-models discovery rule, image-provider gating.</li>
+        <li><code>docs/PRODUCT.md</code> — Settings multi-key; dock available catalog; retire OpenAI-only empty copy.</li>
+        <li><code>docs/ARCHITECTURE.md</code> — provider runtime + catalog; clarify AI SDK vs hosted Vercel AI Gateway (we do <em>not</em> require Vercel Gateway).</li>
+        <li><code>docs/API.md</code> — provider routes + available-models; OpenAI path compatibility.</li>
+        <li><code>docs/OPERATIONS.md</code> — KEK unchanged; no LiteLLM Fly app in v1; optional env notes for E2E live keys per provider.</li>
+        <li><strong>Living design:</strong> Mockups 4.0 / 5.0 — no wholesale rewrite; record additive Settings/dock impact in the record log.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li><strong>D0 — Control plane (accepted 2026-07-26):</strong> Use the open-source <strong>Vercel AI SDK npm packages</strong> (<code>ai</code>, <code>@ai-sdk/openai</code>, <code>@ai-sdk/anthropic</code>, …) <em>inside our Fly Node backend</em>. This is <strong>not</strong> “host on Vercel,” and <strong>not</strong> Vercel’s hosted AI Gateway. Keys stay in Ghostwriter KEK custody; we call Anthropic/OpenAI/etc. directly. LiteLLM stays off the default path.</li>
+        <li><strong>D1 — v1 provider set (accepted 2026-07-26):</strong>
+          <ul>
+            <li><strong>Wave A:</strong> OpenAI, Anthropic, Google Gemini.</li>
+            <li><strong>Wave B (same epic):</strong> Groq, xAI, Mistral, DeepSeek + optional OpenRouter.</li>
+            <li><strong>Defer:</strong> Azure / Bedrock / Vertex SA complexity; Ollama/local until desktop.</li>
+          </ul>
+        </li>
+        <li><strong>D2 — Catalog identity (accepted 2026-07-26):</strong> Real provider model ids in the picker (e.g. <code>claude-sonnet-4-5</code>, <code>gpt-4.1</code>, <code>gemini-2.5-pro</code>) — retire Luna/Terra/Sol as the stored model identity. Effort remains Fast/Standard/High posture mapped per provider.</li>
+        <li><strong>D3 — Agent gating (accepted 2026-07-26):</strong> Models without reliable tool/structured support are chat-only (or hidden from agent mode) via catalog flags.</li>
+        <li><strong>D4 — Sequencing vs harness (accepted 2026-07-26):</strong> Multi-provider first; harness CP3 tools come after this epic’s runtime is in place.</li>
+        <li><strong>D5 — Images (accepted revised 2026-07-26):</strong> Image-capable models are selectable too (catalog flag <code>supportsImage</code>). Cover/character visual jobs use the writer’s chosen image model when that provider key is valid; disable image agents only when no image-capable model is available.</li>
+        <li><strong>D6 — LiteLLM (accepted ignore 2026-07-26):</strong> No LiteLLM work in this epic.</li>
+        <li><strong>Risk:</strong> Provider API surface variance (tools, JSON schema, reasoning effort, image APIs) — catalog flags + adapter tests.</li>
+        <li><strong>Risk:</strong> AI SDK major version churn — pin versions; Ghostwriter ports stay stable.</li>
+        <li><strong>Risk:</strong> OpenRouter fee/privacy hop — label clearly; never route direct-provider keys through OpenRouter unless the writer configured OpenRouter.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked> Plan reviewed and D0–D6 accepted by founder</li>
+        <li><input type="checkbox" checked> Branch confirmed; implementation may start</li>
+        <li><input type="checkbox" checked> CP1 Credential multi-slot foundation</li>
+        <li><input type="checkbox" checked> CP2 Model registry + available-models API</li>
+        <li><input type="checkbox" checked> CP3 Settings multi-provider UI</li>
+        <li><input type="checkbox" checked> CP4 Agent dock catalog wiring</li>
+        <li><input type="checkbox" checked> CP5 Wave A adapters (Anthropic + Google)</li>
+        <li><input type="checkbox" checked> CP6 Wave B long-tail / OpenRouter + image model pickers</li>
+        <li><input type="checkbox" checked> CP7 Docs, ADR, verify</li>
+        <li><input type="checkbox" checked> Founder browser verification (Settings tabs, toggles, picker, discovery)</li>
+        <li><input type="checkbox" checked> Sign-in bootstrap no longer looks like Google auto-start</li>
+        <li><input type="checkbox"> Handoff updated and plan archived when PR merges</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

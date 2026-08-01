@@ -695,10 +695,10 @@ export const canvasRevisions = pgTable(
 );
 
 export const providerCredentials = pgTable(
-  "provider_credentials",
+  "provider_credential_keys",
   {
     accountId: text("account_id")
-      .primaryKey()
+      .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     provider: text("provider").notNull(),
     version: integer("version").notNull(),
@@ -712,7 +712,13 @@ export const providerCredentials = pgTable(
     updatedAt: text("updated_at").notNull(),
     validatedAt: text("validated_at")
   },
-  (table) => [index("provider_credentials_kek_version_index").on(table.kekVersion)]
+  (table) => [
+    primaryKey({
+      name: "provider_credential_keys_pk",
+      columns: [table.accountId, table.provider]
+    }),
+    index("provider_credential_keys_kek_version_index").on(table.kekVersion)
+  ]
 );
 
 export const aiCollaborationProfiles = pgTable("ai_collaboration_profiles", {

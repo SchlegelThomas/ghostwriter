@@ -84,7 +84,10 @@ On `feat/writing-experience-ux-4`, writers also get:
 - Writer profile publishing details (pen name, legal/contact, mailing address, bio, representation) edited from a pencil modal on the project library;
 - Sign-in gate led by the brand lockup with short “Bring your ideas to life” copy.
 
-Agents still never silent-write canon. BYOK OpenAI powers Agent dock chat and toolkit jobs when configured; deterministic-local proposals remain available without a key.
+Agents still never silent-write canon. Multi-provider BYOK (OpenAI, Anthropic, Google, Groq, xAI,
+Mistral, DeepSeek, optional OpenRouter) powers Agent dock chat and toolkit jobs when configured;
+Settings lists keys per provider and the dock shows only available real model ids; deterministic-local
+proposals remain available without a key.
 
 ## Current writing milestone — Capture to Story (implemented locally 2026-07-24)
 
@@ -95,7 +98,7 @@ On `feat/capture-to-story-agents`, writers can Capture first and integrate with 
   audio, PDF, and plain text (Cloudflare R2 when configured; prose Capture still works without it);
 - review Captures in a durable Inbox; promote losslessly to a new Scene with optional same-ID
   Canvas placement, or keep the source as inspectable provenance;
-- connect an OpenAI BYOK key under progressive setup (Capture never requires AI); preview a
+- connect BYOK provider keys under progressive setup (Capture never requires AI); preview a
   server-assembled context receipt before egress; optional collaboration preferences and
   declarative playbooks refine goals without granting tools or canonical authority;
 - Scene Partner reflects on a Capture (summary, questions, story jobs) and can apply as a new Scene
@@ -127,17 +130,19 @@ On the same branch, the workspace shell and Agent dock advanced:
 - project home is a **Title Page**; Write-rail structure folders and Story Knowledge root use a
   **manuscript chronology** scroll (not BookReader, not launchpad cards);
 - hardcover studio remains on the Title Page (cover concept/notes);
-- BYOK cover image options via async jobs (`gpt-image-1` portrait); Apply stores a private object
-  locator (R2 when configured; hermetic memory fake for E2E) — never a data URI in Lakebase;
-- Agent dock composer: modes **chat** / **Plan** / **agent**, model (Luna/Terra/Sol) + effort,
-  persisted per project; **chat** completes with BYOK OpenAI and server-assembled project context;
-  Settings owns the OpenAI key; capability ids still invoke read tools;
+- BYOK cover / character visual options via async jobs with selectable image models from the
+  available catalog (default `gpt-image-1`); Apply stores a private object locator (R2 when
+  configured; hermetic memory fake for E2E) — never a data URI in Lakebase;
+- Agent dock composer: modes **chat** / **Plan** / **agent**, real provider model ids + effort,
+  persisted per project; picker lists only models the account can reach; **agent** mode requires
+  tool-capable models; **chat** completes with BYOK via the selected provider and server-assembled
+  project context; Settings owns multi-provider keys; capability ids still invoke read tools;
 - Manuscript Explorer: header icons + right-click context menu; Canvas owns full center with a
   compact chapter chip strip (no canvas Quick Build).
 
 **Proposed next:** Writing agent harness CP3–CP5 (tools in the loop, toolkit agent deep-link,
-Plan→Plans persistence). Cast studio founder browser verification and post-gate Playwright remain
-open (`plans/active/2026-07-25-character-screens-depth/`).
+Plan→Plans persistence) on the multi-provider runtime (ADR 0012). Founder browser verification of
+multi-provider Settings/dock and post-gate Playwright remain pending.
 
 ## Prior writing milestone — implemented locally 2026-07-12
 

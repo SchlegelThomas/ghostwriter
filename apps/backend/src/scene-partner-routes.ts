@@ -38,6 +38,7 @@ type ScenePartnerEnvironment = {
 export type ScenePartnerImageGenerator = (input: Readonly<{
   apiKey: string;
   prompt: string;
+  model?: string;
   size?: "1024x1024" | "1024x1536" | "1536x1024" | "1024x1792" | "1792x1024";
 }>) => Promise<OpenAiImageGenerationResult>;
 
@@ -222,8 +223,9 @@ export function registerScenePartnerRoutes(
           captureId: scopedCaptureId
         });
 
-        const provider = (await agentProvider.createOpenAiCompletionProvider({
-          accountId: account
+        const provider = (await agentProvider.createCompletionProviderForModel({
+          accountId: account,
+          model: CAPTURE_REFLECTION_DEFAULT_MODEL
         })) as unknown as StructuredCompletionProvider;
 
         const completion = await provider.completeStructured({

@@ -24,7 +24,18 @@ import {
   bookTitleStudioFingerprint,
   buildBookCoverImagePrompt
 } from "./project-title-page-model.js";
+import {
+  ImageGenerationUnavailable,
+  ImageModelPicker
+} from "./ImageModelPicker.js";
+import {
+  accountHasAvailableImageModels,
+  resolveWorkspaceImageModelId,
+  workspaceImageModelPickerOptions,
+  type WorkspaceAvailableModel
+} from "./workspace-agent-prefs.js";
 import { ghostwriterTheme } from "./theme.js";
+import type { OpenSettingsHandler } from "./settings-focus.js";
 
 const { colors, fonts } = ghostwriterTheme;
 
@@ -65,10 +76,14 @@ export type ProjectTitlePageProps = Readonly<{
     prompt: string;
     count?: number;
     refinement?: string;
+    imageModel?: string;
   }>): Promise<void>;
   coverOptionsJob?: CoverOptionsJobSnapshot;
   coverReviewBookId?: BookId;
   onCoverReviewConsumed?(): void;
+  imageAvailableModels?: readonly WorkspaceAvailableModel[];
+  preferredImageModelId?: string;
+  onOpenSettings?: OpenSettingsHandler;
   /** @deprecated Prefer onStartCoverOptionsJob — sync preview is unused by the studio UI. */
   onGenerateCoverPreview?(input: Readonly<{
     bookId: BookId;
@@ -489,6 +504,9 @@ export function ProjectTitlePage({
   coverOptionsJob,
   coverReviewBookId,
   onCoverReviewConsumed,
+  imageAvailableModels = [],
+  preferredImageModelId,
+  onOpenSettings,
   onApplyCoverImage,
   onResolveCoverDisplayUrl
 }: ProjectTitlePageProps) {
@@ -517,6 +535,28 @@ export function ProjectTitlePage({
   const [coverActionError, setCoverActionError] = useState<string | undefined>();
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [saveStatusMessage, setSaveStatusMessage] = useState<string | undefined>();
+  const imageModelOptions = useMemo(
+    () => workspaceImageModelPickerOptions(imageAvailableModels),
+    [imageAvailableModels]
+  );
+  const imageGenerationAvailable = accountHasAvailableImageModels(
+    imageAvailableModels
+  );
+  const [imageModelId, setImageModelId] = useState(() =>
+    resolveWorkspaceImageModelId(imageAvailableModels, preferredImageModelId)
+  );
+
+  useEffect(() => {
+    setImageModelId((current) => {
+      if (imageModelOptions.some((entry) => entry.value === current)) {
+        return current;
+      }
+      return resolveWorkspaceImageModelId(
+        imageAvailableModels,
+        preferredImageModelId
+      );
+    });
+  }, [imageAvailableModels, imageModelOptions, preferredImageModelId]);
 
   const focusedBook = activeBooks.find((book) => book.id === focusedBookId);
   const focusedFingerprint =
@@ -537,7 +577,8 @@ export function ProjectTitlePage({
       jobForFocusedBook.status === "running");
 
   const coverImageBusy = coverJobStarting || coverApplying || jobInFlight;
-  const coverActionsDisabled = busy || coverImageBusy;
+  const coverActionsDisabled =
+    busy || coverImageBusy || !imageGenerationAvailable;
 
   const savedCoverDisplayUrl = useCoverDisplayUrl(
     focusedBook?.id,
@@ -688,6 +729,7 @@ export function ProjectTitlePage({
         bookId: focusedBook.id,
         prompt,
         count: DEFAULT_COVER_OPTION_COUNT,
+        imageModel: imageModelId,
         ...(trimmedRefinement === ""
           ? {}
           : { refinement: trimmedRefinement })
@@ -968,6 +1010,17 @@ export function ProjectTitlePage({
 
           {coverActionError === undefined ? null : (
             <Text style={styles.coverActionError}>{coverActionError}</Text>
+          )}
+
+          {onStartCoverOptionsJob === undefined ? null : imageGenerationAvailable ? (
+            <ImageModelPicker
+              disabled={coverActionsDisabled}
+              onChange={setImageModelId}
+              options={imageModelOptions}
+              value={imageModelId}
+            />
+          ) : (
+            <ImageGenerationUnavailable onOpenSettings={onOpenSettings} />
           )}
 
           <View style={styles.deskActionsPrimary}>

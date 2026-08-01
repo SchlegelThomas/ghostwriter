@@ -242,6 +242,36 @@ describe("book cover image routes", () => {
     expect(invalidApply.status).toBe(400);
   });
 
+  it("passes catalog imageModel to the image generator", async () => {
+    let seenModel: string | undefined;
+    const modelCapturingFake: ScenePartnerImageGenerator = async (input) => {
+      seenModel = input.model;
+      return {
+        ok: true as const,
+        b64Json: TINY_PNG_B64,
+        dataUri: TINY_PNG_DATA_URI
+      };
+    };
+    const { app } = await openSeededApp({
+      scenePartnerGenerateImage: modelCapturingFake
+    });
+    await configureOpenAi(app);
+
+    const response = await app.request(
+      `/api/projects/${PROJECT}/books/${BOOK_ID}/cover/images`,
+      {
+        method: "POST",
+        headers: originHeaders("POST"),
+        body: JSON.stringify({
+          prompt: "Mist over the harbor",
+          imageModel: "gpt-image-1"
+        })
+      }
+    );
+    expect(response.status).toBe(201);
+    expect(seenModel).toBe("gpt-image-1");
+  });
+
   it("starts an async cover job and polls until three options are ready", async () => {
     let call = 0;
     const uniqueFake: ScenePartnerImageGenerator = async ({ prompt }) => {

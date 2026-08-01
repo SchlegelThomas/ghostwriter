@@ -179,13 +179,19 @@ responses use stable `ATTACHMENT_*` codes. Attachments never promote into scene 
 
 ## Provider credentials and agent guidance (BYOK)
 
-Writer OpenAI keys are encrypted at rest under a versioned Fly-held KEK. Routes never return plaintext
-keys. Missing, invalid, and unconfigured provider states use stable codes without echoing secrets.
+Writer provider keys (OpenAI, Anthropic, Google, Groq, xAI, Mistral, DeepSeek, OpenRouter) are
+encrypted at rest under a versioned Fly-held KEK — one envelope per `(account, provider)`. Routes
+never return plaintext keys. Missing, invalid, and unconfigured provider states use stable codes
+without echoing secrets. See ADR 0011 and ADR 0012.
 
-- `GET /api/me/provider/openai` returns configuration status (present/validated metadata only).
-- `PUT /api/me/provider/openai` stores or replaces the encrypted key after validation.
-- `DELETE /api/me/provider/openai` removes the stored key.
-- `POST /api/me/provider/openai/validate` revalidates the stored key without returning it.
+- `GET /api/me/providers` lists configuration status for every supported provider id.
+- `GET` / `PUT` / `DELETE /api/me/providers/{providerId}` read/store/remove one provider key.
+- `POST /api/me/providers/{providerId}/validate` revalidates the stored key without returning it.
+- `GET /api/me/available-models` returns curated catalog entries the account can use (non-revoked
+  credential for that provider), with capability flags (`supportsChat`, `supportsTools`,
+  `supportsStructured`, `supportsImage`).
+- Compatibility shims: `GET` / `PUT` / `DELETE` / `POST …/validate` on
+  `/api/me/provider/openai` forward to the `openai` provider id.
 - `GET` / `PATCH /api/me/ai-collaboration` read/update optional collaboration preferences.
 - `GET` / `PATCH /api/projects/{projectId}/agent-instructions` project-level guidance text.
 - Playbooks: `GET` / `POST /api/projects/{projectId}/playbooks`,

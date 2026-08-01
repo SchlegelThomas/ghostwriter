@@ -185,6 +185,7 @@ describe("postgres provider credentials and agent guidance", () => {
 
     const marked = await credentials.markValidation({
       accountId: OWNER,
+      providerId: OPENAI_PROVIDER_ID,
       expectedVersion: 2,
       validationState: "valid",
       updatedAt: LATER,
@@ -208,12 +209,15 @@ describe("postgres provider credentials and agent guidance", () => {
 
     const purged = await credentials.deleteByKekVersion("kek-v1");
     expect(purged).toBe(1);
-    expect(await credentials.get(OTHER_ACCOUNT)).toBeUndefined();
-    expect(await credentials.get(OWNER)).toBeDefined();
+    expect(await credentials.get(OTHER_ACCOUNT, OPENAI_PROVIDER_ID)).toBeUndefined();
+    expect(await credentials.get(OWNER, OPENAI_PROVIDER_ID)).toBeDefined();
 
-    const deleted = await credentials.delete(OWNER, 2);
+    const deleted = await credentials.delete(OWNER, OPENAI_PROVIDER_ID, 2);
     expect(deleted).toEqual({ ok: true });
-    expect(await credentials.delete(OWNER, 2)).toEqual({ ok: false, reason: "not-found" });
+    expect(await credentials.delete(OWNER, OPENAI_PROVIDER_ID, 2)).toEqual({
+      ok: false,
+      reason: "not-found"
+    });
   });
 
   it("serializes concurrent credential upserts with one winner", async () => {

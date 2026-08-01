@@ -31,8 +31,9 @@ import {
 } from "@ghostwriter/storage/pglite";
 import {
   createFakeStructuredCompletionProvider,
-  createOpenAiProvider
+  createProviderAdapter
 } from "@ghostwriter/ai";
+import type { ProviderId } from "@ghostwriter/core";
 import { createApp } from "./app.js";
 import type { AuthGateway, AuthenticatedSession } from "./auth.js";
 import { createTestAgentProviderRuntime } from "./agent-provider-runtime.js";
@@ -44,7 +45,8 @@ if (process.env.GHOSTWRITER_E2E !== "1") {
   throw new Error("The hermetic E2E server requires GHOSTWRITER_E2E=1.");
 }
 
-const liveOpenAi = process.env.GHOSTWRITER_E2E_LIVE_OPENAI === "1";
+/** Live BYOK adapters (any seeded provider). Name kept for existing local env files. */
+const liveProviders = process.env.GHOSTWRITER_E2E_LIVE_OPENAI === "1";
 const port = Number.parseInt(process.env.PORT ?? "8787", 10);
 const appOrigin = process.env.E2E_APP_ORIGIN ?? "http://127.0.0.1:4173";
 const account = {
@@ -284,9 +286,13 @@ const hermeticFakeImage: ScenePartnerImageGenerator = async () => {
   };
 };
 
-const liveOpenAiFactory = (apiKey: string) => createOpenAiProvider({ apiKey });
-const hermeticProviderFactory = () => hermeticFakeProvider;
-const providerFactory = liveOpenAi ? liveOpenAiFactory : hermeticProviderFactory;
+const liveProviderFactory = (apiKey: string, providerId: ProviderId) =>
+  createProviderAdapter({ providerId, apiKey });
+const hermeticProviderFactory = (_apiKey: string, _providerId: ProviderId) =>
+  hermeticFakeProvider;
+const providerFactory = liveProviders
+  ? liveProviderFactory
+  : hermeticProviderFactory;
 
 const agentProvider = createTestAgentProviderRuntime({
   db: repositoryDatabase,
@@ -301,14 +307,43 @@ const agentProvider = createTestAgentProviderRuntime({
   sceneDocuments
 });
 
-/** Optional local-only seed of BYOK key for the hermetic writer. Never log the value. */
-const seededOpenAiKey = process.env.GHOSTWRITER_E2E_SEED_OPENAI_KEY?.trim();
-if (seededOpenAiKey !== undefined && seededOpenAiKey.length > 0) {
-  await agentProvider.providerCredentials.setOpenAiCredential({
+/** Optional local-only BYOK seeds for the hermetic writer. Never log values. */
+const seededProviderKeys: ReadonlyArray<Readonly<{
+  providerId: ProviderId;
+  envName: string;
+  plaintext: string | undefined;
+}>> = [
+  {
+    providerId: "openai",
+    envName: "GHOSTWRITER_E2E_SEED_OPENAI_KEY",
+    plaintext: process.env.GHOSTWRITER_E2E_SEED_OPENAI_KEY?.trim()
+  },
+  {
+    providerId: "anthropic",
+    envName: "GHOSTWRITER_E2E_SEED_ANTHROPIC_KEY",
+    plaintext: process.env.GHOSTWRITER_E2E_SEED_ANTHROPIC_KEY?.trim()
+  },
+  {
+    providerId: "google",
+    envName: "GHOSTWRITER_E2E_SEED_GOOGLE_KEY",
+    plaintext: process.env.GHOSTWRITER_E2E_SEED_GOOGLE_KEY?.trim()
+  }
+];
+
+const seededProviderIds: ProviderId[] = [];
+for (const seed of seededProviderKeys) {
+  if (seed.plaintext === undefined || seed.plaintext.length === 0) {
+    continue;
+  }
+  await agentProvider.providerCredentials.setCredential({
     accountId: accountId(account.id),
-    plaintext: seededOpenAiKey
+    providerId: seed.providerId,
+    plaintext: seed.plaintext
   });
-  console.log("Hermetic seed: OpenAI key loaded for E2E writer (from env).");
+  seededProviderIds.push(seed.providerId);
+  console.log(
+    `Hermetic seed: ${seed.providerId} key loaded for E2E writer (from env).`
+  );
 }
 
 const app = createApp({
@@ -325,18 +360,20 @@ const app = createApp({
   allowedOrigins: [appOrigin],
   objectStorage,
   demoSeed: { enabled: process.env.GHOSTWRITER_DEMO_SEED !== "0" },
-  ...(liveOpenAi ? {} : { scenePartnerGenerateImage: hermeticFakeImage })
+  ...(liveProviders ? {} : { scenePartnerGenerateImage: hermeticFakeImage })
 });
 const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(`Ghostwriter hermetic backend listening on port ${info.port}`);
   console.log(`Trusted app origin: ${appOrigin}`);
   console.log(
-    liveOpenAi
-      ? "OpenAI: LIVE (GHOSTWRITER_E2E_LIVE_OPENAI=1)"
-      : "OpenAI: hermetic fake provider"
+    liveProviders
+      ? "Providers: LIVE (GHOSTWRITER_E2E_LIVE_OPENAI=1)"
+      : "Providers: hermetic fake"
   );
-  if (seededOpenAiKey !== undefined && seededOpenAiKey.length > 0) {
-    console.log("OpenAI: BYOK key seeded for E2E writer");
+  if (seededProviderIds.length > 0) {
+    console.log(
+      `BYOK keys seeded for E2E writer: ${seededProviderIds.join(", ")}`
+    );
   }
 });
 

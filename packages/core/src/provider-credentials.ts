@@ -1,9 +1,39 @@
 import { DomainValidationError } from "./domain.js";
 import type { AccountId } from "./identity.js";
 
-export const OPENAI_PROVIDER_ID = "openai" as const;
+export const PROVIDER_IDS = Object.freeze([
+  "openai",
+  "anthropic",
+  "google",
+  "groq",
+  "xai",
+  "mistral",
+  "deepseek",
+  "openrouter"
+] as const);
+
+export type ProviderId = (typeof PROVIDER_IDS)[number];
+
+export const OPENAI_PROVIDER_ID = "openai" as const satisfies ProviderId;
 
 export type OpenAiProviderId = typeof OPENAI_PROVIDER_ID;
+
+const PROVIDER_ID_SET = new Set<string>(PROVIDER_IDS);
+
+export function assertProviderId(value: string): ProviderId {
+  const normalized = value.trim();
+  if (!PROVIDER_ID_SET.has(normalized)) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Provider id is not recognized."
+    );
+  }
+  return normalized as ProviderId;
+}
+
+export function isProviderId(value: string): value is ProviderId {
+  return PROVIDER_ID_SET.has(value.trim());
+}
 
 export const PROVIDER_CREDENTIAL_VALIDATION_STATES = Object.freeze([
   "unvalidated",
@@ -22,9 +52,9 @@ export type ProviderCredentialEncryptedMaterial = Readonly<{
   authTagB64: string;
 }>;
 
-export type OpenAiProviderCredentialEnvelope = Readonly<{
+export type ProviderCredentialEnvelope = Readonly<{
   accountId: AccountId;
-  provider: OpenAiProviderId;
+  provider: ProviderId;
   version: number;
   kekVersion: string;
   ciphertextB64: string;
@@ -37,8 +67,11 @@ export type OpenAiProviderCredentialEnvelope = Readonly<{
   validatedAt?: string;
 }>;
 
+/** @deprecated Use {@link ProviderCredentialEnvelope}. */
+export type OpenAiProviderCredentialEnvelope = ProviderCredentialEnvelope;
+
 export type ProviderCredentialStatus = Readonly<{
-  provider: OpenAiProviderId;
+  provider: ProviderId;
   version: number;
   maskedHint: string;
   validationState: ProviderCredentialValidationState;
@@ -51,13 +84,13 @@ export const PROVIDER_CREDENTIAL_ENVELOPE_FORMAT_VERSION = "1" as const;
 
 export type ProviderCredentialEncryptInput = Readonly<{
   accountId: AccountId;
-  provider: OpenAiProviderId;
+  provider: ProviderId;
   plaintext: string;
 }>;
 
 export type ProviderCredentialDecryptInput = Readonly<{
   accountId: AccountId;
-  provider: OpenAiProviderId;
+  provider: ProviderId;
   material: ProviderCredentialEncryptedMaterial;
 }>;
 
@@ -118,7 +151,7 @@ function requireValidationState(value: ProviderCredentialValidationState): Provi
   return value;
 }
 
-export function createOpenAiProviderCredentialMaskedHint(plaintext: string): string {
+export function createProviderCredentialMaskedHint(plaintext: string): string {
   const trimmed = plaintext.trim();
   if (trimmed.length < 4) {
     return "****";
@@ -126,7 +159,13 @@ export function createOpenAiProviderCredentialMaskedHint(plaintext: string): str
   return `…${trimmed.slice(-4)}`;
 }
 
-export function assertOpenAiProviderCredentialPlaintext(plaintext: string): string {
+/** @deprecated Use {@link createProviderCredentialMaskedHint}. */
+export const createOpenAiProviderCredentialMaskedHint = createProviderCredentialMaskedHint;
+
+export function assertProviderCredentialPlaintext(
+  _providerId: ProviderId,
+  plaintext: string
+): string {
   const normalized = plaintext.trim();
   if (
     normalized.length < OPENAI_KEY_MIN_LENGTH ||
@@ -138,12 +177,17 @@ export function assertOpenAiProviderCredentialPlaintext(plaintext: string): stri
   return normalized;
 }
 
-export function createOpenAiProviderCredentialEnvelope(
-  input: OpenAiProviderCredentialEnvelope
-): OpenAiProviderCredentialEnvelope {
+export function assertOpenAiProviderCredentialPlaintext(plaintext: string): string {
+  return assertProviderCredentialPlaintext(OPENAI_PROVIDER_ID, plaintext);
+}
+
+export function createProviderCredentialEnvelope(
+  input: ProviderCredentialEnvelope
+): ProviderCredentialEnvelope {
+  const provider = assertProviderId(input.provider);
   return Object.freeze({
     accountId: input.accountId,
-    provider: OPENAI_PROVIDER_ID,
+    provider,
     version: requirePositiveCredentialVersion(input.version),
     kekVersion: requireKekVersion(input.kekVersion),
     ciphertextB64: requireBase64Field(input.ciphertextB64, "Credential ciphertext"),
@@ -159,8 +203,15 @@ export function createOpenAiProviderCredentialEnvelope(
   });
 }
 
+/** @deprecated Use {@link createProviderCredentialEnvelope}. */
+export function createOpenAiProviderCredentialEnvelope(
+  input: ProviderCredentialEnvelope
+): ProviderCredentialEnvelope {
+  return createProviderCredentialEnvelope(input);
+}
+
 export function providerCredentialStatusFromEnvelope(
-  envelope: OpenAiProviderCredentialEnvelope
+  envelope: ProviderCredentialEnvelope
 ): ProviderCredentialStatus {
   return Object.freeze({
     provider: envelope.provider,
@@ -174,7 +225,7 @@ export function providerCredentialStatusFromEnvelope(
 }
 
 export function encryptedMaterialFromEnvelope(
-  envelope: OpenAiProviderCredentialEnvelope
+  envelope: ProviderCredentialEnvelope
 ): ProviderCredentialEncryptedMaterial {
   return Object.freeze({
     kekVersion: envelope.kekVersion,
@@ -241,5 +292,12 @@ export class ProviderCredentialCryptoContextError extends Error {
   constructor() {
     super("The provider credential envelope could not be decrypted.");
     this.name = "ProviderCredentialCryptoContextError";
+  }
+}
+
+export class ProviderCredentialValidationUnsupportedError extends Error {
+  constructor() {
+    super("Provider credential validation is not available for this provider yet.");
+    this.name = "ProviderCredentialValidationUnsupportedError";
   }
 }

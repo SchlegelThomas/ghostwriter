@@ -86,6 +86,7 @@ export async function createSeededBackendApp(
     callsDisabled?: boolean;
     openAiValidationProviderFactory?: OpenAiValidationProviderFactory;
     openAiCompletionProviderFactory?: OpenAiCompletionProviderFactory;
+    listModelsFactory?: import("./agent-provider-runtime.js").ModelListFactory;
     scenePartnerGenerateImage?: ScenePartnerImageGenerator;
     demoSeed?: Readonly<{ enabled: boolean }>;
   }>
@@ -182,6 +183,12 @@ export async function createSeededBackendApp(
     callsDisabled: options?.callsDisabled,
     defaultValidationProviderFactory: options?.openAiValidationProviderFactory,
     defaultCompletionProviderFactory: options?.openAiCompletionProviderFactory,
+    // Avoid real upstream /models probes in unit tests unless a factory is injected.
+    listModelsFactory:
+      options?.listModelsFactory ??
+      (() => {
+        throw Object.assign(new Error("model discovery stub"), { status: 503 });
+      }),
     capturePromotions,
     sceneDocuments
   });

@@ -1,11 +1,12 @@
 import type { StructuredCompletionProvider } from "@ghostwriter/ai";
 import {
   accountId,
-  AGENT_MODEL_IDS,
   CAPTURE_REFLECTION_DEFAULT_MODEL,
   DomainValidationError,
   GHOSTWRITER_CAPABILITIES,
+  isAgentModelId,
   ProjectAccessDeniedError,
+  providerForAvailableModel,
   ProviderCredentialNotFoundError,
   projectId,
   type AgentModelId,
@@ -22,6 +23,7 @@ import {
 } from "./agent-provider-runtime.js";
 import { parseJsonRequest } from "./api-contract.js";
 import { providerAgentErrorStatusAndBody } from "./provider-agent-api.js";
+import { discoverModelsForAccount } from "./model-discovery.js";
 
 type WorkspaceChatEnvironment = {
   Variables: {
@@ -39,7 +41,13 @@ export const workspaceChatRequestSchema = z.object({
   message: z.string().trim().min(1).max(4_000),
   projectId: z.string().trim().min(1).max(200).optional(),
   mode: z.enum(WORKSPACE_CHAT_MODES).optional(),
-  model: z.enum(AGENT_MODEL_IDS).optional(),
+  model: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .refine(isAgentModelId, { message: "Unknown agent model." })
+    .optional(),
   effort: z.enum(WORKSPACE_CHAT_EFFORTS).optional(),
   selection: z
     .object({
@@ -451,8 +459,47 @@ export function registerWorkspaceChatRoutes(
       }
 
       const authSession = context.get("authSession");
-      const provider = (await agentProvider.createOpenAiCompletionProvider({
-        accountId: accountId(authSession.account.id)
+      const account = accountId(authSession.account.id);
+      const configured = await agentProvider.providerCredentials.listCredentialStatuses(
+        account
+      );
+      const hasReachableCredential = configured.some(
+        (status) =>
+          status.validationState === "unvalidated" ||
+          status.validationState === "valid" ||
+          status.validationState === "invalid"
+      );
+
+      let resolvedProviderId = providerForAvailableModel(model, []);
+      if (hasReachableCredential) {
+        const available = await discoverModelsForAccount({
+          accountId: authSession.account.id,
+          configured,
+          resolveApiKey: async (providerId) =>
+            agentProvider.resolveProviderApiKey({ accountId: account, providerId }),
+          ...(agentProvider.listModelsFactory === undefined
+            ? {}
+            : { createListingProvider: agentProvider.listModelsFactory })
+        });
+        resolvedProviderId = providerForAvailableModel(model, available.models);
+        if (
+          resolvedProviderId === undefined ||
+          !available.models.some((entry) => entry.id === model && entry.supportsChat)
+        ) {
+          return context.json(
+            {
+              error: "That model is not available for this account.",
+              code: "MODEL_NOT_AVAILABLE"
+            },
+            400
+          );
+        }
+      }
+
+      const provider = (await agentProvider.createCompletionProviderForModel({
+        accountId: account,
+        model,
+        ...(resolvedProviderId === undefined ? {} : { providerId: resolvedProviderId })
       })) as unknown as StructuredCompletionProvider;
 
       const limits = EFFORT_LIMITS[effort];

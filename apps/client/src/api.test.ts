@@ -1250,7 +1250,7 @@ describe("Ghostwriter API client", () => {
       projectId: captureScope.projectId,
       workflowId: "scene-partner.capture-reflection",
       workflowVersion: "1",
-      model: "gpt-5.6-terra",
+      model: "gpt-4.1",
       receiptHash: "a".repeat(64),
       createdAt: "2026-07-24T22:00:00.000Z",
       resources: [
@@ -1407,7 +1407,7 @@ describe("Ghostwriter API client", () => {
       projectId: captureScope.projectId,
       workflowId: "sketch-partner.craft-fields",
       workflowVersion: "1",
-      model: "gpt-5.6-terra" as const,
+      model: "gpt-4.1" as const,
       receiptHash: "a".repeat(64),
       createdAt: "2026-07-24T22:00:00.000Z",
       resources: [

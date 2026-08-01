@@ -54,13 +54,21 @@ import {
   DEFAULT_WORKSPACE_AGENT_PREFS,
   readWorkspaceAgentPrefs,
   writeWorkspaceAgentPrefs,
+  accountHasAvailableChatModels,
+  filterWorkspaceImageModels,
+  resolveWorkspaceAgentModel,
+  filterModelsByPreferences,
+  readModelPreferences,
+  resolveTaskModel,
   type WorkspaceAgentEffort,
   type WorkspaceAgentMode,
+  type WorkspaceAvailableModel,
+  type SettingsFocus,
   sceneSelection,
   workspaceModeForComposition
 } from "@ghostwriter/ui";
 import { useFonts } from "expo-font";
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { ActivityIndicator, Linking, View } from "react-native";
 import {
   DraftPanel,
@@ -91,8 +99,8 @@ import {
   getCanvasPreference,
   getCharacterVisualDownload,
   getCharacterVisualJob,
+  getAvailableModels,
   getCurrentWriter,
-  getOpenAiProviderStatus,
   getProject,
   getSceneWorkspace,
   GhostwriterApiError,
@@ -230,6 +238,23 @@ function returnUrl(): string {
   return process.env.EXPO_PUBLIC_APP_URL ?? "ghostwriter://";
 }
 
+function resolveWorkspaceModelForTask(
+  mode: WorkspaceAgentMode,
+  current: AgentModelId,
+  models: readonly WorkspaceAvailableModel[],
+  accountId: string | undefined
+): AgentModelId {
+  const prefs = readModelPreferences(accountId);
+  const taskDefault = resolveTaskModel(prefs, mode, undefined);
+  if (
+    taskDefault !== undefined &&
+    models.some((entry) => entry.id === taskDefault)
+  ) {
+    return taskDefault as AgentModelId;
+  }
+  return resolveWorkspaceAgentModel(current, models, mode);
+}
+
 function projectSceneIds(project: ProjectNavigator): readonly SceneId[] {
   return projectScenes(project).map((scene) => scene.id);
 }
@@ -322,6 +347,13 @@ export default function App() {
     DEFAULT_WORKSPACE_AGENT_PREFS.effort
   );
   const [chatProviderConfigured, setChatProviderConfigured] = useState(false);
+  const [chatAvailableModels, setChatAvailableModels] = useState<
+    readonly WorkspaceAvailableModel[]
+  >([]);
+  const imageAvailableModels = useMemo(
+    () => filterWorkspaceImageModels(chatAvailableModels),
+    [chatAvailableModels]
+  );
   const readerReturnStateRef = useRef<ReaderReturnState | undefined>(undefined);
   const draftPanelRef = useRef<DraftPanelHandle>(null);
   const selectedProjectRef = useRef<ProjectNavigator | undefined>(undefined);
@@ -356,7 +388,20 @@ export default function App() {
     useState<InboxPanelActivity>("idle");
   const [inboxRefreshSignal, setInboxRefreshSignal] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsFocus>("providers");
+
+  function openSettings(focus?: SettingsFocus): void {
+    if (focus !== undefined) {
+      setSettingsTab(focus);
+    }
+    setSettingsOpen(true);
+  }
   const [providerStatusSignal, setProviderStatusSignal] = useState(0);
+  const [modelPreferencesSignal, setModelPreferencesSignal] = useState(0);
+  const preferredImageModelId = useMemo(() => {
+    const prefs = readModelPreferences(writer?.account.id);
+    return resolveTaskModel(prefs, "image", undefined);
+  }, [writer?.account.id, modelPreferencesSignal]);
   const [coverOptionsJob, setCoverOptionsJob] = useState<
     ActiveCoverOptionsJob | undefined
   >();
@@ -812,20 +857,55 @@ export default function App() {
   useEffect(() => {
     if (selectedProject === undefined) {
       setChatProviderConfigured(false);
+      setChatAvailableModels([]);
       return;
     }
+    const accountId = writer?.account.id;
     let cancelled = false;
-    void getOpenAiProviderStatus()
-      .then((status) => {
-        if (!cancelled) setChatProviderConfigured(status.configured);
+    void getAvailableModels()
+      .then((response) => {
+        if (cancelled) return;
+        const prefs = readModelPreferences(accountId);
+        const preferenceFiltered = filterModelsByPreferences(
+          response.models,
+          prefs
+        );
+        setChatAvailableModels(preferenceFiltered);
+        setChatProviderConfigured(
+          accountHasAvailableChatModels(preferenceFiltered)
+        );
+        setChatModel((current) => {
+          const resolved = resolveWorkspaceModelForTask(
+            chatMode,
+            current,
+            preferenceFiltered,
+            accountId
+          );
+          if (resolved !== current) {
+            writeWorkspaceAgentPrefs(selectedProject.id, {
+              mode: chatMode,
+              model: resolved,
+              effort: chatEffort
+            });
+          }
+          return resolved;
+        });
       })
       .catch(() => {
-        if (!cancelled) setChatProviderConfigured(false);
+        if (!cancelled) {
+          setChatProviderConfigured(false);
+          setChatAvailableModels([]);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [selectedProject?.id, providerStatusSignal]);
+  }, [
+    selectedProject?.id,
+    providerStatusSignal,
+    modelPreferencesSignal,
+    writer?.account.id
+  ]);
 
   function persistChatPrefs(next: Readonly<{
     mode?: WorkspaceAgentMode;
@@ -1150,6 +1230,7 @@ export default function App() {
     prompt: string;
     count?: number;
     refinement?: string;
+    imageModel?: string;
   }>): Promise<void> {
     if (selectedProject === undefined) {
       throw new Error("No project is open.");
@@ -1167,7 +1248,10 @@ export default function App() {
       count: input.count ?? 3,
       ...(input.refinement === undefined || input.refinement.trim() === ""
         ? {}
-        : { refinement: input.refinement.trim() })
+        : { refinement: input.refinement.trim() }),
+      ...(input.imageModel === undefined || input.imageModel.trim() === ""
+        ? {}
+        : { imageModel: input.imageModel.trim() })
     });
     setCoverOptionsJob({
       projectId,
@@ -1291,6 +1375,7 @@ export default function App() {
     knowledgeId: StoryKnowledgeId;
     count?: number;
     refinement?: string;
+    imageModel?: string;
   }>): Promise<void> {
     if (selectedProject === undefined) return;
     const projectId = selectedProject.id;
@@ -1301,7 +1386,10 @@ export default function App() {
       count: input.count ?? 3,
       ...(input.refinement === undefined || input.refinement.trim() === ""
         ? {}
-        : { refinement: input.refinement.trim() })
+        : { refinement: input.refinement.trim() }),
+      ...(input.imageModel === undefined || input.imageModel.trim() === ""
+        ? {}
+        : { imageModel: input.imageModel.trim() })
     });
     setCharacterVisualJob({
       projectId,
@@ -2494,14 +2582,31 @@ export default function App() {
     );
   }
 
-  if (phase === "loading" || phase === "signedOut" || writer === undefined) {
+  // Bootstrap session check must not reuse the Google button spinner — that looks
+  // like sign-in already started for first-time visitors.
+  if (phase === "loading") {
+    return (
+      <View
+        accessibilityLabel="Loading Ghostwriter"
+        style={{
+          alignItems: "center",
+          backgroundColor: ghostwriterTheme.colors.canvas,
+          flex: 1,
+          justifyContent: "center"
+        }}
+      >
+        <ActivityIndicator color={ghostwriterTheme.colors.kicker} />
+      </View>
+    );
+  }
+
+  if (phase === "signedOut" || writer === undefined) {
     return (
       <AccountGateScreen
         error={error}
-        loading={phase === "loading"}
         onDemoSignIn={() => void startDemoSignIn()}
         onSignIn={() => void startGoogleSignIn()}
-        signingIn={busy && phase === "signedOut"}
+        signingIn={busy}
       />
     );
   }
@@ -2546,7 +2651,7 @@ export default function App() {
         onCloseInbox={closeInboxWorkspace}
         onOpenCapture={(captureId) => openCaptureComposer(captureId)}
         onOpenInbox={() => void openInboxWorkspace()}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={openSettings}
         renderInbox={(presentation: InboxWorkspacePresentation) => (
           <InboxPanel
             canvasVersion={canvasWorkspace?.board.version}
@@ -2555,7 +2660,7 @@ export default function App() {
             onAcknowledgement={handleInboxAcknowledgement}
             onActivityChange={setInboxActivity}
             onOpenCapture={(captureId) => openCaptureComposer(captureId)}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenSettings={openSettings}
             providerStatusSignal={providerStatusSignal}
             onOpenDraft={(sceneId) =>
               void openHandoffTargetScene(sceneId as SceneId, "draft")
@@ -2586,9 +2691,19 @@ export default function App() {
         chatModel={chatModel}
         chatEffort={chatEffort}
         chatProviderConfigured={chatProviderConfigured}
+        chatAvailableModels={chatAvailableModels}
+        imageAvailableModels={imageAvailableModels}
+        preferredImageModelId={preferredImageModelId}
         onChatModeChange={(mode) => {
           setChatMode(mode);
-          persistChatPrefs({ mode });
+          const nextModel = resolveWorkspaceModelForTask(
+            mode,
+            chatModel,
+            chatAvailableModels,
+            writer.account.id
+          );
+          setChatModel(nextModel);
+          persistChatPrefs({ mode, model: nextModel });
         }}
         onChatModelChange={(model) => {
           setChatModel(model);
@@ -2861,14 +2976,20 @@ export default function App() {
         visible={settingsOpen}
       >
         <SettingsPanel
+          accountId={writer.account.id}
+          activeTab={settingsTab}
           onClose={() => {
             setSettingsOpen(false);
             setProviderStatusSignal((n) => n + 1);
           }}
           onConfigured={() => {
-            setSettingsOpen(false);
             setProviderStatusSignal((n) => n + 1);
           }}
+          onPreferencesChanged={() => {
+            setModelPreferencesSignal((n) => n + 1);
+          }}
+          onTabChange={setSettingsTab}
+          providerStatusSignal={providerStatusSignal}
         />
       </CaptureModalShell>
       </>

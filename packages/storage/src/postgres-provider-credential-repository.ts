@@ -1,11 +1,12 @@
 import {
   accountId,
-  createOpenAiProviderCredentialEnvelope,
-  OPENAI_PROVIDER_ID,
+  assertProviderId,
+  createProviderCredentialEnvelope,
   type AccountId,
-  type OpenAiProviderCredentialEnvelope,
+  type ProviderCredentialEnvelope,
   type ProviderCredentialRepository,
   type ProviderCredentialValidationState,
+  type ProviderId,
   type DeleteProviderCredentialOutcome,
   type MarkProviderCredentialValidationOutcome,
   type UpsertProviderCredentialOutcome
@@ -16,10 +17,10 @@ import { providerCredentials } from "./schema.js";
 
 function envelopeFromRow(
   row: typeof providerCredentials.$inferSelect
-): OpenAiProviderCredentialEnvelope {
-  return createOpenAiProviderCredentialEnvelope({
+): ProviderCredentialEnvelope {
+  return createProviderCredentialEnvelope({
     accountId: accountId(row.accountId),
-    provider: OPENAI_PROVIDER_ID,
+    provider: assertProviderId(row.provider),
     version: row.version,
     kekVersion: row.kekVersion,
     ciphertextB64: row.ciphertextB64,
@@ -33,8 +34,8 @@ function envelopeFromRow(
   });
 }
 
-function envelopeToRow(envelope: OpenAiProviderCredentialEnvelope) {
-  const candidate = createOpenAiProviderCredentialEnvelope(envelope);
+function envelopeToRow(envelope: ProviderCredentialEnvelope) {
+  const candidate = createProviderCredentialEnvelope(envelope);
   return {
     accountId: candidate.accountId,
     provider: candidate.provider,
@@ -55,27 +56,45 @@ export function createPostgresProviderCredentialRepository(
   db: RepositoryDatabase
 ): ProviderCredentialRepository {
   return Object.freeze({
-    async get(id: AccountId): Promise<OpenAiProviderCredentialEnvelope | undefined> {
+    async get(
+      id: AccountId,
+      providerId: ProviderId
+    ): Promise<ProviderCredentialEnvelope | undefined> {
       const [row] = await db
         .select()
         .from(providerCredentials)
-        .where(eq(providerCredentials.accountId, id))
+        .where(
+          and(
+            eq(providerCredentials.accountId, id),
+            eq(providerCredentials.provider, providerId)
+          )
+        )
         .limit(1);
       return row === undefined ? undefined : envelopeFromRow(row);
     },
 
+    async listForAccount(id: AccountId): Promise<readonly ProviderCredentialEnvelope[]> {
+      const rows = await db
+        .select()
+        .from(providerCredentials)
+        .where(eq(providerCredentials.accountId, id));
+      return Object.freeze(rows.map(envelopeFromRow));
+    },
+
     async upsert(
-      envelope: OpenAiProviderCredentialEnvelope,
+      envelope: ProviderCredentialEnvelope,
       expectedVersion: number | undefined
     ): Promise<UpsertProviderCredentialOutcome> {
-      const candidate = createOpenAiProviderCredentialEnvelope(envelope);
+      const candidate = createProviderCredentialEnvelope(envelope);
       const row = envelopeToRow(candidate);
 
       if (expectedVersion === undefined) {
         const [inserted] = await db
           .insert(providerCredentials)
           .values(row)
-          .onConflictDoNothing({ target: providerCredentials.accountId })
+          .onConflictDoNothing({
+            target: [providerCredentials.accountId, providerCredentials.provider]
+          })
           .returning();
         if (inserted === undefined) {
           return { ok: false, reason: "conflict" };
@@ -86,7 +105,6 @@ export function createPostgresProviderCredentialRepository(
       const [updated] = await db
         .update(providerCredentials)
         .set({
-          provider: row.provider,
           version: row.version,
           kekVersion: row.kekVersion,
           ciphertextB64: row.ciphertextB64,
@@ -100,6 +118,7 @@ export function createPostgresProviderCredentialRepository(
         .where(
           and(
             eq(providerCredentials.accountId, candidate.accountId),
+            eq(providerCredentials.provider, candidate.provider),
             eq(providerCredentials.version, expectedVersion)
           )
         )
@@ -112,6 +131,7 @@ export function createPostgresProviderCredentialRepository(
 
     async delete(
       id: AccountId,
+      providerId: ProviderId,
       expectedVersion: number
     ): Promise<DeleteProviderCredentialOutcome> {
       const [deleted] = await db
@@ -119,6 +139,7 @@ export function createPostgresProviderCredentialRepository(
         .where(
           and(
             eq(providerCredentials.accountId, id),
+            eq(providerCredentials.provider, providerId),
             eq(providerCredentials.version, expectedVersion)
           )
         )
@@ -129,7 +150,12 @@ export function createPostgresProviderCredentialRepository(
       const [existing] = await db
         .select({ version: providerCredentials.version })
         .from(providerCredentials)
-        .where(eq(providerCredentials.accountId, id))
+        .where(
+          and(
+            eq(providerCredentials.accountId, id),
+            eq(providerCredentials.provider, providerId)
+          )
+        )
         .limit(1);
       return existing === undefined
         ? { ok: false, reason: "not-found" }
@@ -138,6 +164,7 @@ export function createPostgresProviderCredentialRepository(
 
     async markValidation(input: Readonly<{
       accountId: AccountId;
+      providerId: ProviderId;
       expectedVersion: number;
       validationState: ProviderCredentialValidationState;
       updatedAt: string;
@@ -146,7 +173,12 @@ export function createPostgresProviderCredentialRepository(
       const [existing] = await db
         .select()
         .from(providerCredentials)
-        .where(eq(providerCredentials.accountId, input.accountId))
+        .where(
+          and(
+            eq(providerCredentials.accountId, input.accountId),
+            eq(providerCredentials.provider, input.providerId)
+          )
+        )
         .limit(1);
       if (existing === undefined) {
         return { ok: false, reason: "not-found" };
@@ -155,9 +187,9 @@ export function createPostgresProviderCredentialRepository(
         return { ok: false, reason: "conflict" };
       }
 
-      const nextEnvelope = createOpenAiProviderCredentialEnvelope({
+      const nextEnvelope = createProviderCredentialEnvelope({
         accountId: accountId(existing.accountId),
-        provider: OPENAI_PROVIDER_ID,
+        provider: assertProviderId(existing.provider),
         version: existing.version,
         kekVersion: existing.kekVersion,
         ciphertextB64: existing.ciphertextB64,
@@ -182,6 +214,7 @@ export function createPostgresProviderCredentialRepository(
         .where(
           and(
             eq(providerCredentials.accountId, input.accountId),
+            eq(providerCredentials.provider, input.providerId),
             eq(providerCredentials.version, input.expectedVersion)
           )
         )
@@ -192,7 +225,7 @@ export function createPostgresProviderCredentialRepository(
       return { ok: true, envelope: envelopeFromRow(updated) };
     },
 
-    async listByKekVersion(kekVersion: string): Promise<readonly OpenAiProviderCredentialEnvelope[]> {
+    async listByKekVersion(kekVersion: string): Promise<readonly ProviderCredentialEnvelope[]> {
       const normalized = kekVersion.trim();
       const rows = await db
         .select()
@@ -207,7 +240,10 @@ export function createPostgresProviderCredentialRepository(
         const deleted = await tx
           .delete(providerCredentials)
           .where(eq(providerCredentials.kekVersion, normalized))
-          .returning({ accountId: providerCredentials.accountId });
+          .returning({
+            accountId: providerCredentials.accountId,
+            provider: providerCredentials.provider
+          });
         return deleted.length;
       });
     }

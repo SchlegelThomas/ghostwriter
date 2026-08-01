@@ -141,6 +141,13 @@
       "when": 1784535000000,
       "tag": "0019_character_visuals",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1785071473399,
+      "tag": "0020_steady_shooting_star",
+      "breakpoints": true
     }
   ]
 }

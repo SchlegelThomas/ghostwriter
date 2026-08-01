@@ -1,10 +1,14 @@
 import {
   AgentGuidanceConflictError,
   AgentGuidanceNotFoundError,
+  availableModelsForCredentials,
+  PROVIDER_IDS,
   ProviderCredentialConflictError,
   ProviderCredentialCryptoContextError,
   ProviderCredentialKeyRejectedError,
   ProviderCredentialNotFoundError,
+  ProviderCredentialValidationUnsupportedError,
+  type AvailableModelCatalogView,
   type ProviderCredentialStatus
 } from "@ghostwriter/core";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -13,7 +17,7 @@ import {
   ProviderEncryptionUnavailableError
 } from "./agent-provider-runtime.js";
 
-export function openAiProviderStatusResponse(input: Readonly<{
+export function providerCredentialStatusResponse(input: Readonly<{
   configured: boolean;
   callsDisabled: boolean;
   status?: ProviderCredentialStatus;
@@ -36,6 +40,62 @@ export function openAiProviderStatusResponse(input: Readonly<{
     ...(input.status.validatedAt === undefined
       ? {}
       : { validatedAt: input.status.validatedAt })
+  });
+}
+
+/** @deprecated Use {@link providerCredentialStatusResponse}. */
+export function openAiProviderStatusResponse(input: Readonly<{
+  configured: boolean;
+  callsDisabled: boolean;
+  status?: ProviderCredentialStatus;
+}>) {
+  return providerCredentialStatusResponse(input);
+}
+
+export function availableModelsResponse(input: Readonly<{
+  callsDisabled: boolean;
+  configured: readonly ProviderCredentialStatus[];
+  catalog?: AvailableModelCatalogView;
+}>): AvailableModelCatalogView & Readonly<{ callsDisabled: boolean }> {
+  const catalog = input.catalog ?? availableModelsForCredentials(input.configured);
+  return Object.freeze({
+    callsDisabled: input.callsDisabled,
+    models: catalog.models,
+    providers: catalog.providers,
+    ...(catalog.discovery === undefined ? {} : { discovery: catalog.discovery })
+  });
+}
+
+export function accountProvidersListResponse(input: Readonly<{
+  callsDisabled: boolean;
+  configured: readonly ProviderCredentialStatus[];
+}>) {
+  const configuredByProvider = new Map(
+    input.configured.map((status) => [status.provider, status] as const)
+  );
+  return Object.freeze({
+    callsDisabled: input.callsDisabled,
+    providers: Object.freeze(
+      PROVIDER_IDS.map((providerId) => {
+        const status = configuredByProvider.get(providerId);
+        if (status === undefined) {
+          return Object.freeze({
+            provider: providerId,
+            configured: false as const
+          });
+        }
+        return Object.freeze({
+          provider: providerId,
+          configured: true as const,
+          version: status.version,
+          maskedHint: status.maskedHint,
+          validationState: status.validationState,
+          createdAt: status.createdAt,
+          updatedAt: status.updatedAt,
+          ...(status.validatedAt === undefined ? {} : { validatedAt: status.validatedAt })
+        });
+      })
+    )
   });
 }
 
@@ -93,6 +153,15 @@ export function providerAgentErrorStatusAndBody(error: unknown):
       body: {
         error: "The provider credential changed since it was loaded.",
         code: "PROVIDER_CREDENTIAL_CONFLICT"
+      }
+    };
+  }
+  if (error instanceof ProviderCredentialValidationUnsupportedError) {
+    return {
+      status: 501,
+      body: {
+        error: "Provider credential validation is not available for this provider yet.",
+        code: "PROVIDER_VALIDATION_UNSUPPORTED"
       }
     };
   }

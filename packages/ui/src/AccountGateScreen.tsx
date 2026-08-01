@@ -12,7 +12,11 @@ import { createDoublePressHandler } from "./double-press.js";
 import { ghostwriterTheme } from "./theme.js";
 
 export type AccountGateScreenProps = Readonly<{
-  loading?: boolean;
+  /**
+   * True only while Google (or demo) sign-in is in flight after the writer
+   * pressed Continue. Do not use for session bootstrap — that should be a
+   * separate loading screen so the gate does not look like auto sign-in.
+   */
   signingIn?: boolean;
   error?: string;
   onSignIn(): void;
@@ -25,13 +29,12 @@ const { colors, fonts } = ghostwriterTheme;
 export { createDoublePressHandler } from "./double-press.js";
 
 export function AccountGateScreen({
-  loading = false,
   signingIn = false,
   error,
   onSignIn,
   onDemoSignIn
 }: AccountGateScreenProps) {
-  const busy = loading || signingIn;
+  const busy = signingIn;
   const onDemoSignInRef = useRef(onDemoSignIn);
   onDemoSignInRef.current = onDemoSignIn;
   const handleDemoPress = useRef(

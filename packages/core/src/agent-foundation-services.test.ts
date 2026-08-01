@@ -238,7 +238,7 @@ describe("agent foundation services", () => {
     await expect(
       services.persistPreview({
         accountId: OWNER,
-        receipt: { ...second.receipt, model: "gpt-5.6-luna" }
+        receipt: { ...second.receipt, model: "gpt-4.1-mini" }
       })
     ).rejects.toBeInstanceOf(AgentReceiptConflictError);
   });
