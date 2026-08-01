@@ -10,7 +10,9 @@ export type AgentToolkitId =
 
 export type PlansAgentDeepLink = Readonly<{
   captureId?: string;
-  workflowStep: "scene-partner" | "craft-partner" | "worldkeeper";
+  proposalId?: string;
+  highlight?: "plan-outline";
+  workflowStep: "scene-partner" | "craft-partner" | "worldkeeper" | "plan-outline";
   craftSceneId?: string;
   craftCharacterId?: string;
   /** When set, InboxPanel should call beginCraftPartner after landing if selection is valid */

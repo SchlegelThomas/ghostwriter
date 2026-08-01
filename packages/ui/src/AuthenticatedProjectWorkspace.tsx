@@ -272,6 +272,8 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   imageAvailableModels?: readonly WorkspaceAvailableModel[];
   preferredImageModelId?: string;
   onChatSend?(input: WorkspaceChatSendInput): Promise<void> | void;
+  planOutlineText?: string;
+  onSavePlanToPlans?(outlineText: string): void;
   inboxSelectedCaptureId?: string;
   onAgentToolkitAction?(
     id: AgentToolkitId,
@@ -472,6 +474,8 @@ export function AuthenticatedProjectWorkspace({
   imageAvailableModels = [],
   preferredImageModelId,
   onChatSend,
+  planOutlineText,
+  onSavePlanToPlans,
   inboxSelectedCaptureId,
   onAgentToolkitAction,
   onStartCoverOptionsJob,
@@ -2560,6 +2564,8 @@ export function AuthenticatedProjectWorkspace({
                   onModelChange={(next) => onChatModelChange?.(next)}
                   onOpenSettings={onOpenSettings}
                   onSend={(input) => onChatSend?.(input)}
+                  onSavePlanToPlans={onSavePlanToPlans}
+                  planOutlineText={planOutlineText}
                   onToolkitAction={
                     onAgentToolkitAction === undefined
                       ? undefined

@@ -428,6 +428,31 @@ describe("agent run routes", () => {
     expect(appliedBody.proposal.status).toBe("applied");
   });
 
+  it("persists plan outlines without a provider call", async () => {
+    const { app } = await openSeededApp();
+    const saved = await app.request(`/api/projects/${PROJECT}/agent/plan-outlines`, {
+      method: "POST",
+      headers: originHeaders("POST"),
+      body: JSON.stringify({
+        outlineText: "## Act II\n- Mara chooses the harbor.",
+        title: "Harbor plan"
+      })
+    });
+    expect(saved.status).toBe(201);
+    const savedBody = await saved.json();
+    expect(savedBody.captureId).toMatch(/^capture-/u);
+    expect(savedBody.proposalId).toMatch(/^agentProposal-/u);
+    expect(savedBody.proposal.outputSchemaId).toBe("plan-outline-v1");
+    expect(savedBody.proposal.payload.schemaId).toBe("plan-outline-v1");
+
+    const fetched = await app.request(
+      `/api/projects/${PROJECT}/agent/proposals/${savedBody.proposalId}`
+    );
+    expect(fetched.status).toBe(200);
+    const fetchedBody = await fetched.json();
+    expect(fetchedBody.proposal.outputSchemaId).toBe("plan-outline-v1");
+  });
+
   it("returns content-free 503 when encryption is unavailable", async () => {
     const { app } = await openSeededApp({
       kekConfig: undefined,

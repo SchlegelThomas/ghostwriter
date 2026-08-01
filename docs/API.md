@@ -207,8 +207,13 @@ Typed noncanonical runs/proposals (context receipts, Capture reflection, craft p
 - `GET /api/projects/{projectId}/agent/runs` and `.../runs/{runId}` list/read run status.
 - `POST /api/projects/{projectId}/agent/runs/{runId}/cancel` cancels a run.
 - `GET /api/projects/{projectId}/agent/proposals` and `.../proposals/{proposalId}` list/read.
+- `POST /api/projects/{projectId}/agent/proposals/{proposalId}/reject` rejects a ready proposal.
+- `POST /api/projects/{projectId}/agent/proposals/{proposalId}/acknowledge` marks a
+  `plan-outline-v1` proposal applied with zero manuscript side effects.
+- `POST /api/projects/{projectId}/agent/plan-outlines` body `{ outlineText (1–8000), title?, model? }`
+  creates a Capture + ready `plan-mode.outline` proposal from a Plan-mode reply (no provider call).
 - Apply / reject proposal routes accept the exact proposal hash; only first-party human sessions
-  apply. Core revalidates every version and applies all effects or none.
+  apply craft/reflection paths. Core revalidates every version and applies all effects or none.
 
 Scene Partner Capture chat (BYOK structured turn, propose-only until promote/variant apply):
 
@@ -221,7 +226,9 @@ Scene Partner Capture chat (BYOK structured turn, propose-only until promote/var
 - `POST /api/workspace/chat` accepts project/selection context, optional capability id, and Agent
   dock prefs (`mode`: `chat` | `plan` | `agent`; model + effort). When `message` equals a read
   capability id (e.g. `project.navigator.read`), the server invokes that tool deterministically.
-  Otherwise, with a valid BYOK key and a tool-capable model (`supportsTools`), the route runs a
+  **Plan** mode instructs outline-friendly replies; the writer saves to Plans explicitly via
+  `POST /api/projects/{projectId}/agent/plan-outlines` (not auto-persisted each turn). Otherwise,
+  with a valid BYOK key and a tool-capable model (`supportsTools`), the route runs a
   read-only tool loop (`project_navigator_read`, `scene_workspace_read`, `capture_list`) via
   `@ghostwriter/ai` and returns assistant text plus optional `toolTraces` (compact writer-facing
   step summaries). Scene reads are budgeted per turn (max 4 scenes, ~64k prose chars). Models

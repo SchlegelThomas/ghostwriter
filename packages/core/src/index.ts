@@ -8,6 +8,8 @@ export * from "./agent-guidance-services.js";
 export * from "./agent-instruction-compiler.js";
 export * from "./agent-proposal-apply-services.js";
 export * from "./agent-runs-proposals.js";
+export * from "./plan-outline-v1.js";
+export * from "./plan-mode-outline-services.js";
 export * from "./capture-reflection-v1.js";
 export * from "./capture-reflection-services.js";
 export * from "./scene-partner-turn-v1.js";

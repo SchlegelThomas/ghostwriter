@@ -25,9 +25,11 @@ import {
   applyAgentProposal,
   getAvailableModels,
   getCapture,
+  getAgentProposal,
   getSceneWorkspace,
   listCaptures,
   previewCaptureReflectionContext,
+  acknowledgeAgentProposal,
   rejectAgentProposal,
   setCaptureArchived,
   startCaptureReflectionRun,
@@ -84,6 +86,7 @@ type DreamsWorkflowStep =
   | "scene-partner"
   | "craft-partner"
   | "worldkeeper"
+  | "plan-outline"
   | "integrate";
 
 type AiSetupResume =
@@ -192,6 +195,8 @@ function workflowStepLabel(step: DreamsWorkflowStep): string {
       return "Craft Partner";
     case "worldkeeper":
       return "Worldkeeper";
+    case "plan-outline":
+      return "Plan outline";
     case "integrate":
       return "Add to manuscript";
     case "idea":
@@ -348,9 +353,37 @@ export function InboxPanel({
       return;
     }
 
+    if (agentDeepLink.proposalId !== undefined) {
+      void (async () => {
+        try {
+          const proposal = await getAgentProposal({
+            projectId,
+            proposalId: agentDeepLink.proposalId!
+          });
+          setReflectionProposal(proposal);
+          setProposalApplied(proposal.status === "applied");
+          setReflectionMessage(
+            proposal.payload.schemaId === "plan-outline-v1"
+              ? "Plan outline ready to review."
+              : "Proposal ready to review."
+          );
+        } catch (error) {
+          setReflectionMessage(
+            error instanceof GhostwriterApiError
+              ? error.message
+              : "Ghostwriter could not load that proposal."
+          );
+        } finally {
+          pendingDeepLinkRef.current = undefined;
+          onAgentDeepLinkConsumed?.();
+        }
+      })();
+      return;
+    }
+
     pendingDeepLinkRef.current = undefined;
     onAgentDeepLinkConsumed?.();
-  }, [agentDeepLink, onAgentDeepLinkConsumed, onSelectCapture, selectedCaptureId]);
+  }, [agentDeepLink, onAgentDeepLinkConsumed, onSelectCapture, projectId, selectedCaptureId]);
 
   useEffect(() => {
     if (!deepLinkAutoStartPendingRef.current) return;
@@ -667,6 +700,28 @@ export function InboxPanel({
         error instanceof GhostwriterApiError
           ? error.message
           : "Ghostwriter could not reject that proposal."
+      );
+    } finally {
+      setReflectionBusy(false);
+    }
+  }
+
+  async function acknowledgePlanOutlineProposal(): Promise<void> {
+    if (reflectionProposal === undefined || proposalApplied) return;
+    if (reflectionProposal.payload.schemaId !== "plan-outline-v1") return;
+    setReflectionBusy(true);
+    try {
+      await acknowledgeAgentProposal({
+        projectId,
+        proposalId: reflectionProposal.id
+      });
+      setProposalApplied(true);
+      setReflectionMessage("Plan outline acknowledged.");
+    } catch (error) {
+      setReflectionMessage(
+        error instanceof GhostwriterApiError
+          ? error.message
+          : "Ghostwriter could not acknowledge that outline."
       );
     } finally {
       setReflectionBusy(false);
@@ -1056,7 +1111,9 @@ export function InboxPanel({
             primary
           />
         ) : null}
-        {reflectionProposal !== undefined && !proposalApplied ? (
+        {reflectionProposal !== undefined &&
+        !proposalApplied &&
+        reflectionProposal.payload.schemaId !== "plan-outline-v1" ? (
           <InboxButton
             disabled={sessionControlsDisabled}
             label="Reject proposal"
@@ -1064,7 +1121,32 @@ export function InboxPanel({
           />
         ) : null}
         {reflectionProposal !== undefined &&
-        reflectionProposal.payload.schemaId !== "capture-reflection-v1" ? (
+        reflectionProposal.payload.schemaId === "plan-outline-v1" ? (
+          <View style={styles.proposalCard}>
+            <Text style={styles.proposalSummary}>
+              {reflectionProposal.payload.title}
+            </Text>
+            <Text style={styles.statusCopy}>{reflectionProposal.payload.outline}</Text>
+            {!proposalApplied ? (
+              <View style={styles.headerActions}>
+                <InboxButton
+                  disabled={sessionControlsDisabled}
+                  label="Acknowledge"
+                  onPress={() => void acknowledgePlanOutlineProposal()}
+                  primary
+                />
+                <InboxButton
+                  disabled={sessionControlsDisabled}
+                  label="Reject"
+                  onPress={() => void rejectReflectionProposal()}
+                />
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+        {reflectionProposal !== undefined &&
+        reflectionProposal.payload.schemaId !== "capture-reflection-v1" &&
+        reflectionProposal.payload.schemaId !== "plan-outline-v1" ? (
           <View style={styles.proposalCard}>
             <Text style={styles.proposalSummary}>Typed craft proposal ready</Text>
             {Object.entries(reflectionProposal.payload)

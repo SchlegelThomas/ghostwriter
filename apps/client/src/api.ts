@@ -959,6 +959,7 @@ export type AgentModelId = string;
 
 export type AgentWorkflowId =
   | "scene-partner.capture-reflection"
+  | "plan-mode.outline"
   | "sketch-partner.craft-fields"
   | "character-coach.sheet-fields"
   | "worldkeeper.backdrop-fields";
@@ -1037,14 +1038,23 @@ export type BackdropFieldsPayloadResponse = Readonly<{
   sensoryNotesFallback?: string;
 }>;
 
+export type PlanOutlinePayloadResponse = Readonly<{
+  schemaId: "plan-outline-v1";
+  title: string;
+  outline: string;
+  sourceMode: "plan";
+}>;
+
 export type AgentProposalPayloadResponse =
   | CaptureReflectionPayloadResponse
+  | PlanOutlinePayloadResponse
   | SketchFieldsPayloadResponse
   | CharacterSheetPayloadResponse
   | BackdropFieldsPayloadResponse;
 
 export type AgentOutputSchemaId =
   | "capture-reflection-v1"
+  | "plan-outline-v1"
   | "sketch-fields-v1"
   | "character-sheet-v1"
   | "backdrop-fields-v1";
@@ -1365,6 +1375,43 @@ export async function rejectAgentProposal(input: Readonly<{
     jsonRequest("POST", {})
   );
   return response.proposal;
+}
+
+export async function acknowledgeAgentProposal(input: Readonly<{
+  projectId: string;
+  proposalId: string;
+}>): Promise<AgentProposalResponse> {
+  const response = await requestJson<Readonly<{ proposal: AgentProposalResponse }>>(
+    agentProjectPath(
+      input.projectId,
+      `proposals/${encodeURIComponent(input.proposalId)}/acknowledge`
+    ),
+    jsonRequest("POST", {})
+  );
+  return response.proposal;
+}
+
+export type PersistPlanOutlineResponse = Readonly<{
+  captureId: string;
+  proposalId: string;
+  runId: string;
+  proposal: AgentProposalResponse;
+}>;
+
+export async function persistPlanOutline(input: Readonly<{
+  projectId: string;
+  outlineText: string;
+  title?: string;
+  model?: AgentModelId;
+}>): Promise<PersistPlanOutlineResponse> {
+  return requestJson<PersistPlanOutlineResponse>(
+    agentProjectPath(input.projectId, "plan-outlines"),
+    jsonRequest("POST", {
+      outlineText: input.outlineText,
+      ...(input.title === undefined ? {} : { title: input.title }),
+      ...(input.model === undefined ? {} : { model: input.model })
+    })
+  );
 }
 
 export type ApplyAgentProposalNewSceneInput = Readonly<{

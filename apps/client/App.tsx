@@ -114,6 +114,7 @@ import {
   postCharacterVisualApply,
   postCharacterVisualJob,
   promoteCaptureToScene,
+  persistPlanOutline,
   releaseSceneLease,
   restoreCanvasRevision,
   saveCanvasPreference,
@@ -2178,6 +2179,44 @@ export default function App() {
     ]);
   }
 
+  const planOutlineText = useMemo(() => {
+    if (chatMode !== "plan") return undefined;
+    for (let index = chatMessages.length - 1; index >= 0; index -= 1) {
+      const message = chatMessages[index];
+      if (message?.role === "assistant") {
+        return message.body;
+      }
+    }
+    return undefined;
+  }, [chatMessages, chatMode]);
+
+  async function handleSavePlanToPlans(outlineText: string): Promise<void> {
+    if (selectedProject === undefined) return;
+    try {
+      const result = await persistPlanOutline({
+        projectId: selectedProject.id,
+        outlineText,
+        model: chatModel
+      });
+      appendChatStatusMessage("Saved to Plans.");
+      setInboxSelectedCaptureId(result.captureId);
+      setPlansAgentDeepLink({
+        captureId: result.captureId,
+        proposalId: result.proposalId,
+        highlight: "plan-outline",
+        workflowStep: "plan-outline"
+      });
+      bumpInboxRefresh();
+      void openInboxWorkspace();
+    } catch (cause) {
+      appendChatStatusMessage(
+        cause instanceof GhostwriterApiError
+          ? cause.message
+          : "Ghostwriter could not save that outline to Plans."
+      );
+    }
+  }
+
   function handleAgentToolkitAction(
     id: AgentToolkitId,
     toolkitSelection: Parameters<typeof resolveAgentToolkitAction>[1]
@@ -2812,6 +2851,8 @@ export default function App() {
         onAgentToolkitAction={handleAgentToolkitAction}
         onBack={() => void leaveProject()}
         onChatSend={handleChatSend}
+        onSavePlanToPlans={(outlineText) => void handleSavePlanToPlans(outlineText)}
+        planOutlineText={planOutlineText}
         onCommand={runCommand}
         onDrillBack={handleDrillBack}
         onDrillTo={handleDrillTo}

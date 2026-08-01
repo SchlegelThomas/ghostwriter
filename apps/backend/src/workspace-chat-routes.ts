@@ -138,9 +138,9 @@ const MODE_INSTRUCTIONS: Readonly<Record<WorkspaceChatMode, string>> = Object.fr
   ].join("\n"),
   plan: [
     "You are Ghostwriter's writing agent in Plan mode.",
-    "Produce outlines, plans, and proposal drafts the writer can paste into Plans.",
+    "Produce outlines, plans, and proposal drafts the writer can save to Plans.",
     "Propose only. Never claim Plans, captures, or manuscript canon were written or saved.",
-    "Structure the reply so it is easy to copy into Plans. Return only the workspace-chat-turn-v1 object."
+    "Structure the reply so it is easy to save as a plan outline. Return only the workspace-chat-turn-v1 object."
   ].join("\n"),
   agent: [
     "You are Ghostwriter's writing-agent harness in agent mode.",

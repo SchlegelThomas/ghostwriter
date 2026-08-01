@@ -1058,6 +1058,7 @@ const playbookTriggerSchema = z.enum(["capture-reflection", "manual"]);
 const agentContextClassSchema = z.enum(["capture"]);
 const agentOutputSchemaIdSchema = z.enum([
   "capture-reflection-v1",
+  "plan-outline-v1",
   "sketch-fields-v1",
   "character-sheet-v1",
   "backdrop-fields-v1"
@@ -1107,6 +1108,7 @@ const imageModelIdSchema = z
 
 const agentWorkflowIdSchema = z.enum([
   "scene-partner.capture-reflection",
+  "plan-mode.outline",
   "sketch-partner.craft-fields",
   "character-coach.sheet-fields",
   "worldkeeper.backdrop-fields"
@@ -1126,6 +1128,12 @@ export const agentStartRunRequestSchema = z.object({
     .string()
     .trim()
     .regex(/^[a-f0-9]{64}$/u)
+});
+
+export const persistPlanOutlineRequestSchema = z.object({
+  outlineText: z.string().trim().min(1).max(8_000),
+  title: z.string().trim().min(1).max(120).optional(),
+  model: agentModelIdSchema.optional()
 });
 
 const scenePartnerTurnPhaseSchema = z.enum([

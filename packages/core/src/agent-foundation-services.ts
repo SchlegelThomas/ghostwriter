@@ -120,6 +120,11 @@ export type AgentFoundationServices = Readonly<{
     projectId: ProjectId;
     proposalId: AgentProposalId;
   }>): Promise<AgentProposal>;
+  acknowledgeProposal(input: Readonly<{
+    accountId: AccountId;
+    projectId: ProjectId;
+    proposalId: AgentProposalId;
+  }>): Promise<AgentProposal>;
   applyProposal(input: ApplyAgentProposalInput): Promise<ApplyAgentProposalResult>;
   getRun(input: Readonly<{
     accountId: AccountId;
@@ -215,6 +220,16 @@ function assertRunTransition(
 
 function assertProposalReject(
   outcome: Awaited<ReturnType<AgentProposalRepository["reject"]>>
+): AgentProposal {
+  if (outcome.ok) return outcome.proposal;
+  if (outcome.reason === "not-found" || outcome.reason === "cross-project") {
+    throw new AgentProposalNotFoundError();
+  }
+  throw new AgentProposalStateConflictError();
+}
+
+function assertProposalAcknowledge(
+  outcome: Awaited<ReturnType<AgentProposalRepository["markApplied"]>>
 ): AgentProposal {
   if (outcome.ok) return outcome.proposal;
   if (outcome.reason === "not-found" || outcome.reason === "cross-project") {
@@ -603,6 +618,47 @@ export function createAgentFoundationServices(
           expectedStatus: "ready",
           actorAccountId: input.accountId,
           decidedAt: now,
+          updatedAt: now
+        })
+      );
+    },
+
+    async acknowledgeProposal(input) {
+      try {
+        requireProjectOwner(
+          input.projectId,
+          await dependencies.projects.getProjectMembership(
+            input.projectId,
+            input.accountId
+          )
+        );
+      } catch (error) {
+        if (error instanceof ProjectAccessDeniedError) {
+          throw new AgentProposalNotFoundError();
+        }
+        throw error;
+      }
+      const current = await dependencies.proposals.get(input.proposalId);
+      if (current === undefined || current.projectId !== input.projectId) {
+        throw new AgentProposalNotFoundError();
+      }
+      if (current.outputSchemaId !== "plan-outline-v1") {
+        throw new DomainValidationError(
+          "INVALID_AGENT_POLICY",
+          "Only plan-outline proposals can be acknowledged without apply."
+        );
+      }
+      if (current.status !== "ready") {
+        throw new AgentProposalStateConflictError();
+      }
+      const now = dependencies.clock.now();
+      return assertProposalAcknowledge(
+        await dependencies.proposals.markApplied({
+          proposalId: current.id,
+          projectId: input.projectId,
+          expectedStatus: "ready",
+          actorAccountId: input.accountId,
+          appliedAt: now,
           updatedAt: now
         })
       );

@@ -69,6 +69,9 @@ export type WorkspaceChatPanelProps = Readonly<{
   onOpenSettings?: OpenSettingsHandler;
   selectionSummary?: string;
   onToolkitAction?(id: AgentToolkitId): void;
+  /** Latest Plan-mode assistant reply available to save. */
+  planOutlineText?: string;
+  onSavePlanToPlans?(outlineText: string): void;
   /** Docked in the secondary shell — no outer border; close returns to Properties. */
   variant?: "floating" | "docked";
 }>;
@@ -92,6 +95,8 @@ export function WorkspaceChatPanel({
   onOpenSettings,
   selectionSummary,
   onToolkitAction,
+  planOutlineText,
+  onSavePlanToPlans,
   variant = "floating"
 }: WorkspaceChatPanelProps) {
   const [draft, setDraft] = useState("");
@@ -121,6 +126,12 @@ export function WorkspaceChatPanel({
 
   const composerDisabled = busy || sending;
   const canSend = !composerDisabled && draft.trim().length > 0;
+  const canSavePlanToPlans =
+    mode === "plan" &&
+    onSavePlanToPlans !== undefined &&
+    planOutlineText !== undefined &&
+    planOutlineText.trim().length > 0 &&
+    !composerDisabled;
   const modelPickerOptions = workspaceAgentModelPickerOptions(
     availableModels,
     mode
@@ -177,7 +188,7 @@ export function WorkspaceChatPanel({
               </Text>
               <Text style={styles.empty}>
                 {mode === "plan"
-                  ? "Ask for outlines, scene lists, or proposal drafts you can move into Plans."
+                  ? "Ask for outlines, scene lists, or proposal drafts you can save to Plans."
                   : mode === "agent"
                     ? "Ask for next steps, cover ideas, or scene work — propose only until you apply."
                     : "Ask questions, research continuity, or draft ideas against the open project."}
@@ -252,6 +263,21 @@ export function WorkspaceChatPanel({
               <Text style={styles.toolkitActionText}>{action.label}</Text>
             </Pressable>
           ))}
+        </View>
+      ) : null}
+
+      {canSavePlanToPlans ? (
+        <View style={styles.savePlanRow}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => onSavePlanToPlans?.(planOutlineText!)}
+            style={({ pressed }) => [
+              styles.savePlanButton,
+              pressed && styles.pressed
+            ]}
+          >
+            <Text style={styles.savePlanButtonText}>Save to Plans</Text>
+          </Pressable>
         </View>
       ) : null}
 
@@ -501,6 +527,24 @@ const styles = StyleSheet.create({
   toolkitActionText: {
     color: colors.kicker,
     fontFamily: fonts.uiMedium,
+    fontSize: 11
+  },
+  savePlanRow: {
+    borderTopColor: colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  savePlanButton: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.brandDark,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7
+  },
+  savePlanButtonText: {
+    color: "#ffffff",
+    fontFamily: fonts.uiSemibold,
     fontSize: 11
   },
   messageScroll: {

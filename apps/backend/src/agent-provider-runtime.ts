@@ -9,9 +9,11 @@ import {
   createAgentFoundationServices,
   createAgentGuidanceServices,
   createCaptureReflectionServices,
+  createCaptureServices,
   createCraftPartnerServices,
   createCraftProposalApplyServices,
   createMcpGrantServices,
+  createPlanModeOutlineServices,
   createProjectCommandServices,
   createProviderCredentialServices,
   encryptedMaterialFromEnvelope,
@@ -33,6 +35,7 @@ import {
   type CraftPartnerStructuredCompletionProvider,
   type IdGenerator,
   type McpGrantServices,
+  type PlanModeOutlineServices,
   type ProjectRepository,
   type ProviderCredentialRepository,
   type ProviderCredentialServices,
@@ -97,6 +100,7 @@ export type AgentProviderRuntime = Readonly<{
   agentGuidance: AgentGuidanceServices;
   foundation: AgentFoundationServices;
   captureReflection: CaptureReflectionServices;
+  planModeOutline: PlanModeOutlineServices;
   craftPartners: CraftPartnerServices;
   mcpGrants: McpGrantServices;
   policy: AgentProviderPolicy;
@@ -303,6 +307,22 @@ export function createAgentProviderRuntime(
     ids: input.ids,
     clock: input.clock
   });
+  const captures = createCaptureServices({
+    projects: input.projects,
+    captureDocuments: input.captureDocuments,
+    ids: input.ids,
+    clock: input.clock
+  });
+  const planModeOutline = createPlanModeOutlineServices({
+    projects: input.projects,
+    captureDocuments: input.captureDocuments,
+    captureServices: captures,
+    receipts,
+    foundation,
+    hashPort,
+    ids: input.ids,
+    clock: input.clock
+  });
   const craftApply = createCraftProposalApplyServices({
     projects: input.projects,
     captureDocuments: input.captureDocuments,
@@ -462,6 +482,7 @@ export function createAgentProviderRuntime(
     agentGuidance,
     foundation,
     captureReflection,
+    planModeOutline,
     craftPartners,
     mcpGrants,
     policy: Object.freeze({

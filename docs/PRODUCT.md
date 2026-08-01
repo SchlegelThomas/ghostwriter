@@ -138,13 +138,15 @@ On the same branch, the workspace shell and Agent dock advanced:
   tool-capable models; **agent** mode also exposes a compact toolkit row (Scene Partner, Cover,
   Character Coach, Worldkeeper, Sketch Partner) that deep-links into Plans or the Title Page cover
   studio with dock status copy, or refuses with writer-facing guidance when selection is missing;
-  **chat** completes with BYOK via the selected provider and server-assembled project context; Settings owns multi-provider keys; capability ids still invoke read tools;
+  **chat** completes with BYOK via the selected provider and server-assembled project context;
+  **Plan** replies can be explicitly **Saved to Plans** as a typed `plan-outline-v1` proposal bound
+  to a new Capture (acknowledge/reject only — no manuscript apply); Settings owns multi-provider keys;
+  capability ids still invoke read tools;
 - Manuscript Explorer: header icons + right-click context menu; Canvas owns full center with a
   compact chapter chip strip (no canvas Quick Build).
 
-**Proposed next:** Writing agent harness CP3–CP5 (tools in the loop, toolkit agent deep-link,
-Plan→Plans persistence) on the multi-provider runtime (ADR 0012). Founder browser verification of
-multi-provider Settings/dock and post-gate Playwright remain pending.
+**Proposed next:** Founder browser verification of writing-agent harness CP3–CP5 (including Plan→Plans
+save) and post-gate Playwright; confirm production deploy/migrate for provider credentials when ready.
 
 ## Prior writing milestone — implemented locally 2026-07-12
 

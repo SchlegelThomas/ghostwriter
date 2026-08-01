@@ -20,6 +20,7 @@ import {
   agentApplyProposalRequestSchema,
   agentContextPreviewRequestSchema,
   agentStartRunRequestSchema,
+  persistPlanOutlineRequestSchema,
   parseJsonRequest
 } from "./api-contract.js";
 import type { AuthenticatedSession } from "./auth.js";
@@ -96,7 +97,7 @@ export function registerAgentRunRoutes(
   dependencies: AgentRunRouteDependencies
 ): void {
   const { agentProvider } = dependencies;
-  const { captureReflection, craftPartners, foundation } = agentProvider;
+  const { captureReflection, craftPartners, foundation, planModeOutline } = agentProvider;
 
   app.post("/api/projects/:projectId/agent/context-preview", async (context) => {
     const parsed = await parseJsonRequest(
@@ -289,6 +290,68 @@ export function registerAgentRunRoutes(
       }
     }
   );
+
+  app.post(
+    "/api/projects/:projectId/agent/proposals/:proposalId/acknowledge",
+    async (context) => {
+      try {
+        const authSession = context.get("authSession");
+        const proposal = await planModeOutline.acknowledgeProposal({
+          accountId: accountId(authSession.account.id),
+          projectId: projectId(context.req.param("projectId")),
+          proposalId: agentProposalId(context.req.param("proposalId"))
+        });
+        return context.json(agentProposalResponse(proposal));
+      } catch (error) {
+        const mapped = mapAgentRunRouteError(error);
+        if (mapped !== undefined) {
+          return context.json(mapped.body, mapped.status);
+        }
+        throw error;
+      }
+    }
+  );
+
+  app.post("/api/projects/:projectId/agent/plan-outlines", async (context) => {
+    const parsed = await parseJsonRequest(
+      context.req.raw,
+      persistPlanOutlineRequestSchema
+    );
+    if (!parsed.success) {
+      return invalidRequestResponse(context, parsed);
+    }
+    try {
+      const authSession = context.get("authSession");
+      const scopedProjectId = projectId(context.req.param("projectId"));
+      const result = await planModeOutline.persistPlanOutlineToPlans({
+        accountId: accountId(authSession.account.id),
+        projectId: scopedProjectId,
+        outlineText: parsed.data.outlineText,
+        ...(parsed.data.title === undefined ? {} : { title: parsed.data.title }),
+        ...(parsed.data.model === undefined ? {} : { model: parsed.data.model })
+      });
+      const proposal = await foundation.getProposal({
+        accountId: accountId(authSession.account.id),
+        projectId: scopedProjectId,
+        proposalId: result.proposalId
+      });
+      return context.json(
+        {
+          captureId: result.captureId,
+          proposalId: result.proposalId,
+          runId: result.runId,
+          proposal: agentProposalResponse(proposal).proposal
+        },
+        201
+      );
+    } catch (error) {
+      const mapped = mapAgentRunRouteError(error);
+      if (mapped !== undefined) {
+        return context.json(mapped.body, mapped.status);
+      }
+      throw error;
+    }
+  });
 
   app.post(
     "/api/projects/:projectId/agent/proposals/:proposalId/apply",

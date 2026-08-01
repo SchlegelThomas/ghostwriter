@@ -209,8 +209,10 @@ BYOK agents on `feat/capture-to-story-agents`:
   expiry, and revocation. Owner admin routes mint/revoke grants; proposals created under a grant
   appear in the same Inbox projection as first-party UI runs.
 - Workspace Agent dock (`POST /api/workspace/chat`) uses BYOK chat completion with server-assembled
-  navigator/selection context; mode/model/effort are client prefs. Toolkit jobs (Scene Partner,
-  cover options) remain separate propose/apply or apply-cover routes.
+  navigator/selection context; mode/model/effort are client prefs. **Plan** mode can persist outlines
+  via `POST /api/projects/{projectId}/agent/plan-outlines` (workflow `plan-mode.outline`, schema
+  `plan-outline-v1`) without a second provider call — see [ADR 0013](adr/0013-writing-agent-harness-modes.md).
+  Toolkit jobs (Scene Partner, cover options) remain separate propose/apply or apply-cover routes.
 
 Product and operational docs must preserve shipped-vs-local distinctions until each checkpoint is
 founder-accepted in a real browser. R2/KEK secrets are not assumed provisioned on production Fly

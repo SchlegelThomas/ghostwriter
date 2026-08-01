@@ -15,6 +15,8 @@ import type { CaptureReflectionV1 } from "./capture-reflection-v1.js";
 import { validateCaptureReflectionV1 } from "./capture-reflection-v1.js";
 import type { CraftPartnerPayload } from "./craft-partner-schemas.js";
 import { validateCraftPartnerPayload } from "./craft-partner-schemas.js";
+import type { PlanOutlineV1 } from "./plan-outline-v1.js";
+import { validatePlanOutlineV1 } from "./plan-outline-v1.js";
 import type { CaptureContentHash, CaptureDocumentHead } from "./capture-documents.js";
 import {
   DomainValidationError,
@@ -26,7 +28,7 @@ import {
 } from "./domain.js";
 import type { AccountId } from "./identity.js";
 
-export type AgentProposalPayload = CaptureReflectionV1 | CraftPartnerPayload;
+export type AgentProposalPayload = CaptureReflectionV1 | PlanOutlineV1 | CraftPartnerPayload;
 
 export const AGENT_FOUNDATION_LIST_MAX = 100;
 
@@ -477,6 +479,9 @@ export function validateAgentProposalPayload(
   }
   if (outputSchemaId === "capture-reflection-v1") {
     return validateCaptureReflectionV1(payload);
+  }
+  if (outputSchemaId === "plan-outline-v1") {
+    return validatePlanOutlineV1(payload);
   }
   return validateCraftPartnerPayload(outputSchemaId, payload);
 }
