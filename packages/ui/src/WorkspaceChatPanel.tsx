@@ -23,6 +23,10 @@ import {
   type WorkspaceAgentMode,
   type WorkspaceAvailableModel
 } from "./workspace-agent-prefs.js";
+import {
+  AGENT_TOOLKIT_ACTIONS,
+  type AgentToolkitId
+} from "./workspace-agent-toolkit.js";
 
 const { colors, fonts } = ghostwriterTheme;
 
@@ -64,6 +68,7 @@ export type WorkspaceChatPanelProps = Readonly<{
   providerConfigured?: boolean;
   onOpenSettings?: OpenSettingsHandler;
   selectionSummary?: string;
+  onToolkitAction?(id: AgentToolkitId): void;
   /** Docked in the secondary shell — no outer border; close returns to Properties. */
   variant?: "floating" | "docked";
 }>;
@@ -86,6 +91,7 @@ export function WorkspaceChatPanel({
   providerConfigured = true,
   onOpenSettings,
   selectionSummary,
+  onToolkitAction,
   variant = "floating"
 }: WorkspaceChatPanelProps) {
   const [draft, setDraft] = useState("");
@@ -230,6 +236,24 @@ export function WorkspaceChatPanel({
           )}
         </ScrollView>
       </View>
+
+      {mode === "agent" && onToolkitAction !== undefined ? (
+        <View style={styles.toolkitRow}>
+          {AGENT_TOOLKIT_ACTIONS.map((action) => (
+            <Pressable
+              accessibilityRole="button"
+              key={action.id}
+              onPress={() => onToolkitAction(action.id)}
+              style={({ pressed }) => [
+                styles.toolkitAction,
+                pressed && styles.pressed
+              ]}
+            >
+              <Text style={styles.toolkitActionText}>{action.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
 
       <View style={styles.composer}>
         {openPicker === "model" ? (
@@ -457,6 +481,27 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     minHeight: 0,
     minWidth: 0
+  },
+  toolkitRow: {
+    borderTopColor: colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  toolkitAction: {
+    borderColor: colors.line,
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 8,
+    paddingVertical: 5
+  },
+  toolkitActionText: {
+    color: colors.kicker,
+    fontFamily: fonts.uiMedium,
+    fontSize: 11
   },
   messageScroll: {
     flex: 1,

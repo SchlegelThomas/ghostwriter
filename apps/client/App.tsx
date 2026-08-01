@@ -65,7 +65,10 @@ import {
   type WorkspaceAvailableModel,
   type SettingsFocus,
   sceneSelection,
-  workspaceModeForComposition
+  workspaceModeForComposition,
+  resolveAgentToolkitAction,
+  type AgentToolkitId,
+  type PlansAgentDeepLink
 } from "@ghostwriter/ui";
 import { useFonts } from "expo-font";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
@@ -384,6 +387,9 @@ export default function App() {
   const [captureProblemWhileClosed, setCaptureProblemWhileClosed] =
     useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
+  const [plansAgentDeepLink, setPlansAgentDeepLink] = useState<
+    PlansAgentDeepLink | undefined
+  >();
   const [inboxActivity, setInboxActivity] =
     useState<InboxPanelActivity>("idle");
   const [inboxRefreshSignal, setInboxRefreshSignal] = useState(0);
@@ -2161,6 +2167,39 @@ export default function App() {
     }
   }
 
+  function appendChatStatusMessage(body: string): void {
+    setChatMessages((current) => [
+      ...current,
+      {
+        id: `chat-system-${Date.now()}`,
+        role: "system",
+        body
+      }
+    ]);
+  }
+
+  function handleAgentToolkitAction(
+    id: AgentToolkitId,
+    toolkitSelection: Parameters<typeof resolveAgentToolkitAction>[1]
+  ): void {
+    const result = resolveAgentToolkitAction(id, toolkitSelection);
+    if (!result.ok) {
+      appendChatStatusMessage(result.refusalMessage);
+      return;
+    }
+    if (result.kind === "cover") {
+      setCoverReviewBookId(result.bookId);
+      appendChatStatusMessage(result.statusMessage);
+      return;
+    }
+    if (result.deepLink.captureId !== undefined) {
+      setInboxSelectedCaptureId(result.deepLink.captureId);
+    }
+    setPlansAgentDeepLink(result.deepLink);
+    void openInboxWorkspace();
+    appendChatStatusMessage(result.statusMessage);
+  }
+
   async function handleCanvasFailure(cause: unknown): Promise<void> {
     if (cause instanceof GhostwriterApiError && cause.status === 401) {
       handleError(cause, "Ghostwriter could not save Story Canvas.");
@@ -2657,6 +2696,8 @@ export default function App() {
         onOpenSettings={openSettings}
         renderInbox={(presentation: InboxWorkspacePresentation) => (
           <InboxPanel
+            agentDeepLink={plansAgentDeepLink}
+            onAgentDeepLinkConsumed={() => setPlansAgentDeepLink(undefined)}
             canvasVersion={canvasWorkspace?.board.version}
             compact={presentation.compact}
             ensureCanvasVersion={() => ensureCanvasVersionForHandoff()}
@@ -2767,6 +2808,8 @@ export default function App() {
                   : { basePrompt: characterVisualJob.basePrompt })
               }
         }
+        inboxSelectedCaptureId={inboxSelectedCaptureId}
+        onAgentToolkitAction={handleAgentToolkitAction}
         onBack={() => void leaveProject()}
         onChatSend={handleChatSend}
         onCommand={runCommand}

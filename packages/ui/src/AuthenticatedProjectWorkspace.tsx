@@ -97,6 +97,11 @@ import {
   type WorkspaceChatSendInput
 } from "./WorkspaceChatPanel.js";
 import {
+  buildAgentToolkitSelection,
+  type AgentToolkitId,
+  type AgentToolkitSelection
+} from "./workspace-agent-toolkit.js";
+import {
   DEFAULT_WORKSPACE_AGENT_PREFS,
   type WorkspaceAgentEffort,
   type WorkspaceAgentMode,
@@ -267,6 +272,11 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   imageAvailableModels?: readonly WorkspaceAvailableModel[];
   preferredImageModelId?: string;
   onChatSend?(input: WorkspaceChatSendInput): Promise<void> | void;
+  inboxSelectedCaptureId?: string;
+  onAgentToolkitAction?(
+    id: AgentToolkitId,
+    selection: AgentToolkitSelection
+  ): void;
   onStartCoverOptionsJob?(input: Readonly<{
     bookId: BookId;
     prompt: string;
@@ -462,6 +472,8 @@ export function AuthenticatedProjectWorkspace({
   imageAvailableModels = [],
   preferredImageModelId,
   onChatSend,
+  inboxSelectedCaptureId,
+  onAgentToolkitAction,
   onStartCoverOptionsJob,
   coverOptionsJob,
   coverReviewBookId,
@@ -500,6 +512,14 @@ export function AuthenticatedProjectWorkspace({
     setRailDestination("write");
     if (structureCollapsible) setStructureRail("expanded");
     onOpenInbox?.();
+  }
+
+  function handleAgentToolkitAction(id: AgentToolkitId): void {
+    if (onAgentToolkitAction === undefined) return;
+    onAgentToolkitAction(
+      id,
+      buildAgentToolkitSelection(selection, selectedSceneId, inboxSelectedCaptureId)
+    );
   }
 
   function openCharactersPrimary(): void {
@@ -2540,6 +2560,11 @@ export function AuthenticatedProjectWorkspace({
                   onModelChange={(next) => onChatModelChange?.(next)}
                   onOpenSettings={onOpenSettings}
                   onSend={(input) => onChatSend?.(input)}
+                  onToolkitAction={
+                    onAgentToolkitAction === undefined
+                      ? undefined
+                      : handleAgentToolkitAction
+                  }
                   open
                   providerConfigured={chatProviderConfigured}
                   selectionSummary={manuscriptSelectionSummary(selection)}

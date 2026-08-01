@@ -135,8 +135,10 @@ On the same branch, the workspace shell and Agent dock advanced:
   configured; hermetic memory fake for E2E) — never a data URI in Lakebase;
 - Agent dock composer: modes **chat** / **Plan** / **agent**, real provider model ids + effort,
   persisted per project; picker lists only models the account can reach; **agent** mode requires
-  tool-capable models; **chat** completes with BYOK via the selected provider and server-assembled
-  project context; Settings owns multi-provider keys; capability ids still invoke read tools;
+  tool-capable models; **agent** mode also exposes a compact toolkit row (Scene Partner, Cover,
+  Character Coach, Worldkeeper, Sketch Partner) that deep-links into Plans or the Title Page cover
+  studio with dock status copy, or refuses with writer-facing guidance when selection is missing;
+  **chat** completes with BYOK via the selected provider and server-assembled project context; Settings owns multi-provider keys; capability ids still invoke read tools;
 - Manuscript Explorer: header icons + right-click context menu; Canvas owns full center with a
   compact chapter chip strip (no canvas Quick Build).
 

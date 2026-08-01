@@ -2,7 +2,8 @@ import type { ProjectNavigator } from "@ghostwriter/core";
 import {
   ghostwriterTheme,
   accountHasAvailableStructuredModels,
-  type OpenSettingsHandler
+  type OpenSettingsHandler,
+  type PlansAgentDeepLink
 } from "@ghostwriter/ui";
 import {
   useCallback,
@@ -116,6 +117,8 @@ export type InboxPanelProps = Readonly<{
   onProblem?(problem: InboxPanelProblemEvent): void;
   onProblemResolved?(id: string): void;
   onAcknowledgement?(event: InboxPanelAcknowledgementEvent): void;
+  agentDeepLink?: PlansAgentDeepLink;
+  onAgentDeepLinkConsumed?(): void;
 }>;
 
 function InboxButton({
@@ -216,7 +219,9 @@ export function InboxPanel({
   onActivityChange,
   onProblem,
   onProblemResolved,
-  onAcknowledgement
+  onAcknowledgement,
+  agentDeepLink,
+  onAgentDeepLinkConsumed
 }: InboxPanelProps) {
   const openViewSource =
     onViewSourceCapture ?? ((captureId: string) => onOpenCapture(captureId));
@@ -252,6 +257,8 @@ export function InboxPanel({
   const [craftSceneId, setCraftSceneId] = useState("");
   const [craftCharacterId, setCraftCharacterId] = useState("");
   const applySessionIdRef = useRef(`inbox-apply-${projectId}`);
+  const pendingDeepLinkRef = useRef<PlansAgentDeepLink | undefined>(undefined);
+  const deepLinkAutoStartPendingRef = useRef(false);
 
   const activityCallbackRef = useRef(onActivityChange);
   const problemCallbackRef = useRef(onProblem);
@@ -308,6 +315,80 @@ export function InboxPanel({
   useEffect(() => {
     void loadDetailHead();
   }, [loadDetailHead, refreshSignal]);
+
+  useEffect(() => {
+    if (agentDeepLink === undefined) return;
+
+    pendingDeepLinkRef.current = agentDeepLink;
+
+    if (
+      agentDeepLink.captureId !== undefined &&
+      agentDeepLink.captureId !== selectedCaptureId
+    ) {
+      onSelectCapture?.(agentDeepLink.captureId);
+    }
+
+    setWorkflowStep(agentDeepLink.workflowStep);
+    setShowAiSetup(false);
+    setAiSetupResume(undefined);
+    setPendingReceipt(undefined);
+    setReflectionProposal(undefined);
+    setReflectionMessage(undefined);
+    setProposalApplied(false);
+
+    if (agentDeepLink.craftSceneId !== undefined) {
+      setCraftSceneId(agentDeepLink.craftSceneId);
+    }
+    if (agentDeepLink.craftCharacterId !== undefined) {
+      setCraftCharacterId(agentDeepLink.craftCharacterId);
+    }
+
+    if (agentDeepLink.autoStartWorkflowId !== undefined) {
+      deepLinkAutoStartPendingRef.current = true;
+      return;
+    }
+
+    pendingDeepLinkRef.current = undefined;
+    onAgentDeepLinkConsumed?.();
+  }, [agentDeepLink, onAgentDeepLinkConsumed, onSelectCapture, selectedCaptureId]);
+
+  useEffect(() => {
+    if (!deepLinkAutoStartPendingRef.current) return;
+    const link = pendingDeepLinkRef.current;
+    if (link?.autoStartWorkflowId === undefined) return;
+    if (detailLoading || selectedCaptureId === undefined) return;
+    if (
+      link.craftSceneId !== undefined &&
+      craftSceneId !== link.craftSceneId
+    ) {
+      return;
+    }
+    if (
+      link.craftCharacterId !== undefined &&
+      craftCharacterId !== link.craftCharacterId
+    ) {
+      return;
+    }
+
+    deepLinkAutoStartPendingRef.current = false;
+    pendingDeepLinkRef.current = undefined;
+
+    if (!captureInboxCanRequestReflection(detailHead)) {
+      onAgentDeepLinkConsumed?.();
+      return;
+    }
+
+    const workflowId = link.autoStartWorkflowId;
+    void beginCraftPartner(workflowId).finally(() => {
+      onAgentDeepLinkConsumed?.();
+    });
+  }, [
+    craftCharacterId,
+    craftSceneId,
+    detailHead,
+    detailLoading,
+    selectedCaptureId
+  ]);
 
   const phase = inboxLoadPhase({
     loading,

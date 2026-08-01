@@ -30,6 +30,7 @@ export * from "./WorkspaceChatPanel.js";
 export * from "./ImageModelPicker.js";
 export * from "./AgentModelPickerMenu.js";
 export * from "./workspace-agent-prefs.js";
+export * from "./workspace-agent-toolkit.js";
 export * from "./model-preferences.js";
 export * from "./settings-focus.js";
 export * from "./WorkspaceQuickNav.js";
