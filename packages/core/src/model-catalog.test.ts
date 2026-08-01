@@ -57,10 +57,14 @@ describe("model-catalog", () => {
         }
       ]
     });
-    const dated = merged.find((entry) => entry.id === "claude-sonnet-4-5-20250929");
-    expect(dated?.bestFor).toMatch(/Scene craft/i);
-    expect(dated?.relativeStrength).toMatch(/prose/i);
-    expect(dated?.adapterReady).toBe(true);
+    const sonnet = merged.find((entry) => entry.id === "claude-sonnet-4-5");
+    expect(sonnet?.label).toBe("Claude Sonnet 4.5");
+    expect(sonnet?.bestFor).toMatch(/Scene craft/i);
+    expect(sonnet?.relativeStrength).toMatch(/prose/i);
+    expect(sonnet?.adapterReady).toBe(true);
+    expect(
+      merged.some((entry) => entry.id === "claude-sonnet-4-5-20250929")
+    ).toBe(false);
     const discoveredOnly = merged.find(
       (entry) => entry.id === "claude-brand-new-experimental"
     );
@@ -68,6 +72,42 @@ describe("model-catalog", () => {
     expect(discoveredOnly?.supportsTools).toBe(true);
     expect(discoveredOnly?.adapterReady).toBe(true);
     expect(merged.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("collapses dated discovery ids onto curated stems without duplicate labels", () => {
+    const merged = mergeDiscoveredModels({
+      provider: "anthropic",
+      discovered: [
+        {
+          id: "claude-haiku-4-5",
+          displayName: "Claude Haiku 4.5",
+          modelClass: "chat",
+          supportsImage: false
+        },
+        {
+          id: "claude-haiku-4-5-20251001",
+          displayName: "Claude Haiku 4.5",
+          modelClass: "chat",
+          supportsImage: false
+        },
+        {
+          id: "claude-opus-4-5-20251101",
+          displayName: "Claude Opus 4.5",
+          modelClass: "chat",
+          supportsImage: false
+        }
+      ]
+    });
+    const haikuMatches = merged.filter(
+      (entry) => entry.label === "Claude Haiku 4.5"
+    );
+    const opusMatches = merged.filter(
+      (entry) => entry.label === "Claude Opus 4.5"
+    );
+    expect(haikuMatches).toHaveLength(1);
+    expect(haikuMatches[0]?.id).toBe("claude-haiku-4-5");
+    expect(opusMatches).toHaveLength(1);
+    expect(opusMatches[0]?.id).toBe("claude-opus-4-5");
   });
 
   it("resolves provider from available merge for discovered ids", () => {

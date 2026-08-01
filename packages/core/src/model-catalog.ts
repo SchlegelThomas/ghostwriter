@@ -639,6 +639,8 @@ function synthesizeDiscoveredEntry(input: Readonly<{
 /**
  * Merge live discovery with curated catalog metadata.
  * Curated wins for metadata when ids match (including date-suffix stems).
+ * Date-suffixed discovery ids that match a curated stem collapse onto the curated
+ * id so the picker does not show duplicate labels (e.g. claude-haiku-4-5 + …-20251001).
  * Discovered-only ids are synthesized with adapter-ready defaults.
  */
 export function mergeDiscoveredModels(input: Readonly<{
@@ -657,20 +659,22 @@ export function mergeDiscoveredModels(input: Readonly<{
     if (id.length === 0) continue;
     const curatedMatch = findCuratedMatch(id, provider);
     if (curatedMatch !== undefined) {
+      const canonicalId = curatedMatch.id;
+      // Prefer an exact curated-id hit over a later dated snapshot of the same stem.
+      if (byId.has(canonicalId) && id !== canonicalId) {
+        continue;
+      }
       const chat = discovered.modelClass === "chat";
       const image =
         discovered.modelClass === "image" ||
         discovered.supportsImage ||
         curatedMatch.supportsImage;
       byId.set(
-        id,
+        canonicalId,
         entry({
           ...curatedMatch,
-          id,
-          label:
-            id === curatedMatch.id
-              ? curatedMatch.label
-              : discovered.displayName?.trim() || prettifyModelId(id),
+          id: canonicalId,
+          label: curatedMatch.label,
           supportsChat: chat ? true : curatedMatch.supportsChat,
           supportsTools: chat ? true : curatedMatch.supportsTools,
           supportsStructured: chat ? true : curatedMatch.supportsStructured,
