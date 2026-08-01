@@ -64,6 +64,19 @@ import {
   type WorkspaceAgentMode,
   type WorkspaceAvailableModel,
   type SettingsFocus,
+  type WorkspaceChatSessionsState,
+  activeWorkspaceChatMessages,
+  activeWorkspaceChatSession,
+  appendWorkspaceChatMessage,
+  createWorkspaceChatSession,
+  deleteWorkspaceChatSession,
+  emptyWorkspaceChatSessionsState,
+  loadWorkspaceChatSessions,
+  renameWorkspaceChatSession,
+  replaceWorkspaceChatMessages,
+  saveWorkspaceChatSessions,
+  setActiveWorkspaceChatSession,
+  updateActiveWorkspaceChatSessionPrefs,
   sceneSelection,
   workspaceModeForComposition,
   resolveAgentToolkitAction,
@@ -341,7 +354,8 @@ export default function App() {
     useState<ReaderVoicePack>("default");
   const [readerSpeaking, setReaderSpeaking] = useState(false);
   const readerAudioRef = useRef<{ pause(): void } | null>(null);
-  const [chatMessages, setChatMessages] = useState<WorkspaceChatMessage[]>([]);
+  const [chatSessionsState, setChatSessionsState] =
+    useState<WorkspaceChatSessionsState>(() => emptyWorkspaceChatSessionsState());
   const [chatMode, setChatMode] = useState<WorkspaceAgentMode>(
     DEFAULT_WORKSPACE_AGENT_PREFS.mode
   );
@@ -355,6 +369,17 @@ export default function App() {
   const [chatAvailableModels, setChatAvailableModels] = useState<
     readonly WorkspaceAvailableModel[]
   >([]);
+  const chatMessages = useMemo(
+    () => [...activeWorkspaceChatMessages(chatSessionsState)],
+    [chatSessionsState]
+  );
+  const chatSessionTabs = useMemo(
+    () =>
+      chatSessionsState.sessions.map((session) =>
+        Object.freeze({ id: session.id, title: session.title })
+      ),
+    [chatSessionsState.sessions]
+  );
   const imageAvailableModels = useMemo(
     () => filterWorkspaceImageModels(chatAvailableModels),
     [chatAvailableModels]
@@ -852,15 +877,20 @@ export default function App() {
       setChatMode(DEFAULT_WORKSPACE_AGENT_PREFS.mode);
       setChatModel(DEFAULT_WORKSPACE_AGENT_PREFS.model);
       setChatEffort(DEFAULT_WORKSPACE_AGENT_PREFS.effort);
-      setChatMessages([]);
+      setChatSessionsState(emptyWorkspaceChatSessionsState());
       return;
     }
-    const prefs = readWorkspaceAgentPrefs(selectedProject.id);
-    setChatMode(prefs.mode);
-    setChatModel(prefs.model);
-    setChatEffort(prefs.effort);
-    setChatMessages([]);
-  }, [selectedProject?.id]);
+    const loaded = loadWorkspaceChatSessions(
+      writer?.account.id,
+      selectedProject.id
+    );
+    setChatSessionsState(loaded);
+    const projectPrefs = readWorkspaceAgentPrefs(selectedProject.id);
+    const activeSession = activeWorkspaceChatSession(loaded);
+    setChatMode(activeSession?.mode ?? projectPrefs.mode);
+    setChatModel(activeSession?.model ?? projectPrefs.model);
+    setChatEffort(activeSession?.effort ?? projectPrefs.effort);
+  }, [selectedProject?.id, writer?.account.id]);
 
   useEffect(() => {
     if (selectedProject === undefined) {
@@ -915,6 +945,40 @@ export default function App() {
     writer?.account.id
   ]);
 
+  function persistChatSessions(state: WorkspaceChatSessionsState): void {
+    if (selectedProject === undefined) return;
+    saveWorkspaceChatSessions(writer?.account.id, selectedProject.id, state);
+  }
+
+  function replaceActiveChatMessages(
+    mutator: (messages: WorkspaceChatMessage[]) => WorkspaceChatMessage[]
+  ): void {
+    setChatSessionsState((current) => {
+      const activeId = current.activeSessionId;
+      const active = current.sessions.find((session) => session.id === activeId);
+      if (active === undefined) return current;
+      const next = replaceWorkspaceChatMessages(
+        current,
+        activeId,
+        mutator([...active.messages])
+      );
+      persistChatSessions(next);
+      return next;
+    });
+  }
+
+  function appendActiveChatMessage(message: WorkspaceChatMessage): void {
+    setChatSessionsState((current) => {
+      const next = appendWorkspaceChatMessage(
+        current,
+        current.activeSessionId,
+        message
+      );
+      persistChatSessions(next);
+      return next;
+    });
+  }
+
   function persistChatPrefs(next: Readonly<{
     mode?: WorkspaceAgentMode;
     model?: AgentModelId;
@@ -925,6 +989,70 @@ export default function App() {
       mode: next.mode ?? chatMode,
       model: next.model ?? chatModel,
       effort: next.effort ?? chatEffort
+    });
+    setChatSessionsState((current) => {
+      const updated = updateActiveWorkspaceChatSessionPrefs(current, {
+        ...(next.mode === undefined ? {} : { mode: next.mode }),
+        ...(next.model === undefined ? {} : { model: next.model }),
+        ...(next.effort === undefined ? {} : { effort: next.effort })
+      });
+      persistChatSessions(updated);
+      return updated;
+    });
+  }
+
+  function handleChatSessionSelect(sessionId: string): void {
+    setChatSessionsState((current) => {
+      const next = setActiveWorkspaceChatSession(current, sessionId);
+      persistChatSessions(next);
+      const session = next.sessions.find((entry) => entry.id === sessionId);
+      const projectPrefs =
+        selectedProject === undefined
+          ? DEFAULT_WORKSPACE_AGENT_PREFS
+          : readWorkspaceAgentPrefs(selectedProject.id);
+      setChatMode(session?.mode ?? projectPrefs.mode);
+      setChatModel(session?.model ?? projectPrefs.model);
+      setChatEffort(session?.effort ?? projectPrefs.effort);
+      return next;
+    });
+  }
+
+  function handleNewChatSession(): void {
+    setChatSessionsState((current) => {
+      const next = createWorkspaceChatSession(current, {
+        mode: chatMode,
+        model: chatModel,
+        effort: chatEffort
+      });
+      persistChatSessions(next);
+      return next;
+    });
+  }
+
+  function handleRenameChatSession(sessionId: string, title: string): void {
+    setChatSessionsState((current) => {
+      const next = renameWorkspaceChatSession(current, sessionId, title);
+      persistChatSessions(next);
+      return next;
+    });
+  }
+
+  function handleDeleteChatSession(sessionId: string): void {
+    setChatSessionsState((current) => {
+      const next = deleteWorkspaceChatSession(current, sessionId);
+      if (next === null) return current;
+      persistChatSessions(next);
+      const session = next.sessions.find(
+        (entry) => entry.id === next.activeSessionId
+      );
+      const projectPrefs =
+        selectedProject === undefined
+          ? DEFAULT_WORKSPACE_AGENT_PREFS
+          : readWorkspaceAgentPrefs(selectedProject.id);
+      setChatMode(session?.mode ?? projectPrefs.mode);
+      setChatModel(session?.model ?? projectPrefs.model);
+      setChatEffort(session?.effort ?? projectPrefs.effort);
+      return next;
     });
   }
 
@@ -2107,7 +2235,7 @@ export default function App() {
       role: "user",
       body: input.message
     };
-    setChatMessages((current) => [...current, userMessage]);
+    appendActiveChatMessage(userMessage);
     const selection =
       selectedProject === undefined || selectedSceneId === undefined
         ? undefined
@@ -2138,20 +2266,17 @@ export default function App() {
           })
     } as const;
     const assistantId = `chat-assistant-${Date.now()}`;
-    setChatMessages((current) => [
-      ...current,
-      {
-        id: assistantId,
-        role: "assistant",
-        body: "",
-        streaming: true,
-        statusLabel: "Thinking…",
-        toolTraces: []
-      }
-    ]);
+    appendActiveChatMessage({
+      id: assistantId,
+      role: "assistant",
+      body: "",
+      streaming: true,
+      statusLabel: "Thinking…",
+      toolTraces: []
+    });
 
     const finalizeAssistant = (update: Partial<WorkspaceChatMessage>): void => {
-      setChatMessages((current) =>
+      replaceActiveChatMessages((current) =>
         current.map((message) =>
           message.id === assistantId
             ? { ...message, ...update, streaming: false }
@@ -2163,7 +2288,7 @@ export default function App() {
     try {
       const result = await sendWorkspaceChatStream(chatRequest, {
         onStatus: (_phase, label) => {
-          setChatMessages((current) =>
+          replaceActiveChatMessages((current) =>
             current.map((message) =>
               message.id === assistantId
                 ? { ...message, statusLabel: label }
@@ -2172,7 +2297,7 @@ export default function App() {
           );
         },
         onToolTrace: (trace) => {
-          setChatMessages((current) =>
+          replaceActiveChatMessages((current) =>
             current.map((message) =>
               message.id === assistantId
                 ? {
@@ -2184,7 +2309,7 @@ export default function App() {
           );
         },
         onTextDelta: (delta) => {
-          setChatMessages((current) =>
+          replaceActiveChatMessages((current) =>
             current.map((message) =>
               message.id === assistantId
                 ? { ...message, body: `${message.body}${delta}`, statusLabel: "Writing…" }
@@ -2221,7 +2346,7 @@ export default function App() {
           // fall through to system error
         }
       }
-      setChatMessages((current) =>
+      replaceActiveChatMessages((current) =>
         current.filter((message) => message.id !== assistantId).concat({
           id: `chat-system-${Date.now()}`,
           role: "system",
@@ -2235,14 +2360,11 @@ export default function App() {
   }
 
   function appendChatStatusMessage(body: string): void {
-    setChatMessages((current) => [
-      ...current,
-      {
-        id: `chat-system-${Date.now()}`,
-        role: "system",
-        body
-      }
-    ]);
+    appendActiveChatMessage({
+      id: `chat-system-${Date.now()}`,
+      role: "system",
+      body
+    });
   }
 
   const planOutlineText = useMemo(() => {
@@ -2839,6 +2961,12 @@ export default function App() {
         chatMode={chatMode}
         chatModel={chatModel}
         chatEffort={chatEffort}
+        chatSessions={chatSessionTabs}
+        activeChatSessionId={chatSessionsState.activeSessionId}
+        onChatSessionSelect={handleChatSessionSelect}
+        onNewChatSession={handleNewChatSession}
+        onRenameChatSession={handleRenameChatSession}
+        onDeleteChatSession={handleDeleteChatSession}
         chatProviderConfigured={chatProviderConfigured}
         chatAvailableModels={chatAvailableModels}
         imageAvailableModels={imageAvailableModels}

@@ -8,7 +8,7 @@ import {
   TextInput,
   View
 } from "react-native";
-import { ArrowUp, CaretDown, CaretRight, Check, CopySimple } from "phosphor-react-native";
+import { ArrowUp, CaretDown, CaretRight, Check, CopySimple, DotsThree, Plus } from "phosphor-react-native";
 import type { AgentModelId } from "@ghostwriter/core";
 import { AgentChatMarkdown } from "./AgentChatMarkdown.js";
 import {
@@ -60,6 +60,11 @@ export type WorkspaceChatSendInput = Readonly<{
   effort: WorkspaceAgentEffort;
 }>;
 
+export type WorkspaceChatSessionTab = Readonly<{
+  id: string;
+  title: string;
+}>;
+
 export type WorkspaceChatPanelProps = Readonly<{
   messages: readonly WorkspaceChatMessage[];
   busy?: boolean;
@@ -80,6 +85,12 @@ export type WorkspaceChatPanelProps = Readonly<{
   /** Latest Plan-mode assistant reply available to save. */
   planOutlineText?: string;
   onSavePlanToPlans?(outlineText: string): void;
+  chatSessions?: readonly WorkspaceChatSessionTab[];
+  activeChatSessionId?: string;
+  onChatSessionSelect?(sessionId: string): void;
+  onNewChatSession?(): void;
+  onRenameChatSession?(sessionId: string, title: string): void;
+  onDeleteChatSession?(sessionId: string): void;
   /** Docked in the secondary shell — no outer border; close returns to Properties. */
   variant?: "floating" | "docked";
 }>;
@@ -105,11 +116,18 @@ export function WorkspaceChatPanel({
   onToolkitAction,
   planOutlineText,
   onSavePlanToPlans,
+  chatSessions = [],
+  activeChatSessionId,
+  onChatSessionSelect,
+  onNewChatSession,
+  onRenameChatSession,
+  onDeleteChatSession,
   variant = "floating"
 }: WorkspaceChatPanelProps) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [openPicker, setOpenPicker] = useState<PickerKind>(null);
+  const [sessionMenuId, setSessionMenuId] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -164,6 +182,124 @@ export function WorkspaceChatPanel({
           >
             <Text style={styles.ghostButtonText}>Close</Text>
           </Pressable>
+        </View>
+      ) : null}
+
+      {chatSessions.length > 0 &&
+      onChatSessionSelect !== undefined &&
+      activeChatSessionId !== undefined ? (
+        <View style={styles.sessionRow}>
+          <ScrollView
+            contentContainerStyle={styles.sessionScrollContent}
+            horizontal
+            keyboardShouldPersistTaps="handled"
+            showsHorizontalScrollIndicator={false}
+            style={styles.sessionScroll}
+          >
+            {chatSessions.map((session) => {
+              const active = session.id === activeChatSessionId;
+              const menuOpen = sessionMenuId === session.id;
+              const canDelete =
+                onDeleteChatSession !== undefined && chatSessions.length > 1;
+              const canRename = onRenameChatSession !== undefined;
+              return (
+                <View key={session.id} style={styles.sessionChipWrap}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    onPress={() => {
+                      setSessionMenuId(null);
+                      onChatSessionSelect(session.id);
+                    }}
+                    style={({ pressed }) => [
+                      styles.sessionChip,
+                      active && styles.sessionChipActive,
+                      pressed && styles.pressed
+                    ]}
+                  >
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.sessionChipText,
+                        active && styles.sessionChipTextActive
+                      ]}
+                    >
+                      {session.title}
+                    </Text>
+                  </Pressable>
+                  {canRename || canDelete ? (
+                    <Pressable
+                      accessibilityLabel={`Session actions for ${session.title}`}
+                      accessibilityRole="button"
+                      onPress={() =>
+                        setSessionMenuId((current) =>
+                          current === session.id ? null : session.id
+                        )
+                      }
+                      style={({ pressed }) => [
+                        styles.sessionMenuButton,
+                        pressed && styles.pressed
+                      ]}
+                    >
+                      <DotsThree color={colors.muted} size={12} weight="bold" />
+                    </Pressable>
+                  ) : null}
+                  {menuOpen ? (
+                    <View style={styles.sessionMenu}>
+                      {canRename ? (
+                        <Pressable
+                          accessibilityRole="menuitem"
+                          onPress={() => {
+                            setSessionMenuId(null);
+                            promptRenameSession(session.title, (title) =>
+                              onRenameChatSession?.(session.id, title)
+                            );
+                          }}
+                          style={({ pressed }) => [
+                            styles.sessionMenuItem,
+                            pressed && styles.pressed
+                          ]}
+                        >
+                          <Text style={styles.sessionMenuItemText}>Rename</Text>
+                        </Pressable>
+                      ) : null}
+                      {canDelete ? (
+                        <Pressable
+                          accessibilityRole="menuitem"
+                          onPress={() => {
+                            setSessionMenuId(null);
+                            onDeleteChatSession?.(session.id);
+                          }}
+                          style={({ pressed }) => [
+                            styles.sessionMenuItem,
+                            pressed && styles.pressed
+                          ]}
+                        >
+                          <Text style={styles.sessionMenuItemText}>Delete</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
+          </ScrollView>
+          {onNewChatSession !== undefined ? (
+            <Pressable
+              accessibilityLabel="New chat"
+              accessibilityRole="button"
+              onPress={() => {
+                setSessionMenuId(null);
+                onNewChatSession();
+              }}
+              style={({ pressed }) => [
+                styles.newSessionButton,
+                pressed && styles.pressed
+              ]}
+            >
+              <Plus color={colors.kicker} size={12} weight="bold" />
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
 
@@ -381,6 +517,18 @@ export function WorkspaceChatPanel({
       </View>
     </View>
   );
+}
+
+function promptRenameSession(
+  currentTitle: string,
+  onRename: (title: string) => void
+): void {
+  if (typeof globalThis.prompt !== "function") return;
+  const next = globalThis.prompt("Rename chat", currentTitle);
+  if (next === null) return;
+  const trimmed = next.trim();
+  if (trimmed.length === 0) return;
+  onRename(trimmed);
 }
 
 function prefersReducedMotion(): boolean {
@@ -732,6 +880,88 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontFamily: fonts.uiMedium,
     fontSize: 10
+  },
+  sessionRow: {
+    alignItems: "center",
+    borderBottomColor: colors.line,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    flexShrink: 0,
+    gap: 4,
+    paddingLeft: 8,
+    paddingRight: 6,
+    paddingVertical: 6
+  },
+  sessionScroll: {
+    flex: 1,
+    minWidth: 0
+  },
+  sessionScrollContent: {
+    alignItems: "center",
+    gap: 4,
+    paddingRight: 4
+  },
+  sessionChipWrap: {
+    flexDirection: "row",
+    position: "relative"
+  },
+  sessionChip: {
+    backgroundColor: colors.wash,
+    borderColor: colors.line,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    maxWidth: 160,
+    paddingHorizontal: 10,
+    paddingVertical: 5
+  },
+  sessionChipActive: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.kicker
+  },
+  sessionChipText: {
+    color: colors.muted,
+    fontFamily: fonts.uiMedium,
+    fontSize: 11
+  },
+  sessionChipTextActive: {
+    color: colors.kicker
+  },
+  sessionMenuButton: {
+    alignItems: "center",
+    borderRadius: 999,
+    height: 22,
+    justifyContent: "center",
+    marginLeft: -6,
+    width: 18
+  },
+  sessionMenu: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    left: 0,
+    minWidth: 96,
+    position: "absolute",
+    top: "100%",
+    zIndex: 20
+  },
+  sessionMenuItem: {
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  sessionMenuItemText: {
+    color: colors.ink,
+    fontFamily: fonts.ui,
+    fontSize: 11
+  },
+  newSessionButton: {
+    alignItems: "center",
+    borderColor: colors.line,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 26,
+    justifyContent: "center",
+    width: 26
   },
   messageArea: {
     flex: 1,

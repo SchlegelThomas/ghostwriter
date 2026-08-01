@@ -94,7 +94,8 @@ import {
 import {
   WorkspaceChatPanel,
   type WorkspaceChatMessage,
-  type WorkspaceChatSendInput
+  type WorkspaceChatSendInput,
+  type WorkspaceChatSessionTab
 } from "./WorkspaceChatPanel.js";
 import {
   buildAgentToolkitSelection,
@@ -274,6 +275,12 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   onChatSend?(input: WorkspaceChatSendInput): Promise<void> | void;
   planOutlineText?: string;
   onSavePlanToPlans?(outlineText: string): void;
+  chatSessions?: readonly WorkspaceChatSessionTab[];
+  activeChatSessionId?: string;
+  onChatSessionSelect?(sessionId: string): void;
+  onNewChatSession?(): void;
+  onRenameChatSession?(sessionId: string, title: string): void;
+  onDeleteChatSession?(sessionId: string): void;
   inboxSelectedCaptureId?: string;
   onAgentToolkitAction?(
     id: AgentToolkitId,
@@ -476,6 +483,12 @@ export function AuthenticatedProjectWorkspace({
   onChatSend,
   planOutlineText,
   onSavePlanToPlans,
+  chatSessions = [],
+  activeChatSessionId,
+  onChatSessionSelect,
+  onNewChatSession,
+  onRenameChatSession,
+  onDeleteChatSession,
   inboxSelectedCaptureId,
   onAgentToolkitAction,
   onStartCoverOptionsJob,
@@ -2552,17 +2565,23 @@ export function AuthenticatedProjectWorkspace({
             <WorkspaceSecondaryPanel
               agent={
                 <WorkspaceChatPanel
+                  activeChatSessionId={activeChatSessionId}
                   availableModels={chatAvailableModels}
                   busy={busy}
+                  chatSessions={chatSessions}
                   effort={chatEffort}
                   messages={chatMessages}
                   mode={chatMode}
                   model={chatModel}
+                  onChatSessionSelect={onChatSessionSelect}
                   onClose={() => setSecondaryTab("properties")}
+                  onDeleteChatSession={onDeleteChatSession}
                   onEffortChange={(next) => onChatEffortChange?.(next)}
                   onModeChange={(next) => onChatModeChange?.(next)}
                   onModelChange={(next) => onChatModelChange?.(next)}
+                  onNewChatSession={onNewChatSession}
                   onOpenSettings={onOpenSettings}
+                  onRenameChatSession={onRenameChatSession}
                   onSend={(input) => onChatSend?.(input)}
                   onSavePlanToPlans={onSavePlanToPlans}
                   planOutlineText={planOutlineText}
