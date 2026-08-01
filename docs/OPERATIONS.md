@@ -85,14 +85,20 @@ callback, so required CI uses the hermetic identity boundary; a real Google logi
 local or production acceptance check. The test identity server refuses to start unless
 `GHOSTWRITER_E2E=1` and is never part of the production entry point.
 
-Hermetic E2E backend (`apps/backend/src/e2e-server.ts`) defaults to a fake OpenAI validation and
+Hermetic E2E backend (`apps/backend/src/e2e-server.ts`) defaults to a fake validation and
 structured-completion provider so CI/Playwright never spend tokens. Cover-image preview uses that
 same injected fake and does **not** require a saved key. Set
-`GHOSTWRITER_E2E_LIVE_OPENAI=1` (with `GHOSTWRITER_E2E=1`) to use the real OpenAI adapter for local
-founder checks. For live images/completions, supply a BYOK key either via **Settings** in the app
-or (local only) `GHOSTWRITER_E2E_SEED_OPENAI_KEY` in the hermetic process environment — never commit
-the key, and never paste it into chat/logs. Playwright must leave
-`GHOSTWRITER_E2E_LIVE_OPENAI` and `GHOSTWRITER_E2E_SEED_OPENAI_KEY` unset.
+`GHOSTWRITER_E2E_LIVE_OPENAI=1` (with `GHOSTWRITER_E2E=1`) to use live provider adapters for local
+founder checks. For live images/completions, supply BYOK keys either via **Settings** in the app
+or (local only) in gitignored `apps/backend/.env.e2e.local` (see
+`apps/backend/e2e.env.example` for the template):
+
+- `GHOSTWRITER_E2E_SEED_OPENAI_KEY`
+- `GHOSTWRITER_E2E_SEED_ANTHROPIC_KEY`
+- `GHOSTWRITER_E2E_SEED_GOOGLE_KEY`
+
+Never commit those keys, and never paste them into chat/logs. Playwright must leave
+`GHOSTWRITER_E2E_LIVE_OPENAI` and all `GHOSTWRITER_E2E_SEED_*_KEY` vars unset.
 
 On boot, the hermetic server seeds a **Harry Potter** multi-book project for the E2E writer
 account (seven books, chapters/scenes with original placeholder prose, cast/locations/threads, and
@@ -123,9 +129,11 @@ credentials, Fly secrets, or deployment were created in this branch:
   `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME`, authorizes every object
   operation, and issues short-lived single-object URLs. Hermetic E2E uses a memory object-store
   fake (cover download returns a PNG data URI for display). Required CI uses the same memory fake.
-- Writer OpenAI keys are encrypted in Lakebase under a versioned AES-GCM envelope. Root keys such as
-  `GHOSTWRITER_PROVIDER_KEK_V1` live only as Fly secrets; they are distinct from an optional
-  Ghostwriter-operated `OPENAI_API_KEY`.
+- Writer provider keys (one envelope per account+provider) are encrypted in Lakebase under a
+  versioned AES-GCM envelope. Root keys such as `GHOSTWRITER_PROVIDER_KEK_V1` live only as Fly
+  secrets; they are distinct from an optional Ghostwriter-operated `OPENAI_API_KEY`. Migration
+  `0020_steady_shooting_star` makes `provider_credentials` primary key `(account_id, provider)`.
+  No LiteLLM or other gateway process is required for multi-provider BYOK (ADR 0012).
 - Root-key rotation deploys an overlapping new version, rewraps or replaces safe envelopes, then
   retires the old key. Suspected compromise disables provider calls, deletes affected envelopes,
   requires writer key re-entry, and triggers notification.

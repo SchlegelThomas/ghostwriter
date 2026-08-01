@@ -1,5 +1,25 @@
 import type { AgentModelId } from "@ghostwriter/core";
-import { CAPTURE_REFLECTION_DEFAULT_MODEL } from "@ghostwriter/core";
+import {
+  CAPTURE_REFLECTION_DEFAULT_MODEL,
+  DEFAULT_IMAGE_MODEL_ID,
+  getModelCatalogEntry,
+  isAgentModelId,
+  PROVIDER_IDS
+} from "@ghostwriter/core";
+
+export type WorkspaceAvailableModel = Readonly<{
+  id: string;
+  provider: string;
+  label: string;
+  supportsChat: boolean;
+  supportsTools: boolean;
+  supportsStructured: boolean;
+  supportsImage: boolean;
+  adapterReady?: boolean;
+  bestFor?: string;
+  relativeStrength?: string;
+  notes?: string;
+}>;
 
 export const WORKSPACE_AGENT_MODES = ["chat", "plan", "agent"] as const;
 export type WorkspaceAgentMode = (typeof WORKSPACE_AGENT_MODES)[number];
@@ -19,12 +39,6 @@ export const DEFAULT_WORKSPACE_AGENT_PREFS: WorkspaceAgentPrefs = Object.freeze(
   effort: "standard"
 });
 
-const MODEL_IDS = Object.freeze([
-  "gpt-5.6-luna",
-  "gpt-5.6-terra",
-  "gpt-5.6-sol"
-] as const satisfies readonly AgentModelId[]);
-
 export function workspaceAgentPrefsStorageKey(projectId: string): string {
   return `ghostwriter:workspace-agent-prefs:${projectId}`;
 }
@@ -43,11 +57,8 @@ function isWorkspaceAgentEffort(value: unknown): value is WorkspaceAgentEffort {
   );
 }
 
-function isAgentModelId(value: unknown): value is AgentModelId {
-  return (
-    typeof value === "string" &&
-    (MODEL_IDS as readonly string[]).includes(value)
-  );
+function isStoredAgentModelId(value: unknown): value is AgentModelId {
+  return typeof value === "string" && isAgentModelId(value);
 }
 
 export function normalizeWorkspaceAgentPrefs(
@@ -61,7 +72,7 @@ export function normalizeWorkspaceAgentPrefs(
     mode: isWorkspaceAgentMode(record.mode)
       ? record.mode
       : DEFAULT_WORKSPACE_AGENT_PREFS.mode,
-    model: isAgentModelId(record.model)
+    model: isStoredAgentModelId(record.model)
       ? record.model
       : DEFAULT_WORKSPACE_AGENT_PREFS.model,
     effort: isWorkspaceAgentEffort(record.effort)
@@ -100,14 +111,259 @@ export function writeWorkspaceAgentPrefs(
 }
 
 export function agentModelLabel(model: AgentModelId): string {
-  switch (model) {
-    case "gpt-5.6-luna":
-      return "Luna";
-    case "gpt-5.6-terra":
-      return "Terra";
-    case "gpt-5.6-sol":
-      return "Sol";
+  return getModelCatalogEntry(model)?.label ?? model;
+}
+
+function modelAdapterReady(entry: WorkspaceAvailableModel): boolean {
+  return entry.adapterReady !== false;
+}
+
+export function providerDisplayLabel(providerId: string): string {
+  switch (providerId) {
+    case "openai":
+      return "OpenAI";
+    case "anthropic":
+      return "Anthropic";
+    case "google":
+      return "Google";
+    case "groq":
+      return "Groq";
+    case "xai":
+      return "xAI";
+    case "mistral":
+      return "Mistral";
+    case "deepseek":
+      return "DeepSeek";
+    case "openrouter":
+      return "OpenRouter";
+    default:
+      return providerId;
   }
+}
+
+export function filterWorkspaceAgentPickerModels(
+  models: readonly WorkspaceAvailableModel[],
+  mode: WorkspaceAgentMode
+): readonly WorkspaceAvailableModel[] {
+  return models.filter((entry) => {
+    if (!entry.supportsChat || !modelAdapterReady(entry)) return false;
+    if (mode === "agent") {
+      return entry.supportsTools;
+    }
+    return true;
+  });
+}
+
+export function accountHasAvailableChatModels(
+  models: readonly WorkspaceAvailableModel[]
+): boolean {
+  return filterWorkspaceAgentPickerModels(models, "chat").length > 0;
+}
+
+export function accountHasAvailableStructuredModels(
+  models: readonly WorkspaceAvailableModel[]
+): boolean {
+  return models.some(
+    (entry) => entry.supportsStructured && modelAdapterReady(entry)
+  );
+}
+
+export function filterWorkspaceImageModels(
+  models: readonly WorkspaceAvailableModel[]
+): readonly WorkspaceAvailableModel[] {
+  return models.filter(
+    (entry) => entry.supportsImage && modelAdapterReady(entry)
+  );
+}
+
+export function accountHasAvailableImageModels(
+  models: readonly WorkspaceAvailableModel[]
+): boolean {
+  return filterWorkspaceImageModels(models).length > 0;
+}
+
+export function defaultWorkspaceImageModelId(
+  models: readonly WorkspaceAvailableModel[]
+): string {
+  return resolveWorkspaceImageModelId(models, undefined);
+}
+
+export function resolveWorkspaceImageModelId(
+  models: readonly WorkspaceAvailableModel[],
+  preferredModelId: string | undefined
+): string {
+  const imageModels = filterWorkspaceImageModels(models);
+  if (imageModels.length === 0) {
+    return DEFAULT_IMAGE_MODEL_ID;
+  }
+  if (
+    preferredModelId !== undefined &&
+    imageModels.some((entry) => entry.id === preferredModelId)
+  ) {
+    return preferredModelId;
+  }
+  const preferred = imageModels.find(
+    (entry) => entry.id === DEFAULT_IMAGE_MODEL_ID
+  );
+  return (preferred ?? imageModels[0]!).id;
+}
+
+export type WorkspaceImageModelPickerOption = Readonly<{
+  value: string;
+  label: string;
+}>;
+
+export function workspaceImageModelPickerOptions(
+  models: readonly WorkspaceAvailableModel[]
+): readonly WorkspaceImageModelPickerOption[] {
+  const filtered = [...filterWorkspaceImageModels(models)].sort((left, right) => {
+    const byProvider =
+      providerSortIndex(left.provider) - providerSortIndex(right.provider);
+    if (byProvider !== 0) return byProvider;
+    return left.label.localeCompare(right.label);
+  });
+  return Object.freeze(
+    filtered.map((entry) =>
+      Object.freeze({
+        value: entry.id,
+        label: `${entry.label} · ${providerDisplayLabel(entry.provider)}`
+      })
+    )
+  );
+}
+
+export function defaultWorkspaceChatModelId(
+  models: readonly WorkspaceAvailableModel[]
+): AgentModelId {
+  const chatModels = filterWorkspaceAgentPickerModels(models, "chat");
+  if (chatModels.length === 0) {
+    return DEFAULT_WORKSPACE_AGENT_PREFS.model;
+  }
+  const preferred = chatModels.find(
+    (entry) => entry.id === CAPTURE_REFLECTION_DEFAULT_MODEL
+  );
+  return (preferred ?? chatModels[0]!).id as AgentModelId;
+}
+
+export function resolveWorkspaceAgentModel(
+  preferred: AgentModelId,
+  models: readonly WorkspaceAvailableModel[],
+  mode: WorkspaceAgentMode
+): AgentModelId {
+  const pickerModels = filterWorkspaceAgentPickerModels(models, mode);
+  if (pickerModels.some((entry) => entry.id === preferred)) {
+    return preferred;
+  }
+  return defaultWorkspaceChatModelId(pickerModels);
+}
+
+export type WorkspaceAgentModelPickerOption = Readonly<{
+  value: AgentModelId;
+  label: string;
+  provider: string;
+  bestFor?: string;
+  relativeStrength?: string;
+}>;
+
+function providerSortIndex(providerId: string): number {
+  const index = (PROVIDER_IDS as readonly string[]).indexOf(providerId);
+  return index === -1 ? PROVIDER_IDS.length : index;
+}
+
+export function filterWorkspaceAgentModelPickerOptionsByQuery(
+  options: readonly WorkspaceAgentModelPickerOption[],
+  query: string
+): readonly WorkspaceAgentModelPickerOption[] {
+  const normalized = query.trim().toLowerCase();
+  if (normalized.length === 0) {
+    return options;
+  }
+  return Object.freeze(
+    options.filter((option) => {
+      const haystack = [
+        option.label,
+        option.provider,
+        option.value,
+        providerDisplayLabel(option.provider),
+        option.bestFor ?? "",
+        option.relativeStrength ?? ""
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(normalized);
+    })
+  );
+}
+
+/** @deprecated Prefer a flat picker; kept for any transitional callers. */
+export type WorkspaceAgentModelPickerGroup = Readonly<{
+  provider: string;
+  providerLabel: string;
+  options: readonly WorkspaceAgentModelPickerOption[];
+}>;
+
+/** @deprecated Prefer a flat picker sorted by label. */
+export function groupWorkspaceAgentModelPickerOptions(
+  options: readonly WorkspaceAgentModelPickerOption[]
+): readonly WorkspaceAgentModelPickerGroup[] {
+  const byProvider = new Map<string, WorkspaceAgentModelPickerOption[]>();
+  for (const option of options) {
+    const bucket = byProvider.get(option.provider) ?? [];
+    bucket.push(option);
+    byProvider.set(option.provider, bucket);
+  }
+  const sortedProviders = [...byProvider.keys()].sort(
+    (left, right) => providerSortIndex(left) - providerSortIndex(right)
+  );
+  return Object.freeze(
+    sortedProviders.map((provider) =>
+      Object.freeze({
+        provider,
+        providerLabel: providerDisplayLabel(provider),
+        options: Object.freeze(byProvider.get(provider)!)
+      })
+    )
+  );
+}
+
+export function workspaceAgentModelPickerOptions(
+  models: readonly WorkspaceAvailableModel[],
+  mode: WorkspaceAgentMode
+): readonly WorkspaceAgentModelPickerOption[] {
+  const filtered = [...filterWorkspaceAgentPickerModels(models, mode)].sort(
+    (left, right) => left.label.localeCompare(right.label)
+  );
+  return Object.freeze(
+    filtered.map((entry) => {
+      const catalog = getModelCatalogEntry(entry.id);
+      return Object.freeze({
+        value: entry.id as AgentModelId,
+        label: entry.label,
+        provider: entry.provider,
+        ...(entry.bestFor !== undefined || catalog?.bestFor !== undefined
+          ? { bestFor: entry.bestFor ?? catalog?.bestFor }
+          : {}),
+        ...(entry.relativeStrength !== undefined ||
+        catalog?.relativeStrength !== undefined
+          ? {
+              relativeStrength:
+                entry.relativeStrength ?? catalog?.relativeStrength
+            }
+          : {})
+      });
+    })
+  );
+}
+
+export function agentModelLabelWithProvider(
+  model: AgentModelId,
+  models: readonly WorkspaceAvailableModel[] | undefined
+): string {
+  const fromCatalog = models?.find((entry) => entry.id === model);
+  if (fromCatalog !== undefined) {
+    return fromCatalog.label;
+  }
+  return agentModelLabel(model);
 }
 
 export function workspaceAgentModeLabel(mode: WorkspaceAgentMode): string {

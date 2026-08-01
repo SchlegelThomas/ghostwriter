@@ -1,8 +1,9 @@
 import type { AccountId } from "./identity.js";
 import {
-  createOpenAiProviderCredentialEnvelope,
-  type OpenAiProviderCredentialEnvelope,
-  type ProviderCredentialValidationState
+  createProviderCredentialEnvelope,
+  type ProviderCredentialEnvelope,
+  type ProviderCredentialValidationState,
+  type ProviderId
 } from "./provider-credentials.js";
 import type {
   DeleteProviderCredentialOutcome,
@@ -16,17 +17,15 @@ import {
 } from "./memory-transaction.js";
 
 type MemoryProviderCredentialState = {
-  credentials: Map<string, OpenAiProviderCredentialEnvelope>;
+  credentials: Map<string, ProviderCredentialEnvelope>;
 };
 
-function accountKey(accountId: AccountId): string {
-  return String(accountId);
+function credentialKey(accountId: AccountId, providerId: ProviderId): string {
+  return `${String(accountId)}|${providerId}`;
 }
 
-function cloneEnvelope(
-  envelope: OpenAiProviderCredentialEnvelope
-): OpenAiProviderCredentialEnvelope {
-  return createOpenAiProviderCredentialEnvelope(envelope);
+function cloneEnvelope(envelope: ProviderCredentialEnvelope): ProviderCredentialEnvelope {
+  return createProviderCredentialEnvelope(envelope);
 }
 
 function cloneMemoryProviderCredentialState(
@@ -64,14 +63,23 @@ export function createMemoryProviderCredentialRepository(): ProviderCredentialRe
   }
 
   const repository: ProviderCredentialRepository & MemoryTransactionalRepository = {
-    async get(accountId) {
-      const envelope = state.credentials.get(accountKey(accountId));
+    async get(accountId, providerId) {
+      const envelope = state.credentials.get(credentialKey(accountId, providerId));
       return envelope === undefined ? undefined : cloneEnvelope(envelope);
+    },
+
+    async listForAccount(accountId) {
+      const prefix = `${String(accountId)}|`;
+      return Object.freeze(
+        [...state.credentials.entries()]
+          .filter(([key]) => key.startsWith(prefix))
+          .map(([, envelope]) => cloneEnvelope(envelope))
+      );
     },
 
     upsert(envelope, expectedVersion) {
       return serializeWrite((): UpsertProviderCredentialOutcome => {
-        const key = accountKey(envelope.accountId);
+        const key = credentialKey(envelope.accountId, envelope.provider);
         const existing = state.credentials.get(key);
         const stored = cloneEnvelope(envelope);
         if (existing === undefined) {
@@ -89,9 +97,9 @@ export function createMemoryProviderCredentialRepository(): ProviderCredentialRe
       });
     },
 
-    delete(accountId, expectedVersion) {
+    delete(accountId, providerId, expectedVersion) {
       return serializeWrite((): DeleteProviderCredentialOutcome => {
-        const key = accountKey(accountId);
+        const key = credentialKey(accountId, providerId);
         const existing = state.credentials.get(key);
         if (existing === undefined) {
           return { ok: false, reason: "not-found" };
@@ -106,7 +114,7 @@ export function createMemoryProviderCredentialRepository(): ProviderCredentialRe
 
     markValidation(input) {
       return serializeWrite((): MarkProviderCredentialValidationOutcome => {
-        const key = accountKey(input.accountId);
+        const key = credentialKey(input.accountId, input.providerId);
         const existing = state.credentials.get(key);
         if (existing === undefined) {
           return { ok: false, reason: "not-found" };
@@ -115,7 +123,7 @@ export function createMemoryProviderCredentialRepository(): ProviderCredentialRe
           return { ok: false, reason: "conflict" };
         }
         const { validatedAt: _ignoredValidatedAt, ...rest } = existing;
-        const next = createOpenAiProviderCredentialEnvelope({
+        const next = createProviderCredentialEnvelope({
           ...rest,
           validationState: input.validationState as ProviderCredentialValidationState,
           updatedAt: input.updatedAt,

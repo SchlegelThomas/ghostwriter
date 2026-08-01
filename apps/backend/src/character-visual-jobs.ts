@@ -71,6 +71,7 @@ const CHARACTER_IMAGE_SIZE = "1024x1024" as const;
 export type CharacterVisualImageGenerator = (input: Readonly<{
   apiKey: string;
   prompt: string;
+  model?: string;
   size?: typeof CHARACTER_IMAGE_SIZE | "1024x1536" | "1536x1024" | "1024x1792" | "1792x1024";
 }>) => Promise<OpenAiImageGenerationResult>;
 
@@ -291,6 +292,7 @@ export async function runCharacterVisualJob(input: Readonly<{
   jobId: string;
   generateImage: CharacterVisualImageGenerator;
   apiKey: string;
+  model?: string;
   size?: typeof CHARACTER_IMAGE_SIZE | "1024x1536" | "1536x1024" | "1024x1792" | "1792x1024";
   now?: () => Date;
 }>): Promise<void> {
@@ -312,6 +314,7 @@ export async function runCharacterVisualJob(input: Readonly<{
         input.generateImage({
           apiKey: input.apiKey,
           prompt,
+          ...(input.model === undefined ? {} : { model: input.model }),
           size
         })
       )

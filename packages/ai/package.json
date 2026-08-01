@@ -9,5 +9,16 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run src"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "4.0.21",
+    "@ai-sdk/google": "4.0.24",
+    "@ai-sdk/groq": "4.0.13",
+    "@ai-sdk/mistral": "4.0.14",
+    "@ai-sdk/openai": "4.0.20",
+    "@ai-sdk/openai-compatible": "3.0.14",
+    "@ai-sdk/xai": "4.0.18",
+    "ai": "7.0.37",
+    "zod": "^4.4.3"
   }
 }

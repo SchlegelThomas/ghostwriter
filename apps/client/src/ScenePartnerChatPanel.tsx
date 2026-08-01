@@ -1,4 +1,8 @@
-import { ghostwriterTheme } from "@ghostwriter/ui";
+import {
+  ghostwriterTheme,
+  accountHasAvailableChatModels,
+  type OpenSettingsHandler
+} from "@ghostwriter/ui";
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import {
   Image,
@@ -10,7 +14,7 @@ import {
 } from "react-native";
 import { AiSetupPanel } from "./AiSetupPanel.js";
 import {
-  getOpenAiProviderStatus,
+  getAvailableModels,
   GhostwriterApiError,
   postScenePartnerImage,
   postScenePartnerTurn
@@ -56,8 +60,8 @@ export type ScenePartnerChatPanelProps = Readonly<{
   disabled?: boolean;
   onApplyAsNewScene(input: ScenePartnerApplyInput): Promise<void>;
   onBusyChange?(busy: boolean): void;
-  onOpenSettings?(): void;
-  /** Bump when Settings may have changed the OpenAI key. */
+  onOpenSettings?: OpenSettingsHandler;
+  /** Bump when Settings may have changed provider keys. */
   providerStatusSignal?: number;
 }>;
 
@@ -221,15 +225,15 @@ export function ScenePartnerChatPanel({
     let cancelled = false;
     void (async () => {
       try {
-        const status = await getOpenAiProviderStatus();
+        const available = await getAvailableModels();
         if (cancelled) return;
-        if (status.callsDisabled) {
+        if (available.callsDisabled) {
           setStatusMessage("Provider calls are temporarily disabled.");
           setProviderConfigured(false);
           setProviderGate("ready");
           return;
         }
-        if (!status.configured) {
+        if (!accountHasAvailableChatModels(available.models)) {
           setProviderConfigured(false);
           setProviderGate("needs-setup");
           return;
@@ -241,7 +245,7 @@ export function ScenePartnerChatPanel({
         setStatusMessage(
           error instanceof GhostwriterApiError
             ? error.message
-            : "Ghostwriter could not check the OpenAI key."
+            : "Ghostwriter could not check provider settings."
         );
         // Hermetic / offline: continue with the fake session script.
         setProviderConfigured(false);
@@ -520,8 +524,8 @@ export function ScenePartnerChatPanel({
       {providerGate === "needs-setup" ? (
         <View style={styles.setupCard}>
           <Text style={styles.statusCopy}>
-            Scene Partner needs your OpenAI key. Add it once in Settings at the
-            bottom of the left rail — it applies across the whole app.
+            Scene Partner needs a configured model provider. Add keys in Settings
+            at the bottom of the left rail — they apply across the whole app.
           </Text>
           {onOpenSettings === undefined ? (
             <AiSetupPanel
@@ -535,7 +539,7 @@ export function ScenePartnerChatPanel({
           ) : (
             <ChatButton
               label="Open Settings"
-              onPress={onOpenSettings}
+              onPress={() => onOpenSettings?.("providers")}
               primary
             />
           )}

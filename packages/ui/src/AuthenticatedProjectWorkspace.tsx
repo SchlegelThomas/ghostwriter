@@ -27,6 +27,7 @@ import type {
   BookId,
   StoryKnowledgeId
 } from "@ghostwriter/core";
+import type { OpenSettingsHandler } from "./settings-focus.js";
 import {
   type AcknowledgementToast
 } from "./AcknowledgementToastHost.js";
@@ -98,7 +99,8 @@ import {
 import {
   DEFAULT_WORKSPACE_AGENT_PREFS,
   type WorkspaceAgentEffort,
-  type WorkspaceAgentMode
+  type WorkspaceAgentMode,
+  type WorkspaceAvailableModel
 } from "./workspace-agent-prefs.js";
 import { WorkspaceSecondaryPanel } from "./WorkspaceSecondaryPanel.js";
 import {
@@ -251,7 +253,7 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   onOpenInbox?(): void;
   onCloseInbox?(): void;
   onOpenCapture?(captureId?: string): void;
-  onOpenSettings?(): void;
+  onOpenSettings?: OpenSettingsHandler;
   chatCapabilities?: readonly GhostwriterCapability[];
   chatMessages?: readonly WorkspaceChatMessage[];
   chatMode?: WorkspaceAgentMode;
@@ -261,12 +263,16 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   onChatModelChange?(model: AgentModelId): void;
   onChatEffortChange?(effort: WorkspaceAgentEffort): void;
   chatProviderConfigured?: boolean;
+  chatAvailableModels?: readonly WorkspaceAvailableModel[];
+  imageAvailableModels?: readonly WorkspaceAvailableModel[];
+  preferredImageModelId?: string;
   onChatSend?(input: WorkspaceChatSendInput): Promise<void> | void;
   onStartCoverOptionsJob?(input: Readonly<{
     bookId: BookId;
     prompt: string;
     count?: number;
     refinement?: string;
+    imageModel?: string;
   }>): Promise<void>;
   coverOptionsJob?: CoverOptionsJobSnapshot;
   coverReviewBookId?: BookId;
@@ -291,6 +297,7 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
     knowledgeId: StoryKnowledgeId;
     count?: number;
     refinement?: string;
+    imageModel?: string;
   }>): Promise<void>;
   onApplyCharacterVisual?(input: Readonly<{
     knowledgeId: StoryKnowledgeId;
@@ -451,6 +458,9 @@ export function AuthenticatedProjectWorkspace({
   onChatModelChange,
   onChatEffortChange,
   chatProviderConfigured = true,
+  chatAvailableModels = [],
+  imageAvailableModels = [],
+  preferredImageModelId,
   onChatSend,
   onStartCoverOptionsJob,
   coverOptionsJob,
@@ -2334,6 +2344,8 @@ export function AuthenticatedProjectWorkspace({
                 <CastRelationshipsStudio
                   busy={busy}
                   characterVisualJob={characterVisualJob}
+                  imageAvailableModels={imageAvailableModels}
+                  preferredImageModelId={preferredImageModelId}
                   layout={narrow ? "narrow" : "wide"}
                   onApplyCharacterVisual={onApplyCharacterVisual}
                   onCommand={onCommand}
@@ -2364,6 +2376,7 @@ export function AuthenticatedProjectWorkspace({
                     });
                   }}
                   onStartCharacterVisualJob={onStartCharacterVisualJob}
+                  onOpenSettings={onOpenSettings}
                   project={project}
                   selectedKnowledgeId={castSelectedKnowledge?.id}
                 />
@@ -2415,6 +2428,8 @@ export function AuthenticatedProjectWorkspace({
                     busy={busy}
                     coverOptionsJob={coverOptionsJob}
                     coverReviewBookId={coverReviewBookId}
+                    imageAvailableModels={imageAvailableModels}
+                    preferredImageModelId={preferredImageModelId}
                     onApplyCoverImage={onApplyCoverImage}
                     onCommand={onCommand}
                     onCoverReviewConsumed={onCoverReviewConsumed}
@@ -2427,6 +2442,7 @@ export function AuthenticatedProjectWorkspace({
                       onChatSend === undefined ? undefined : proposeCoverConcept
                     }
                     onResolveCoverDisplayUrl={onResolveCoverDisplayUrl}
+                    onOpenSettings={onOpenSettings}
                     onStartCoverOptionsJob={onStartCoverOptionsJob}
                     project={project}
                   />
@@ -2512,6 +2528,7 @@ export function AuthenticatedProjectWorkspace({
             <WorkspaceSecondaryPanel
               agent={
                 <WorkspaceChatPanel
+                  availableModels={chatAvailableModels}
                   busy={busy}
                   effort={chatEffort}
                   messages={chatMessages}

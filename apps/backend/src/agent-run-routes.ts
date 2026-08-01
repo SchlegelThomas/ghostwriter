@@ -166,8 +166,10 @@ export function registerAgentRunRoutes(
         projectId: scopedProjectId,
         receiptId
       });
-      const provider = await agentProvider.createOpenAiCompletionProvider({
-        accountId: account
+      const provider = await agentProvider.createCompletionProviderForModel({
+        accountId: account,
+        model: receipt.model,
+        providerId: receipt.provider
       });
       const result = isCraftWorkflowId(receipt.workflowId)
         ? await craftPartners.start({

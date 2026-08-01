@@ -60,6 +60,7 @@ export * from "./project-repository.js";
 export * from "./provider-credential-repository.js";
 export * from "./provider-credential-services.js";
 export * from "./provider-credentials.js";
+export * from "./model-catalog.js";
 export * from "./project-services.js";
 export * from "./scene-document-repository.js";
 export * from "./scene-documents.js";

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Image,
   Modal,
@@ -31,7 +31,18 @@ import {
   visualsAfterDelete,
   type KnowledgeConstellationPeer
 } from "./cast-studio-model.js";
+import {
+  ImageGenerationUnavailable,
+  ImageModelPicker
+} from "./ImageModelPicker.js";
+import {
+  accountHasAvailableImageModels,
+  resolveWorkspaceImageModelId,
+  workspaceImageModelPickerOptions,
+  type WorkspaceAvailableModel
+} from "./workspace-agent-prefs.js";
 import { ghostwriterTheme } from "./theme.js";
+import type { OpenSettingsHandler } from "./settings-focus.js";
 
 const { colors, fonts } = ghostwriterTheme;
 
@@ -75,6 +86,7 @@ export type CastRelationshipsStudioProps = Readonly<{
     knowledgeId: StoryKnowledgeId;
     count?: number;
     refinement?: string;
+    imageModel?: string;
   }>): Promise<void>;
   onApplyCharacterVisual?(input: Readonly<{
     knowledgeId: StoryKnowledgeId;
@@ -87,6 +99,9 @@ export type CastRelationshipsStudioProps = Readonly<{
     visualId: string;
     imageUrl: string;
   }>): Promise<string | undefined>;
+  imageAvailableModels?: readonly WorkspaceAvailableModel[];
+  preferredImageModelId?: string;
+  onOpenSettings?: OpenSettingsHandler;
 }>;
 
 export function CastRelationshipsStudio({
@@ -101,7 +116,10 @@ export function CastRelationshipsStudio({
   characterVisualJob,
   onStartCharacterVisualJob,
   onApplyCharacterVisual,
-  onResolveCharacterVisualDisplayUrl
+  onResolveCharacterVisualDisplayUrl,
+  imageAvailableModels = [],
+  preferredImageModelId,
+  onOpenSettings
 }: CastRelationshipsStudioProps) {
   const { width } = useWindowDimensions();
   const narrow = layoutProp === "narrow" || (layoutProp === undefined && width < 760);
@@ -233,10 +251,13 @@ export function CastRelationshipsStudio({
             <CharacterDossier
               busy={busy}
               characterVisualJob={characterVisualJob}
+              imageAvailableModels={imageAvailableModels}
+              preferredImageModelId={preferredImageModelId}
               knowledge={selected}
               narrow={narrow}
               onApplyCharacterVisual={onApplyCharacterVisual}
               onCommand={onCommand}
+              onOpenSettings={onOpenSettings}
               onResolveCharacterVisualDisplayUrl={
                 onResolveCharacterVisualDisplayUrl
               }
@@ -359,7 +380,10 @@ function CharacterVisualGallery({
   onCommand,
   onStartCharacterVisualJob,
   onApplyCharacterVisual,
-  onResolveCharacterVisualDisplayUrl
+  onResolveCharacterVisualDisplayUrl,
+  imageAvailableModels = [],
+  preferredImageModelId,
+  onOpenSettings
 }: Readonly<{
   knowledge: ProjectNavigatorKnowledge;
   busy: boolean;
@@ -369,6 +393,7 @@ function CharacterVisualGallery({
     knowledgeId: StoryKnowledgeId;
     count?: number;
     refinement?: string;
+    imageModel?: string;
   }>): Promise<void>;
   onApplyCharacterVisual?(input: Readonly<{
     knowledgeId: StoryKnowledgeId;
@@ -381,6 +406,9 @@ function CharacterVisualGallery({
     visualId: string;
     imageUrl: string;
   }>): Promise<string | undefined>;
+  imageAvailableModels?: readonly WorkspaceAvailableModel[];
+  preferredImageModelId?: string;
+  onOpenSettings?: OpenSettingsHandler;
 }>) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [actionError, setActionError] = useState<string | undefined>();
@@ -389,6 +417,28 @@ function CharacterVisualGallery({
   const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>();
   const [previewDataUri, setPreviewDataUri] = useState<string | undefined>();
   const [enlargedUri, setEnlargedUri] = useState<string | undefined>();
+  const imageModelOptions = useMemo(
+    () => workspaceImageModelPickerOptions(imageAvailableModels),
+    [imageAvailableModels]
+  );
+  const imageGenerationAvailable = accountHasAvailableImageModels(
+    imageAvailableModels
+  );
+  const [imageModelId, setImageModelId] = useState(() =>
+    resolveWorkspaceImageModelId(imageAvailableModels, preferredImageModelId)
+  );
+
+  useEffect(() => {
+    setImageModelId((current) => {
+      if (imageModelOptions.some((entry) => entry.value === current)) {
+        return current;
+      }
+      return resolveWorkspaceImageModelId(
+        imageAvailableModels,
+        preferredImageModelId
+      );
+    });
+  }, [imageAvailableModels, imageModelOptions, preferredImageModelId]);
 
   const jobForCharacter =
     characterVisualJob !== undefined &&
@@ -399,6 +449,7 @@ function CharacterVisualGallery({
     jobForCharacter !== undefined &&
     (jobForCharacter.status === "queued" || jobForCharacter.status === "running");
   const galleryBusy = busy || applying || starting || jobInFlight;
+  const generateDisabled = galleryBusy || !imageGenerationAvailable;
   const emptyCopy = characterVisualEmptyStateCopy(knowledge.visuals);
 
   useEffect(() => {
@@ -436,13 +487,19 @@ function CharacterVisualGallery({
   }, [jobForCharacter?.jobId, jobForCharacter?.status]);
 
   async function startGenerate(): Promise<void> {
-    if (onStartCharacterVisualJob === undefined || galleryBusy) return;
+    if (
+      onStartCharacterVisualJob === undefined ||
+      generateDisabled
+    ) {
+      return;
+    }
     setStarting(true);
     setActionError(undefined);
     try {
       await onStartCharacterVisualJob({
         knowledgeId: knowledge.id,
-        count: 3
+        count: 3,
+        imageModel: imageModelId
       });
     } catch (error) {
       setActionError(
@@ -532,12 +589,12 @@ function CharacterVisualGallery({
             <Pressable
               accessibilityLabel="Generate character visuals"
               accessibilityRole="button"
-              disabled={galleryBusy}
+              disabled={generateDisabled}
               onPress={() => void startGenerate()}
               style={({ pressed }) => [
                 styles.primaryButton,
                 pressed && styles.pressed,
-                galleryBusy && styles.disabled
+                generateDisabled && styles.disabled
               ]}
             >
               <Text style={styles.primaryButtonText}>
@@ -562,6 +619,17 @@ function CharacterVisualGallery({
           )}
         </View>
       </View>
+
+      {onStartCharacterVisualJob === undefined ? null : imageGenerationAvailable ? (
+        <ImageModelPicker
+          disabled={generateDisabled}
+          onChange={setImageModelId}
+          options={imageModelOptions}
+          value={imageModelId}
+        />
+      ) : (
+        <ImageGenerationUnavailable onOpenSettings={onOpenSettings} />
+      )}
 
       {emptyCopy === undefined ? null : (
         <Text style={styles.help}>{emptyCopy}</Text>
@@ -699,7 +767,10 @@ function CharacterDossier({
   characterVisualJob,
   onStartCharacterVisualJob,
   onApplyCharacterVisual,
-  onResolveCharacterVisualDisplayUrl
+  onResolveCharacterVisualDisplayUrl,
+  imageAvailableModels = [],
+  preferredImageModelId,
+  onOpenSettings
 }: Readonly<{
   project: ProjectNavigator;
   knowledge: ProjectNavigatorKnowledge;
@@ -713,6 +784,7 @@ function CharacterDossier({
     knowledgeId: StoryKnowledgeId;
     count?: number;
     refinement?: string;
+    imageModel?: string;
   }>): Promise<void>;
   onApplyCharacterVisual?(input: Readonly<{
     knowledgeId: StoryKnowledgeId;
@@ -725,6 +797,9 @@ function CharacterDossier({
     visualId: string;
     imageUrl: string;
   }>): Promise<string | undefined>;
+  imageAvailableModels?: readonly WorkspaceAvailableModel[];
+  preferredImageModelId?: string;
+  onOpenSettings?: OpenSettingsHandler;
 }>) {
   const [linkKind, setLinkKind] = useState<StoryKnowledgeLinkKind>("related");
   const [notesDraft, setNotesDraft] = useState(knowledge.notes ?? "");
@@ -829,9 +904,12 @@ function CharacterDossier({
       <CharacterVisualGallery
         busy={busy || archived}
         characterVisualJob={characterVisualJob}
+        imageAvailableModels={imageAvailableModels}
+        preferredImageModelId={preferredImageModelId}
         knowledge={knowledge}
         onApplyCharacterVisual={onApplyCharacterVisual}
         onCommand={onCommand}
+        onOpenSettings={onOpenSettings}
         onResolveCharacterVisualDisplayUrl={onResolveCharacterVisualDisplayUrl}
         onStartCharacterVisualJob={onStartCharacterVisualJob}
       />

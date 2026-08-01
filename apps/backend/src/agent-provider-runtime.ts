@@ -1,6 +1,8 @@
 import {
-  createOpenAiProvider,
+  createProviderAdapter,
+  ProviderAdapterUnsupportedError,
   type CredentialValidatingProvider,
+  type ListingCredentialProvider,
   type StructuredCompletionProvider
 } from "@ghostwriter/ai";
 import {
@@ -14,9 +16,11 @@ import {
   createProviderCredentialServices,
   encryptedMaterialFromEnvelope,
   OPENAI_PROVIDER_ID,
+  providerForAgentModel,
   ProviderCredentialConflictError,
   ProviderCredentialCryptoContextError,
   ProviderCredentialNotFoundError,
+  ProviderCredentialValidationUnsupportedError,
   type AccountId,
   type AgentFoundationServices,
   type AgentGuidanceServices,
@@ -34,6 +38,7 @@ import {
   type ProviderCredentialServices,
   type ProviderCredentialStatus,
   type ProviderCredentialValidationState,
+  type ProviderId,
   type SceneDocumentRepository
 } from "@ghostwriter/core";
 import {
@@ -57,10 +62,22 @@ import {
 import { createNodeSha256HashPort } from "./node-sha256-hash-port.js";
 import { createNodeMcpGrantTokenPort } from "./mcp-grant-token-port.js";
 
+export type ProviderValidationFactory = (
+  apiKey: string,
+  providerId: ProviderId
+) => CredentialValidatingProvider;
+
+export type ProviderCompletionFactory = (
+  apiKey: string,
+  providerId: ProviderId
+) => StructuredCompletionProvider;
+
+/** @deprecated Use {@link ProviderValidationFactory}. */
 export type OpenAiValidationProviderFactory = (
   apiKey: string
 ) => CredentialValidatingProvider;
 
+/** @deprecated Use {@link ProviderCompletionFactory}. */
 export type OpenAiCompletionProviderFactory = (
   apiKey: string
 ) => StructuredCompletionProvider;
@@ -70,6 +87,11 @@ export type AgentProviderPolicy = Readonly<{
   encryptionAvailable: boolean;
 }>;
 
+export type ModelListFactory = (input: Readonly<{
+  providerId: ProviderId;
+  apiKey: string;
+}>) => ListingCredentialProvider;
+
 export type AgentProviderRuntime = Readonly<{
   providerCredentials: ProviderCredentialServices;
   agentGuidance: AgentGuidanceServices;
@@ -78,11 +100,37 @@ export type AgentProviderRuntime = Readonly<{
   craftPartners: CraftPartnerServices;
   mcpGrants: McpGrantServices;
   policy: AgentProviderPolicy;
+  /** Optional test seam for live model discovery. */
+  listModelsFactory?: ModelListFactory;
   validateOpenAiCredential(input: Readonly<{
     accountId: AccountId;
     expectedVersion: number;
     createProvider?: OpenAiValidationProviderFactory;
   }>): Promise<ProviderCredentialStatus>;
+  validateProviderCredential(input: Readonly<{
+    accountId: AccountId;
+    providerId: ProviderId;
+    expectedVersion: number;
+    createProvider?: ProviderValidationFactory | OpenAiValidationProviderFactory;
+  }>): Promise<ProviderCredentialStatus>;
+  createCompletionProvider(input: Readonly<{
+    accountId: AccountId;
+    providerId: ProviderId;
+    createProvider?: ProviderCompletionFactory | OpenAiCompletionProviderFactory;
+  }>): Promise<
+    CaptureReflectionStructuredCompletionProvider &
+      CraftPartnerStructuredCompletionProvider
+  >;
+  createCompletionProviderForModel(input: Readonly<{
+    accountId: AccountId;
+    model: string;
+    providerId?: ProviderId;
+    createProvider?: ProviderCompletionFactory | OpenAiCompletionProviderFactory;
+  }>): Promise<
+    CaptureReflectionStructuredCompletionProvider &
+      CraftPartnerStructuredCompletionProvider
+  >;
+  /** @deprecated Prefer {@link AgentProviderRuntime.createCompletionProviderForModel}. */
   createOpenAiCompletionProvider(input: Readonly<{
     accountId: AccountId;
     createProvider?: OpenAiCompletionProviderFactory;
@@ -90,6 +138,11 @@ export type AgentProviderRuntime = Readonly<{
     CaptureReflectionStructuredCompletionProvider &
       CraftPartnerStructuredCompletionProvider
   >;
+  /** Decrypts a provider key for ephemeral adapter calls (never log/return). */
+  resolveProviderApiKey(input: Readonly<{
+    accountId: AccountId;
+    providerId: ProviderId;
+  }>): Promise<string>;
   /** Decrypts the writer's OpenAI key for ephemeral provider calls (never log/return). */
   resolveOpenAiApiKey(input: Readonly<{
     accountId: AccountId;
@@ -105,8 +158,11 @@ export type CreateAgentProviderRuntimeInput = Readonly<{
   kekConfig: ProviderKekRuntimeConfig | undefined;
   callsDisabled?: boolean;
   credentials?: ProviderCredentialRepository;
-  defaultValidationProviderFactory?: OpenAiValidationProviderFactory;
-  defaultCompletionProviderFactory?: OpenAiCompletionProviderFactory;
+  defaultValidationProviderFactory?: ProviderValidationFactory | OpenAiValidationProviderFactory;
+  defaultCompletionProviderFactory?: ProviderCompletionFactory | OpenAiCompletionProviderFactory;
+  /** @deprecated Prefer defaultValidationProviderFactory. */
+  openAiValidationProviderFactory?: OpenAiValidationProviderFactory;
+  listModelsFactory?: ModelListFactory;
   capturePromotions?: Pick<CapturePromotionServices, "promoteCaptureToScene">;
   sceneDocuments?: SceneDocumentRepository;
 }>;
@@ -161,6 +217,34 @@ function toStructuredCompletionProvider(
     }
   }) as CaptureReflectionStructuredCompletionProvider &
     CraftPartnerStructuredCompletionProvider;
+}
+
+function asValidationFactory(
+  factory: ProviderValidationFactory | OpenAiValidationProviderFactory | undefined
+): ProviderValidationFactory | undefined {
+  if (factory === undefined) {
+    return undefined;
+  }
+  return (apiKey, providerId) => {
+    if (factory.length >= 2) {
+      return (factory as ProviderValidationFactory)(apiKey, providerId);
+    }
+    return (factory as OpenAiValidationProviderFactory)(apiKey);
+  };
+}
+
+function asCompletionFactory(
+  factory: ProviderCompletionFactory | OpenAiCompletionProviderFactory | undefined
+): ProviderCompletionFactory | undefined {
+  if (factory === undefined) {
+    return undefined;
+  }
+  return (apiKey, providerId) => {
+    if (factory.length >= 2) {
+      return (factory as ProviderCompletionFactory)(apiKey, providerId);
+    }
+    return (factory as OpenAiCompletionProviderFactory)(apiKey);
+  };
 }
 
 export function createAgentProviderRuntime(
@@ -252,28 +336,51 @@ export function createAgentProviderRuntime(
     clock: input.clock
   });
   const callsDisabled = input.callsDisabled ?? false;
-  const defaultValidationProviderFactory: OpenAiValidationProviderFactory =
-    input.defaultValidationProviderFactory ??
-    ((apiKey) => createOpenAiProvider({ apiKey }));
-  const defaultCompletionProviderFactory: OpenAiCompletionProviderFactory =
-    input.defaultCompletionProviderFactory ??
-    ((apiKey) => createOpenAiProvider({ apiKey }));
+  const defaultValidationProviderFactory: ProviderValidationFactory =
+    asValidationFactory(
+      input.defaultValidationProviderFactory ?? input.openAiValidationProviderFactory
+    ) ??
+    ((apiKey, providerId) => {
+      try {
+        return createProviderAdapter({ providerId, apiKey });
+      } catch (error) {
+        if (error instanceof ProviderAdapterUnsupportedError) {
+          throw new ProviderCredentialValidationUnsupportedError();
+        }
+        throw error;
+      }
+    });
+  const defaultCompletionProviderFactory: ProviderCompletionFactory =
+    asCompletionFactory(input.defaultCompletionProviderFactory) ??
+    ((apiKey, providerId) => {
+      try {
+        return createProviderAdapter({ providerId, apiKey });
+      } catch (error) {
+        if (error instanceof ProviderAdapterUnsupportedError) {
+          throw new ProviderCredentialValidationUnsupportedError();
+        }
+        throw error;
+      }
+    });
 
-  async function decryptOpenAiApiKey(accountId: AccountId): Promise<string> {
+  async function decryptProviderApiKey(
+    accountId: AccountId,
+    providerId: ProviderId
+  ): Promise<string> {
     if (callsDisabled) {
       throw new ProviderCallsDisabledError();
     }
     if (!encryptionAvailable) {
       throw new ProviderEncryptionUnavailableError();
     }
-    const envelope = await credentials.get(accountId);
+    const envelope = await credentials.get(accountId, providerId);
     if (envelope === undefined) {
       throw new ProviderCredentialNotFoundError();
     }
     try {
       return await crypto.decrypt({
         accountId: envelope.accountId,
-        provider: OPENAI_PROVIDER_ID,
+        provider: providerId,
         material: encryptedMaterialFromEnvelope(envelope)
       });
     } catch (error) {
@@ -282,6 +389,72 @@ export function createAgentProviderRuntime(
       }
       throw error;
     }
+  }
+
+  async function validateProviderCredentialInternal(validateInput: Readonly<{
+    accountId: AccountId;
+    providerId: ProviderId;
+    expectedVersion: number;
+    createProvider?: ProviderValidationFactory | OpenAiValidationProviderFactory;
+  }>): Promise<ProviderCredentialStatus> {
+    if (callsDisabled) {
+      throw new ProviderCallsDisabledError();
+    }
+    if (!encryptionAvailable) {
+      throw new ProviderEncryptionUnavailableError();
+    }
+    const envelope = await credentials.get(validateInput.accountId, validateInput.providerId);
+    if (envelope === undefined) {
+      throw new ProviderCredentialNotFoundError();
+    }
+    if (envelope.version !== validateInput.expectedVersion) {
+      throw new ProviderCredentialConflictError();
+    }
+    let plaintext: string;
+    try {
+      plaintext = await crypto.decrypt({
+        accountId: envelope.accountId,
+        provider: validateInput.providerId,
+        material: encryptedMaterialFromEnvelope(envelope)
+      });
+    } catch (error) {
+      if (error instanceof ProviderCredentialCryptoContextError) {
+        throw new ProviderEncryptionUnavailableError();
+      }
+      throw error;
+    }
+    const factory =
+      asValidationFactory(validateInput.createProvider) ?? defaultValidationProviderFactory;
+    const provider = factory(plaintext, validateInput.providerId);
+    const validation = await provider.validateCredential();
+    const validationState: ProviderCredentialValidationState = validation.ok
+      ? "valid"
+      : "invalid";
+    return providerCredentials.markCredentialValidation({
+      accountId: validateInput.accountId,
+      providerId: validateInput.providerId,
+      expectedVersion: validateInput.expectedVersion,
+      validationState
+    });
+  }
+
+  async function createCompletionProviderInternal(completionInput: Readonly<{
+    accountId: AccountId;
+    providerId: ProviderId;
+    createProvider?: ProviderCompletionFactory | OpenAiCompletionProviderFactory;
+  }>): Promise<
+    CaptureReflectionStructuredCompletionProvider &
+      CraftPartnerStructuredCompletionProvider
+  > {
+    const plaintext = await decryptProviderApiKey(
+      completionInput.accountId,
+      completionInput.providerId
+    );
+    const factory =
+      asCompletionFactory(completionInput.createProvider) ?? defaultCompletionProviderFactory;
+    return toStructuredCompletionProvider(
+      factory(plaintext, completionInput.providerId)
+    );
   }
 
   return Object.freeze({
@@ -295,53 +468,37 @@ export function createAgentProviderRuntime(
       callsDisabled,
       encryptionAvailable
     }),
-    validateOpenAiCredential: async (validateInput) => {
-      if (callsDisabled) {
-        throw new ProviderCallsDisabledError();
-      }
-      if (!encryptionAvailable) {
-        throw new ProviderEncryptionUnavailableError();
-      }
-      const envelope = await credentials.get(validateInput.accountId);
-      if (envelope === undefined) {
-        throw new ProviderCredentialNotFoundError();
-      }
-      if (envelope.version !== validateInput.expectedVersion) {
-        throw new ProviderCredentialConflictError();
-      }
-      let plaintext: string;
-      try {
-        plaintext = await crypto.decrypt({
-          accountId: envelope.accountId,
-          provider: OPENAI_PROVIDER_ID,
-          material: encryptedMaterialFromEnvelope(envelope)
-        });
-      } catch (error) {
-        if (error instanceof ProviderCredentialCryptoContextError) {
-          throw new ProviderEncryptionUnavailableError();
-        }
-        throw error;
-      }
-      const factory = validateInput.createProvider ?? defaultValidationProviderFactory;
-      const provider = factory(plaintext);
-      const validation = await provider.validateCredential();
-      const validationState: ProviderCredentialValidationState = validation.ok
-        ? "valid"
-        : "invalid";
-      return providerCredentials.markOpenAiCredentialValidation({
+    validateOpenAiCredential: async (validateInput) =>
+      validateProviderCredentialInternal({
         accountId: validateInput.accountId,
+        providerId: OPENAI_PROVIDER_ID,
         expectedVersion: validateInput.expectedVersion,
-        validationState
+        createProvider: validateInput.createProvider
+      }),
+    validateProviderCredential: validateProviderCredentialInternal,
+    createCompletionProvider: createCompletionProviderInternal,
+    createCompletionProviderForModel: async (completionInput) => {
+      const providerId =
+        completionInput.providerId ?? providerForAgentModel(completionInput.model);
+      return createCompletionProviderInternal({
+        accountId: completionInput.accountId,
+        providerId,
+        createProvider: completionInput.createProvider
       });
     },
-    createOpenAiCompletionProvider: async (completionInput) => {
-      const plaintext = await decryptOpenAiApiKey(completionInput.accountId);
-      const factory =
-        completionInput.createProvider ?? defaultCompletionProviderFactory;
-      return toStructuredCompletionProvider(factory(plaintext));
-    },
+    createOpenAiCompletionProvider: async (completionInput) =>
+      createCompletionProviderInternal({
+        accountId: completionInput.accountId,
+        providerId: OPENAI_PROVIDER_ID,
+        createProvider: completionInput.createProvider
+      }),
+    resolveProviderApiKey: async (resolveInput) =>
+      decryptProviderApiKey(resolveInput.accountId, resolveInput.providerId),
     resolveOpenAiApiKey: async (resolveInput) =>
-      decryptOpenAiApiKey(resolveInput.accountId)
+      decryptProviderApiKey(resolveInput.accountId, OPENAI_PROVIDER_ID),
+    ...(input.listModelsFactory === undefined
+      ? {}
+      : { listModelsFactory: input.listModelsFactory })
   });
 }
 

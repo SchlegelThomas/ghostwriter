@@ -28,7 +28,8 @@ import {
   createOpenAiProviderCredentialEnvelope,
   type ProviderCredentialCryptoPort,
   type ProviderCredentialDecryptInput,
-  type ProviderCredentialEncryptInput
+  type ProviderCredentialEncryptInput,
+  type ProviderId
 } from "./provider-credentials.js";
 import { ProjectArchivedMutationError } from "./capture-documents.js";
 import { accountId, createProjectMembership } from "./identity.js";
@@ -109,7 +110,10 @@ function createSequenceIds(values: Partial<Record<DomainIdKind, readonly string[
   };
 }
 
-function providerCredentialAad(input: Readonly<{ accountId: AccountId; provider: "openai" }>): string {
+function providerCredentialAad(input: Readonly<{
+  accountId: AccountId;
+  provider: ProviderId;
+}>): string {
   return canonicalJsonStringify({
     accountId: String(input.accountId),
     provider: input.provider,
@@ -267,10 +271,10 @@ describe("provider credential services", () => {
       services.getOpenAiCredentialStatus(OWNER)
     ).resolves.toBeUndefined();
     await services.setOpenAiCredential({ accountId: OWNER, plaintext: OPENAI_KEY });
-    const stored = await credentials.get(OWNER);
+    const stored = await credentials.get(OWNER, OPENAI_PROVIDER_ID);
     expect(stored?.ciphertextB64).toMatch(/^[A-Za-z0-9+/]+={0,2}$/u);
     expect(await services.revokeOpenAiCredentialsForKekVersion("kek-v1")).toBe(1);
-    expect(await credentials.get(OWNER)).toBeUndefined();
+    expect(await credentials.get(OWNER, OPENAI_PROVIDER_ID)).toBeUndefined();
   });
 
   it("decrypts only through the authorized backend seam when valid", async () => {
@@ -318,7 +322,7 @@ describe("provider credential services", () => {
     const crypto = createFakeCrypto();
     const { services, credentials } = createCredentialHarness(crypto);
     await services.setOpenAiCredential({ accountId: OWNER, plaintext: OPENAI_KEY });
-    const stolen = await credentials.get(OWNER);
+    const stolen = await credentials.get(OWNER, OPENAI_PROVIDER_ID);
     if (stolen === undefined) {
       throw new Error("Expected an owner credential envelope.");
     }

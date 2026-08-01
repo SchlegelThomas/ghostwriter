@@ -173,7 +173,7 @@ describe("capture reflection instruction compiler", () => {
     expect(compiled.layers[0]?.version).toBe(CAPTURE_REFLECTION_PRODUCT_POLICY_VERSION);
     expect(compiled.layers[1]?.version).toBe(CAPTURE_REFLECTION_WORKFLOW_CONTRACT_VERSION);
     expect(compiled.toolCount).toBe(0);
-    expect(compiled.model).toBe("gpt-5.6-terra");
+    expect(compiled.model).toBe("gpt-4.1");
     expect(compiled.outputSchemaId).toBe("capture-reflection-v1");
     expect(compiled.receipt.resources).toHaveLength(1);
     expect(compiled.receipt.resources[0]).toMatchObject({
@@ -195,7 +195,7 @@ describe("capture reflection instruction compiler", () => {
             resources: compiled.receipt.resources,
             excludedContextClasses: compiled.receipt.excludedContextClasses,
             provider: "openai",
-            model: "gpt-5.6-terra",
+            model: "gpt-4.1",
             maxOutputTokens: 1500,
             wallClockSeconds: 60,
             toolCount: 0,

@@ -2,12 +2,16 @@ import { canonicalJsonStringify } from "./agent-canonical-json.js";
 import {
   assembleCaptureReflectionResource,
   buildCraftPartnerContextReceipt,
-  AGENT_MODEL_IDS,
-  CAPTURE_REFLECTION_DEFAULT_MODEL,
   sliceCaptureProviderText,
   type AgentModelId,
+  type AgentProviderId,
   type ContextReceipt
 } from "./agent-context-receipt.js";
+import {
+  CAPTURE_REFLECTION_DEFAULT_MODEL,
+  isAgentModelId,
+  type AgentEgressClass
+} from "./model-catalog.js";
 import type {
   AccountAiCollaborationProfile,
   AsyncHashPort,
@@ -80,12 +84,12 @@ export type CompileCraftPartnerInput = Readonly<{
 }>;
 
 export type CompiledCraftPartnerInstructions = Readonly<{
-  provider: "openai";
+  provider: AgentProviderId;
   model: AgentModelId;
   maxOutputTokens: number;
   wallClockSeconds: number;
   toolCount: 0;
-  egressClass: "openai-responses";
+  egressClass: AgentEgressClass;
   outputSchemaId: ReturnType<typeof craftPartnerOutputSchemaId>;
   systemInstructionText: string;
   inputText: string;
@@ -119,7 +123,7 @@ function formatAccountPreferences(profile: AccountAiCollaborationProfile): strin
 
 function resolveModel(model: AgentModelId | undefined): AgentModelId {
   const next = model ?? CAPTURE_REFLECTION_DEFAULT_MODEL;
-  if (!AGENT_MODEL_IDS.includes(next)) {
+  if (!isAgentModelId(next)) {
     throw new DomainValidationError(
       "INVALID_AGENT_POLICY",
       "Agent model is not allowed for craft partners."

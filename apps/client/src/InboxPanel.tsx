@@ -1,5 +1,9 @@
 import type { ProjectNavigator } from "@ghostwriter/core";
-import { ghostwriterTheme } from "@ghostwriter/ui";
+import {
+  ghostwriterTheme,
+  accountHasAvailableStructuredModels,
+  type OpenSettingsHandler
+} from "@ghostwriter/ui";
 import {
   useCallback,
   useEffect,
@@ -18,7 +22,7 @@ import {
 import {
   GhostwriterApiError,
   applyAgentProposal,
-  getOpenAiProviderStatus,
+  getAvailableModels,
   getCapture,
   getSceneWorkspace,
   listCaptures,
@@ -99,8 +103,8 @@ export type InboxPanelProps = Readonly<{
   onSelectCapture?(captureId: string | undefined): void;
   /** Omit captureId to open a new Idea Capture. */
   onOpenCapture(captureId?: string): void;
-  onOpenSettings?(): void;
-  /** Bump when Settings may have changed the OpenAI key. */
+  onOpenSettings?: OpenSettingsHandler;
+  /** Bump when Settings may have changed provider keys. */
   providerStatusSignal?: number;
   onViewSourceCapture?(captureId: string): void;
   onPromote?(
@@ -602,15 +606,17 @@ export function InboxPanel({
     setReflectionProposal(undefined);
     setPendingReceipt(undefined);
     try {
-      const provider = await getOpenAiProviderStatus();
-      if (provider.callsDisabled) {
+      const available = await getAvailableModels();
+      if (available.callsDisabled) {
         setReflectionMessage("Provider calls are temporarily disabled.");
         return;
       }
-      if (!provider.configured) {
+      if (!accountHasAvailableStructuredModels(available.models)) {
         setAiSetupResume(workflowId);
         setShowAiSetup(true);
-        setReflectionMessage("Add an OpenAI key before asking this partner.");
+        setReflectionMessage(
+          "Add a model provider key in Settings before asking this partner."
+        );
         return;
       }
       setShowAiSetup(false);

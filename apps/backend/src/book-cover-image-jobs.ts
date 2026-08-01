@@ -70,6 +70,7 @@ const COVER_IMAGE_SIZE = "1024x1536" as const;
 export type BookCoverImageGenerator = (input: Readonly<{
   apiKey: string;
   prompt: string;
+  model?: string;
   size?: typeof COVER_IMAGE_SIZE | "1024x1024" | "1536x1024" | "1024x1792" | "1792x1024";
 }>) => Promise<OpenAiImageGenerationResult>;
 
@@ -264,6 +265,7 @@ export async function runBookCoverImageJob(input: Readonly<{
   jobId: string;
   generateImage: BookCoverImageGenerator;
   apiKey: string;
+  model?: string;
   size?: "1024x1024" | "1024x1536" | "1536x1024" | "1024x1792" | "1792x1024";
   now?: () => Date;
 }>): Promise<void> {
@@ -285,6 +287,7 @@ export async function runBookCoverImageJob(input: Readonly<{
         input.generateImage({
           apiKey: input.apiKey,
           prompt,
+          ...(input.model === undefined ? {} : { model: input.model }),
           size
         })
       )

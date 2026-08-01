@@ -24,26 +24,28 @@ import {
   type SceneId,
   type StoryKnowledgeId
 } from "./domain.js";
+import {
+  agentEgressClassForProvider,
+  assertAgentModelId,
+  providerForAgentModel,
+  type AgentEgressClass
+} from "./model-catalog.js";
+import type { ProviderId } from "./provider-credentials.js";
 
 export const CAPTURE_REFLECTION_MAX_CAPTURE_CHARS = 24_000;
 
-export type AgentProviderId = "openai";
+/** Alias of {@link ProviderId} for receipt/run surfaces. */
+export type AgentProviderId = ProviderId;
 
-export type AgentModelId = "gpt-5.6-luna" | "gpt-5.6-terra" | "gpt-5.6-sol";
-
-export const AGENT_MODEL_IDS = Object.freeze([
-  "gpt-5.6-luna",
-  "gpt-5.6-terra",
-  "gpt-5.6-sol"
-] as const);
-
-export const CAPTURE_REFLECTION_DEFAULT_MODEL: AgentModelId = "gpt-5.6-terra";
+/**
+ * Catalog-validated upstream model id (e.g. `gpt-4.1`, `claude-sonnet-4-5`).
+ * Use {@link assertAgentModelId} / {@link isAgentModelId} at boundaries.
+ */
+export type AgentModelId = string;
 
 export const CAPTURE_REFLECTION_MAX_OUTPUT_TOKENS = 1_500;
 
 export const CAPTURE_REFLECTION_WALL_CLOCK_SECONDS = 60;
-
-export type AgentEgressClass = "openai-responses";
 
 export type ContextResourceClass = "capture";
 
@@ -153,6 +155,9 @@ export type BuildContextReceiptInput = Readonly<{
 export async function buildCaptureReflectionContextReceipt(
   input: BuildContextReceiptInput
 ): Promise<ContextReceipt> {
+  const model = assertAgentModelId(input.model);
+  const provider = providerForAgentModel(model);
+  const egressClass = agentEgressClassForProvider(provider);
   const receiptBody = {
     id: input.id,
     projectId: input.projectId,
@@ -161,12 +166,12 @@ export async function buildCaptureReflectionContextReceipt(
     layers: input.layers,
     resources: input.resources,
     excludedContextClasses: CAPTURE_REFLECTION_EXCLUDED_CONTEXT_CLASSES,
-    provider: "openai" as const,
-    model: input.model,
+    provider,
+    model,
     maxOutputTokens: CAPTURE_REFLECTION_MAX_OUTPUT_TOKENS,
     wallClockSeconds: CAPTURE_REFLECTION_WALL_CLOCK_SECONDS,
     toolCount: 0 as const,
-    egressClass: "openai-responses" as const,
+    egressClass,
     outputSchemaId: "capture-reflection-v1" as const,
     createdAt: input.createdAt
   };
@@ -189,6 +194,9 @@ export type BuildCraftPartnerContextReceiptInput = BuildContextReceiptInput &
 export async function buildCraftPartnerContextReceipt(
   input: BuildCraftPartnerContextReceiptInput
 ): Promise<ContextReceipt> {
+  const model = assertAgentModelId(input.model);
+  const provider = providerForAgentModel(model);
+  const egressClass = agentEgressClassForProvider(provider);
   const receiptBody = {
     id: input.id,
     projectId: input.projectId,
@@ -197,12 +205,12 @@ export async function buildCraftPartnerContextReceipt(
     layers: input.layers,
     resources: input.resources,
     excludedContextClasses: CAPTURE_REFLECTION_EXCLUDED_CONTEXT_CLASSES,
-    provider: "openai" as const,
-    model: input.model,
+    provider,
+    model,
     maxOutputTokens: CAPTURE_REFLECTION_MAX_OUTPUT_TOKENS,
     wallClockSeconds: CAPTURE_REFLECTION_WALL_CLOCK_SECONDS,
     toolCount: 0 as const,
-    egressClass: "openai-responses" as const,
+    egressClass,
     outputSchemaId: craftPartnerOutputSchemaId(input.workflowId),
     createdAt: input.createdAt,
     ...(input.targetSceneId === undefined ? {} : { targetSceneId: input.targetSceneId }),

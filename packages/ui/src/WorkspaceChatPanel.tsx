@@ -9,16 +9,19 @@ import {
 } from "react-native";
 import { ArrowUp } from "phosphor-react-native";
 import type { AgentModelId } from "@ghostwriter/core";
-import { AGENT_MODEL_IDS } from "@ghostwriter/core";
 import { ghostwriterTheme } from "./theme.js";
+import type { OpenSettingsHandler } from "./settings-focus.js";
+import { AgentModelPickerMenu } from "./AgentModelPickerMenu.js";
 import {
-  agentModelLabel,
+  agentModelLabelWithProvider,
   WORKSPACE_AGENT_EFFORTS,
   WORKSPACE_AGENT_MODES,
   workspaceAgentEffortLabel,
   workspaceAgentModeLabel,
+  workspaceAgentModelPickerOptions,
   type WorkspaceAgentEffort,
-  type WorkspaceAgentMode
+  type WorkspaceAgentMode,
+  type WorkspaceAvailableModel
 } from "./workspace-agent-prefs.js";
 
 const { colors, fonts } = ghostwriterTheme;
@@ -48,8 +51,9 @@ export type WorkspaceChatPanelProps = Readonly<{
   onModeChange(mode: WorkspaceAgentMode): void;
   onModelChange(model: AgentModelId): void;
   onEffortChange(effort: WorkspaceAgentEffort): void;
+  availableModels?: readonly WorkspaceAvailableModel[];
   providerConfigured?: boolean;
-  onOpenSettings?(): void;
+  onOpenSettings?: OpenSettingsHandler;
   selectionSummary?: string;
   /** Docked in the secondary shell — no outer border; close returns to Properties. */
   variant?: "floating" | "docked";
@@ -69,6 +73,7 @@ export function WorkspaceChatPanel({
   onModeChange,
   onModelChange,
   onEffortChange,
+  availableModels = [],
   providerConfigured = true,
   onOpenSettings,
   selectionSummary,
@@ -101,6 +106,11 @@ export function WorkspaceChatPanel({
 
   const composerDisabled = busy || sending;
   const canSend = !composerDisabled && draft.trim().length > 0;
+  const modelPickerOptions = workspaceAgentModelPickerOptions(
+    availableModels,
+    mode
+  );
+  const modelChipLabel = agentModelLabelWithProvider(model, availableModels);
 
   return (
     <View
@@ -160,12 +170,12 @@ export function WorkspaceChatPanel({
               {!providerConfigured ? (
                 <View style={styles.emptyCtaBlock}>
                   <Text style={styles.emptyHint}>
-                    Add your OpenAI key in Settings for real replies.
+                    Add model provider keys in Settings for real replies.
                   </Text>
                   {onOpenSettings !== undefined ? (
                     <Pressable
                       accessibilityRole="button"
-                      onPress={onOpenSettings}
+                      onPress={() => onOpenSettings("providers")}
                       style={({ pressed }) => [
                         styles.settingsButton,
                         pressed && styles.pressed
@@ -196,22 +206,35 @@ export function WorkspaceChatPanel({
       </View>
 
       <View style={styles.composer}>
-        {openPicker !== null ? (
+        {openPicker === "model" ? (
+          <AgentModelPickerMenu
+            onDismiss={() => setOpenPicker(null)}
+            onOpenSettings={
+              onOpenSettings === undefined
+                ? undefined
+                : (focus) => {
+                    setOpenPicker(null);
+                    onOpenSettings(focus);
+                  }
+            }
+            onSelect={(next) => {
+              onModelChange(next);
+              setOpenPicker(null);
+            }}
+            options={modelPickerOptions}
+            selectedValue={model}
+          />
+        ) : openPicker !== null ? (
           <View style={styles.pickerMenuDock}>
             {(openPicker === "mode"
               ? WORKSPACE_AGENT_MODES.map((value) => ({
                   value,
                   label: workspaceAgentModeLabel(value)
                 }))
-              : openPicker === "model"
-                ? AGENT_MODEL_IDS.map((value) => ({
-                    value,
-                    label: agentModelLabel(value)
-                  }))
-                : WORKSPACE_AGENT_EFFORTS.map((value) => ({
-                    value,
-                    label: workspaceAgentEffortLabel(value)
-                  }))
+              : WORKSPACE_AGENT_EFFORTS.map((value) => ({
+                  value,
+                  label: workspaceAgentEffortLabel(value)
+                }))
             ).map((option) => (
               <Pressable
                 accessibilityRole="menuitem"
@@ -219,8 +242,6 @@ export function WorkspaceChatPanel({
                 onPress={() => {
                   if (openPicker === "mode") {
                     onModeChange(option.value as WorkspaceAgentMode);
-                  } else if (openPicker === "model") {
-                    onModelChange(option.value as AgentModelId);
                   } else {
                     onEffortChange(option.value as WorkspaceAgentEffort);
                   }
@@ -264,8 +285,8 @@ export function WorkspaceChatPanel({
               />
               <ComposerChip
                 accessibilityLabel="Agent model"
-                disabled={composerDisabled}
-                label={agentModelLabel(model)}
+                disabled={composerDisabled || modelPickerOptions.length === 0}
+                label={modelChipLabel}
                 onPress={() =>
                   setOpenPicker((current) =>
                     current === "model" ? null : "model"
@@ -503,7 +524,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingTop: 8,
     position: "relative",
-    zIndex: 5
+    // Keep mode/effort dock menus above message scroll; model menu uses position:fixed.
+    zIndex: 40
   },
   pickerMenuDock: {
     backgroundColor: colors.panel,

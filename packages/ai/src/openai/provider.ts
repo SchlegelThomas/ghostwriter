@@ -1,8 +1,10 @@
 import { combineAbortWithTimeout, type CombinedAbort } from "../abort-timeout.js";
 import { aiDiagnostic } from "../diagnostics.js";
+import { fetchPaginatedOpenAiStyleModels } from "../model-listing.js";
 import type {
   CredentialValidationResult,
-  CredentialValidatingProvider,
+  DiscoveredModel,
+  ListingCredentialProvider,
   StructuredCompletionInput,
   StructuredCompletionResult
 } from "../types.js";
@@ -75,7 +77,7 @@ function createOpenAiProviderInternal(config: {
   apiKey: string;
   baseUrl: string;
   fetchImpl: typeof fetch;
-}): CredentialValidatingProvider {
+}): ListingCredentialProvider {
   const responsesUrl = `${config.baseUrl.replace(/\/$/, "")}/v1/responses`;
   const modelsUrl = `${config.baseUrl.replace(/\/$/, "")}/v1/models`;
 
@@ -106,6 +108,19 @@ function createOpenAiProviderInternal(config: {
         }
         return { ok: false, diagnostic: aiDiagnostic("upstream_error") };
       }
+    },
+
+    async listModels(signal?: AbortSignal): Promise<readonly DiscoveredModel[]> {
+      if (signal?.aborted) {
+        throw signal.reason instanceof Error ? signal.reason : new DOMException("Aborted", "AbortError");
+      }
+      return fetchPaginatedOpenAiStyleModels({
+        fetchImpl: config.fetchImpl,
+        initialUrl: modelsUrl,
+        headers: authorizationHeader(config.apiKey),
+        signal,
+        paginate: false
+      });
     },
 
     async completeStructured<TOutput>(
@@ -186,7 +201,7 @@ function createOpenAiProviderInternal(config: {
 }
 
 /** Production OpenAI adapter; fixed API origin, native fetch. */
-export function createOpenAiProvider(config: OpenAiProviderConfig): CredentialValidatingProvider {
+export function createOpenAiProvider(config: OpenAiProviderConfig): ListingCredentialProvider {
   return createOpenAiProviderInternal({
     apiKey: config.apiKey,
     baseUrl: OPENAI_API_ORIGIN,
@@ -197,7 +212,7 @@ export function createOpenAiProvider(config: OpenAiProviderConfig): CredentialVa
 /** Injectable fetch/base URL for unit tests only. */
 export function createOpenAiProviderForTests(
   config: OpenAiProviderTestConfig
-): CredentialValidatingProvider {
+): ListingCredentialProvider {
   return createOpenAiProviderInternal({
     apiKey: config.apiKey,
     baseUrl: config.baseUrl,

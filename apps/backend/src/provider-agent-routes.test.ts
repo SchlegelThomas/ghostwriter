@@ -1,12 +1,16 @@
 import { describe, expect, it, afterEach } from "vitest";
 import { aiDiagnostic } from "@ghostwriter/ai";
 import { BELLWETHER_FIXTURE_PROJECT_ID } from "@ghostwriter/core";
-import type { OpenAiValidationProviderFactory } from "./agent-provider-runtime.js";
+import type {
+  ModelListFactory,
+  OpenAiValidationProviderFactory
+} from "./agent-provider-runtime.js";
 import {
   createSeededBackendApp,
   TEST_BACKEND_ORIGIN
 } from "./test-backend-app.js";
 import { createTestProviderKekRuntimeConfig } from "./provider-kek-config.js";
+import { clearModelDiscoveryCache } from "./model-discovery.js";
 
 const TEST_ORIGIN = TEST_BACKEND_ORIGIN;
 const OPENAI_KEY = "sk-valid-openai-key-1234567890";
@@ -41,17 +45,22 @@ async function openSeededApp(
     callsDisabled?: boolean;
     kekConfig?: ReturnType<typeof createTestProviderKekRuntimeConfig> | undefined;
     openAiValidationProviderFactory?: OpenAiValidationProviderFactory;
+    listModelsFactory?: ModelListFactory;
     auth?: import("./auth.js").AuthGateway;
   }>
 ): Promise<SeededApp> {
   return createSeededBackendApp(options?.auth, {
     kekConfig: options?.kekConfig,
     callsDisabled: options?.callsDisabled,
-    openAiValidationProviderFactory: options?.openAiValidationProviderFactory
+    openAiValidationProviderFactory: options?.openAiValidationProviderFactory,
+    ...(options?.listModelsFactory === undefined
+      ? {}
+      : { listModelsFactory: options.listModelsFactory })
   });
 }
 
 afterEach(async () => {
+  clearModelDiscoveryCache();
   const { testBackendClosers } = await import("./test-backend-app.js");
   while (testBackendClosers.length > 0) {
     const close = testBackendClosers.pop();
@@ -285,6 +294,136 @@ describe("provider and agent guidance routes", () => {
       }
     );
     expect((await archived.json()).playbook.archivedAt).toBeDefined();
+  });
+
+  it("returns available models for configured non-revoked providers", async () => {
+    const { app } = await openSeededApp({
+      kekConfig: createTestProviderKekRuntimeConfig()
+    });
+    const empty = await (await app.request("/api/me/available-models")).json();
+    expect(empty.models).toEqual([]);
+    expect(empty.callsDisabled).toBe(false);
+
+    await app.request("/api/me/providers/openai", {
+      method: "PUT",
+      headers: originHeaders("PUT"),
+      body: JSON.stringify({ apiKey: OPENAI_KEY })
+    });
+    await app.request("/api/me/providers/anthropic", {
+      method: "PUT",
+      headers: originHeaders("PUT"),
+      body: JSON.stringify({ apiKey: "sk-ant-test-key-1234567890abcd" })
+    });
+
+    const body = await (await app.request("/api/me/available-models")).json();
+    const providers = new Set(body.models.map((model: { provider: string }) => model.provider));
+    expect(providers.has("openai")).toBe(true);
+    expect(providers.has("anthropic")).toBe(true);
+    expect(providers.has("google")).toBe(false);
+    expect(body.models.some((model: { id: string }) => model.id === "gpt-4.1")).toBe(true);
+    expect(body.models.some((model: { id: string }) => model.id === "claude-sonnet-4-5")).toBe(
+      true
+    );
+    expect(
+      body.providers.find((provider: { provider: string }) => provider.provider === "openai")
+        ?.validationState
+    ).toBe("unvalidated");
+  });
+
+  it("merges live discovery into available-models and falls back on failure", async () => {
+    const listModelsFactory: ModelListFactory = ({ providerId }) =>
+      Object.freeze({
+        async validateCredential() {
+          return { ok: true as const };
+        },
+        async listModels() {
+          if (providerId === "openai") {
+            return Object.freeze(
+              Array.from({ length: 35 }, (_, index) =>
+                Object.freeze({ id: `gpt-live-${index}` })
+              )
+            );
+          }
+          throw Object.assign(new Error("anthropic down"), { status: 500 });
+        },
+        async completeStructured() {
+          return { ok: false as const, diagnostic: aiDiagnostic("upstream_error") };
+        }
+      });
+
+    const { app } = await openSeededApp({
+      kekConfig: createTestProviderKekRuntimeConfig(),
+      listModelsFactory
+    });
+    await app.request("/api/me/providers/openai", {
+      method: "PUT",
+      headers: originHeaders("PUT"),
+      body: JSON.stringify({ apiKey: OPENAI_KEY })
+    });
+    await app.request("/api/me/providers/anthropic", {
+      method: "PUT",
+      headers: originHeaders("PUT"),
+      body: JSON.stringify({ apiKey: "sk-ant-test-key-1234567890abcd" })
+    });
+
+    const body = await (await app.request("/api/me/available-models")).json();
+    expect(body.models.filter((model: { id: string }) => model.id.startsWith("gpt-live-")).length).toBe(
+      35
+    );
+    expect(body.models.some((model: { id: string }) => model.id === "claude-sonnet-4-5")).toBe(
+      true
+    );
+    const openaiDiscovery = body.discovery.find(
+      (row: { provider: string }) => row.provider === "openai"
+    );
+    const anthropicDiscovery = body.discovery.find(
+      (row: { provider: string }) => row.provider === "anthropic"
+    );
+    expect(openaiDiscovery).toMatchObject({ ok: true, count: 35 });
+    expect(anthropicDiscovery.ok).toBe(false);
+    expect(anthropicDiscovery.errorCode).toBe("upstream_error");
+  });
+
+  it("validates anthropic credentials through the Wave A adapter path", async () => {
+    const { app } = await openSeededApp({
+      kekConfig: createTestProviderKekRuntimeConfig(),
+      openAiValidationProviderFactory: validationFactory(true)
+    });
+    const saved = await (
+      await app.request("/api/me/providers/anthropic", {
+        method: "PUT",
+        headers: originHeaders("PUT"),
+        body: JSON.stringify({ apiKey: "sk-ant-test-key-1234567890abcd" })
+      })
+    ).json();
+    const validated = await app.request("/api/me/providers/anthropic/validate", {
+      method: "POST",
+      headers: originHeaders("POST"),
+      body: JSON.stringify({ expectedVersion: saved.version })
+    });
+    expect(validated.status).toBe(200);
+    expect((await validated.json()).validationState).toBe("valid");
+  });
+
+  it("validates groq credentials without 501 unsupported", async () => {
+    const { app } = await openSeededApp({
+      kekConfig: createTestProviderKekRuntimeConfig(),
+      openAiValidationProviderFactory: validationFactory(true)
+    });
+    const saved = await (
+      await app.request("/api/me/providers/groq", {
+        method: "PUT",
+        headers: originHeaders("PUT"),
+        body: JSON.stringify({ apiKey: "gsk_test_groq_key_1234567890abcd" })
+      })
+    ).json();
+    const validated = await app.request("/api/me/providers/groq/validate", {
+      method: "POST",
+      headers: originHeaders("POST"),
+      body: JSON.stringify({ expectedVersion: saved.version })
+    });
+    expect(validated.status).toBe(200);
+    expect((await validated.json()).validationState).toBe("valid");
   });
 
   it("rejects malformed provider payloads and surfaces kill switch reads", async () => {

@@ -4,7 +4,7 @@ import {
   PROVIDER_CREDENTIAL_ENVELOPE_FORMAT_VERSION,
   ProviderCredentialCryptoContextError,
   type AccountId,
-  type OpenAiProviderId,
+  type ProviderId,
   type ProviderCredentialCryptoPort,
   type ProviderCredentialDecryptInput,
   type ProviderCredentialEncryptInput,
@@ -18,7 +18,7 @@ const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/u;
 
 function credentialAdditionalAuthenticatedData(
   accountId: AccountId,
-  provider: OpenAiProviderId
+  provider: ProviderId
 ): Buffer {
   const canonical = `${PROVIDER_CREDENTIAL_ENVELOPE_FORMAT_VERSION}|${accountId}|${provider}`;
   return Buffer.from(canonical, "utf8");
@@ -118,7 +118,7 @@ export function createUnavailableProviderCredentialCrypto(): ProviderCredentialC
 /** Exposed for tests that assert AAD binding. */
 export function providerCredentialAadForTests(
   accountId: AccountId,
-  provider: OpenAiProviderId = OPENAI_PROVIDER_ID
+  provider: ProviderId = OPENAI_PROVIDER_ID
 ): string {
   return credentialAdditionalAuthenticatedData(accountId, provider).toString("utf8");
 }

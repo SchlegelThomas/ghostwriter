@@ -87,7 +87,7 @@ function sampleReceipt(overrides: Partial<ContextReceipt> = {}): ContextReceipt 
     ]),
     excludedContextClasses: Object.freeze([]),
     provider: "openai" as const,
-    model: "gpt-5.6-terra" as const,
+    model: "gpt-4.1" as const,
     maxOutputTokens: 1500,
     wallClockSeconds: 60,
     toolCount: 0 as const,
@@ -107,7 +107,7 @@ function queuedRun(runId = RUN_ID) {
     workflowId: "scene-partner.capture-reflection",
     workflowVersion: "2026-07-24",
     provider: "openai",
-    model: "gpt-5.6-terra",
+    model: "gpt-4.1",
     receiptId: RECEIPT_ID,
     receiptHash: RECEIPT_HASH,
     status: "queued",
@@ -302,7 +302,7 @@ describe("postgres agent foundation repositories", () => {
 
     const conflict = await receipts.insertImmutable({
       ...receipt,
-      model: "gpt-5.6-luna"
+      model: "gpt-4.1-mini"
     });
     expect(conflict).toEqual({ ok: false, reason: "conflict" });
   });
@@ -523,7 +523,7 @@ describe("postgres agent foundation repositories", () => {
 
   describe("identity enforcement", () => {
     it.each([
-      ["model", { model: "gpt-5.6-luna" as const }],
+      ["model", { model: "gpt-4.1-mini" as const }],
       ["receiptHash", { receiptHash: instructionContentHash("f".repeat(64)) }],
       ["initiatorAccountId", { initiatorAccountId: accountId("other-writer") }]
     ])("rejects run %s mutation during transition", async (_label, mutation) => {

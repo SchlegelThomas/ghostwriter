@@ -44,7 +44,7 @@ function queuedRunRecord() {
     workflowId: "scene-partner.capture-reflection",
     workflowVersion: "2026-07-24",
     provider: "openai",
-    model: "gpt-5.6-terra",
+    model: "gpt-4.1",
     receiptId: contextReceiptId("receipt-identity"),
     receiptHash: RECEIPT_HASH,
     status: "queued",
@@ -77,7 +77,7 @@ describe("agent run identity preservation", () => {
     const next = createAgentRun({
       ...current,
       status: "running",
-      model: "gpt-5.6-luna",
+      model: "gpt-4.1-mini",
       updatedAt: "2026-07-24T23:00:01.000Z"
     });
     expect(agentRunIdentityMatches(current, next)).toBe(false);
@@ -123,7 +123,7 @@ describe("agent proposal identity preservation", () => {
 
 describe("memory agent run repository identity enforcement", () => {
   it.each([
-    ["model", { model: "gpt-5.6-luna" as const }],
+    ["model", { model: "gpt-4.1-mini" as const }],
     ["receiptHash", { receiptHash: instructionContentHash("f".repeat(64)) }],
     ["initiatorAccountId", { initiatorAccountId: accountId("other-writer") }]
   ])("rejects %s mutation during transition", async (_label, mutation) => {

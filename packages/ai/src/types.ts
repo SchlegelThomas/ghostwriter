@@ -70,6 +70,19 @@ export interface StructuredCompletionProvider {
   ): Promise<StructuredCompletionResult<TOutput>>;
 }
 
+export type DiscoveredModel = Readonly<{
+  id: string;
+  displayName?: string;
+  raw?: unknown;
+}>;
+
+export interface ModelListingProvider {
+  listModels(signal?: AbortSignal): Promise<readonly DiscoveredModel[]>;
+}
+
 export interface CredentialValidatingProvider extends StructuredCompletionProvider {
   validateCredential(signal?: AbortSignal): Promise<CredentialValidationResult>;
 }
+
+/** Live BYOK adapter that can validate, complete, and list upstream models. */
+export type ListingCredentialProvider = CredentialValidatingProvider & ModelListingProvider;

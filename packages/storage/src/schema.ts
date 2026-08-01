@@ -698,7 +698,7 @@ export const providerCredentials = pgTable(
   "provider_credentials",
   {
     accountId: text("account_id")
-      .primaryKey()
+      .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     provider: text("provider").notNull(),
     version: integer("version").notNull(),
@@ -712,7 +712,10 @@ export const providerCredentials = pgTable(
     updatedAt: text("updated_at").notNull(),
     validatedAt: text("validated_at")
   },
-  (table) => [index("provider_credentials_kek_version_index").on(table.kekVersion)]
+  (table) => [
+    primaryKey({ columns: [table.accountId, table.provider] }),
+    index("provider_credentials_kek_version_index").on(table.kekVersion)
+  ]
 );
 
 export const aiCollaborationProfiles = pgTable("ai_collaboration_profiles", {

@@ -1,28 +1,41 @@
-import { accountId, playbookId, projectId, ProjectArchivedMutationError } from "@ghostwriter/core";
+import {
+  accountId,
+  playbookId,
+  projectId,
+  ProjectArchivedMutationError
+} from "@ghostwriter/core";
 import type { Context, Hono } from "hono";
 import {
   archiveProjectPlaybookRequestSchema,
   deleteOpenAiProviderCredentialRequestSchema,
+  deleteProviderCredentialRequestSchema,
   OPENAI_PROVIDER_CREDENTIAL_MAX_BYTES,
   parseJsonRequest,
   saveProjectAgentInstructionsRequestSchema,
   saveProjectPlaybookRequestSchema,
   setOpenAiProviderCredentialRequestSchema,
+  setProviderCredentialRequestSchema,
   updateProjectPlaybookRequestSchema,
   validateOpenAiProviderCredentialRequestSchema,
-  patchAiCollaborationRequestSchema
+  validateProviderCredentialRequestSchema,
+  patchAiCollaborationRequestSchema,
+  providerIdParamSchema
 } from "./api-contract.js";
 import type { AuthenticatedSession } from "./auth.js";
 import type { AgentProviderRuntime } from "./agent-provider-runtime.js";
 import { ProviderEncryptionUnavailableError } from "./agent-provider-runtime.js";
 import {
   aiCollaborationProfileResponse,
+  accountProvidersListResponse,
+  availableModelsResponse,
   mapAgentGuidanceRouteError,
   openAiProviderStatusResponse,
+  providerCredentialStatusResponse,
   projectAgentInstructionsResponse,
   projectPlaybookResponse,
   providerAgentErrorStatusAndBody
 } from "./provider-agent-api.js";
+import { discoverModelsForAccount } from "./model-discovery.js";
 
 type ProviderAgentEnvironment = {
   Variables: {
@@ -70,12 +83,218 @@ function mapRouteError(
     : mapAgentGuidanceRouteError(error, scope);
 }
 
+function parseProviderRouteId(
+  context: Context<ProviderAgentEnvironment>
+):
+  | Readonly<{ ok: true; providerId: import("@ghostwriter/core").ProviderId }>
+  | Readonly<{ ok: false; response: Response }> {
+  const raw = context.req.param("providerId");
+  const parsed = providerIdParamSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      response: context.json(
+        {
+          error: "Invalid request.",
+          code: "INVALID_PROVIDER_ID"
+        },
+        400
+      )
+    };
+  }
+  return { ok: true, providerId: parsed.data };
+}
+
 export function registerProviderAgentRoutes(
   app: Hono<ProviderAgentEnvironment>,
   dependencies: ProviderAgentRouteDependencies
 ): void {
   const { agentProvider } = dependencies;
-  const { providerCredentials, agentGuidance, policy, validateOpenAiCredential } = agentProvider;
+  const {
+    providerCredentials,
+    agentGuidance,
+    policy,
+    validateOpenAiCredential,
+    validateProviderCredential
+  } = agentProvider;
+
+  app.get("/api/me/providers", async (context) => {
+    const authSession = context.get("authSession");
+    const configured = await providerCredentials.listCredentialStatuses(
+      accountId(authSession.account.id)
+    );
+    return context.json(
+      accountProvidersListResponse({
+        callsDisabled: policy.callsDisabled,
+        configured
+      })
+    );
+  });
+
+  app.get("/api/me/available-models", async (context) => {
+    const authSession = context.get("authSession");
+    const account = accountId(authSession.account.id);
+    const configured = await providerCredentials.listCredentialStatuses(account);
+    let catalog;
+    try {
+      catalog = await discoverModelsForAccount({
+        accountId: authSession.account.id,
+        configured,
+        resolveApiKey: async (providerId) =>
+          agentProvider.resolveProviderApiKey({
+            accountId: account,
+            providerId
+          }),
+        ...(agentProvider.listModelsFactory === undefined
+          ? {}
+          : { createListingProvider: agentProvider.listModelsFactory })
+      });
+    } catch {
+      catalog = undefined;
+    }
+    return context.json(
+      availableModelsResponse({
+        callsDisabled: policy.callsDisabled,
+        configured,
+        ...(catalog === undefined ? {} : { catalog })
+      })
+    );
+  });
+
+  app.get("/api/me/providers/:providerId", async (context) => {
+    const providerParsed = parseProviderRouteId(context);
+    if (!providerParsed.ok) {
+      return providerParsed.response;
+    }
+    const authSession = context.get("authSession");
+    const status = await providerCredentials.getCredentialStatus(
+      accountId(authSession.account.id),
+      providerParsed.providerId
+    );
+    return context.json(
+      providerCredentialStatusResponse({
+        configured: status !== undefined,
+        callsDisabled: policy.callsDisabled,
+        status
+      })
+    );
+  });
+
+  app.put("/api/me/providers/:providerId", async (context) => {
+    const providerParsed = parseProviderRouteId(context);
+    if (!providerParsed.ok) {
+      return providerParsed.response;
+    }
+    const parsed = await parseJsonRequest(
+      context.req.raw,
+      setProviderCredentialRequestSchema,
+      OPENAI_PROVIDER_CREDENTIAL_MAX_BYTES
+    );
+    if (!parsed.success) {
+      return invalidRequestResponse(context, parsed);
+    }
+    if (!policy.encryptionAvailable) {
+      return context.json(
+        providerAgentErrorStatusAndBody(new ProviderEncryptionUnavailableError())!.body,
+        503
+      );
+    }
+    try {
+      const authSession = context.get("authSession");
+      const status = await providerCredentials.setCredential({
+        accountId: accountId(authSession.account.id),
+        providerId: providerParsed.providerId,
+        plaintext: parsed.data.apiKey,
+        ...(parsed.data.expectedVersion === undefined
+          ? {}
+          : { expectedVersion: parsed.data.expectedVersion })
+      });
+      return context.json(
+        providerCredentialStatusResponse({
+          configured: true,
+          callsDisabled: policy.callsDisabled,
+          status
+        })
+      );
+    } catch (error) {
+      const mapped = mapRouteError(error);
+      if (mapped !== undefined) {
+        return context.json(mapped.body, mapped.status);
+      }
+      throw error;
+    }
+  });
+
+  app.delete("/api/me/providers/:providerId", async (context) => {
+    const providerParsed = parseProviderRouteId(context);
+    if (!providerParsed.ok) {
+      return providerParsed.response;
+    }
+    const parsed = await parseJsonRequest(
+      context.req.raw,
+      deleteProviderCredentialRequestSchema,
+      OPENAI_PROVIDER_CREDENTIAL_MAX_BYTES
+    );
+    if (!parsed.success) {
+      return invalidRequestResponse(context, parsed);
+    }
+    try {
+      const authSession = context.get("authSession");
+      await providerCredentials.deleteCredential({
+        accountId: accountId(authSession.account.id),
+        providerId: providerParsed.providerId,
+        expectedVersion: parsed.data.expectedVersion
+      });
+      return context.json(
+        providerCredentialStatusResponse({
+          configured: false,
+          callsDisabled: policy.callsDisabled
+        })
+      );
+    } catch (error) {
+      const mapped = mapRouteError(error);
+      if (mapped !== undefined) {
+        return context.json(mapped.body, mapped.status);
+      }
+      throw error;
+    }
+  });
+
+  app.post("/api/me/providers/:providerId/validate", async (context) => {
+    const providerParsed = parseProviderRouteId(context);
+    if (!providerParsed.ok) {
+      return providerParsed.response;
+    }
+    const parsed = await parseJsonRequest(
+      context.req.raw,
+      validateProviderCredentialRequestSchema,
+      OPENAI_PROVIDER_CREDENTIAL_MAX_BYTES
+    );
+    if (!parsed.success) {
+      return invalidRequestResponse(context, parsed);
+    }
+    try {
+      const authSession = context.get("authSession");
+      const status = await validateProviderCredential({
+        accountId: accountId(authSession.account.id),
+        providerId: providerParsed.providerId,
+        expectedVersion: parsed.data.expectedVersion
+      });
+      return context.json(
+        providerCredentialStatusResponse({
+          configured: true,
+          callsDisabled: policy.callsDisabled,
+          status
+        })
+      );
+    } catch (error) {
+      const mapped = mapRouteError(error);
+      if (mapped !== undefined) {
+        return context.json(mapped.body, mapped.status);
+      }
+      throw error;
+    }
+  });
 
   app.get("/api/me/provider/openai", async (context) => {
     const authSession = context.get("authSession");

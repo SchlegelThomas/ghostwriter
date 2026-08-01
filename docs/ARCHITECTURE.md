@@ -194,9 +194,12 @@ BYOK agents on `feat/capture-to-story-agents`:
 - Private Capture attachments and applied book-cover PNGs use Cloudflare R2 through an
   object-storage port and Fly-authorized short-lived object URLs. Binary bytes never enter Postgres
   project JSON or editor documents. Hermetic E2E uses a memory fake.
-- `packages/ai` provides a provider-neutral boundary with OpenAI BYOK first (`completeStructured`,
-  `gpt-image-1` images) and a deterministic fake provider in required CI. Writer keys are encrypted
-  under versioned Fly-held root keys (`GHOSTWRITER_PROVIDER_KEK_V1`).
+- `packages/ai` provides a provider-neutral boundary with multi-provider BYOK adapters (OpenAI
+  Responses kept; Anthropic/Google/Groq/xAI/Mistral/DeepSeek/OpenRouter via Vercel AI SDK packages
+  in-process — not Vercel AI Gateway). A curated model catalog and
+  `GET /api/me/available-models` gate Settings and the Agent dock. Credentials are one encrypted
+  envelope per `(account, provider)` under versioned Fly-held root keys
+  (`GHOSTWRITER_PROVIDER_KEK_V1`). Required CI uses a deterministic fake provider. See ADR 0012.
 - Context is assembled server-side into revision-addressed receipts. Fixed product/workflow policy
   outranks optional account preferences, project instructions, declarative playbooks, and the
   assignment; capabilities remain enforced outside the model.
@@ -294,7 +297,7 @@ plan's record-log plus update this section.
 | Browser recovery | IndexedDB, OPFS, simpler encrypted draft buffer | Implemented under ADR 0006: bounded encrypted IndexedDB for unacknowledged prose only |
 | Story Canvas state | relational board objects/links, aggregate JSON board, scene-only placement fields | Implemented foundation under ADR 0007: project board with dedicated version, canonical ID references, manuscript-derived spine, and accessible ordered projection |
 | Build tooling | pnpm native workspace orchestration; revisit Turborepo only when measured need appears | Resolved for scaffold |
-| AI providers | Resolved for first live workflow by ADR 0011 | Provider-neutral `packages/ai`; OpenAI BYOK first, deterministic fake in CI; future official delegated auth can replace key entry |
+| AI providers | Resolved by ADR 0011 + ADR 0012 | Provider-neutral `packages/ai` + curated catalog; multi-provider BYOK via AI SDK adapters; deterministic fake in CI; LiteLLM not the control plane; future official delegated auth can replace key entry |
 
 ## Non-negotiables recap
 

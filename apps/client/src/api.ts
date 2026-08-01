@@ -946,7 +946,7 @@ export type OpenAiProviderStatusResponse =
       validatedAt?: string;
     }>;
 
-export type AgentModelId = "gpt-5.6-luna" | "gpt-5.6-terra" | "gpt-5.6-sol";
+export type AgentModelId = string;
 
 export type AgentWorkflowId =
   | "scene-partner.capture-reflection"
@@ -1081,6 +1081,111 @@ export type StartCaptureReflectionResponse =
 
 function agentProjectPath(projectId: string, suffix: string): string {
   return `/api/projects/${encodeURIComponent(projectId)}/agent/${suffix}`;
+}
+
+export function getProviderCredentialStatus(
+  providerId: string
+): Promise<OpenAiProviderStatusResponse> {
+  return requestJson(`/api/me/providers/${encodeURIComponent(providerId)}`);
+}
+
+export function setProviderCredential(
+  providerId: string,
+  input: Readonly<{
+    apiKey: string;
+    expectedVersion?: number;
+  }>
+): Promise<OpenAiProviderStatusResponse> {
+  return requestJson(
+    `/api/me/providers/${encodeURIComponent(providerId)}`,
+    jsonRequest("PUT", {
+      apiKey: input.apiKey,
+      ...(input.expectedVersion === undefined
+        ? {}
+        : { expectedVersion: input.expectedVersion })
+    })
+  );
+}
+
+export function deleteProviderCredential(
+  providerId: string,
+  input: Readonly<{
+    expectedVersion: number;
+  }>
+): Promise<OpenAiProviderStatusResponse> {
+  return requestJson(
+    `/api/me/providers/${encodeURIComponent(providerId)}`,
+    jsonRequest("DELETE", {
+      expectedVersion: input.expectedVersion
+    })
+  );
+}
+
+export function validateProviderCredential(
+  providerId: string,
+  input: Readonly<{
+    expectedVersion: number;
+  }>
+): Promise<OpenAiProviderStatusResponse> {
+  return requestJson(
+    `/api/me/providers/${encodeURIComponent(providerId)}/validate`,
+    jsonRequest("POST", { expectedVersion: input.expectedVersion })
+  );
+}
+
+export type AccountProviderCredentialListItem =
+  | Readonly<{ provider: string; configured: false }>
+  | Readonly<{
+      provider: string;
+      configured: true;
+      version: number;
+      maskedHint: string;
+      validationState: string;
+      createdAt: string;
+      updatedAt: string;
+      validatedAt?: string;
+    }>;
+
+export function listAccountProviderCredentials(): Promise<
+  Readonly<{
+    callsDisabled: boolean;
+    providers: readonly AccountProviderCredentialListItem[];
+  }>
+> {
+  return requestJson("/api/me/providers");
+}
+
+export type AvailableModelCatalogEntry = Readonly<{
+  id: string;
+  provider: string;
+  label: string;
+  supportsChat: boolean;
+  supportsTools: boolean;
+  supportsStructured: boolean;
+  supportsImage: boolean;
+  defaultEffort?: "fast" | "standard" | "high";
+  notes?: string;
+  bestFor?: string;
+  relativeStrength?: string;
+  adapterReady: boolean;
+}>;
+
+export type AvailableModelDiscoveryStatus = Readonly<{
+  provider: string;
+  ok: boolean;
+  count: number;
+  errorCode?: string;
+}>;
+
+export type AvailableModelsResponse = Readonly<{
+  callsDisabled: boolean;
+  models: readonly AvailableModelCatalogEntry[];
+  providers: readonly AccountProviderCredentialListItem[];
+  discovery?: readonly AvailableModelDiscoveryStatus[];
+}>;
+
+export function getAvailableModels(): Promise<AvailableModelsResponse> {
+  return requestJson("/api/me/available-models");
 }
 
 export function getOpenAiProviderStatus(): Promise<OpenAiProviderStatusResponse> {
@@ -1493,13 +1598,15 @@ export async function postBookCoverImageJob(input: Readonly<{
   prompt: string;
   count?: number;
   refinement?: string;
+  imageModel?: string;
 }>): Promise<BookCoverImageJobStartResponse> {
   return requestJson(
     bookCoverImagePath(input.projectId, input.bookId, "images/jobs"),
     jsonRequest("POST", {
       prompt: input.prompt,
       ...(input.count === undefined ? {} : { count: input.count }),
-      ...(input.refinement === undefined ? {} : { refinement: input.refinement })
+      ...(input.refinement === undefined ? {} : { refinement: input.refinement }),
+      ...(input.imageModel === undefined ? {} : { imageModel: input.imageModel })
     })
   );
 }
@@ -1607,13 +1714,15 @@ export async function postCharacterVisualJob(input: Readonly<{
   prompt?: string;
   count?: number;
   refinement?: string;
+  imageModel?: string;
 }>): Promise<CharacterVisualJobStartResponse> {
   return requestJson(
     characterVisualPath(input.projectId, input.knowledgeId, "visuals/jobs"),
     jsonRequest("POST", {
       ...(input.prompt === undefined ? {} : { prompt: input.prompt }),
       ...(input.count === undefined ? {} : { count: input.count }),
-      ...(input.refinement === undefined ? {} : { refinement: input.refinement })
+      ...(input.refinement === undefined ? {} : { refinement: input.refinement }),
+      ...(input.imageModel === undefined ? {} : { imageModel: input.imageModel })
     })
   );
 }

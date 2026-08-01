@@ -16,6 +16,9 @@ import {
   SCENE_VARIANT_NAME_MAX_LENGTH,
   sceneId,
   storyKnowledgeId,
+  isAgentModelId,
+  getModelCatalogEntry,
+  OPENAI_PROVIDER_ID,
   type AccountId,
   type CanvasCommand,
   type CaptureId,
@@ -995,18 +998,37 @@ const optionalPositiveVersion = z.number().int().positive().optional();
 
 export const OPENAI_PROVIDER_CREDENTIAL_MAX_BYTES = 4_096;
 
-export const setOpenAiProviderCredentialRequestSchema = z.object({
+export const providerIdParamSchema = z.enum([
+  "openai",
+  "anthropic",
+  "google",
+  "groq",
+  "xai",
+  "mistral",
+  "deepseek",
+  "openrouter"
+]);
+
+export const setProviderCredentialRequestSchema = z.object({
   apiKey: z.string().trim().min(20).max(200).regex(/^\S+$/u),
   expectedVersion: optionalPositiveVersion
 });
 
-export const deleteOpenAiProviderCredentialRequestSchema = z.object({
+export const deleteProviderCredentialRequestSchema = z.object({
   expectedVersion: z.number().int().positive()
 });
 
-export const validateOpenAiProviderCredentialRequestSchema = z.object({
+export const validateProviderCredentialRequestSchema = z.object({
   expectedVersion: z.number().int().positive()
 });
+
+export const setOpenAiProviderCredentialRequestSchema = setProviderCredentialRequestSchema;
+
+export const deleteOpenAiProviderCredentialRequestSchema =
+  deleteProviderCredentialRequestSchema;
+
+export const validateOpenAiProviderCredentialRequestSchema =
+  validateProviderCredentialRequestSchema;
 
 const aiCollaborationPostureSchema = z.enum([
   "options",
@@ -1057,7 +1079,31 @@ export const archiveProjectPlaybookRequestSchema = z.object({
   expectedVersion: z.number().int().positive()
 });
 
-const agentModelIdSchema = z.enum(["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]);
+const agentModelIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .refine(isAgentModelId, { message: "Invalid agent model id." });
+
+const imageModelIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .refine((id) => {
+    if (!isAgentModelId(id)) return false;
+    const entry = getModelCatalogEntry(id);
+    if (entry !== undefined) {
+      return entry.supportsImage && entry.provider === OPENAI_PROVIDER_ID;
+    }
+    // Discovered OpenAI image ids (availability checked at the image route).
+    const normalized = id.trim().toLowerCase();
+    return (
+      normalized.includes("image") ||
+      normalized.startsWith("dall-e")
+    );
+  }, { message: "Unknown or unsupported image model." });
 
 const agentWorkflowIdSchema = z.enum([
   "scene-partner.capture-reflection",
@@ -1126,7 +1172,8 @@ export const scenePartnerImageRequestSchema = z
 
 export const bookCoverImageRequestSchema = z
   .object({
-    prompt: z.string().trim().min(1).max(4_000)
+    prompt: z.string().trim().min(1).max(4_000),
+    imageModel: imageModelIdSchema.optional()
   })
   .strict();
 
@@ -1134,14 +1181,16 @@ export const bookCoverImageJobRequestSchema = z
   .object({
     prompt: z.string().trim().min(1).max(4_000),
     count: z.number().int().min(2).max(4).optional(),
-    refinement: z.string().trim().min(1).max(2_000).optional()
+    refinement: z.string().trim().min(1).max(2_000).optional(),
+    imageModel: imageModelIdSchema.optional()
   })
   .strict();
 
 export const bookCoverImageApplyRequestSchema = z
   .object({
     prompt: z.string().trim().min(1).max(4_000).optional(),
-    previewDataUri: z.string().trim().min(1).max(12_000_000).optional()
+    previewDataUri: z.string().trim().min(1).max(12_000_000).optional(),
+    imageModel: imageModelIdSchema.optional()
   })
   .strict()
   .superRefine((value, context) => {
@@ -1159,7 +1208,8 @@ export const characterVisualJobRequestSchema = z
   .object({
     prompt: z.string().trim().min(1).max(4_000).optional(),
     count: z.number().int().min(2).max(4).optional(),
-    refinement: z.string().trim().min(1).max(2_000).optional()
+    refinement: z.string().trim().min(1).max(2_000).optional(),
+    imageModel: imageModelIdSchema.optional()
   })
   .strict();
 

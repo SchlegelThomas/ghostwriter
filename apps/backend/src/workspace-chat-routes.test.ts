@@ -122,7 +122,7 @@ describe("POST /api/workspace/chat", () => {
       reply: expect.stringContaining("Settings"),
       code: "PROVIDER_NOT_CONFIGURED",
       mode: "chat",
-      model: "gpt-5.6-terra",
+      model: "gpt-4.1",
       effort: "standard"
     });
     expect(String(body.reply)).not.toContain("Matching capabilities");
@@ -146,7 +146,7 @@ describe("POST /api/workspace/chat", () => {
         message: "Summarize the open manuscript focus.",
         projectId: PROJECT,
         mode: "plan",
-        model: "gpt-5.6-luna",
+        model: "gpt-4.1-mini",
         effort: "high",
         selection: {
           kind: "scene",
@@ -161,7 +161,7 @@ describe("POST /api/workspace/chat", () => {
     const body = await chat.json();
     expect(body).toMatchObject({
       mode: "plan",
-      model: "gpt-5.6-luna",
+      model: "gpt-4.1-mini",
       effort: "high"
     });
     expect(String(body.reply)).toContain(BELLWETHER_FIXTURE_NAVIGATOR.title);

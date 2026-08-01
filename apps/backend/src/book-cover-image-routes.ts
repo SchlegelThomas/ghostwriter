@@ -20,10 +20,6 @@ import {
 } from "./api-contract.js";
 import type { AuthenticatedSession } from "./auth.js";
 import type { AgentProviderRuntime } from "./agent-provider-runtime.js";
-import {
-  ProviderCallsDisabledError,
-  ProviderEncryptionUnavailableError
-} from "./agent-provider-runtime.js";
 import { mapAgentRunRouteError } from "./agent-run-api.js";
 import {
   composeBookCoverImagePrompt,
@@ -35,6 +31,7 @@ import {
 } from "./book-cover-image-jobs.js";
 import { CaptureObjectStorageError } from "./capture-object-storage-error.js";
 import { providerAgentErrorStatusAndBody } from "./provider-agent-api.js";
+import { resolveCatalogImageGeneration } from "./catalog-image-generation.js";
 import type { ScenePartnerImageGenerator } from "./scene-partner-routes.js";
 
 type BookCoverEnvironment = {
@@ -71,15 +68,6 @@ function invalidRequestResponse(
     },
     parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
   );
-}
-
-function assertProviderCallable(agentProvider: AgentProviderRuntime): void {
-  if (agentProvider.policy.callsDisabled) {
-    throw new ProviderCallsDisabledError();
-  }
-  if (!agentProvider.policy.encryptionAvailable) {
-    throw new ProviderEncryptionUnavailableError();
-  }
 }
 
 function providerImageError(
@@ -178,14 +166,15 @@ async function loadBookInProject(input: Readonly<{
 async function resolveImageApiKey(
   agentProvider: AgentProviderRuntime,
   account: ReturnType<typeof accountId>,
-  usingInjectedGenerator: boolean
-): Promise<string> {
-  if (usingInjectedGenerator) {
-    // Hermetic/tests inject a generator — do not require a saved BYOK key.
-    return "injected-image-generator";
-  }
-  assertProviderCallable(agentProvider);
-  return agentProvider.resolveOpenAiApiKey({ accountId: account });
+  usingInjectedGenerator: boolean,
+  imageModel?: string
+): Promise<{ apiKey: string; model: string }> {
+  return resolveCatalogImageGeneration({
+    agentProvider,
+    accountId: account,
+    imageModel,
+    usingInjectedGenerator
+  });
 }
 
 export function registerBookCoverImageRoutes(
@@ -226,14 +215,16 @@ export function registerBookCoverImageRoutes(
           return context.json({ error: "Book not found.", code: "BOOK_NOT_FOUND" }, 404);
         }
 
-        const apiKey = await resolveImageApiKey(
+        const { apiKey, model } = await resolveImageApiKey(
           agentProvider,
           account,
-          usingInjectedGenerator
+          usingInjectedGenerator,
+          parsed.data.imageModel
         );
         const generated = await generateImage({
           apiKey,
           prompt: parsed.data.prompt,
+          model,
           size: COVER_IMAGE_SIZE
         });
         if (!generated.ok) {
@@ -292,10 +283,11 @@ export function registerBookCoverImageRoutes(
           return context.json({ error: "Book not found.", code: "BOOK_NOT_FOUND" }, 404);
         }
 
-        const apiKey = await resolveImageApiKey(
+        const { apiKey, model } = await resolveImageApiKey(
           agentProvider,
           account,
-          usingInjectedGenerator
+          usingInjectedGenerator,
+          parsed.data.imageModel
         );
         const basePrompt = composeBookCoverImagePrompt(
           parsed.data.prompt,
@@ -315,6 +307,7 @@ export function registerBookCoverImageRoutes(
             jobId: job.id,
             generateImage,
             apiKey,
+            model,
             size: COVER_IMAGE_SIZE,
             now
           })
@@ -418,14 +411,16 @@ export function registerBookCoverImageRoutes(
 
         let previewDataUri = parsed.data.previewDataUri;
         if (previewDataUri === undefined) {
-          const apiKey = await resolveImageApiKey(
+          const { apiKey, model } = await resolveImageApiKey(
             agentProvider,
             account,
-            usingInjectedGenerator
+            usingInjectedGenerator,
+            parsed.data.imageModel
           );
           const generated = await generateImage({
             apiKey,
             prompt: parsed.data.prompt!,
+            model,
             size: COVER_IMAGE_SIZE
           });
           if (!generated.ok) {
