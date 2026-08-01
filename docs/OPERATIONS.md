@@ -132,7 +132,9 @@ credentials, Fly secrets, or deployment were created in this branch:
 - Writer provider keys (one envelope per account+provider) are encrypted in Lakebase under a
   versioned AES-GCM envelope. Root keys such as `GHOSTWRITER_PROVIDER_KEK_V1` live only as Fly
   secrets; they are distinct from an optional Ghostwriter-operated `OPENAI_API_KEY`. Migration
-  `0020_steady_shooting_star` makes `provider_credentials` primary key `(account_id, provider)`.
+  `0020_steady_shooting_star` introduces `provider_credential_keys` with primary key
+  `(account_id, provider)` (copied from legacy `provider_credentials`, which remains for
+  rollback until an owner-profile cleanup can drop it).
   No LiteLLM or other gateway process is required for multi-provider BYOK (ADR 0012).
 - Root-key rotation deploys an overlapping new version, rewraps or replaces safe envelopes, then
   retires the old key. Suspected compromise disables provider calls, deletes affected envelopes,

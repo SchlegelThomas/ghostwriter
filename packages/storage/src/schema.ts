@@ -695,7 +695,7 @@ export const canvasRevisions = pgTable(
 );
 
 export const providerCredentials = pgTable(
-  "provider_credentials",
+  "provider_credential_keys",
   {
     accountId: text("account_id")
       .notNull()
@@ -713,8 +713,11 @@ export const providerCredentials = pgTable(
     validatedAt: text("validated_at")
   },
   (table) => [
-    primaryKey({ columns: [table.accountId, table.provider] }),
-    index("provider_credentials_kek_version_index").on(table.kekVersion)
+    primaryKey({
+      name: "provider_credential_keys_pk",
+      columns: [table.accountId, table.provider]
+    }),
+    index("provider_credential_keys_kek_version_index").on(table.kekVersion)
   ]
 );
 
