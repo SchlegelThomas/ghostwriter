@@ -13,9 +13,11 @@ import type {
 import {
   CAPTURE_REFLECTION_WORKFLOW_ID,
   craftPartnerOutputSchemaId,
-  instructionContentHash
+  instructionContentHash,
+  PLAN_MODE_OUTLINE_WORKFLOW_ID
 } from "./agent-domain.js";
 import type { CaptureContentHash, CaptureDocumentHead } from "./capture-documents.js";
+import type { AgentProposalPrimaryTarget } from "./agent-runs-proposals.js";
 import {
   DomainValidationError,
   type CaptureId,
@@ -85,6 +87,7 @@ export type ContextReceipt = Readonly<{
   outputSchemaId: AgentOutputSchemaId;
   targetSceneId?: SceneId;
   targetStoryKnowledgeId?: StoryKnowledgeId;
+  primaryTarget?: AgentProposalPrimaryTarget;
   receiptHash: InstructionContentHash;
   createdAt: string;
 }>;
@@ -217,6 +220,40 @@ export async function buildCraftPartnerContextReceipt(
     ...(input.targetStoryKnowledgeId === undefined
       ? {}
       : { targetStoryKnowledgeId: input.targetStoryKnowledgeId })
+  };
+  const receiptHash = instructionContentHash(
+    await input.hashPort.digestSha256Hex(canonicalJsonStringify(receiptBody))
+  );
+  return Object.freeze({
+    ...receiptBody,
+    receiptHash
+  });
+}
+
+export const PLAN_MODE_OUTLINE_WORKFLOW_CONTRACT_VERSION = "1" as const;
+
+export async function buildPlanModeOutlineContextReceipt(
+  input: BuildContextReceiptInput
+): Promise<ContextReceipt> {
+  const model = assertAgentModelId(input.model);
+  const provider = providerForAgentModel(model);
+  const egressClass = agentEgressClassForProvider(provider);
+  const receiptBody = {
+    id: input.id,
+    projectId: input.projectId,
+    workflowId: PLAN_MODE_OUTLINE_WORKFLOW_ID,
+    workflowVersion: input.workflowVersion,
+    layers: input.layers,
+    resources: input.resources,
+    excludedContextClasses: CAPTURE_REFLECTION_EXCLUDED_CONTEXT_CLASSES,
+    provider,
+    model,
+    maxOutputTokens: CAPTURE_REFLECTION_MAX_OUTPUT_TOKENS,
+    wallClockSeconds: CAPTURE_REFLECTION_WALL_CLOCK_SECONDS,
+    toolCount: 0 as const,
+    egressClass,
+    outputSchemaId: "plan-outline-v1" as const,
+    createdAt: input.createdAt
   };
   const receiptHash = instructionContentHash(
     await input.hashPort.digestSha256Hex(canonicalJsonStringify(receiptBody))

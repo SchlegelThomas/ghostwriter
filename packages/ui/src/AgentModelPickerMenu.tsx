@@ -14,6 +14,9 @@ import type { OpenSettingsHandler } from "./settings-focus.js";
 import {
   filterWorkspaceAgentModelPickerOptionsByQuery,
   providerDisplayLabel,
+  WORKSPACE_AGENT_EFFORTS,
+  workspaceAgentEffortLabel,
+  type WorkspaceAgentEffort,
   type WorkspaceAgentModelPickerOption
 } from "./workspace-agent-prefs.js";
 
@@ -24,35 +27,40 @@ const DETAIL_PANE_WIDTH = 180;
 const isWeb = typeof document !== "undefined";
 
 export type AgentModelPickerMenuProps = Readonly<{
+  effort: WorkspaceAgentEffort;
   options: readonly WorkspaceAgentModelPickerOption[];
   selectedValue: AgentModelId;
+  onApplyModelEffort(value: AgentModelId, effort: WorkspaceAgentEffort): void;
   onSelect(value: AgentModelId): void;
   onDismiss?(): void;
   onOpenSettings?: OpenSettingsHandler;
 }>;
 
 export function AgentModelPickerMenu({
-  options,
-  selectedValue,
-  onSelect,
+  effort,
+  onApplyModelEffort,
   onDismiss,
-  onOpenSettings
+  onOpenSettings,
+  onSelect,
+  options,
+  selectedValue
 }: AgentModelPickerMenuProps) {
   const [query, setQuery] = useState("");
   const [hoveredValue, setHoveredValue] = useState<AgentModelId | null>(null);
+  const [editingValue, setEditingValue] = useState<AgentModelId | null>(null);
 
   const filtered = useMemo(
     () => filterWorkspaceAgentModelPickerOptionsByQuery(options, query),
     [options, query]
   );
 
-  const hovered = useMemo(
-    () =>
-      hoveredValue === null
-        ? undefined
-        : filtered.find((option) => option.value === hoveredValue),
-    [filtered, hoveredValue]
+  const targetModelId = hoveredValue ?? editingValue ?? selectedValue;
+  const targetOption = useMemo(
+    () => options.find((option) => option.value === targetModelId),
+    [options, targetModelId]
   );
+  const showEffortSection =
+    targetModelId === editingValue || targetModelId === selectedValue;
 
   return (
     <View
@@ -92,76 +100,136 @@ export function AgentModelPickerMenu({
           ) : (
             filtered.map((option) => {
               const selected = option.value === selectedValue;
+              const editing = option.value === editingValue;
+              const hovered = option.value === hoveredValue;
+              const showEdit = hovered || selected || editing;
+              const hoverIn = (): void => setHoveredValue(option.value);
+              const hoverOut = (): void =>
+                setHoveredValue((current) =>
+                  current === option.value ? null : current
+                );
               return (
-                <Pressable
-                  accessibilityHint={[
-                    `Provider ${providerDisplayLabel(option.provider)}`,
-                    option.bestFor,
-                    option.relativeStrength
-                  ]
-                    .filter((part) => part !== undefined && part.length > 0)
-                    .join(". ")}
-                  accessibilityRole="menuitem"
-                  accessibilityState={{ selected }}
+                <View
                   key={option.value}
-                  onHoverIn={() => setHoveredValue(option.value)}
-                  onHoverOut={() =>
-                    setHoveredValue((current) =>
-                      current === option.value ? null : current
-                    )
-                  }
-                  onPress={() => onSelect(option.value)}
-                  style={({ pressed }) => [
+                  style={[
                     styles.row,
                     selected && styles.rowSelected,
-                    hoveredValue === option.value && styles.rowHover,
-                    pressed && styles.pressed
+                    hovered && styles.rowHover
                   ]}
                 >
-                  <Text
-                    numberOfLines={2}
-                    style={[
-                      styles.rowLabel,
-                      selected && styles.rowLabelSelected
+                  <Pressable
+                    accessibilityHint={[
+                      `Provider ${providerDisplayLabel(option.provider)}`,
+                      option.bestFor,
+                      option.relativeStrength
+                    ]
+                      .filter((part) => part !== undefined && part.length > 0)
+                      .join(". ")}
+                    accessibilityRole="menuitem"
+                    accessibilityState={{ selected }}
+                    onHoverIn={hoverIn}
+                    onHoverOut={hoverOut}
+                    onPress={() => onSelect(option.value)}
+                    style={({ pressed }) => [
+                      styles.rowMain,
+                      pressed && styles.pressed
                     ]}
                   >
-                    {option.label}
-                  </Text>
+                    <Text
+                      numberOfLines={2}
+                      style={[
+                        styles.rowLabel,
+                        selected && styles.rowLabelSelected
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                  {showEdit ? (
+                    <Pressable
+                      accessibilityLabel={`Effort for ${option.label}`}
+                      accessibilityRole="button"
+                      onHoverIn={hoverIn}
+                      onHoverOut={hoverOut}
+                      onPress={() => setEditingValue(option.value)}
+                      style={({ pressed }) => [
+                        styles.editButton,
+                        editing && styles.editButtonActive,
+                        pressed && styles.pressed
+                      ]}
+                    >
+                      <Text style={styles.editButtonText}>Edit</Text>
+                    </Pressable>
+                  ) : (
+                    <View style={styles.editSpacer} />
+                  )}
                   {selected ? (
                     <Check color={colors.kicker} size={14} weight="bold" />
                   ) : (
                     <View style={styles.checkSpacer} />
                   )}
-                </Pressable>
+                </View>
               );
             })
           )}
         </ScrollView>
-        <View
-          accessibilityLiveRegion="polite"
-          style={styles.detailPane}
-        >
-          {hovered !== undefined ? (
-            <ScrollView
-              nestedScrollEnabled
-              style={styles.detailScroll}
-            >
-              <Text style={styles.detailTitle}>{hovered.label}</Text>
+        <View accessibilityLiveRegion="polite" style={styles.detailPane}>
+          {targetOption !== undefined ? (
+            <ScrollView nestedScrollEnabled style={styles.detailScroll}>
+              <Text style={styles.detailTitle}>{targetOption.label}</Text>
               <Text style={styles.detailMeta}>
-                Provider · {providerDisplayLabel(hovered.provider)}
+                Provider · {providerDisplayLabel(targetOption.provider)}
               </Text>
-              {hovered.bestFor !== undefined && hovered.bestFor.length > 0 ? (
+              {showEffortSection ? (
                 <View style={styles.detailBlock}>
-                  <Text style={styles.detailLabel}>Best for</Text>
-                  <Text style={styles.detailBody}>{hovered.bestFor}</Text>
+                  <Text style={styles.detailLabel}>Effort</Text>
+                  {WORKSPACE_AGENT_EFFORTS.map((nextEffort) => {
+                    const effortSelected = effort === nextEffort;
+                    return (
+                      <Pressable
+                        accessibilityRole="menuitem"
+                        accessibilityState={{ selected: effortSelected }}
+                        key={nextEffort}
+                        onPress={() =>
+                          onApplyModelEffort(targetOption.value, nextEffort)
+                        }
+                        style={({ pressed }) => [
+                          styles.effortRow,
+                          effortSelected && styles.effortRowSelected,
+                          pressed && styles.pressed
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.effortRowLabel,
+                            effortSelected && styles.effortRowLabelSelected
+                          ]}
+                        >
+                          {workspaceAgentEffortLabel(nextEffort)}
+                        </Text>
+                        {effortSelected ? (
+                          <Check color={colors.kicker} size={12} weight="bold" />
+                        ) : (
+                          <View style={styles.effortCheckSpacer} />
+                        )}
+                      </Pressable>
+                    );
+                  })}
                 </View>
               ) : null}
-              {hovered.relativeStrength !== undefined &&
-              hovered.relativeStrength.length > 0 ? (
+              {targetOption.bestFor !== undefined &&
+              targetOption.bestFor.length > 0 ? (
+                <View style={styles.detailBlock}>
+                  <Text style={styles.detailLabel}>Best for</Text>
+                  <Text style={styles.detailBody}>{targetOption.bestFor}</Text>
+                </View>
+              ) : null}
+              {targetOption.relativeStrength !== undefined &&
+              targetOption.relativeStrength.length > 0 ? (
                 <View style={styles.detailBlock}>
                   <Text style={styles.detailLabel}>Compared with others</Text>
                   <Text style={styles.detailBody}>
-                    {hovered.relativeStrength}
+                    {targetOption.relativeStrength}
                   </Text>
                 </View>
               ) : null}
@@ -257,9 +325,14 @@ const styles = StyleSheet.create({
   row: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
     minWidth: 0,
-    paddingHorizontal: 14,
+    paddingHorizontal: 14
+  },
+  /** The label area selects the model; Edit stays a sibling so it can't be swallowed. */
+  rowMain: {
+    flex: 1,
+    minWidth: 0,
     paddingVertical: 9
   },
   rowSelected: {
@@ -277,6 +350,22 @@ const styles = StyleSheet.create({
   },
   rowLabelSelected: {
     fontFamily: fonts.uiSemibold
+  },
+  editButton: {
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3
+  },
+  editButtonActive: {
+    backgroundColor: colors.accentSoft
+  },
+  editButtonText: {
+    color: colors.kicker,
+    fontFamily: fonts.uiMedium,
+    fontSize: 10
+  },
+  editSpacer: {
+    width: 36
   },
   checkSpacer: {
     height: 14,
@@ -342,6 +431,31 @@ const styles = StyleSheet.create({
     fontFamily: fonts.ui,
     fontSize: 11,
     lineHeight: 15
+  },
+  effortRow: {
+    alignItems: "center",
+    borderRadius: 6,
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 5
+  },
+  effortRowSelected: {
+    backgroundColor: colors.accentSoft
+  },
+  effortRowLabel: {
+    color: colors.ink,
+    flex: 1,
+    fontFamily: fonts.ui,
+    fontSize: 11
+  },
+  effortRowLabelSelected: {
+    fontFamily: fonts.uiSemibold
+  },
+  effortCheckSpacer: {
+    height: 12,
+    width: 12
   },
   pressed: {
     opacity: 0.88

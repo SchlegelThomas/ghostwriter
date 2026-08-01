@@ -25,6 +25,11 @@ import {
   resolveManuscriptSelection,
   type ManuscriptSelection
 } from "./manuscript-selection.js";
+import {
+  EntityDraftsPanel,
+  type EntityDraftsPanelProps
+} from "./EntityDraftsPanel.js";
+import type { EntityDraftSummary } from "./entity-draft-model.js";
 import { ghostwriterTheme } from "./theme.js";
 
 const { colors, fonts } = ghostwriterTheme;
@@ -68,6 +73,20 @@ type Confirmation = Readonly<{
   command: ProjectCommand;
 }>;
 
+export type SelectionInspectorEntityDraftsProps = Readonly<{
+  entityDrafts?: readonly EntityDraftSummary[];
+  entityDraftsLoading?: boolean;
+  entityDraftMutatingProposalId?: string;
+  entityDraftExpandedId?: string;
+  entityDraftExpandedBody?: string;
+  entityDraftExpandedLoading?: boolean;
+  entityDraftDetailTitles?: Readonly<Record<string, string>>;
+  onRejectEntityDraft?(proposalId: string): void;
+  onAcknowledgeEntityDraft?(proposalId: string): void;
+  onRefreshEntityDrafts?(): void;
+  onSelectEntityDraft?(proposalId: string): void;
+}>;
+
 export type SelectionInspectorProps = Readonly<{
   project: ProjectNavigator;
   selection: ManuscriptSelection;
@@ -76,7 +95,8 @@ export type SelectionInspectorProps = Readonly<{
   onClose?(): void;
   onCommand(command: ProjectCommand): Promise<boolean>;
   onReorder(selection: ManuscriptSelection, offset: -1 | 1): Promise<boolean>;
-}>;
+}> &
+  SelectionInspectorEntityDraftsProps;
 
 type ScenePlacement = Readonly<{
   book: ProjectNavigatorBook;
@@ -590,6 +610,32 @@ function selectionHeading(
   }
 }
 
+function entityDraftsPanelProps(
+  props: SelectionInspectorEntityDraftsProps
+): EntityDraftsPanelProps | undefined {
+  if (
+    props.entityDrafts === undefined &&
+    props.onRefreshEntityDrafts === undefined &&
+    props.onRejectEntityDraft === undefined &&
+    props.onSelectEntityDraft === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    drafts: props.entityDrafts ?? [],
+    loading: props.entityDraftsLoading,
+    mutatingProposalId: props.entityDraftMutatingProposalId,
+    expandedDraftId: props.entityDraftExpandedId,
+    expandedBody: props.entityDraftExpandedBody,
+    expandedLoading: props.entityDraftExpandedLoading,
+    detailTitles: props.entityDraftDetailTitles,
+    onReject: props.onRejectEntityDraft,
+    onAcknowledge: props.onAcknowledgeEntityDraft,
+    onRefresh: props.onRefreshEntityDrafts,
+    onSelect: props.onSelectEntityDraft
+  };
+}
+
 export function SelectionInspector({
   project,
   selection,
@@ -597,7 +643,18 @@ export function SelectionInspector({
   busy = false,
   onClose,
   onCommand,
-  onReorder
+  onReorder,
+  entityDrafts,
+  entityDraftsLoading,
+  entityDraftMutatingProposalId,
+  entityDraftExpandedId,
+  entityDraftExpandedBody,
+  entityDraftExpandedLoading,
+  entityDraftDetailTitles,
+  onRejectEntityDraft,
+  onAcknowledgeEntityDraft,
+  onRefreshEntityDrafts,
+  onSelectEntityDraft
 }: SelectionInspectorProps) {
   const resolved = resolveManuscriptSelection(project, selection);
   const [confirmation, setConfirmation] = useState<Confirmation>();
@@ -605,6 +662,24 @@ export function SelectionInspector({
   const [knowledgeLinkKind, setKnowledgeLinkKind] =
     useState<StoryKnowledgeLinkKind>("related");
   const heading = selectionHeading(project, selection);
+  const draftsPanel = entityDraftsPanelProps({
+    entityDrafts,
+    entityDraftsLoading,
+    entityDraftMutatingProposalId,
+    entityDraftExpandedId,
+    entityDraftExpandedBody,
+    entityDraftExpandedLoading,
+    entityDraftDetailTitles,
+    onRejectEntityDraft,
+    onAcknowledgeEntityDraft,
+    onRefreshEntityDrafts,
+    onSelectEntityDraft
+  });
+  const showEntityDrafts =
+    draftsPanel !== undefined &&
+    (selection.kind === "scene" ||
+      selection.kind === "project" ||
+      selection.kind === "storyKnowledge");
   const scenes = useMemo(() => allScenes(project), [project]);
   const selectedWorkspaceScene = scenes.find(
     (scene) => scene.id === selectedSceneId
@@ -1452,6 +1527,12 @@ export function SelectionInspector({
           </View>
         )}
         {content}
+        {showEntityDrafts ? (
+          <EntityDraftsPanel
+            {...draftsPanel}
+            busy={busy || entityDraftMutatingProposalId !== undefined}
+          />
+        ) : null}
       </ScrollView>
     </View>
   );

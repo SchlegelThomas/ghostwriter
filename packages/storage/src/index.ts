@@ -4,6 +4,7 @@ export * from "./migrate.js";
 export * from "./postgres-agent-foundation-repository.js";
 export * from "./postgres-agent-run-completion-uow.js";
 export * from "./postgres-agent-guidance-repository.js";
+export * from "./postgres-catalog-playbook-override-repository.js";
 export * from "./postgres-capture-attachment-repository.js";
 export * from "./postgres-provider-credential-repository.js";
 export * from "./postgres-mcp-grant-repository.js";

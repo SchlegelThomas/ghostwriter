@@ -47,6 +47,9 @@ export type AgentContextClass = (typeof AGENT_CONTEXT_CLASSES)[number];
 
 export const AGENT_OUTPUT_SCHEMA_IDS = Object.freeze([
   "capture-reflection-v1",
+  "plan-outline-v1",
+  "catalog-memo-v1",
+  "pacing-findings-v1",
   "sketch-fields-v1",
   "character-sheet-v1",
   "backdrop-fields-v1"
@@ -74,14 +77,20 @@ export const CAPTURE_REFLECTION_WORKFLOW_ID = "scene-partner.capture-reflection"
 export const SKETCH_PARTNER_WORKFLOW_ID = "sketch-partner.craft-fields" as const;
 export const CHARACTER_COACH_WORKFLOW_ID = "character-coach.sheet-fields" as const;
 export const WORLDKEEPER_WORKFLOW_ID = "worldkeeper.backdrop-fields" as const;
+export const PLAN_MODE_OUTLINE_WORKFLOW_ID = "plan-mode.outline" as const;
+export const CATALOG_AGENT_MEMO_WORKFLOW_ID = "catalog-agent.memo" as const;
 
 export type CaptureReflectionWorkflowId = typeof CAPTURE_REFLECTION_WORKFLOW_ID;
+export type PlanModeOutlineWorkflowId = typeof PLAN_MODE_OUTLINE_WORKFLOW_ID;
+export type CatalogAgentMemoWorkflowId = typeof CATALOG_AGENT_MEMO_WORKFLOW_ID;
 export type SketchPartnerWorkflowId = typeof SKETCH_PARTNER_WORKFLOW_ID;
 export type CharacterCoachWorkflowId = typeof CHARACTER_COACH_WORKFLOW_ID;
 export type WorldkeeperWorkflowId = typeof WORLDKEEPER_WORKFLOW_ID;
 
 export const AGENT_WORKFLOW_IDS = Object.freeze([
   CAPTURE_REFLECTION_WORKFLOW_ID,
+  PLAN_MODE_OUTLINE_WORKFLOW_ID,
+  CATALOG_AGENT_MEMO_WORKFLOW_ID,
   SKETCH_PARTNER_WORKFLOW_ID,
   CHARACTER_COACH_WORKFLOW_ID,
   WORLDKEEPER_WORKFLOW_ID
@@ -122,6 +131,8 @@ export class CraftTargetRequiredError extends Error {
 export type InstructionLayerKind =
   | "product-policy"
   | "workflow-contract"
+  | "agent-doctrine"
+  | "lens-overlay"
   | "account-preferences"
   | "project-instructions"
   | "playbook"
@@ -327,6 +338,26 @@ export function createCaptureReflectionAssignment(
   });
 }
 
+export type PlanModeOutlineAssignment = Readonly<{
+  workflowId: PlanModeOutlineWorkflowId;
+  captureId: CaptureId;
+}>;
+
+export function createPlanModeOutlineAssignment(
+  input: PlanModeOutlineAssignment
+): PlanModeOutlineAssignment {
+  if (input.workflowId !== PLAN_MODE_OUTLINE_WORKFLOW_ID) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Assignment workflow does not match plan-mode outline."
+    );
+  }
+  return Object.freeze({
+    workflowId: input.workflowId,
+    captureId: input.captureId
+  });
+}
+
 export function createCraftPartnerAssignment(
   input: CraftPartnerAssignment
 ): CraftPartnerAssignment {
@@ -373,7 +404,7 @@ export function createCraftPartnerAssignment(
 
 export function craftPartnerOutputSchemaId(
   workflowId: CraftPartnerWorkflowId
-): Exclude<AgentOutputSchemaId, "capture-reflection-v1"> {
+): Exclude<AgentOutputSchemaId, "capture-reflection-v1" | "plan-outline-v1"> {
   switch (workflowId) {
     case SKETCH_PARTNER_WORKFLOW_ID:
       return "sketch-fields-v1";

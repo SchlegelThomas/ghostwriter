@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AiSetupPanel } from "./AiSetupPanel.js";
 import { ModelPreferencesPanel } from "./ModelPreferencesPanel.js";
+import { CatalogPlaybooksPanel } from "./CatalogPlaybooksPanel.js";
 
 const { colors, fonts } = ghostwriterTheme;
 
@@ -15,13 +16,15 @@ const SETTINGS_TABS: readonly Readonly<{
 }>[] = Object.freeze([
   Object.freeze({ id: "providers", label: "Providers" }),
   Object.freeze({ id: "models", label: "Models" }),
-  Object.freeze({ id: "defaults", label: "Defaults" })
+  Object.freeze({ id: "defaults", label: "Defaults" }),
+  Object.freeze({ id: "playbooks", label: "Playbooks" })
 ]);
 
 export type SettingsPanelProps = Readonly<{
   onClose(): void;
   onConfigured?(): void;
   accountId?: string;
+  projectId?: string;
   providerStatusSignal?: number;
   onPreferencesChanged?(): void;
   activeTab?: SettingsFocus;
@@ -32,6 +35,7 @@ export function SettingsPanel({
   onClose,
   onConfigured,
   accountId,
+  projectId,
   providerStatusSignal = 0,
   onPreferencesChanged,
   activeTab: controlledTab,
@@ -145,6 +149,14 @@ export function SettingsPanel({
               providerStatusSignal={providerStatusSignal}
               section="defaults"
             />
+          </View>
+        ) : null}
+        {activeTab === "playbooks" ? (
+          <View
+            accessibilityLabel="Catalog playbooks settings"
+            style={styles.tabPanelFill}
+          >
+            <CatalogPlaybooksPanel projectId={projectId} />
           </View>
         ) : null}
       </View>

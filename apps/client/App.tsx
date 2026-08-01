@@ -8,6 +8,8 @@ import type {
   AgentModelId,
   BookId,
   CanvasCommand,
+  CatalogAgentId,
+  CatalogMemoLens,
   CanvasObjectId,
   CanvasRevisionId,
   ProjectCommand,
@@ -64,11 +66,37 @@ import {
   type WorkspaceAgentMode,
   type WorkspaceAvailableModel,
   type SettingsFocus,
+  type WorkspaceChatSessionsState,
+  activeWorkspaceChatMessages,
+  activeWorkspaceChatSession,
+  appendWorkspaceChatMessage,
+  collectWorkspaceChatPriorTurns,
+  createWorkspaceChatSession,
+  deleteWorkspaceChatSession,
+  emptyWorkspaceChatSessionsState,
+  findLastUserMessage,
+  forkWorkspaceChatSession,
+  loadWorkspaceChatSessions,
+  removeLastAssistantTurn,
+  renameWorkspaceChatSession,
+  replaceWorkspaceChatMessages,
+  saveWorkspaceChatSessions,
+  setActiveWorkspaceChatSession,
+  truncateMessagesBeforeUserMessage,
+  updateActiveWorkspaceChatSessionPrefs,
   sceneSelection,
-  workspaceModeForComposition
+  workspaceModeForComposition,
+  resolveAgentToolkitAction,
+  type AgentToolkitId,
+  type PlansAgentDeepLink,
+  type EntityDraftSummary,
+  type EntityDraftTarget,
+  entityDraftDetailTitle,
+  entityDraftPrimaryAction,
+  formatEntityDraftDetailBody
 } from "@ghostwriter/ui";
 import { useFonts } from "expo-font";
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState, useCallback } from "react";
 import { ActivityIndicator, Linking, View } from "react-native";
 import {
   DraftPanel,
@@ -111,14 +139,22 @@ import {
   postCharacterVisualApply,
   postCharacterVisualJob,
   promoteCaptureToScene,
+  persistPlanOutline,
   releaseSceneLease,
+  runCatalogAgent,
   restoreCanvasRevision,
   saveCanvasPreference,
   sendWorkspaceChat,
+  sendWorkspaceChatStream,
   signOut,
   synthesizeReaderSpeech,
   undoCanvas,
   updateWriterProfile,
+  listAgentProposals,
+  getAgentProposal,
+  rejectAgentProposal,
+  acknowledgeAgentProposal,
+  type AgentProposalSummaryResponse,
   type BookCoverImageJobOption,
   type BookCoverImageJobStatus,
   type CharacterVisualJobOption,
@@ -129,8 +165,11 @@ import {
   type CanvasSceneGeometryInput,
   type CanvasScenePlacementInput,
   type CanvasWorkspaceResponse,
-  type CurrentWriter
+  type CurrentWriter,
+  type WorkspaceChatAttachment
 } from "./src/api.js";
+import { useDictationSpeechRecognition } from "./src/useDictationSpeechRecognition.js";
+import { getSpeechRecognitionConstructor } from "./src/speech-recognition-dictation.js";
 import {
   canvasFailureDisposition,
   preferredCanvasSceneId
@@ -259,6 +298,44 @@ function projectSceneIds(project: ProjectNavigator): readonly SceneId[] {
   return projectScenes(project).map((scene) => scene.id);
 }
 
+function mapProposalSummaryToEntityDraft(
+  proposal: AgentProposalSummaryResponse
+): EntityDraftSummary {
+  return Object.freeze({
+    id: proposal.id,
+    outputSchemaId: proposal.outputSchemaId,
+    createdAt: proposal.createdAt,
+    ...(proposal.baseCaptureId === undefined
+      ? {}
+      : { baseCaptureId: proposal.baseCaptureId }),
+    preview: proposal.preview
+  });
+}
+
+function buildEntityDraftPlansDeepLink(
+  draft: EntityDraftSummary
+): PlansAgentDeepLink {
+  let workflowStep: PlansAgentDeepLink["workflowStep"] = "scene-partner";
+  if (draft.outputSchemaId === "plan-outline-v1") {
+    workflowStep = "plan-outline";
+  } else if (
+    draft.outputSchemaId === "sketch-fields-v1" ||
+    draft.outputSchemaId === "character-sheet-v1"
+  ) {
+    workflowStep = "craft-partner";
+  } else if (draft.outputSchemaId === "backdrop-fields-v1") {
+    workflowStep = "worldkeeper";
+  }
+  return Object.freeze({
+    ...(draft.baseCaptureId === undefined ? {} : { captureId: draft.baseCaptureId }),
+    proposalId: draft.id,
+    ...(draft.outputSchemaId === "plan-outline-v1"
+      ? { highlight: "plan-outline" as const }
+      : {}),
+    workflowStep
+  });
+}
+
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
     [ghostwriterTheme.fonts.brand]: Parisienne_400Regular,
@@ -336,7 +413,17 @@ export default function App() {
     useState<ReaderVoicePack>("default");
   const [readerSpeaking, setReaderSpeaking] = useState(false);
   const readerAudioRef = useRef<{ pause(): void } | null>(null);
-  const [chatMessages, setChatMessages] = useState<WorkspaceChatMessage[]>([]);
+  const chatAbortRef = useRef<AbortController | undefined>(undefined);
+  const [chatStreaming, setChatStreaming] = useState(false);
+  const [chatDictating, setChatDictating] = useState(false);
+  const chatDictateAppendRef = useRef<((text: string) => void) | undefined>(
+    undefined
+  );
+  const chatDictationAvailable =
+    typeof window !== "undefined" &&
+    getSpeechRecognitionConstructor() !== undefined;
+  const [chatSessionsState, setChatSessionsState] =
+    useState<WorkspaceChatSessionsState>(() => emptyWorkspaceChatSessionsState());
   const [chatMode, setChatMode] = useState<WorkspaceAgentMode>(
     DEFAULT_WORKSPACE_AGENT_PREFS.mode
   );
@@ -350,6 +437,30 @@ export default function App() {
   const [chatAvailableModels, setChatAvailableModels] = useState<
     readonly WorkspaceAvailableModel[]
   >([]);
+  const chatMessages = useMemo(
+    () => [...activeWorkspaceChatMessages(chatSessionsState)],
+    [chatSessionsState]
+  );
+
+  useDictationSpeechRecognition({
+    active: chatDictating,
+    onInsertProse: (text) => chatDictateAppendRef.current?.(text),
+    onStopDictation: () => setChatDictating(false),
+    setAssistStatus: () => undefined,
+    statusCopy: {
+      listening: "Listening — speech enters the Agent composer.",
+      unavailable: "Dictation is unavailable in this browser.",
+      couldNotStart: "Could not start dictation.",
+      stopped: "Dictation stopped — microphone permission or engine error."
+    }
+  });
+  const chatSessionTabs = useMemo(
+    () =>
+      chatSessionsState.sessions.map((session) =>
+        Object.freeze({ id: session.id, title: session.title })
+      ),
+    [chatSessionsState.sessions]
+  );
   const imageAvailableModels = useMemo(
     () => filterWorkspaceImageModels(chatAvailableModels),
     [chatAvailableModels]
@@ -384,6 +495,9 @@ export default function App() {
   const [captureProblemWhileClosed, setCaptureProblemWhileClosed] =
     useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
+  const [plansAgentDeepLink, setPlansAgentDeepLink] = useState<
+    PlansAgentDeepLink | undefined
+  >();
   const [inboxActivity, setInboxActivity] =
     useState<InboxPanelActivity>("idle");
   const [inboxRefreshSignal, setInboxRefreshSignal] = useState(0);
@@ -414,6 +528,26 @@ export default function App() {
   const [castFocusKnowledgeId, setCastFocusKnowledgeId] = useState<
     StoryKnowledgeId | undefined
   >();
+  const [entityDraftTarget, setEntityDraftTarget] = useState<
+    EntityDraftTarget | undefined
+  >();
+  const [entityDrafts, setEntityDrafts] = useState<
+    readonly EntityDraftSummary[]
+  >([]);
+  const [entityDraftsLoading, setEntityDraftsLoading] = useState(false);
+  const [entityDraftMutatingProposalId, setEntityDraftMutatingProposalId] =
+    useState<string | undefined>();
+  const [entityDraftExpandedId, setEntityDraftExpandedId] = useState<
+    string | undefined
+  >();
+  const [entityDraftExpandedBody, setEntityDraftExpandedBody] = useState<
+    string | undefined
+  >();
+  const [entityDraftExpandedLoading, setEntityDraftExpandedLoading] =
+    useState(false);
+  const [entityDraftDetailTitles, setEntityDraftDetailTitles] = useState<
+    Readonly<Record<string, string>>
+  >({});
   const coverJobPollRef = useRef<ReturnType<typeof setInterval> | undefined>(
     undefined
   );
@@ -844,15 +978,20 @@ export default function App() {
       setChatMode(DEFAULT_WORKSPACE_AGENT_PREFS.mode);
       setChatModel(DEFAULT_WORKSPACE_AGENT_PREFS.model);
       setChatEffort(DEFAULT_WORKSPACE_AGENT_PREFS.effort);
-      setChatMessages([]);
+      setChatSessionsState(emptyWorkspaceChatSessionsState());
       return;
     }
-    const prefs = readWorkspaceAgentPrefs(selectedProject.id);
-    setChatMode(prefs.mode);
-    setChatModel(prefs.model);
-    setChatEffort(prefs.effort);
-    setChatMessages([]);
-  }, [selectedProject?.id]);
+    const loaded = loadWorkspaceChatSessions(
+      writer?.account.id,
+      selectedProject.id
+    );
+    setChatSessionsState(loaded);
+    const projectPrefs = readWorkspaceAgentPrefs(selectedProject.id);
+    const activeSession = activeWorkspaceChatSession(loaded);
+    setChatMode(activeSession?.mode ?? projectPrefs.mode);
+    setChatModel(activeSession?.model ?? projectPrefs.model);
+    setChatEffort(activeSession?.effort ?? projectPrefs.effort);
+  }, [selectedProject?.id, writer?.account.id]);
 
   useEffect(() => {
     if (selectedProject === undefined) {
@@ -907,6 +1046,40 @@ export default function App() {
     writer?.account.id
   ]);
 
+  function persistChatSessions(state: WorkspaceChatSessionsState): void {
+    if (selectedProject === undefined) return;
+    saveWorkspaceChatSessions(writer?.account.id, selectedProject.id, state);
+  }
+
+  function replaceActiveChatMessages(
+    mutator: (messages: WorkspaceChatMessage[]) => WorkspaceChatMessage[]
+  ): void {
+    setChatSessionsState((current) => {
+      const activeId = current.activeSessionId;
+      const active = current.sessions.find((session) => session.id === activeId);
+      if (active === undefined) return current;
+      const next = replaceWorkspaceChatMessages(
+        current,
+        activeId,
+        mutator([...active.messages])
+      );
+      persistChatSessions(next);
+      return next;
+    });
+  }
+
+  function appendActiveChatMessage(message: WorkspaceChatMessage): void {
+    setChatSessionsState((current) => {
+      const next = appendWorkspaceChatMessage(
+        current,
+        current.activeSessionId,
+        message
+      );
+      persistChatSessions(next);
+      return next;
+    });
+  }
+
   function persistChatPrefs(next: Readonly<{
     mode?: WorkspaceAgentMode;
     model?: AgentModelId;
@@ -917,6 +1090,70 @@ export default function App() {
       mode: next.mode ?? chatMode,
       model: next.model ?? chatModel,
       effort: next.effort ?? chatEffort
+    });
+    setChatSessionsState((current) => {
+      const updated = updateActiveWorkspaceChatSessionPrefs(current, {
+        ...(next.mode === undefined ? {} : { mode: next.mode }),
+        ...(next.model === undefined ? {} : { model: next.model }),
+        ...(next.effort === undefined ? {} : { effort: next.effort })
+      });
+      persistChatSessions(updated);
+      return updated;
+    });
+  }
+
+  function handleChatSessionSelect(sessionId: string): void {
+    setChatSessionsState((current) => {
+      const next = setActiveWorkspaceChatSession(current, sessionId);
+      persistChatSessions(next);
+      const session = next.sessions.find((entry) => entry.id === sessionId);
+      const projectPrefs =
+        selectedProject === undefined
+          ? DEFAULT_WORKSPACE_AGENT_PREFS
+          : readWorkspaceAgentPrefs(selectedProject.id);
+      setChatMode(session?.mode ?? projectPrefs.mode);
+      setChatModel(session?.model ?? projectPrefs.model);
+      setChatEffort(session?.effort ?? projectPrefs.effort);
+      return next;
+    });
+  }
+
+  function handleNewChatSession(): void {
+    setChatSessionsState((current) => {
+      const next = createWorkspaceChatSession(current, {
+        mode: chatMode,
+        model: chatModel,
+        effort: chatEffort
+      });
+      persistChatSessions(next);
+      return next;
+    });
+  }
+
+  function handleRenameChatSession(sessionId: string, title: string): void {
+    setChatSessionsState((current) => {
+      const next = renameWorkspaceChatSession(current, sessionId, title);
+      persistChatSessions(next);
+      return next;
+    });
+  }
+
+  function handleDeleteChatSession(sessionId: string): void {
+    setChatSessionsState((current) => {
+      const next = deleteWorkspaceChatSession(current, sessionId);
+      if (next === null) return current;
+      persistChatSessions(next);
+      const session = next.sessions.find(
+        (entry) => entry.id === next.activeSessionId
+      );
+      const projectPrefs =
+        selectedProject === undefined
+          ? DEFAULT_WORKSPACE_AGENT_PREFS
+          : readWorkspaceAgentPrefs(selectedProject.id);
+      setChatMode(session?.mode ?? projectPrefs.mode);
+      setChatModel(session?.model ?? projectPrefs.model);
+      setChatEffort(session?.effort ?? projectPrefs.effort);
+      return next;
     });
   }
 
@@ -2093,68 +2330,518 @@ export default function App() {
     setReaderSpeaking(false);
   }
 
+  function workspaceChatAttachmentsForApi(
+    attachments: WorkspaceChatSendInput["attachments"]
+  ): readonly WorkspaceChatAttachment[] | undefined {
+    if (attachments === undefined || attachments.length === 0) return undefined;
+    return attachments.map(({ kind, name, mimeType, byteLength, dataBase64 }) =>
+      Object.freeze({
+        kind,
+        name,
+        mimeType,
+        byteLength,
+        ...(dataBase64 === undefined ? {} : { dataBase64 })
+      })
+    );
+  }
+
   async function handleChatSend(input: WorkspaceChatSendInput): Promise<void> {
-    const userMessage: WorkspaceChatMessage = {
-      id: `chat-user-${Date.now()}`,
-      role: "user",
-      body: input.message
-    };
-    setChatMessages((current) => [...current, userMessage]);
+    chatAbortRef.current?.abort();
+    const abortController = new AbortController();
+    chatAbortRef.current = abortController;
+    setChatStreaming(true);
+
+    let messagesForTurn = [...(input.baseMessages ?? chatMessages)];
+    if (input.resendFromMessageId !== undefined) {
+      messagesForTurn = [
+        ...truncateMessagesBeforeUserMessage(
+          messagesForTurn,
+          input.resendFromMessageId
+        )
+      ];
+      replaceActiveChatMessages(() => messagesForTurn);
+    }
+
+    const priorTurns =
+      input.priorTurns ??
+      collectWorkspaceChatPriorTurns(
+        input.existingUserMessageId === undefined
+          ? messagesForTurn
+          : truncateMessagesBeforeUserMessage(
+              messagesForTurn,
+              input.existingUserMessageId
+            )
+      );
+
+    const userMessageId =
+      input.existingUserMessageId ?? `chat-user-${Date.now()}`;
+    if (input.existingUserMessageId === undefined) {
+      const userMessage: WorkspaceChatMessage = {
+        id: userMessageId,
+        role: "user",
+        body: input.message
+      };
+      appendActiveChatMessage(userMessage);
+      messagesForTurn = [...messagesForTurn, userMessage];
+    }
+
     const selection =
       selectedProject === undefined || selectedSceneId === undefined
         ? undefined
         : sceneSelection(selectedProject, selectedSceneId);
+    const chatAttachments = workspaceChatAttachmentsForApi(input.attachments);
+    const chatRequest = {
+      message: input.message,
+      projectId: selectedProject?.id,
+      mode: input.mode,
+      model: input.model,
+      effort: input.effort,
+      ...(priorTurns.length === 0 ? {} : { priorTurns }),
+      ...(chatAttachments === undefined ? {} : { attachments: chatAttachments }),
+      ...(selection === undefined
+        ? {}
+        : {
+            selection: {
+              kind: selection.kind,
+              ...("bookId" in selection ? { bookId: selection.bookId } : {}),
+              ...("partId" in selection && selection.partId !== undefined
+                ? { partId: selection.partId }
+                : {}),
+              ...("chapterId" in selection && selection.chapterId !== undefined
+                ? { chapterId: selection.chapterId }
+                : {}),
+              ...("sceneId" in selection ? { sceneId: selection.sceneId } : {}),
+              ...("storyKnowledgeId" in selection
+                ? { storyKnowledgeId: selection.storyKnowledgeId }
+                : {})
+            }
+          })
+    } as const;
+    const assistantId = `chat-assistant-${Date.now()}`;
+    appendActiveChatMessage({
+      id: assistantId,
+      role: "assistant",
+      body: "",
+      streaming: true,
+      statusLabel: "Thinking…",
+      toolTraces: []
+    });
+
+    const finalizeAssistant = (update: Partial<WorkspaceChatMessage>): void => {
+      replaceActiveChatMessages((current) =>
+        current.map((message) =>
+          message.id === assistantId
+            ? { ...message, ...update, streaming: false }
+            : message
+        )
+      );
+    };
+
+    let partialBody = "";
+
     try {
-      const result = await sendWorkspaceChat({
-        message: input.message,
-        projectId: selectedProject?.id,
-        mode: input.mode,
-        model: input.model,
-        effort: input.effort,
-        ...(selection === undefined
+      const result = await sendWorkspaceChatStream(
+        chatRequest,
+        {
+          onStatus: (_phase, label) => {
+            replaceActiveChatMessages((current) =>
+              current.map((message) =>
+                message.id === assistantId
+                  ? { ...message, statusLabel: label }
+                  : message
+              )
+            );
+          },
+          onToolTrace: (trace) => {
+            replaceActiveChatMessages((current) =>
+              current.map((message) =>
+                message.id === assistantId
+                  ? {
+                      ...message,
+                      toolTraces: [...(message.toolTraces ?? []), trace]
+                    }
+                  : message
+              )
+            );
+          },
+          onTextDelta: (delta) => {
+            partialBody += delta;
+            replaceActiveChatMessages((current) =>
+              current.map((message) =>
+                message.id === assistantId
+                  ? {
+                      ...message,
+                      body: `${message.body}${delta}`,
+                      statusLabel: "Writing…"
+                    }
+                  : message
+              )
+            );
+          }
+        },
+        abortController.signal
+      );
+      finalizeAssistant({
+        body: result.reply,
+        ...(result.toolTraces === undefined || result.toolTraces.length === 0
           ? {}
-          : {
-              selection: {
-                kind: selection.kind,
-                ...("bookId" in selection
-                  ? { bookId: selection.bookId }
-                  : {}),
-                ...("partId" in selection && selection.partId !== undefined
-                  ? { partId: selection.partId }
-                  : {}),
-                ...("chapterId" in selection &&
-                selection.chapterId !== undefined
-                  ? { chapterId: selection.chapterId }
-                  : {}),
-                ...("sceneId" in selection
-                  ? { sceneId: selection.sceneId }
-                  : {}),
-                ...("storyKnowledgeId" in selection
-                  ? { storyKnowledgeId: selection.storyKnowledgeId }
-                  : {})
-              }
-            })
+          : { toolTraces: result.toolTraces }),
+        statusLabel: undefined
       });
-      setChatMessages((current) => [
-        ...current,
-        {
-          id: `chat-assistant-${Date.now()}`,
-          role: "assistant",
-          body: result.reply
-        }
-      ]);
     } catch (cause) {
-      setChatMessages((current) => [
-        ...current,
-        {
-          id: `chat-system-${Date.now()}`,
-          role: "system",
+      if (
+        abortController.signal.aborted ||
+        (cause instanceof DOMException && cause.name === "AbortError")
+      ) {
+        finalizeAssistant({
           body:
-            cause instanceof GhostwriterApiError
-              ? cause.message
-              : "Chat could not complete that turn."
+            partialBody.trim().length > 0 ? partialBody.trim() : "Stopped.",
+          statusLabel: undefined
+        });
+        return;
+      }
+      const canFallbackToJson =
+        cause instanceof GhostwriterApiError &&
+        (cause.status === 404 ||
+          cause.code === "STREAM_UNAVAILABLE" ||
+          cause.code === "REQUEST_FAILED");
+      if (canFallbackToJson) {
+        try {
+          const result = await sendWorkspaceChat(chatRequest);
+          finalizeAssistant({
+            body: result.reply,
+            ...(result.toolTraces === undefined || result.toolTraces.length === 0
+              ? {}
+              : { toolTraces: result.toolTraces }),
+            statusLabel: undefined
+          });
+          return;
+        } catch {
+          // fall through to system error
         }
-      ]);
+      }
+      replaceActiveChatMessages((current) =>
+        current
+          .filter((message) => message.id !== assistantId)
+          .concat({
+            id: `chat-system-${Date.now()}`,
+            role: "system",
+            body:
+              cause instanceof GhostwriterApiError
+                ? cause.message
+                : "Chat could not complete that turn.",
+            retryable: true
+          })
+      );
+    } finally {
+      setChatStreaming(false);
+      if (chatAbortRef.current === abortController) {
+        chatAbortRef.current = undefined;
+      }
+    }
+  }
+
+  function handleChatStop(): void {
+    chatAbortRef.current?.abort();
+  }
+
+  function handleForkChatMessage(messageId: string): void {
+    setChatSessionsState((current) => {
+      const next = forkWorkspaceChatSession(
+        current,
+        current.activeSessionId,
+        messageId,
+        { mode: chatMode, model: chatModel, effort: chatEffort }
+      );
+      if (next === null) return current;
+      persistChatSessions(next);
+      const session = next.sessions.find(
+        (entry) => entry.id === next.activeSessionId
+      );
+      if (session !== undefined) {
+        setChatMode(session.mode ?? chatMode);
+        setChatModel(session.model ?? chatModel);
+        setChatEffort(session.effort ?? chatEffort);
+      }
+      return next;
+    });
+  }
+
+  function handleRegenerateChatMessage(messageId: string): void {
+    const active = activeWorkspaceChatSession(chatSessionsState);
+    if (active === undefined) return;
+    const message = active.messages.find((entry) => entry.id === messageId);
+    if (message?.role !== "assistant") return;
+    const truncated = removeLastAssistantTurn(active.messages);
+    const lastUser = findLastUserMessage(truncated);
+    if (lastUser === undefined) return;
+    replaceActiveChatMessages(() => [...truncated]);
+    void handleChatSend({
+      message: lastUser.body,
+      mode: chatMode,
+      model: chatModel,
+      effort: chatEffort,
+      existingUserMessageId: lastUser.id,
+      baseMessages: truncated,
+      priorTurns: collectWorkspaceChatPriorTurns(
+        truncateMessagesBeforeUserMessage(truncated, lastUser.id)
+      )
+    });
+  }
+
+  function handleRetryChatTurn(): void {
+    const lastUser = findLastUserMessage(chatMessages);
+    if (lastUser === undefined) return;
+    const withoutSystem = chatMessages.filter(
+      (message) => message.role !== "system"
+    );
+    replaceActiveChatMessages(() => withoutSystem);
+    void handleChatSend({
+      message: lastUser.body,
+      mode: chatMode,
+      model: chatModel,
+      effort: chatEffort,
+      existingUserMessageId: lastUser.id,
+      baseMessages: withoutSystem,
+      priorTurns: collectWorkspaceChatPriorTurns(
+        truncateMessagesBeforeUserMessage(withoutSystem, lastUser.id)
+      )
+    });
+  }
+
+  function handleOpenChatScene(): void {
+    if (selectedSceneId === undefined) return;
+    void selectWorkspaceScene(selectedSceneId);
+  }
+
+  function appendChatStatusMessage(body: string): void {
+    appendActiveChatMessage({
+      id: `chat-system-${Date.now()}`,
+      role: "system",
+      body
+    });
+  }
+
+  const planOutlineText = useMemo(() => {
+    if (chatMode !== "plan") return undefined;
+    for (let index = chatMessages.length - 1; index >= 0; index -= 1) {
+      const message = chatMessages[index];
+      if (message?.role === "assistant") {
+        return message.body;
+      }
+    }
+    return undefined;
+  }, [chatMessages, chatMode]);
+
+  async function handleSavePlanToPlans(outlineText: string): Promise<void> {
+    if (selectedProject === undefined) return;
+    try {
+      const result = await persistPlanOutline({
+        projectId: selectedProject.id,
+        outlineText,
+        model: chatModel
+      });
+      appendChatStatusMessage("Saved to Plans.");
+      setInboxSelectedCaptureId(result.captureId);
+      setPlansAgentDeepLink({
+        captureId: result.captureId,
+        proposalId: result.proposalId,
+        highlight: "plan-outline",
+        workflowStep: "plan-outline"
+      });
+      bumpInboxRefresh();
+      void openInboxWorkspace();
+    } catch (cause) {
+      appendChatStatusMessage(
+        cause instanceof GhostwriterApiError
+          ? cause.message
+          : "Ghostwriter could not save that outline to Plans."
+      );
+    }
+  }
+
+  function handleAgentToolkitAction(
+    id: AgentToolkitId,
+    toolkitSelection: Parameters<typeof resolveAgentToolkitAction>[1]
+  ): void {
+    const result = resolveAgentToolkitAction(id, toolkitSelection);
+    if (!result.ok) {
+      appendChatStatusMessage(result.refusalMessage);
+      return;
+    }
+    if (result.kind === "cover") {
+      setCoverReviewBookId(result.bookId);
+      appendChatStatusMessage(result.statusMessage);
+      return;
+    }
+    if (result.deepLink.captureId !== undefined) {
+      setInboxSelectedCaptureId(result.deepLink.captureId);
+    }
+    setPlansAgentDeepLink(result.deepLink);
+    void openInboxWorkspace();
+    appendChatStatusMessage(result.statusMessage);
+  }
+
+  async function handleCatalogAgentRun(
+    agentId: CatalogAgentId,
+    toolkitSelection: Parameters<typeof resolveAgentToolkitAction>[1],
+    lens?: CatalogMemoLens
+  ): Promise<void> {
+    if (selectedProject === undefined) return;
+    try {
+      const proposal = await runCatalogAgent({
+        projectId: selectedProject.id,
+        agentId,
+        model: chatModel,
+        effort: chatEffort,
+        ...(lens === undefined ? {} : { lens }),
+        ...(toolkitSelection.sceneId === undefined
+          ? {}
+          : { sceneId: toolkitSelection.sceneId }),
+        ...(toolkitSelection.storyKnowledgeId === undefined
+          ? {}
+          : { storyKnowledgeId: toolkitSelection.storyKnowledgeId }),
+        ...(toolkitSelection.bookId === undefined
+          ? {}
+          : { bookId: toolkitSelection.bookId })
+      });
+      appendChatStatusMessage(
+        proposal.primaryTarget.kind === "scene"
+          ? "Draft ready on Scene."
+          : proposal.primaryTarget.kind === "story-knowledge"
+            ? "Draft ready on Cast."
+            : "Draft ready on Project."
+      );
+      await loadEntityDrafts();
+    } catch (cause) {
+      appendChatStatusMessage(
+        cause instanceof GhostwriterApiError
+          ? cause.message
+          : "Ghostwriter could not run that catalog agent."
+      );
+    }
+  }
+
+  const loadEntityDrafts = useCallback(async () => {
+    if (selectedProject === undefined || entityDraftTarget === undefined) {
+      setEntityDrafts([]);
+      setEntityDraftDetailTitles({});
+      return;
+    }
+    setEntityDraftsLoading(true);
+    try {
+      const proposals = await listAgentProposals(selectedProject.id, {
+        targetKind: entityDraftTarget.targetKind,
+        targetId: entityDraftTarget.targetId,
+        status: "ready"
+      });
+      setEntityDrafts(proposals.map(mapProposalSummaryToEntityDraft));
+    } catch {
+      setEntityDrafts([]);
+    } finally {
+      setEntityDraftsLoading(false);
+    }
+  }, [entityDraftTarget, selectedProject]);
+
+  useEffect(() => {
+    setEntityDraftExpandedId(undefined);
+    setEntityDraftExpandedBody(undefined);
+    void loadEntityDrafts();
+  }, [loadEntityDrafts]);
+
+  async function handleRejectEntityDraft(proposalId: string): Promise<void> {
+    if (selectedProject === undefined) return;
+    setEntityDraftMutatingProposalId(proposalId);
+    try {
+      await rejectAgentProposal({
+        projectId: selectedProject.id,
+        proposalId
+      });
+      if (entityDraftExpandedId === proposalId) {
+        setEntityDraftExpandedId(undefined);
+        setEntityDraftExpandedBody(undefined);
+      }
+      await loadEntityDrafts();
+    } catch (cause) {
+      appendChatStatusMessage(
+        cause instanceof GhostwriterApiError
+          ? cause.message
+          : "Ghostwriter could not reject that draft."
+      );
+    } finally {
+      setEntityDraftMutatingProposalId(undefined);
+    }
+  }
+
+  async function handleAcknowledgeEntityDraft(
+    proposalId: string
+  ): Promise<void> {
+    if (selectedProject === undefined) return;
+    setEntityDraftMutatingProposalId(proposalId);
+    try {
+      await acknowledgeAgentProposal({
+        projectId: selectedProject.id,
+        proposalId
+      });
+      if (entityDraftExpandedId === proposalId) {
+        setEntityDraftExpandedId(undefined);
+        setEntityDraftExpandedBody(undefined);
+      }
+      await loadEntityDrafts();
+    } catch (cause) {
+      appendChatStatusMessage(
+        cause instanceof GhostwriterApiError
+          ? cause.message
+          : "Ghostwriter could not acknowledge that draft."
+      );
+    } finally {
+      setEntityDraftMutatingProposalId(undefined);
+    }
+  }
+
+  async function handleSelectEntityDraft(proposalId: string): Promise<void> {
+    const draft = entityDrafts.find((candidate) => candidate.id === proposalId);
+    if (draft === undefined || selectedProject === undefined) return;
+
+    if (entityDraftPrimaryAction(draft) === "open-in-plans") {
+      if (draft.baseCaptureId !== undefined) {
+        setInboxSelectedCaptureId(draft.baseCaptureId);
+      }
+      setPlansAgentDeepLink(buildEntityDraftPlansDeepLink(draft));
+      void openInboxWorkspace();
+      return;
+    }
+
+    if (entityDraftExpandedId === proposalId) {
+      setEntityDraftExpandedId(undefined);
+      setEntityDraftExpandedBody(undefined);
+      return;
+    }
+
+    setEntityDraftExpandedId(proposalId);
+    setEntityDraftExpandedBody(undefined);
+    setEntityDraftExpandedLoading(true);
+    try {
+      const proposal = await getAgentProposal({
+        projectId: selectedProject.id,
+        proposalId
+      });
+      const title = entityDraftDetailTitle(
+        proposal.outputSchemaId,
+        proposal.payload
+      );
+      if (title !== undefined) {
+        setEntityDraftDetailTitles((current) =>
+          Object.freeze({ ...current, [proposalId]: title })
+        );
+      }
+      setEntityDraftExpandedBody(
+        formatEntityDraftDetailBody(proposal.outputSchemaId, proposal.payload)
+      );
+    } catch {
+      setEntityDraftExpandedBody("Could not load this draft.");
+    } finally {
+      setEntityDraftExpandedLoading(false);
     }
   }
 
@@ -2654,6 +3341,8 @@ export default function App() {
         onOpenSettings={openSettings}
         renderInbox={(presentation: InboxWorkspacePresentation) => (
           <InboxPanel
+            agentDeepLink={plansAgentDeepLink}
+            onAgentDeepLinkConsumed={() => setPlansAgentDeepLink(undefined)}
             canvasVersion={canvasWorkspace?.board.version}
             compact={presentation.compact}
             ensureCanvasVersion={() => ensureCanvasVersionForHandoff()}
@@ -2690,6 +3379,19 @@ export default function App() {
         chatMode={chatMode}
         chatModel={chatModel}
         chatEffort={chatEffort}
+        chatSessions={chatSessionTabs}
+        activeChatSessionId={chatSessionsState.activeSessionId}
+        onChatSessionSelect={handleChatSessionSelect}
+        onNewChatSession={handleNewChatSession}
+        onRenameChatSession={handleRenameChatSession}
+        onDeleteChatSession={handleDeleteChatSession}
+        chatStreaming={chatStreaming}
+        onChatStop={handleChatStop}
+        onForkChatMessage={handleForkChatMessage}
+        onRegenerateChatMessage={handleRegenerateChatMessage}
+        onRetryChatTurn={handleRetryChatTurn}
+        onOpenChatScene={handleOpenChatScene}
+        canOpenChatScene={selectedSceneId !== undefined}
         chatProviderConfigured={chatProviderConfigured}
         chatAvailableModels={chatAvailableModels}
         imageAvailableModels={imageAvailableModels}
@@ -2764,8 +3466,39 @@ export default function App() {
                   : { basePrompt: characterVisualJob.basePrompt })
               }
         }
+        entityDraftDetailTitles={entityDraftDetailTitles}
+        entityDraftExpandedBody={entityDraftExpandedBody}
+        entityDraftExpandedId={entityDraftExpandedId}
+        entityDraftExpandedLoading={entityDraftExpandedLoading}
+        entityDraftMutatingProposalId={entityDraftMutatingProposalId}
+        entityDrafts={entityDrafts}
+        entityDraftsLoading={entityDraftsLoading}
+        onAcknowledgeEntityDraft={(proposalId) =>
+          void handleAcknowledgeEntityDraft(proposalId)
+        }
+        onEntityDraftTargetChange={setEntityDraftTarget}
+        onRefreshEntityDrafts={() => void loadEntityDrafts()}
+        onRejectEntityDraft={(proposalId) =>
+          void handleRejectEntityDraft(proposalId)
+        }
+        onSelectEntityDraft={(proposalId) =>
+          void handleSelectEntityDraft(proposalId)
+        }
+        inboxSelectedCaptureId={inboxSelectedCaptureId}
+        onAgentToolkitAction={handleAgentToolkitAction}
+        onCatalogAgentRun={(agentId, selection, lens) =>
+          void handleCatalogAgentRun(agentId, selection, lens)
+        }
         onBack={() => void leaveProject()}
         onChatSend={handleChatSend}
+        chatDictating={chatDictating}
+        onChatToggleDictation={() => setChatDictating((current) => !current)}
+        chatDictationAvailable={chatDictationAvailable}
+        onBindChatDictateAppend={(append) => {
+          chatDictateAppendRef.current = append;
+        }}
+        onSavePlanToPlans={(outlineText) => void handleSavePlanToPlans(outlineText)}
+        planOutlineText={planOutlineText}
         onCommand={runCommand}
         onDrillBack={handleDrillBack}
         onDrillTo={handleDrillTo}
@@ -2977,6 +3710,7 @@ export default function App() {
       >
         <SettingsPanel
           accountId={writer.account.id}
+          projectId={selectedProject.id}
           activeTab={settingsTab}
           onClose={() => {
             setSettingsOpen(false);

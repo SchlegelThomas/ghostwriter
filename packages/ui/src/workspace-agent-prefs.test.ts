@@ -181,4 +181,5 @@ describe("workspace-agent-prefs", () => {
       { value: "gpt-image-1", label: "GPT Image 1 · OpenAI" }
     ]);
   });
+
 });

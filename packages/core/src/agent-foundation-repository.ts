@@ -1,6 +1,8 @@
 import type { ContextReceipt } from "./agent-context-receipt.js";
 import type {
   AgentProposal,
+  AgentProposalStatus,
+  AgentProposalTargetKind,
   AgentRun
 } from "./agent-runs-proposals.js";
 import type {
@@ -14,6 +16,13 @@ import type { AccountId } from "./identity.js";
 export type AgentFoundationListOptions = Readonly<{
   limit?: number;
 }>;
+
+export type AgentProposalListOptions = AgentFoundationListOptions &
+  Readonly<{
+    targetKind?: AgentProposalTargetKind;
+    targetId?: string;
+    status?: AgentProposalStatus;
+  }>;
 
 export type InsertContextReceiptOutcome =
   | Readonly<{ ok: true; receipt: ContextReceipt; created: boolean }>
@@ -96,7 +105,7 @@ export interface AgentProposalRepository {
   get(proposalId: AgentProposalId): Promise<AgentProposal | undefined>;
   listByProject(
     projectId: ProjectId,
-    options?: AgentFoundationListOptions
+    options?: AgentProposalListOptions
   ): Promise<readonly AgentProposal[]>;
   create(proposal: AgentProposal): Promise<CreateAgentProposalOutcome>;
   transition(input: TransitionAgentProposalInput): Promise<TransitionAgentProposalOutcome>;

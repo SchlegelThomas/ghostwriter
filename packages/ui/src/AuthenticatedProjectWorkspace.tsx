@@ -19,6 +19,8 @@ import {
 } from "phosphor-react-native";
 import type {
   AgentModelId,
+  CatalogAgentId,
+  CatalogMemoLens,
   GhostwriterCapability,
   ProjectCommand,
   ProjectNavigator,
@@ -60,6 +62,11 @@ import {
   sceneSelection,
   type ManuscriptSelection
 } from "./manuscript-selection.js";
+import {
+  entityDraftTargetForSelection,
+  type EntityDraftSummary,
+  type EntityDraftTarget
+} from "./entity-draft-model.js";
 import { SelectionInspector } from "./SelectionInspector.js";
 import {
   clampSplitRatio,
@@ -94,8 +101,14 @@ import {
 import {
   WorkspaceChatPanel,
   type WorkspaceChatMessage,
-  type WorkspaceChatSendInput
+  type WorkspaceChatSendInput,
+  type WorkspaceChatSessionTab
 } from "./WorkspaceChatPanel.js";
+import {
+  buildAgentToolkitSelection,
+  type AgentToolkitId,
+  type AgentToolkitSelection
+} from "./workspace-agent-toolkit.js";
 import {
   DEFAULT_WORKSPACE_AGENT_PREFS,
   type WorkspaceAgentEffort,
@@ -110,7 +123,7 @@ import {
 import { WorkspaceTopSearch } from "./WorkspaceTopSearch.js";
 import {
   clampShellWidth,
-  nextSecondaryTabOnAgentOpen,
+  nextSecondaryModeOnAgentOpen,
   primaryPanelStorageKey,
   primarySideLabel,
   PRIMARY_WIDTH_DEFAULT,
@@ -125,7 +138,7 @@ import {
   workspaceSplitPanesActive,
   writeStoredShellWidth,
   type WorkspacePrimaryView,
-  type WorkspaceSecondaryTab
+  type WorkspaceSecondaryMode
 } from "./workspace-shell-layout.js";
 import {
   buildUnifiedSearchTargets,
@@ -267,6 +280,35 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   imageAvailableModels?: readonly WorkspaceAvailableModel[];
   preferredImageModelId?: string;
   onChatSend?(input: WorkspaceChatSendInput): Promise<void> | void;
+  planOutlineText?: string;
+  onSavePlanToPlans?(outlineText: string): void;
+  chatSessions?: readonly WorkspaceChatSessionTab[];
+  activeChatSessionId?: string;
+  onChatSessionSelect?(sessionId: string): void;
+  onNewChatSession?(): void;
+  onRenameChatSession?(sessionId: string, title: string): void;
+  onDeleteChatSession?(sessionId: string): void;
+  chatStreaming?: boolean;
+  onChatStop?(): void;
+  onForkChatMessage?(messageId: string): void;
+  onRegenerateChatMessage?(messageId: string): void;
+  onRetryChatTurn?(): void;
+  onOpenChatScene?(): void;
+  canOpenChatScene?: boolean;
+  chatDictating?: boolean;
+  onChatToggleDictation?(): void;
+  chatDictationAvailable?: boolean;
+  onBindChatDictateAppend?(append: (text: string) => void): void;
+  inboxSelectedCaptureId?: string;
+  onAgentToolkitAction?(
+    id: AgentToolkitId,
+    selection: AgentToolkitSelection
+  ): void;
+  onCatalogAgentRun?(
+    id: CatalogAgentId,
+    selection: AgentToolkitSelection,
+    lens?: CatalogMemoLens
+  ): void;
   onStartCoverOptionsJob?(input: Readonly<{
     bookId: BookId;
     prompt: string;
@@ -310,6 +352,18 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
     visualId: string;
     imageUrl: string;
   }>): Promise<string | undefined>;
+  entityDrafts?: readonly EntityDraftSummary[];
+  entityDraftsLoading?: boolean;
+  entityDraftMutatingProposalId?: string;
+  entityDraftExpandedId?: string;
+  entityDraftExpandedBody?: string;
+  entityDraftExpandedLoading?: boolean;
+  entityDraftDetailTitles?: Readonly<Record<string, string>>;
+  onRejectEntityDraft?(proposalId: string): void;
+  onAcknowledgeEntityDraft?(proposalId: string): void;
+  onRefreshEntityDrafts?(): void;
+  onSelectEntityDraft?(proposalId: string): void;
+  onEntityDraftTargetChange?(target: EntityDraftTarget | undefined): void;
 }>;
 
 const { colors, fonts, shell } = ghostwriterTheme;
@@ -462,6 +516,28 @@ export function AuthenticatedProjectWorkspace({
   imageAvailableModels = [],
   preferredImageModelId,
   onChatSend,
+  planOutlineText,
+  onSavePlanToPlans,
+  chatSessions = [],
+  activeChatSessionId,
+  onChatSessionSelect,
+  onNewChatSession,
+  onRenameChatSession,
+  onDeleteChatSession,
+  chatStreaming = false,
+  onChatStop,
+  onForkChatMessage,
+  onRegenerateChatMessage,
+  onRetryChatTurn,
+  onOpenChatScene,
+  canOpenChatScene = false,
+  chatDictating = false,
+  onChatToggleDictation,
+  chatDictationAvailable = false,
+  onBindChatDictateAppend,
+  inboxSelectedCaptureId,
+  onAgentToolkitAction,
+  onCatalogAgentRun,
   onStartCoverOptionsJob,
   coverOptionsJob,
   coverReviewBookId,
@@ -474,7 +550,19 @@ export function AuthenticatedProjectWorkspace({
   characterVisualJob,
   onStartCharacterVisualJob,
   onApplyCharacterVisual,
-  onResolveCharacterVisualDisplayUrl
+  onResolveCharacterVisualDisplayUrl,
+  entityDrafts,
+  entityDraftsLoading,
+  entityDraftMutatingProposalId,
+  entityDraftExpandedId,
+  entityDraftExpandedBody,
+  entityDraftExpandedLoading,
+  entityDraftDetailTitles,
+  onRejectEntityDraft,
+  onAcknowledgeEntityDraft,
+  onRefreshEntityDrafts,
+  onSelectEntityDraft,
+  onEntityDraftTargetChange
 }: AuthenticatedProjectWorkspaceProps) {
   const { width } = useWindowDimensions();
   const wide = width >= 1240;
@@ -500,6 +588,23 @@ export function AuthenticatedProjectWorkspace({
     setRailDestination("write");
     if (structureCollapsible) setStructureRail("expanded");
     onOpenInbox?.();
+  }
+
+  function handleAgentToolkitAction(id: AgentToolkitId): void {
+    if (onAgentToolkitAction === undefined) return;
+    onAgentToolkitAction(
+      id,
+      buildAgentToolkitSelection(selection, selectedSceneId, inboxSelectedCaptureId)
+    );
+  }
+
+  function handleCatalogAgentRun(id: CatalogAgentId, lens?: CatalogMemoLens): void {
+    if (onCatalogAgentRun === undefined) return;
+    onCatalogAgentRun(
+      id,
+      buildAgentToolkitSelection(selection, selectedSceneId, inboxSelectedCaptureId),
+      lens
+    );
   }
 
   function openCharactersPrimary(): void {
@@ -544,8 +649,8 @@ export function AuthenticatedProjectWorkspace({
   const [secondaryWidthPx, setSecondaryWidthPx] = useState<number>(
     SECONDARY_WIDTH_DEFAULT
   );
-  const [secondaryTab, setSecondaryTab] =
-    useState<WorkspaceSecondaryTab>("agent");
+  const [secondaryMode, setSecondaryMode] =
+    useState<WorkspaceSecondaryMode>("agent");
   const [secondaryOpen, setSecondaryOpen] = useState(true);
   const [explorerQuery, setExplorerQuery] = useState("");
   const [contextDockOpen, setContextDockOpen] = useState(false);
@@ -690,9 +795,28 @@ export function AuthenticatedProjectWorkspace({
 
   function openAgentSecondary(): void {
     setSecondaryOpen(true);
-    setSecondaryTab(nextSecondaryTabOnAgentOpen(secondaryTab, true));
-    setContextDockOpen(true);
+    setSecondaryMode(nextSecondaryModeOnAgentOpen(secondaryMode, true));
     if (!wide) setCollapsedPanel("inspector");
+  }
+
+  function openInspectorSecondary(): void {
+    setSecondaryOpen(true);
+    setSecondaryMode("inspector");
+    if (draftDeskActive) setContextDockOpen(true);
+    if (!wide) setCollapsedPanel("inspector");
+  }
+
+  function handleContextDockOpenChange(open: boolean): void {
+    setContextDockOpen(open);
+    if (onChatSend === undefined) return;
+    if (open) {
+      openInspectorSecondary();
+      return;
+    }
+    if (secondaryMode === "inspector") {
+      setSecondaryOpen(false);
+      if (!wide) setCollapsedPanel("none");
+    }
   }
 
   const structureResizeResponder = useMemo(
@@ -901,6 +1025,10 @@ export function AuthenticatedProjectWorkspace({
 
   const timeline = sceneTimeline(project, selection);
   const selectionKey = manuscriptSelectionKey(selection);
+
+  useEffect(() => {
+    onEntityDraftTargetChange?.(entityDraftTargetForSelection(project, selection));
+  }, [onEntityDraftTargetChange, project, selection]);
 
   useEffect(() => {
     if (!manuscriptChronologyVisible) {
@@ -1382,9 +1510,20 @@ export function AuthenticatedProjectWorkspace({
   const inspector = (
     <SelectionInspector
       busy={busy}
+      entityDraftDetailTitles={entityDraftDetailTitles}
+      entityDraftExpandedBody={entityDraftExpandedBody}
+      entityDraftExpandedId={entityDraftExpandedId}
+      entityDraftExpandedLoading={entityDraftExpandedLoading}
+      entityDraftMutatingProposalId={entityDraftMutatingProposalId}
+      entityDrafts={entityDrafts}
+      entityDraftsLoading={entityDraftsLoading}
+      onAcknowledgeEntityDraft={onAcknowledgeEntityDraft}
       onClose={wide ? undefined : () => setCollapsedPanel("none")}
       onCommand={onCommand}
+      onRefreshEntityDrafts={onRefreshEntityDrafts}
+      onRejectEntityDraft={onRejectEntityDraft}
       onReorder={reorderSelection}
+      onSelectEntityDraft={onSelectEntityDraft}
       project={project}
       selectedSceneId={selectedSceneId}
       selection={selection}
@@ -1430,7 +1569,7 @@ export function AuthenticatedProjectWorkspace({
           }
         }
       : {}),
-    onContextDockOpenChange: setContextDockOpen,
+    onContextDockOpenChange: handleContextDockOpenChange,
     onFocusHaloChange: setFocusHalo,
     onHistoryOpenChange: (open) => {
       setDraftDockTab(open ? "history" : "brief");
@@ -1736,7 +1875,7 @@ export function AuthenticatedProjectWorkspace({
               {surfaceDense ? "Saved" : "All changes saved"}
             </Text>
           ) : null}
-          {surfaceDense || wide ? null : (
+          {surfaceDense || (wide && onChatSend === undefined) ? null : (
             <>
               <Button
                 label={
@@ -1759,17 +1898,25 @@ export function AuthenticatedProjectWorkspace({
                     ? contextDockOpen
                       ? "Hide Context Dock"
                       : "Show Context Dock"
-                    : collapsedPanel === "inspector"
+                    : collapsedPanel === "inspector" ||
+                        (onChatSend !== undefined &&
+                          secondaryOpen &&
+                          secondaryMode === "inspector")
                       ? "Hide inspector"
                       : "Show inspector"
                 }
                 onPress={() => {
                   if (draftDeskActive) {
-                    setContextDockOpen((open) => {
-                      const next = !open;
-                      if (next) setCollapsedPanel("none");
-                      return next;
-                    });
+                    handleContextDockOpenChange(!contextDockOpen);
+                    return;
+                  }
+                  if (onChatSend !== undefined) {
+                    if (secondaryOpen && secondaryMode === "inspector") {
+                      setSecondaryOpen(false);
+                      if (!wide) setCollapsedPanel("none");
+                      return;
+                    }
+                    openInspectorSecondary();
                     return;
                   }
                   setCollapsedPanel((current) =>
@@ -1779,7 +1926,9 @@ export function AuthenticatedProjectWorkspace({
                 selected={
                   draftDeskActive
                     ? contextDockOpen
-                    : collapsedPanel === "inspector"
+                    : onChatSend !== undefined
+                      ? secondaryOpen && secondaryMode === "inspector"
+                      : collapsedPanel === "inspector"
                 }
               />
             </>
@@ -1999,13 +2148,14 @@ export function AuthenticatedProjectWorkspace({
                 icon={(tone) => <ChatRailIcon tone={tone} />}
                 label="Agent"
                 onPress={() => {
-                  if (secondaryOpen && secondaryTab === "agent") {
+                  if (secondaryOpen && secondaryMode === "agent") {
                     setSecondaryOpen(false);
+                    if (!wide) setCollapsedPanel("none");
                     return;
                   }
                   openAgentSecondary();
                 }}
-                selected={secondaryOpen && secondaryTab === "agent"}
+                selected={secondaryOpen && secondaryMode === "agent"}
               />
             )}
             <RailButton
@@ -2428,8 +2578,16 @@ export function AuthenticatedProjectWorkspace({
                     busy={busy}
                     coverOptionsJob={coverOptionsJob}
                     coverReviewBookId={coverReviewBookId}
+                    entityDraftDetailTitles={entityDraftDetailTitles}
+                    entityDraftExpandedBody={entityDraftExpandedBody}
+                    entityDraftExpandedId={entityDraftExpandedId}
+                    entityDraftExpandedLoading={entityDraftExpandedLoading}
+                    entityDraftMutatingProposalId={entityDraftMutatingProposalId}
+                    entityDrafts={entityDrafts}
+                    entityDraftsLoading={entityDraftsLoading}
                     imageAvailableModels={imageAvailableModels}
                     preferredImageModelId={preferredImageModelId}
+                    onAcknowledgeEntityDraft={onAcknowledgeEntityDraft}
                     onApplyCoverImage={onApplyCoverImage}
                     onCommand={onCommand}
                     onCoverReviewConsumed={onCoverReviewConsumed}
@@ -2441,8 +2599,11 @@ export function AuthenticatedProjectWorkspace({
                     onProposeCoverConcept={
                       onChatSend === undefined ? undefined : proposeCoverConcept
                     }
+                    onRefreshEntityDrafts={onRefreshEntityDrafts}
+                    onRejectEntityDraft={onRejectEntityDraft}
                     onResolveCoverDisplayUrl={onResolveCoverDisplayUrl}
                     onOpenSettings={onOpenSettings}
+                    onSelectEntityDraft={onSelectEntityDraft}
                     onStartCoverOptionsJob={onStartCoverOptionsJob}
                     project={project}
                   />
@@ -2528,31 +2689,63 @@ export function AuthenticatedProjectWorkspace({
             <WorkspaceSecondaryPanel
               agent={
                 <WorkspaceChatPanel
+                  activeChatSessionId={activeChatSessionId}
                   availableModels={chatAvailableModels}
                   busy={busy}
+                  canOpenScene={canOpenChatScene}
+                  chatSessions={chatSessions}
+                  chatStreaming={chatStreaming}
+                  dictating={chatDictating}
+                  dictationAvailable={chatDictationAvailable}
                   effort={chatEffort}
                   messages={chatMessages}
                   mode={chatMode}
                   model={chatModel}
-                  onClose={() => setSecondaryTab("properties")}
+                  onBindDictateAppend={onBindChatDictateAppend}
+                  onChatSessionSelect={onChatSessionSelect}
+                  onClose={() => {
+                    setSecondaryOpen(false);
+                    if (!wide) setCollapsedPanel("none");
+                  }}
+                  onDeleteChatSession={onDeleteChatSession}
                   onEffortChange={(next) => onChatEffortChange?.(next)}
+                  onForkMessage={onForkChatMessage}
                   onModeChange={(next) => onChatModeChange?.(next)}
                   onModelChange={(next) => onChatModelChange?.(next)}
+                  onNewChatSession={onNewChatSession}
+                  onOpenScene={onOpenChatScene}
                   onOpenSettings={onOpenSettings}
+                  onRegenerateMessage={onRegenerateChatMessage}
+                  onRenameChatSession={onRenameChatSession}
+                  onRetryFailedTurn={onRetryChatTurn}
                   onSend={(input) => onChatSend?.(input)}
+                  onSavePlanToPlans={onSavePlanToPlans}
+                  onStop={onChatStop}
+                  onToggleDictation={onChatToggleDictation}
+                  planOutlineText={planOutlineText}
+                  onToolkitAction={
+                    onAgentToolkitAction === undefined
+                      ? undefined
+                      : handleAgentToolkitAction
+                  }
+                  onCatalogAgentRun={
+                    onCatalogAgentRun === undefined
+                      ? undefined
+                      : handleCatalogAgentRun
+                  }
                   open
                   providerConfigured={chatProviderConfigured}
                   selectionSummary={manuscriptSelectionSummary(selection)}
                   variant="docked"
                 />
               }
-              onCollapse={() => setSecondaryOpen(false)}
-              onTabChange={(tab) => {
-                setSecondaryTab(tab);
-                if (tab === "properties") setContextDockOpen(true);
+              inspector={draftDeskActive ? draftContextDock : inspector}
+              inspectorLabel={draftDeskActive ? "Context" : "Inspector"}
+              mode={secondaryMode}
+              onCollapse={() => {
+                setSecondaryOpen(false);
+                if (!wide) setCollapsedPanel("none");
               }}
-              properties={draftDeskActive ? draftContextDock : inspector}
-              tab={secondaryTab}
               width={wide ? secondaryWidthPx : shell.inspectorWidth}
             />
           )}
@@ -2564,7 +2757,7 @@ export function AuthenticatedProjectWorkspace({
             accessibilityRole="button"
             onPress={() => {
               setSecondaryOpen(true);
-              setSecondaryTab("agent");
+              setSecondaryMode("agent");
             }}
             style={({ pressed }) => [
               styles.secondaryCollapsedRail,

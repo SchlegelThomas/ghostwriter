@@ -1,4 +1,8 @@
-import type { StructuredCompletionProvider } from "@ghostwriter/ai";
+import {
+  createToolLoopProvider,
+  type StructuredCompletionProvider,
+  type ToolLoopCompletionProvider
+} from "@ghostwriter/ai";
 import {
   accountId,
   CAPTURE_REFLECTION_DEFAULT_MODEL,
@@ -10,8 +14,10 @@ import {
   ProviderCredentialNotFoundError,
   projectId,
   type AgentModelId,
+  type CaptureServices,
   type GhostwriterServices,
-  type ProjectNavigator
+  type ProjectNavigator,
+  type SceneWritingServices
 } from "@ghostwriter/core";
 import type { Context, Hono } from "hono";
 import { z } from "zod";
@@ -24,6 +30,16 @@ import {
 import { parseJsonRequest } from "./api-contract.js";
 import { providerAgentErrorStatusAndBody } from "./provider-agent-api.js";
 import { discoverModelsForAccount } from "./model-discovery.js";
+import {
+  createWorkspaceChatTools,
+  mapWorkspaceChatToolTraces,
+  summarizeWorkspaceChatToolTrace,
+  type WorkspaceChatToolTrace
+} from "./workspace-chat-tools.js";
+import {
+  createWorkspaceChatSseResponse,
+  writeSse
+} from "./workspace-chat-sse.js";
 
 type WorkspaceChatEnvironment = {
   Variables: {
@@ -37,6 +53,37 @@ export type WorkspaceChatMode = (typeof WORKSPACE_CHAT_MODES)[number];
 export const WORKSPACE_CHAT_EFFORTS = ["fast", "standard", "high"] as const;
 export type WorkspaceChatEffort = (typeof WORKSPACE_CHAT_EFFORTS)[number];
 
+export const WORKSPACE_CHAT_MAX_ATTACHMENTS = 3;
+export const WORKSPACE_CHAT_MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+const workspaceChatAttachmentSchema = z
+  .object({
+    kind: z.enum(["image", "video"]),
+    name: z.string().trim().min(1).max(200),
+    mimeType: z.string().trim().min(1).max(100),
+    dataBase64: z.string().max(12_000_000).optional(),
+    byteLength: z.number().int().min(0).max(WORKSPACE_CHAT_MAX_IMAGE_BYTES)
+  })
+  .superRefine((attachment, context) => {
+    if (
+      attachment.kind === "image" &&
+      attachment.byteLength > WORKSPACE_CHAT_MAX_IMAGE_BYTES
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Image attachment exceeds size limit."
+      });
+    }
+    if (attachment.kind === "video" && attachment.dataBase64 !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Video attachments must not include inline binary data."
+      });
+    }
+  });
+
+export type WorkspaceChatAttachment = z.infer<typeof workspaceChatAttachmentSchema>;
+
 export const workspaceChatRequestSchema = z.object({
   message: z.string().trim().min(1).max(4_000),
   projectId: z.string().trim().min(1).max(200).optional(),
@@ -49,6 +96,16 @@ export const workspaceChatRequestSchema = z.object({
     .refine(isAgentModelId, { message: "Unknown agent model." })
     .optional(),
   effort: z.enum(WORKSPACE_CHAT_EFFORTS).optional(),
+  priorTurns: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        body: z.string().trim().min(1).max(4_000)
+      })
+    )
+    .max(6)
+    .optional(),
+  attachments: z.array(workspaceChatAttachmentSchema).max(WORKSPACE_CHAT_MAX_ATTACHMENTS).optional(),
   selection: z
     .object({
       kind: z.string().trim().min(1).max(64),
@@ -67,7 +124,10 @@ export type WorkspaceChatSelection = NonNullable<
 
 export type WorkspaceChatRouteDependencies = Readonly<{
   services: Pick<GhostwriterServices, "getProjectNavigator">;
+  writing: Pick<SceneWritingServices, "getSceneWorkspace">;
+  captures: Pick<CaptureServices, "listCaptures">;
   agentProvider: AgentProviderRuntime;
+  createToolLoopProvider?: typeof createToolLoopProvider;
 }>;
 
 const WORKSPACE_CHAT_TURN_SCHEMA_NAME = "workspace-chat-turn-v1";
@@ -104,6 +164,17 @@ const EFFORT_LIMITS: Readonly<
   high: Object.freeze({ maxOutputTokens: 3_200, maxDurationMs: 60_000 })
 });
 
+const TOOL_READ_INSTRUCTIONS = [
+  "You MAY call read tools to inspect the open project:",
+  "- project_navigator_read — manuscript hierarchy (books → scenes)",
+  "- scene_workspace_read — one scene's working prose by sceneId",
+  "- capture_list — inbox capture summaries",
+  "Use scene reads iteratively for whole-book questions; do not dump or assume unseen scenes.",
+  "When citing prose, name the scene title.",
+  "Propose only. Never claim manuscript canon was written, saved, or changed.",
+  "Reply in plain writer-facing text."
+].join("\n");
+
 const MODE_INSTRUCTIONS: Readonly<Record<WorkspaceChatMode, string>> = Object.freeze({
   chat: [
     "You are Ghostwriter's writing agent in chat mode.",
@@ -113,9 +184,9 @@ const MODE_INSTRUCTIONS: Readonly<Record<WorkspaceChatMode, string>> = Object.fr
   ].join("\n"),
   plan: [
     "You are Ghostwriter's writing agent in Plan mode.",
-    "Produce outlines, plans, and proposal drafts the writer can paste into Plans.",
+    "Produce outlines, plans, and proposal drafts the writer can save to Plans.",
     "Propose only. Never claim Plans, captures, or manuscript canon were written or saved.",
-    "Structure the reply so it is easy to copy into Plans. Return only the workspace-chat-turn-v1 object."
+    "Structure the reply so it is easy to save as a plan outline. Return only the workspace-chat-turn-v1 object."
   ].join("\n"),
   agent: [
     "You are Ghostwriter's writing-agent harness in agent mode.",
@@ -125,6 +196,20 @@ const MODE_INSTRUCTIONS: Readonly<Record<WorkspaceChatMode, string>> = Object.fr
     "Return only the workspace-chat-turn-v1 object."
   ].join("\n")
 });
+
+const TOOL_LOOP_MAX_STEPS: Readonly<Record<WorkspaceChatEffort, number>> = Object.freeze({
+  fast: 3,
+  standard: 6,
+  high: 8
+});
+
+function toolLoopInstructions(mode: WorkspaceChatMode): string {
+  const base = MODE_INSTRUCTIONS[mode].replace(
+    " Return only the workspace-chat-turn-v1 object.",
+    "."
+  );
+  return `${base}\n\n${TOOL_READ_INSTRUCTIONS}`;
+}
 
 function invalidRequestResponse(
   context: Context<WorkspaceChatEnvironment>,
@@ -231,18 +316,62 @@ export function assembleWorkspaceChatContext(input: Readonly<{
   return lines.join("\n");
 }
 
+export type WorkspaceChatPriorTurn = Readonly<{
+  role: "user" | "assistant";
+  body: string;
+}>;
+
 function buildWorkspaceChatInputText(input: Readonly<{
   message: string;
   contextText: string;
+  priorTurns?: readonly WorkspaceChatPriorTurn[];
+  attachments?: readonly WorkspaceChatAttachment[];
 }>): string {
-  return [
-    "Project context:",
-    input.contextText,
-    "",
-    "Writer message:",
-    input.message
-  ].join("\n");
+  const lines = ["Project context:", input.contextText, ""];
+  if (input.priorTurns !== undefined && input.priorTurns.length > 0) {
+    lines.push("Recent conversation (non-authoritative):");
+    for (const turn of input.priorTurns) {
+      const speaker = turn.role === "user" ? "Writer" : "Assistant";
+      lines.push(`${speaker}: ${turn.body}`);
+    }
+    lines.push("");
+  }
+  const attachmentContext = formatWorkspaceChatAttachmentsContext(
+    input.attachments
+  );
+  if (attachmentContext.length > 0) {
+    lines.push(attachmentContext, "");
+  }
+  lines.push("Writer message:", input.message);
+  return lines.join("\n");
 }
+
+export function formatWorkspaceChatAttachmentsContext(
+  attachments: readonly WorkspaceChatAttachment[] | undefined
+): string {
+  if (attachments === undefined || attachments.length === 0) return "";
+  const lines = ["Writer attachments (this turn):"];
+  for (const attachment of attachments) {
+    if (attachment.kind === "video") {
+      lines.push(
+        `- video: ${attachment.name} (${attachment.mimeType}, ${attachment.byteLength} bytes) — binary not ingested as frames yet`
+      );
+      continue;
+    }
+    if (attachment.dataBase64 !== undefined && attachment.dataBase64.length > 0) {
+      lines.push(
+        `- image: ${attachment.name} (${attachment.mimeType}, ${attachment.byteLength} bytes) — image data included in request metadata; vision ingestion may vary by model`
+      );
+      continue;
+    }
+    lines.push(
+      `- image: ${attachment.name} (${attachment.mimeType}, ${attachment.byteLength} bytes) — metadata only`
+    );
+  }
+  return lines.join("\n");
+}
+
+export { buildWorkspaceChatInputText };
 
 function providerUnavailableReply(code: string): Readonly<{
   reply: string;
@@ -326,6 +455,7 @@ function chatSuccessResponse(input: Readonly<{
   mode: WorkspaceChatMode;
   model: AgentModelId;
   effort: WorkspaceChatEffort;
+  toolTraces?: readonly WorkspaceChatToolTrace[];
   code?: string;
 }>) {
   return Object.freeze({
@@ -333,15 +463,33 @@ function chatSuccessResponse(input: Readonly<{
     mode: input.mode,
     model: input.model,
     effort: input.effort,
+    ...(input.toolTraces === undefined || input.toolTraces.length === 0
+      ? {}
+      : { toolTraces: input.toolTraces }),
     ...(input.code === undefined ? {} : { code: input.code })
   });
+}
+
+function createToolLoopProviderForChat(
+  dependencies: WorkspaceChatRouteDependencies,
+  input: Readonly<{ providerId: string; apiKey: string }>
+): ToolLoopCompletionProvider | undefined {
+  try {
+    const factory = dependencies.createToolLoopProvider ?? createToolLoopProvider;
+    return factory({
+      providerId: input.providerId as Parameters<typeof createToolLoopProvider>[0]["providerId"],
+      apiKey: input.apiKey
+    });
+  } catch {
+    return undefined;
+  }
 }
 
 export function registerWorkspaceChatRoutes(
   app: Hono<WorkspaceChatEnvironment>,
   dependencies: WorkspaceChatRouteDependencies
 ): void {
-  const { services, agentProvider } = dependencies;
+  const { services, writing, captures, agentProvider } = dependencies;
 
   app.post("/api/workspace/chat", async (context) => {
     const parsed = await parseJsonRequest(
@@ -471,6 +619,7 @@ export function registerWorkspaceChatRoutes(
       );
 
       let resolvedProviderId = providerForAvailableModel(model, []);
+      let modelSupportsTools = false;
       if (hasReachableCredential) {
         const available = await discoverModelsForAccount({
           accountId: authSession.account.id,
@@ -482,6 +631,8 @@ export function registerWorkspaceChatRoutes(
             : { createListingProvider: agentProvider.listModelsFactory })
         });
         resolvedProviderId = providerForAvailableModel(model, available.models);
+        const modelEntry = available.models.find((entry) => entry.id === model);
+        modelSupportsTools = modelEntry?.supportsTools === true;
         if (
           resolvedProviderId === undefined ||
           !available.models.some((entry) => entry.id === model && entry.supportsChat)
@@ -496,21 +647,74 @@ export function registerWorkspaceChatRoutes(
         }
       }
 
+      const limits = EFFORT_LIMITS[effort];
+      const inputText = buildWorkspaceChatInputText({
+        message: normalizedMessage,
+        contextText,
+        priorTurns: parsed.data.priorTurns,
+        attachments: parsed.data.attachments
+      });
+
+      if (
+        modelSupportsTools &&
+        resolvedProviderId !== undefined &&
+        parsed.data.projectId !== undefined
+      ) {
+        const apiKey = await agentProvider.resolveProviderApiKey({
+          accountId: account,
+          providerId: resolvedProviderId
+        });
+        const toolLoopProvider = createToolLoopProviderForChat(dependencies, {
+          providerId: resolvedProviderId,
+          apiKey
+        });
+        if (toolLoopProvider !== undefined) {
+          const toolCompletion = await toolLoopProvider.completeWithTools({
+            workflow: "workspace-chat.turn",
+            model,
+            instructions: toolLoopInstructions(mode),
+            inputText,
+            tools: createWorkspaceChatTools({
+              accountId: account,
+              projectId: projectId(parsed.data.projectId),
+              services,
+              writing,
+              captures,
+              ...(navigator === undefined ? {} : { navigator })
+            }),
+            maxSteps: TOOL_LOOP_MAX_STEPS[effort],
+            maxOutputTokens: limits.maxOutputTokens,
+            maxDurationMs: limits.maxDurationMs
+          });
+
+          if (toolCompletion.ok) {
+            return context.json(
+              chatSuccessResponse({
+                reply: toolCompletion.text.trim(),
+                mode,
+                model,
+                effort,
+                toolTraces: mapWorkspaceChatToolTraces(toolCompletion.toolTraces)
+              })
+            );
+          }
+
+          const mapped = providerCompletionError(toolCompletion.diagnostic.code);
+          return context.json(mapped.body, mapped.status);
+        }
+      }
+
       const provider = (await agentProvider.createCompletionProviderForModel({
         accountId: account,
         model,
         ...(resolvedProviderId === undefined ? {} : { providerId: resolvedProviderId })
       })) as unknown as StructuredCompletionProvider;
 
-      const limits = EFFORT_LIMITS[effort];
       const completion = await provider.completeStructured({
         workflow: "workspace-chat.turn",
         model,
         instructions: MODE_INSTRUCTIONS[mode],
-        inputText: buildWorkspaceChatInputText({
-          message: normalizedMessage,
-          contextText
-        }),
+        inputText,
         outputSchema: {
           name: WORKSPACE_CHAT_TURN_SCHEMA_NAME,
           schema: WORKSPACE_CHAT_TURN_V1_JSON_SCHEMA as Record<string, unknown>
@@ -559,5 +763,350 @@ export function registerWorkspaceChatRoutes(
       }
       throw error;
     }
+  });
+
+  app.post("/api/workspace/chat/stream", async (context) => {
+    const parsed = await parseJsonRequest(
+      context.req.raw,
+      workspaceChatRequestSchema
+    );
+    if (!parsed.success) {
+      return invalidRequestResponse(context, parsed);
+    }
+
+    const mode = parsed.data.mode ?? "chat";
+    const model = parsed.data.model ?? CAPTURE_REFLECTION_DEFAULT_MODEL;
+    const effort = parsed.data.effort ?? "standard";
+
+    return createWorkspaceChatSseResponse(async (controller, signal) => {
+      if (signal.aborted) return;
+      writeSse(controller, "status", {
+        phase: "starting",
+        label: "Starting…"
+      });
+
+      const normalizedMessage = parsed.data.message.trim();
+      const normalizedId = normalizedMessage.toLocaleLowerCase();
+
+      const requestedCapability = GHOSTWRITER_CAPABILITIES.find(
+        (capability) => capability.id.toLocaleLowerCase() === normalizedId
+      );
+
+      if (
+        requestedCapability?.id === "project.navigator.read" &&
+        requestedCapability.access === "read"
+      ) {
+        writeSse(controller, "status", {
+          phase: "assembling_context",
+          label: "Reading project…"
+        });
+        if (parsed.data.projectId === undefined) {
+          writeSse(controller, "status", {
+            phase: "writing",
+            label: "Finishing…"
+          });
+          writeSse(controller, "done", {
+            reply:
+              "Open a project before running the manuscript hierarchy capability.",
+            mode,
+            model,
+            effort
+          });
+          return;
+        }
+        const authSession = context.get("authSession");
+        let navigator: ProjectNavigator | undefined;
+        try {
+          navigator = await services.getProjectNavigator(
+            accountId(authSession.account.id),
+            projectId(parsed.data.projectId)
+          );
+        } catch (error) {
+          if (
+            error instanceof DomainValidationError ||
+            error instanceof ProjectAccessDeniedError
+          ) {
+            writeSse(controller, "error", {
+              error: "Project not found.",
+              code: "PROJECT_NOT_FOUND"
+            });
+            return;
+          }
+          throw error;
+        }
+        if (navigator === undefined) {
+          writeSse(controller, "error", {
+            error: "Project not found.",
+            code: "PROJECT_NOT_FOUND"
+          });
+          return;
+        }
+        writeSse(controller, "status", {
+          phase: "writing",
+          label: "Finishing…"
+        });
+        writeSse(controller, "done", {
+          reply: [
+            `Ran ${requestedCapability.title}.`,
+            `${navigator.title} · project version ${navigator.version}`,
+            `${navigator.totals.books} books · ${navigator.totals.scenes} scenes · ${navigator.totals.storyKnowledge} story records`,
+            `Books: ${navigator.books.map((book) => book.title).join(", ")}`
+          ].join("\n"),
+          mode,
+          model,
+          effort
+        });
+        return;
+      }
+
+      writeSse(controller, "status", {
+        phase: "assembling_context",
+        label: "Reading project…"
+      });
+
+      let navigator: ProjectNavigator | undefined;
+      if (parsed.data.projectId !== undefined) {
+        const authSession = context.get("authSession");
+        try {
+          navigator = await services.getProjectNavigator(
+            accountId(authSession.account.id),
+            projectId(parsed.data.projectId)
+          );
+        } catch (error) {
+          if (
+            error instanceof DomainValidationError ||
+            error instanceof ProjectAccessDeniedError
+          ) {
+            writeSse(controller, "error", {
+              error: "Project not found.",
+              code: "PROJECT_NOT_FOUND"
+            });
+            return;
+          }
+          throw error;
+        }
+        if (navigator === undefined) {
+          writeSse(controller, "error", {
+            error: "Project not found.",
+            code: "PROJECT_NOT_FOUND"
+          });
+          return;
+        }
+      }
+
+      const contextText = assembleWorkspaceChatContext({
+        navigator,
+        selection: parsed.data.selection
+      });
+
+      try {
+        if (agentProvider.policy.callsDisabled) {
+          throw new ProviderCallsDisabledError();
+        }
+        if (!agentProvider.policy.encryptionAvailable) {
+          throw new ProviderEncryptionUnavailableError();
+        }
+
+        const authSession = context.get("authSession");
+        const account = accountId(authSession.account.id);
+        const configured = await agentProvider.providerCredentials.listCredentialStatuses(
+          account
+        );
+        const hasReachableCredential = configured.some(
+          (status) =>
+            status.validationState === "unvalidated" ||
+            status.validationState === "valid" ||
+            status.validationState === "invalid"
+        );
+
+        let resolvedProviderId = providerForAvailableModel(model, []);
+        let modelSupportsTools = false;
+        if (hasReachableCredential) {
+          const available = await discoverModelsForAccount({
+            accountId: authSession.account.id,
+            configured,
+            resolveApiKey: async (providerId) =>
+              agentProvider.resolveProviderApiKey({ accountId: account, providerId }),
+            ...(agentProvider.listModelsFactory === undefined
+              ? {}
+              : { createListingProvider: agentProvider.listModelsFactory })
+          });
+          resolvedProviderId = providerForAvailableModel(model, available.models);
+          const modelEntry = available.models.find((entry) => entry.id === model);
+          modelSupportsTools = modelEntry?.supportsTools === true;
+          if (
+            resolvedProviderId === undefined ||
+            !available.models.some((entry) => entry.id === model && entry.supportsChat)
+          ) {
+            writeSse(controller, "error", {
+              error: "That model is not available for this account.",
+              code: "MODEL_NOT_AVAILABLE"
+            });
+            return;
+          }
+        }
+
+        const limits = EFFORT_LIMITS[effort];
+        const inputText = buildWorkspaceChatInputText({
+          message: normalizedMessage,
+          contextText,
+          priorTurns: parsed.data.priorTurns,
+          attachments: parsed.data.attachments
+        });
+
+        writeSse(controller, "status", {
+          phase: "thinking",
+          label: "Thinking…"
+        });
+
+        if (
+          modelSupportsTools &&
+          resolvedProviderId !== undefined &&
+          parsed.data.projectId !== undefined
+        ) {
+          const apiKey = await agentProvider.resolveProviderApiKey({
+            accountId: account,
+            providerId: resolvedProviderId
+          });
+          const toolLoopProvider = createToolLoopProviderForChat(dependencies, {
+            providerId: resolvedProviderId,
+            apiKey
+          });
+          if (toolLoopProvider !== undefined) {
+            if (signal.aborted) return;
+            await toolLoopProvider.streamWithTools({
+              workflow: "workspace-chat.turn",
+              model,
+              instructions: toolLoopInstructions(mode),
+              inputText,
+              tools: createWorkspaceChatTools({
+                accountId: account,
+                projectId: projectId(parsed.data.projectId),
+                services,
+                writing,
+                captures,
+                ...(navigator === undefined ? {} : { navigator })
+              }),
+              maxSteps: TOOL_LOOP_MAX_STEPS[effort],
+              maxOutputTokens: limits.maxOutputTokens,
+              maxDurationMs: limits.maxDurationMs,
+              signal,
+              onEvent: (event) => {
+                if (signal.aborted) return;
+                switch (event.type) {
+                  case "status":
+                    writeSse(controller, "status", {
+                      phase: event.phase,
+                      label: event.label
+                    });
+                    break;
+                  case "tool_trace":
+                    writeSse(
+                      controller,
+                      "tool_trace",
+                      summarizeWorkspaceChatToolTrace(event.trace)
+                    );
+                    break;
+                  case "text_delta":
+                    writeSse(controller, "text_delta", { delta: event.delta });
+                    break;
+                  case "error":
+                    writeSse(controller, "error", {
+                      error: providerCompletionError(event.diagnostic.code).body
+                        .error,
+                      code: providerCompletionError(event.diagnostic.code).body.code
+                    });
+                    break;
+                  case "done":
+                    writeSse(controller, "done", {
+                      reply: event.result.text.trim(),
+                      mode,
+                      model,
+                      effort,
+                      ...(event.result.toolTraces.length === 0
+                        ? {}
+                        : {
+                            toolTraces: mapWorkspaceChatToolTraces(
+                              event.result.toolTraces
+                            )
+                          })
+                    });
+                    break;
+                  default:
+                    break;
+                }
+              }
+            });
+            return;
+          }
+        }
+
+        const provider = (await agentProvider.createCompletionProviderForModel({
+          accountId: account,
+          model,
+          ...(resolvedProviderId === undefined ? {} : { providerId: resolvedProviderId })
+        })) as unknown as StructuredCompletionProvider;
+
+        const completion = await provider.completeStructured({
+          workflow: "workspace-chat.turn",
+          model,
+          instructions: MODE_INSTRUCTIONS[mode],
+          inputText,
+          outputSchema: {
+            name: WORKSPACE_CHAT_TURN_SCHEMA_NAME,
+            schema: WORKSPACE_CHAT_TURN_V1_JSON_SCHEMA as Record<string, unknown>
+          },
+          maxOutputTokens: limits.maxOutputTokens,
+          maxDurationMs: limits.maxDurationMs,
+          validateOutput: isWorkspaceChatTurnV1,
+          signal
+        });
+
+        if (signal.aborted) return;
+
+        if (!completion.ok) {
+          const mapped = providerCompletionError(completion.diagnostic.code);
+          writeSse(controller, "error", mapped.body);
+          return;
+        }
+
+        writeSse(controller, "done", {
+          reply: completion.output.reply.trim(),
+          mode,
+          model,
+          effort
+        });
+      } catch (error) {
+        if (signal.aborted) return;
+        if (
+          error instanceof ProviderCredentialNotFoundError ||
+          error instanceof ProviderCallsDisabledError ||
+          error instanceof ProviderEncryptionUnavailableError
+        ) {
+          const mapped = providerAgentErrorStatusAndBody(error);
+          const unavailable = providerUnavailableReply(
+            mapped?.body.code ?? "PROVIDER_NOT_CONFIGURED"
+          );
+          writeSse(controller, "status", {
+            phase: "writing",
+            label: "Finishing…"
+          });
+          writeSse(controller, "done", {
+            reply: unavailable.reply,
+            mode,
+            model,
+            effort,
+            code: unavailable.code
+          });
+          return;
+        }
+        const mapped = providerAgentErrorStatusAndBody(error);
+        if (mapped !== undefined) {
+          writeSse(controller, "error", mapped.body);
+          return;
+        }
+        throw error;
+      }
+    });
   });
 }

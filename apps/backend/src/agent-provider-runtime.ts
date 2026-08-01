@@ -9,9 +9,13 @@ import {
   createAgentFoundationServices,
   createAgentGuidanceServices,
   createCaptureReflectionServices,
+  createCaptureServices,
+  createCatalogAgentServices,
+  createCatalogPlaybookOverrideServices,
   createCraftPartnerServices,
   createCraftProposalApplyServices,
   createMcpGrantServices,
+  createPlanModeOutlineServices,
   createProjectCommandServices,
   createProviderCredentialServices,
   encryptedMaterialFromEnvelope,
@@ -25,6 +29,8 @@ import {
   type AgentFoundationServices,
   type AgentGuidanceServices,
   type CaptureDocumentRepository,
+  type CatalogAgentServices,
+  type CatalogPlaybookOverrideServices,
   type CapturePromotionServices,
   type CaptureReflectionServices,
   type CaptureReflectionStructuredCompletionProvider,
@@ -33,6 +39,7 @@ import {
   type CraftPartnerStructuredCompletionProvider,
   type IdGenerator,
   type McpGrantServices,
+  type PlanModeOutlineServices,
   type ProjectRepository,
   type ProviderCredentialRepository,
   type ProviderCredentialServices,
@@ -47,6 +54,7 @@ import {
   createPostgresAgentRunReflectionCompletionUnitOfWork,
   createPostgresAgentRunRepository,
   createPostgresContextReceiptRepository,
+  createPostgresCatalogPlaybookOverrideRepository,
   createPostgresMcpGrantRepository,
   createPostgresProjectAgentInstructionsRepository,
   createPostgresProjectPlaybookRepository,
@@ -97,7 +105,10 @@ export type AgentProviderRuntime = Readonly<{
   agentGuidance: AgentGuidanceServices;
   foundation: AgentFoundationServices;
   captureReflection: CaptureReflectionServices;
+  planModeOutline: PlanModeOutlineServices;
   craftPartners: CraftPartnerServices;
+  catalogAgents: CatalogAgentServices;
+  catalogPlaybookOverrides: CatalogPlaybookOverrideServices;
   mcpGrants: McpGrantServices;
   policy: AgentProviderPolicy;
   /** Optional test seam for live model discovery. */
@@ -262,6 +273,12 @@ export function createAgentProviderRuntime(
     clock: input.clock
   });
   const hashPort = createNodeSha256HashPort();
+  const catalogPlaybookOverrides = createCatalogPlaybookOverrideServices({
+    projects: input.projects,
+    overrides: createPostgresCatalogPlaybookOverrideRepository(input.db),
+    hashPort,
+    clock: input.clock
+  });
   const agentGuidance = createAgentGuidanceServices({
     projects: input.projects,
     collaborationProfiles: createPostgresAccountAiCollaborationProfileRepository(input.db),
@@ -303,6 +320,22 @@ export function createAgentProviderRuntime(
     ids: input.ids,
     clock: input.clock
   });
+  const captures = createCaptureServices({
+    projects: input.projects,
+    captureDocuments: input.captureDocuments,
+    ids: input.ids,
+    clock: input.clock
+  });
+  const planModeOutline = createPlanModeOutlineServices({
+    projects: input.projects,
+    captureDocuments: input.captureDocuments,
+    captureServices: captures,
+    receipts,
+    foundation,
+    hashPort,
+    ids: input.ids,
+    clock: input.clock
+  });
   const craftApply = createCraftProposalApplyServices({
     projects: input.projects,
     captureDocuments: input.captureDocuments,
@@ -322,6 +355,18 @@ export function createAgentProviderRuntime(
     foundation,
     guidance: agentGuidance,
     craftApply,
+    hashPort,
+    ids: input.ids,
+    clock: input.clock
+  });
+  const catalogAgents = createCatalogAgentServices({
+    projects: input.projects,
+    receipts,
+    runs,
+    completion: createPostgresAgentRunReflectionCompletionUnitOfWork(input.db),
+    foundation,
+    guidance: agentGuidance,
+    playbookOverrides: catalogPlaybookOverrides,
     hashPort,
     ids: input.ids,
     clock: input.clock
@@ -460,9 +505,12 @@ export function createAgentProviderRuntime(
   return Object.freeze({
     providerCredentials,
     agentGuidance,
+    catalogPlaybookOverrides,
     foundation,
     captureReflection,
+    planModeOutline,
     craftPartners,
+    catalogAgents,
     mcpGrants,
     policy: Object.freeze({
       callsDisabled,

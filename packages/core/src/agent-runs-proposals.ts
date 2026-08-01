@@ -15,6 +15,16 @@ import type { CaptureReflectionV1 } from "./capture-reflection-v1.js";
 import { validateCaptureReflectionV1 } from "./capture-reflection-v1.js";
 import type { CraftPartnerPayload } from "./craft-partner-schemas.js";
 import { validateCraftPartnerPayload } from "./craft-partner-schemas.js";
+import type { PlanOutlineV1 } from "./plan-outline-v1.js";
+import { validatePlanOutlineV1 } from "./plan-outline-v1.js";
+import type { CatalogMemoV1 } from "./catalog-memo-v1.js";
+import { validateCatalogMemoV1 } from "./catalog-memo-v1.js";
+import type { PacingFindingsV1 } from "./pacing-findings-v1.js";
+import { validatePacingFindingsV1 } from "./pacing-findings-v1.js";
+import {
+  agentProposalListPreviewFromPayload,
+  type AgentProposalListPreview
+} from "./agent-proposal-list-preview.js";
 import type { CaptureContentHash, CaptureDocumentHead } from "./capture-documents.js";
 import {
   DomainValidationError,
@@ -26,9 +36,28 @@ import {
 } from "./domain.js";
 import type { AccountId } from "./identity.js";
 
-export type AgentProposalPayload = CaptureReflectionV1 | CraftPartnerPayload;
+export type AgentProposalPayload =
+  | CaptureReflectionV1
+  | PlanOutlineV1
+  | CatalogMemoV1
+  | PacingFindingsV1
+  | CraftPartnerPayload;
 
 export const AGENT_FOUNDATION_LIST_MAX = 100;
+
+export const AGENT_PROPOSAL_TARGET_KINDS = Object.freeze([
+  "capture",
+  "scene",
+  "story-knowledge",
+  "book",
+  "project"
+] as const);
+
+export type AgentProposalTargetKind = (typeof AGENT_PROPOSAL_TARGET_KINDS)[number];
+export type AgentProposalPrimaryTarget = Readonly<{
+  kind: AgentProposalTargetKind;
+  id: string;
+}>;
 
 export const AGENT_RUN_STATUSES = Object.freeze([
   "queued",
@@ -100,7 +129,7 @@ export type AgentProposalAppliedRecord = Readonly<{
   appliedAt: string;
 }>;
 
-export type AgentProposal = Readonly<{
+type AgentProposalBase = Readonly<{
   id: AgentProposalId;
   projectId: ProjectId;
   runId: AgentRunId;
@@ -109,14 +138,38 @@ export type AgentProposal = Readonly<{
   outputSchemaId: AgentOutputSchemaId;
   payload: AgentProposalPayload;
   contentHash: InstructionContentHash;
-  baseCaptureId: CaptureId;
-  baseCaptureWorkingVersion: number;
-  baseCaptureContentHash: CaptureContentHash;
   createdAt: string;
   updatedAt: string;
   decision?: AgentProposalDecision;
   applied?: AgentProposalAppliedRecord;
 }>;
+
+export type AgentProposal =
+  | (AgentProposalBase &
+      Readonly<{
+        primaryTarget: Readonly<{ kind: "capture"; id: CaptureId }>;
+        baseCaptureId: CaptureId;
+        baseCaptureWorkingVersion: number;
+        baseCaptureContentHash: CaptureContentHash;
+      }>)
+  | (AgentProposalBase &
+      Readonly<{
+        primaryTarget: Readonly<{
+          kind: Exclude<AgentProposalTargetKind, "capture">;
+          id: string;
+        }>;
+        baseCaptureId?: CaptureId;
+        baseCaptureWorkingVersion?: number;
+        baseCaptureContentHash?: CaptureContentHash;
+      }>);
+
+type AgentProposalInput = AgentProposalBase &
+  Readonly<{
+    primaryTarget: AgentProposalPrimaryTarget;
+    baseCaptureId?: CaptureId;
+    baseCaptureWorkingVersion?: number;
+    baseCaptureContentHash?: CaptureContentHash;
+  }>;
 
 export type AgentRunSummary = Readonly<{
   id: AgentRunId;
@@ -129,6 +182,9 @@ export type AgentRunSummary = Readonly<{
   completedAt?: string;
 }>;
 
+export type { AgentProposalListPreview } from "./agent-proposal-list-preview.js";
+export { agentProposalListPreviewFromPayload } from "./agent-proposal-list-preview.js";
+
 export type AgentProposalSummary = Readonly<{
   id: AgentProposalId;
   projectId: ProjectId;
@@ -136,9 +192,11 @@ export type AgentProposalSummary = Readonly<{
   status: AgentProposalStatus;
   outputSchemaId: AgentOutputSchemaId;
   contentHash: InstructionContentHash;
-  baseCaptureId: CaptureId;
+  primaryTarget: AgentProposalPrimaryTarget;
+  baseCaptureId?: CaptureId;
   createdAt: string;
   updatedAt: string;
+  preview: AgentProposalListPreview;
 }>;
 
 export class AgentRunNotFoundError extends Error {
@@ -275,6 +333,71 @@ function requireProviderResponseId(value: string | undefined): string | undefine
   return normalized;
 }
 
+function normalizeAgentProposalPrimaryTarget(
+  target: AgentProposalPrimaryTarget
+): AgentProposalPrimaryTarget {
+  if (!AGENT_PROPOSAL_TARGET_KINDS.includes(target.kind)) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Agent proposal target kind is not recognized."
+    );
+  }
+  const id = target.id.trim();
+  if (id.length === 0 || id.length > 200) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Agent proposal target identifier is out of bounds."
+    );
+  }
+  return Object.freeze({ kind: target.kind, id });
+}
+
+function normalizeProposalBinding(input: Readonly<{
+  primaryTarget: AgentProposalPrimaryTarget;
+  baseCaptureId?: CaptureId;
+  baseCaptureWorkingVersion?: number;
+  baseCaptureContentHash?: CaptureContentHash;
+}>): Readonly<{
+  primaryTarget: AgentProposalPrimaryTarget;
+  baseCaptureId?: CaptureId;
+  baseCaptureWorkingVersion?: number;
+  baseCaptureContentHash?: CaptureContentHash;
+}> {
+  const primaryTarget = normalizeAgentProposalPrimaryTarget(input.primaryTarget);
+  const bindingCount = [
+    input.baseCaptureId,
+    input.baseCaptureWorkingVersion,
+    input.baseCaptureContentHash
+  ].filter((value) => value !== undefined).length;
+  if (primaryTarget.kind === "capture") {
+    if (
+      bindingCount !== 3 ||
+      input.baseCaptureId === undefined ||
+      primaryTarget.id !== input.baseCaptureId
+    ) {
+      throw new DomainValidationError(
+        "INVALID_AGENT_POLICY",
+        "Capture-targeted proposals require a matching Capture base."
+      );
+    }
+  } else if (bindingCount !== 0 && bindingCount !== 3) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Agent proposal Capture base fields must be supplied together."
+    );
+  }
+  return Object.freeze({
+    primaryTarget,
+    ...(input.baseCaptureId === undefined ? {} : { baseCaptureId: input.baseCaptureId }),
+    ...(input.baseCaptureWorkingVersion === undefined
+      ? {}
+      : { baseCaptureWorkingVersion: input.baseCaptureWorkingVersion }),
+    ...(input.baseCaptureContentHash === undefined
+      ? {}
+      : { baseCaptureContentHash: input.baseCaptureContentHash })
+  });
+}
+
 export function assertAgentRunTransition(
   current: AgentRunStatus,
   next: AgentRunStatus
@@ -328,6 +451,8 @@ export function agentProposalIdentityMatches(
     current.outputSchemaId === next.outputSchemaId &&
     canonicalJsonStringify(current.payload) === canonicalJsonStringify(next.payload) &&
     current.contentHash === next.contentHash &&
+    canonicalJsonStringify(current.primaryTarget) ===
+      canonicalJsonStringify(next.primaryTarget) &&
     current.baseCaptureId === next.baseCaptureId &&
     current.baseCaptureWorkingVersion === next.baseCaptureWorkingVersion &&
     current.baseCaptureContentHash === next.baseCaptureContentHash &&
@@ -478,10 +603,19 @@ export function validateAgentProposalPayload(
   if (outputSchemaId === "capture-reflection-v1") {
     return validateCaptureReflectionV1(payload);
   }
+  if (outputSchemaId === "plan-outline-v1") {
+    return validatePlanOutlineV1(payload);
+  }
+  if (outputSchemaId === "catalog-memo-v1") {
+    return validateCatalogMemoV1(payload);
+  }
+  if (outputSchemaId === "pacing-findings-v1") {
+    return validatePacingFindingsV1(payload);
+  }
   return validateCraftPartnerPayload(outputSchemaId, payload);
 }
 
-export function createReadyAgentProposal(input: AgentProposal): AgentProposal {
+export function createReadyAgentProposal(input: AgentProposalInput): AgentProposal {
   if (input.status !== "ready") {
     throw new DomainValidationError(
       "INVALID_AGENT_POLICY",
@@ -501,6 +635,7 @@ export function createReadyAgentProposal(input: AgentProposal): AgentProposal {
     );
   }
   const payload = validateAgentProposalPayload(input.outputSchemaId, input.payload);
+  const binding = normalizeProposalBinding(input);
   return Object.freeze({
     id: input.id,
     projectId: input.projectId,
@@ -510,15 +645,13 @@ export function createReadyAgentProposal(input: AgentProposal): AgentProposal {
     outputSchemaId: input.outputSchemaId,
     payload,
     contentHash: instructionContentHash(String(input.contentHash)),
-    baseCaptureId: input.baseCaptureId,
-    baseCaptureWorkingVersion: input.baseCaptureWorkingVersion,
-    baseCaptureContentHash: input.baseCaptureContentHash,
+    ...binding,
     createdAt: requireTimestamp(input.createdAt, "Agent proposal creation time"),
     updatedAt: requireTimestamp(input.updatedAt, "Agent proposal update time")
-  });
+  }) as AgentProposal;
 }
 
-export function createAgentProposal(input: AgentProposal): AgentProposal {
+export function createAgentProposal(input: AgentProposalInput): AgentProposal {
   if (!AGENT_PROPOSAL_STATUSES.includes(input.status)) {
     throw new DomainValidationError(
       "INVALID_AGENT_POLICY",
@@ -532,6 +665,7 @@ export function createAgentProposal(input: AgentProposal): AgentProposal {
     );
   }
   const payload = validateAgentProposalPayload(input.outputSchemaId, input.payload);
+  const binding = normalizeProposalBinding(input);
   const proposal = Object.freeze({
     id: input.id,
     projectId: input.projectId,
@@ -541,9 +675,7 @@ export function createAgentProposal(input: AgentProposal): AgentProposal {
     outputSchemaId: input.outputSchemaId,
     payload,
     contentHash: instructionContentHash(String(input.contentHash)),
-    baseCaptureId: input.baseCaptureId,
-    baseCaptureWorkingVersion: input.baseCaptureWorkingVersion,
-    baseCaptureContentHash: input.baseCaptureContentHash,
+    ...binding,
     createdAt: requireTimestamp(input.createdAt, "Agent proposal creation time"),
     updatedAt: requireTimestamp(input.updatedAt, "Agent proposal update time"),
     ...(input.decision === undefined
@@ -595,7 +727,7 @@ export function createAgentProposal(input: AgentProposal): AgentProposal {
       );
     }
   }
-  return proposal;
+  return proposal as AgentProposal;
 }
 
 export function agentRunSummaryFromRun(run: AgentRun): AgentRunSummary {
@@ -621,9 +753,16 @@ export function agentProposalSummaryFromProposal(
     status: proposal.status,
     outputSchemaId: proposal.outputSchemaId,
     contentHash: proposal.contentHash,
-    baseCaptureId: proposal.baseCaptureId,
+    primaryTarget: proposal.primaryTarget,
+    ...(proposal.baseCaptureId === undefined
+      ? {}
+      : { baseCaptureId: proposal.baseCaptureId }),
     createdAt: proposal.createdAt,
-    updatedAt: proposal.updatedAt
+    updatedAt: proposal.updatedAt,
+    preview: agentProposalListPreviewFromPayload(
+      proposal.outputSchemaId,
+      proposal.payload
+    )
   });
 }
 
@@ -645,21 +784,21 @@ export function receiptsMatch(left: ContextReceipt, right: ContextReceipt): bool
 export type ProposalContentHashInput = Readonly<{
   outputSchemaId: AgentOutputSchemaId;
   payload: AgentProposalPayload;
-  baseCaptureId: CaptureId;
-  baseCaptureWorkingVersion: number;
-  baseCaptureContentHash: CaptureContentHash;
+  primaryTarget: AgentProposalPrimaryTarget;
+  baseCaptureId?: CaptureId;
+  baseCaptureWorkingVersion?: number;
+  baseCaptureContentHash?: CaptureContentHash;
 }>;
 
 export async function computeAgentProposalContentHash(
   input: ProposalContentHashInput,
   hashPort: AsyncHashPort
 ): Promise<InstructionContentHash> {
+  const binding = normalizeProposalBinding(input);
   const body = Object.freeze({
     outputSchemaId: input.outputSchemaId,
     payload: input.payload,
-    baseCaptureId: input.baseCaptureId,
-    baseCaptureWorkingVersion: input.baseCaptureWorkingVersion,
-    baseCaptureContentHash: input.baseCaptureContentHash
+    ...binding
   });
   return instructionContentHash(
     await hashPort.digestSha256Hex(canonicalJsonStringify(body))

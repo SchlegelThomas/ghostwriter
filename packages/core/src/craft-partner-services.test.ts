@@ -8,6 +8,7 @@ import {
   WORLDKEEPER_WORKFLOW_ID
 } from "./agent-domain.js";
 import { createAgentFoundationServices } from "./agent-foundation-services.js";
+import { createReadyAgentProposal } from "./agent-runs-proposals.js";
 import { createAgentGuidanceServices } from "./agent-guidance-services.js";
 import {
   createCraftPartnerServices,
@@ -23,6 +24,7 @@ import {
 import {
   captureId,
   captureRevisionId,
+  agentProposalId,
   sceneId,
   storyKnowledgeId
 } from "./domain.js";
@@ -262,7 +264,7 @@ function createHarness() {
     ids,
     clock
   });
-  return { services, captureDocuments, projects };
+  return { services, captureDocuments, projects, proposals, craftApply };
 }
 
 describe("craft partner services", () => {
@@ -334,6 +336,46 @@ describe("craft partner services", () => {
     const scene = scenes.find((candidate) => candidate.id === SCENE);
     expect(scene?.sketch?.purpose).toContain("tide");
     expect(scene?.sketch?.conflict).toContain("log");
+  });
+
+  it("applies an entity-targeted craft proposal without a Capture base", async () => {
+    const harness = createHarness();
+    await seedCapture(harness.captureDocuments);
+    const receipt = await harness.services.preview({
+      accountId: OWNER,
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+      captureId: CAPTURE,
+      workflowId: SKETCH_PARTNER_WORKFLOW_ID,
+      sceneId: SCENE
+    });
+    const started = await harness.services.start({
+      accountId: OWNER,
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+      receiptId: receipt.id,
+      expectedReceiptHash: receipt.receiptHash,
+      provider: createFakeProvider(sketchPayload)
+    });
+    expect(started.kind).toBe("ready");
+    if (started.kind !== "ready") return;
+    const entityProposal = createReadyAgentProposal({
+      ...started.proposal,
+      id: agentProposalId("proposal-craft-without-capture"),
+      primaryTarget: { kind: "scene", id: SCENE },
+      baseCaptureId: undefined,
+      baseCaptureWorkingVersion: undefined,
+      baseCaptureContentHash: undefined
+    });
+    expect((await harness.proposals.create(entityProposal)).ok).toBe(true);
+    const project = await harness.projects.getProject(BELLWETHER_FIXTURE_PROJECT_ID);
+    if (project === undefined) throw new Error("Expected seeded project.");
+    const applied = await harness.craftApply.applyCraftProposal({
+      accountId: OWNER,
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+      proposalId: entityProposal.id,
+      expectedProposalContentHash: entityProposal.contentHash,
+      expectedProjectVersion: project.version
+    });
+    expect(applied.proposal.status).toBe("applied");
   });
 
   it("runs Character Coach apply via storyKnowledge.update", async () => {

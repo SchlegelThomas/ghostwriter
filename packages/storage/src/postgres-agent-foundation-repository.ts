@@ -33,6 +33,7 @@ import {
   type TransitionAgentProposalInput,
   type TransitionAgentProposalOutcome,
   type AgentFoundationListOptions,
+  type AgentProposalListOptions,
   type AgentRunId,
   type AgentProposalId,
   type ContextReceiptId,
@@ -176,6 +177,16 @@ function proposalFromRow(row: typeof agentProposals.$inferSelect): AgentProposal
     throw new Error(STORED_PROPOSAL_INVALID);
   }
   try {
+    const primaryTarget =
+      row.primaryTargetKind === "capture"
+        ? Object.freeze({ kind: "capture" as const, id: captureId(row.primaryTargetId) })
+        : Object.freeze({
+            kind: row.primaryTargetKind as Exclude<
+              AgentProposal["primaryTarget"]["kind"],
+              "capture"
+            >,
+            id: row.primaryTargetId
+          });
     return createAgentProposal({
       id: agentProposalId(row.id),
       projectId: projectId(row.projectId),
@@ -185,9 +196,16 @@ function proposalFromRow(row: typeof agentProposals.$inferSelect): AgentProposal
       outputSchemaId: row.outputSchemaId as AgentProposal["outputSchemaId"],
       payload: row.payload as AgentProposal["payload"],
       contentHash: instructionContentHash(row.contentHash),
-      baseCaptureId: captureId(row.baseCaptureId),
-      baseCaptureWorkingVersion: row.baseCaptureWorkingVersion,
-      baseCaptureContentHash: captureContentHash(row.baseCaptureContentHash),
+      primaryTarget,
+      ...(row.baseCaptureId === null
+        ? {}
+        : { baseCaptureId: captureId(row.baseCaptureId) }),
+      ...(row.baseCaptureWorkingVersion === null
+        ? {}
+        : { baseCaptureWorkingVersion: row.baseCaptureWorkingVersion }),
+      ...(row.baseCaptureContentHash === null
+        ? {}
+        : { baseCaptureContentHash: captureContentHash(row.baseCaptureContentHash) }),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       ...(row.decisionActorAccountId === null || row.decidedAt === null
@@ -206,7 +224,7 @@ function proposalFromRow(row: typeof agentProposals.$inferSelect): AgentProposal
               appliedAt: row.appliedAt
             }
           })
-    });
+    } as AgentProposal);
   } catch {
     throw new Error(STORED_PROPOSAL_INVALID);
   }
@@ -219,13 +237,15 @@ function proposalToRow(proposal: AgentProposal) {
     projectId: candidate.projectId,
     runId: candidate.runId,
     receiptId: candidate.receiptId,
-    baseCaptureId: candidate.baseCaptureId,
+    primaryTargetKind: candidate.primaryTarget.kind,
+    primaryTargetId: candidate.primaryTarget.id,
+    baseCaptureId: candidate.baseCaptureId ?? null,
     status: candidate.status,
     outputSchemaId: candidate.outputSchemaId,
     payload: candidate.payload,
     contentHash: candidate.contentHash,
-    baseCaptureWorkingVersion: candidate.baseCaptureWorkingVersion,
-    baseCaptureContentHash: candidate.baseCaptureContentHash,
+    baseCaptureWorkingVersion: candidate.baseCaptureWorkingVersion ?? null,
+    baseCaptureContentHash: candidate.baseCaptureContentHash ?? null,
     decisionActorAccountId: candidate.decision?.actorAccountId ?? null,
     decidedAt: candidate.decision?.decidedAt ?? null,
     appliedActorAccountId: candidate.applied?.actorAccountId ?? null,
@@ -449,12 +469,22 @@ export function createPostgresAgentProposalRepository(
       return loadProposal(db, proposalId);
     },
 
-    async listByProject(projectIdValue: ProjectId, options: AgentFoundationListOptions = {}) {
+    async listByProject(projectIdValue: ProjectId, options: AgentProposalListOptions = {}) {
       const limit = normalizeAgentFoundationListLimit(options.limit);
+      const filters = [
+        eq(agentProposals.projectId, projectIdValue),
+        ...(options.targetKind === undefined
+          ? []
+          : [eq(agentProposals.primaryTargetKind, options.targetKind)]),
+        ...(options.targetId === undefined
+          ? []
+          : [eq(agentProposals.primaryTargetId, options.targetId)]),
+        ...(options.status === undefined ? [] : [eq(agentProposals.status, options.status)])
+      ];
       const rows = await db
         .select()
         .from(agentProposals)
-        .where(eq(agentProposals.projectId, projectIdValue))
+        .where(and(...filters))
         .orderBy(desc(agentProposals.createdAt), desc(agentProposals.id))
         .limit(limit);
       return Object.freeze(rows.map(proposalFromRow));

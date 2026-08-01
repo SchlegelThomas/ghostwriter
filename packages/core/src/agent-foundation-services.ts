@@ -33,7 +33,9 @@ import {
   primaryCaptureFromReceipt,
   validateAgentProposalPayload,
   type AgentProposal,
+  type AgentProposalStatus,
   type AgentProposalSummary,
+  type AgentProposalTargetKind,
   type AgentRun,
   type AgentRunSummary,
   type AgentRunTerminalDiagnosticCode,
@@ -120,6 +122,11 @@ export type AgentFoundationServices = Readonly<{
     projectId: ProjectId;
     proposalId: AgentProposalId;
   }>): Promise<AgentProposal>;
+  acknowledgeProposal(input: Readonly<{
+    accountId: AccountId;
+    projectId: ProjectId;
+    proposalId: AgentProposalId;
+  }>): Promise<AgentProposal>;
   applyProposal(input: ApplyAgentProposalInput): Promise<ApplyAgentProposalResult>;
   getRun(input: Readonly<{
     accountId: AccountId;
@@ -140,6 +147,9 @@ export type AgentFoundationServices = Readonly<{
     accountId: AccountId;
     projectId: ProjectId;
     limit?: number;
+    targetKind?: AgentProposalTargetKind;
+    targetId?: string;
+    status?: AgentProposalStatus;
   }>): Promise<readonly AgentProposalSummary[]>;
 }>;
 
@@ -215,6 +225,16 @@ function assertRunTransition(
 
 function assertProposalReject(
   outcome: Awaited<ReturnType<AgentProposalRepository["reject"]>>
+): AgentProposal {
+  if (outcome.ok) return outcome.proposal;
+  if (outcome.reason === "not-found" || outcome.reason === "cross-project") {
+    throw new AgentProposalNotFoundError();
+  }
+  throw new AgentProposalStateConflictError();
+}
+
+function assertProposalAcknowledge(
+  outcome: Awaited<ReturnType<AgentProposalRepository["markApplied"]>>
 ): AgentProposal {
   if (outcome.ok) return outcome.proposal;
   if (outcome.reason === "not-found" || outcome.reason === "cross-project") {
@@ -464,10 +484,20 @@ export function createAgentFoundationServices(
         receipt.outputSchemaId,
         input.rawPayload
       );
+      const primaryTarget =
+        receipt.targetStoryKnowledgeId !== undefined
+          ? ({
+              kind: "story-knowledge",
+              id: receipt.targetStoryKnowledgeId
+            } as const)
+          : receipt.targetSceneId !== undefined
+            ? ({ kind: "scene", id: receipt.targetSceneId } as const)
+            : ({ kind: "capture", id: receiptBinding.captureId } as const);
       const contentHash = await computeAgentProposalContentHash(
         {
           outputSchemaId: receipt.outputSchemaId,
           payload,
+          primaryTarget,
           baseCaptureId: receiptBinding.captureId,
           baseCaptureWorkingVersion: receiptBinding.workingVersion,
           baseCaptureContentHash: receiptBinding.contentHash
@@ -484,6 +514,7 @@ export function createAgentFoundationServices(
         outputSchemaId: receipt.outputSchemaId,
         payload,
         contentHash,
+        primaryTarget,
         baseCaptureId: receiptBinding.captureId,
         baseCaptureWorkingVersion: receiptBinding.workingVersion,
         baseCaptureContentHash: receiptBinding.contentHash,
@@ -608,6 +639,51 @@ export function createAgentFoundationServices(
       );
     },
 
+    async acknowledgeProposal(input) {
+      try {
+        requireProjectOwner(
+          input.projectId,
+          await dependencies.projects.getProjectMembership(
+            input.projectId,
+            input.accountId
+          )
+        );
+      } catch (error) {
+        if (error instanceof ProjectAccessDeniedError) {
+          throw new AgentProposalNotFoundError();
+        }
+        throw error;
+      }
+      const current = await dependencies.proposals.get(input.proposalId);
+      if (current === undefined || current.projectId !== input.projectId) {
+        throw new AgentProposalNotFoundError();
+      }
+      if (
+        current.outputSchemaId !== "plan-outline-v1" &&
+        current.outputSchemaId !== "catalog-memo-v1" &&
+        current.outputSchemaId !== "pacing-findings-v1"
+      ) {
+        throw new DomainValidationError(
+          "INVALID_AGENT_POLICY",
+          "Only findings, memo, and plan-outline proposals can be acknowledged without apply."
+        );
+      }
+      if (current.status !== "ready") {
+        throw new AgentProposalStateConflictError();
+      }
+      const now = dependencies.clock.now();
+      return assertProposalAcknowledge(
+        await dependencies.proposals.markApplied({
+          proposalId: current.id,
+          projectId: input.projectId,
+          expectedStatus: "ready",
+          actorAccountId: input.accountId,
+          appliedAt: now,
+          updatedAt: now
+        })
+      );
+    },
+
     async applyProposal(input) {
       if (applyServices === undefined) {
         throw new DomainValidationError(
@@ -647,7 +723,10 @@ export function createAgentFoundationServices(
     async listProposalSummaries(input) {
       await requireOwnedProject(dependencies, input.accountId, input.projectId);
       const proposals = await dependencies.proposals.listByProject(input.projectId, {
-        limit: input.limit
+        limit: input.limit,
+        targetKind: input.targetKind,
+        targetId: input.targetId,
+        status: input.status
       });
       return proposals.map(agentProposalSummaryFromProposal);
     }

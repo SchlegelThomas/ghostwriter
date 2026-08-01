@@ -17,6 +17,7 @@ import type {
   ProjectNavigator,
   ProjectNavigatorKnowledge,
   SceneId,
+  StoryKnowledgeAuthority,
   StoryKnowledgeId,
   StoryKnowledgeLinkKind
 } from "@ghostwriter/core";
@@ -45,6 +46,13 @@ import { ghostwriterTheme } from "./theme.js";
 import type { OpenSettingsHandler } from "./settings-focus.js";
 
 const { colors, fonts } = ghostwriterTheme;
+
+const KNOWLEDGE_AUTHORITIES: readonly StoryKnowledgeAuthority[] = [
+  "planned",
+  "confirmed",
+  "inferred",
+  "disputed"
+];
 
 const LINK_KINDS: readonly StoryKnowledgeLinkKind[] = [
   "cast",
@@ -802,6 +810,7 @@ function CharacterDossier({
   onOpenSettings?: OpenSettingsHandler;
 }>) {
   const [linkKind, setLinkKind] = useState<StoryKnowledgeLinkKind>("related");
+  const [labelDraft, setLabelDraft] = useState(knowledge.label);
   const [notesDraft, setNotesDraft] = useState(knowledge.notes ?? "");
   const [aliasesDraft, setAliasesDraft] = useState(
     (knowledge.aliases ?? []).join(", ")
@@ -817,16 +826,30 @@ function CharacterDossier({
   );
 
   useEffect(() => {
+    setLabelDraft(knowledge.label);
     setNotesDraft(knowledge.notes ?? "");
     setAliasesDraft((knowledge.aliases ?? []).join(", "));
     setDesireDraft(knowledge.characterSheet?.desire ?? "");
     setPressureDraft(knowledge.characterSheet?.pressure ?? "");
     setVoiceDraft(knowledge.characterSheet?.voiceNotes ?? "");
-  }, [knowledge]);
+  }, [
+    knowledge.id,
+    knowledge.label,
+    knowledge.notes,
+    knowledge.aliases,
+    knowledge.characterSheet?.desire,
+    knowledge.characterSheet?.pressure,
+    knowledge.characterSheet?.voiceNotes
+  ]);
 
+  /** Live preview from drafts — Role itself is not a writable field. */
   const roleSummary = composeCharacterRoleSummary({
-    notes: knowledge.notes,
-    characterSheet: knowledge.characterSheet
+    notes: notesDraft,
+    characterSheet: {
+      desire: desireDraft,
+      pressure: pressureDraft,
+      voiceNotes: voiceDraft
+    }
   });
   const constellation = buildKnowledgeConstellation(
     knowledge,
@@ -838,11 +861,14 @@ function CharacterDossier({
       candidate.id !== knowledge.id && candidate.archivedAt === undefined
   );
   const archived = knowledge.archivedAt !== undefined;
+  /** Keep fields typable during project saves; only archive locks the dossier. */
+  const fieldsEditable = !archived;
 
   function commitSheet(
     key: "desire" | "pressure" | "voiceNotes",
     value: string
   ): void {
+    if (busy || archived) return;
     const next = value.trim();
     const current = knowledge.characterSheet?.[key] ?? "";
     if (next === current) return;
@@ -873,10 +899,32 @@ function CharacterDossier({
       <View style={styles.dossierHeader}>
         <View style={styles.dossierHeaderCopy}>
           <Text style={styles.eyebrow}>
-            Character · {knowledge.authority}
-            {archived ? " · archived" : ""}
+            Character
+            {archived ? " · archived" : " · edit and blur to save"}
           </Text>
-          <Text style={styles.dossierTitle}>{knowledge.label}</Text>
+          <TextInput
+            accessibilityLabel="Character name"
+            editable={fieldsEditable}
+            onBlur={() => {
+              if (busy || archived) return;
+              const next = labelDraft.trim();
+              if (next.length === 0) {
+                setLabelDraft(knowledge.label);
+                return;
+              }
+              if (next === knowledge.label) return;
+              void onCommand({
+                type: "storyKnowledge.update",
+                storyKnowledgeId: knowledge.id,
+                label: next
+              });
+            }}
+            onChangeText={setLabelDraft}
+            placeholder="Character name"
+            placeholderTextColor={colors.muted}
+            style={styles.dossierTitleInput}
+            value={labelDraft}
+          />
         </View>
         <Pressable
           accessibilityLabel={archived ? "Restore character" : "Archive character"}
@@ -901,6 +949,45 @@ function CharacterDossier({
         </Pressable>
       </View>
 
+      <Text style={styles.fieldLabel}>Authority</Text>
+      <View style={styles.kindRow}>
+        {KNOWLEDGE_AUTHORITIES.map((authority) => {
+          const selected = knowledge.authority === authority;
+          return (
+            <Pressable
+              accessibilityLabel={`Authority ${authority}`}
+              accessibilityRole="button"
+              accessibilityState={{ selected, disabled: !fieldsEditable || busy }}
+              disabled={!fieldsEditable || busy}
+              key={authority}
+              onPress={() => {
+                if (selected) return;
+                void onCommand({
+                  type: "storyKnowledge.update",
+                  storyKnowledgeId: knowledge.id,
+                  authority
+                });
+              }}
+              style={({ pressed }) => [
+                styles.kindChip,
+                selected && styles.kindChipSelected,
+                pressed && styles.pressed,
+                (!fieldsEditable || busy) && styles.disabled
+              ]}
+            >
+              <Text
+                style={[
+                  styles.kindChipText,
+                  selected && styles.kindChipTextSelected
+                ]}
+              >
+                {authority}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
       <CharacterVisualGallery
         busy={busy || archived}
         characterVisualJob={characterVisualJob}
@@ -914,21 +1001,69 @@ function CharacterDossier({
         onStartCharacterVisualJob={onStartCharacterVisualJob}
       />
 
-      <Text style={styles.sectionTitle}>Role in the story</Text>
-      {roleSummary.length === 0 ? (
-        <Text style={styles.help}>
-          Add notes and sheet fields below — Role is composed from what you
-          write (no AI generation).
-        </Text>
-      ) : (
-        <Text style={styles.roleSummary}>{roleSummary}</Text>
-      )}
+      <Text style={styles.sectionTitle}>Character sheet</Text>
+      <Text style={styles.help}>
+        Edit Desire, Pressure, Voice, and Notes. Changes save when you leave a
+        field.
+      </Text>
+      {(
+        [
+          ["Desire", desireDraft, setDesireDraft, "desire", "What they want"],
+          [
+            "Pressure",
+            pressureDraft,
+            setPressureDraft,
+            "pressure",
+            "What weighs on them"
+          ],
+          ["Voice", voiceDraft, setVoiceDraft, "voiceNotes", "How they sound"]
+        ] as const
+      ).map(([label, value, setValue, key, placeholder]) => (
+        <View key={key} style={styles.field}>
+          <Text style={styles.fieldLabel}>{label}</Text>
+          <TextInput
+            accessibilityLabel={label}
+            editable={fieldsEditable}
+            multiline
+            onBlur={() => commitSheet(key, value)}
+            onChangeText={setValue}
+            placeholder={placeholder}
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+            value={value}
+          />
+        </View>
+      ))}
+
+      <Text style={styles.fieldLabel}>Notes</Text>
+      <TextInput
+        accessibilityLabel="Character notes"
+        editable={fieldsEditable}
+        multiline
+        onBlur={() => {
+          if (busy || archived) return;
+          const next = notesDraft.trim();
+          const current = knowledge.notes ?? "";
+          if (next === current) return;
+          void onCommand({
+            type: "storyKnowledge.update",
+            storyKnowledgeId: knowledge.id,
+            notes: next === "" ? null : next
+          });
+        }}
+        onChangeText={setNotesDraft}
+        placeholder="Who they are in the story"
+        placeholderTextColor={colors.muted}
+        style={styles.inputTall}
+        value={notesDraft}
+      />
 
       <Text style={styles.fieldLabel}>Aliases</Text>
       <TextInput
         accessibilityLabel="Character aliases"
-        editable={!busy}
+        editable={fieldsEditable}
         onBlur={() => {
+          if (busy || archived) return;
           const next = parseAliasList(aliasesDraft);
           const current = knowledge.aliases ?? [];
           if (
@@ -945,52 +1080,19 @@ function CharacterDossier({
         }}
         onChangeText={setAliasesDraft}
         placeholder="Comma-separated"
+        placeholderTextColor={colors.muted}
         style={styles.input}
         value={aliasesDraft}
       />
 
-      <Text style={styles.fieldLabel}>Notes</Text>
-      <TextInput
-        accessibilityLabel="Character notes"
-        editable={!busy}
-        multiline
-        onBlur={() => {
-          const next = notesDraft.trim();
-          const current = knowledge.notes ?? "";
-          if (next === current) return;
-          void onCommand({
-            type: "storyKnowledge.update",
-            storyKnowledgeId: knowledge.id,
-            notes: next === "" ? null : next
-          });
-        }}
-        onChangeText={setNotesDraft}
-        placeholder="Who they are in the story"
-        style={styles.inputTall}
-        value={notesDraft}
-      />
-
-      <Text style={styles.sectionTitle}>Character sheet</Text>
-      {(
-        [
-          ["Desire", desireDraft, setDesireDraft, "desire"],
-          ["Pressure", pressureDraft, setPressureDraft, "pressure"],
-          ["Voice", voiceDraft, setVoiceDraft, "voiceNotes"]
-        ] as const
-      ).map(([label, value, setValue, key]) => (
-        <View key={key} style={styles.field}>
-          <Text style={styles.fieldLabel}>{label}</Text>
-          <TextInput
-            accessibilityLabel={label}
-            editable={!busy}
-            multiline
-            onBlur={() => commitSheet(key, value)}
-            onChangeText={setValue}
-            style={styles.input}
-            value={value}
-          />
-        </View>
-      ))}
+      <Text style={styles.sectionTitle}>Role preview</Text>
+      {roleSummary.length === 0 ? (
+        <Text style={styles.help}>
+          Composed from Notes and the sheet above — not a separate field.
+        </Text>
+      ) : (
+        <Text style={styles.roleSummary}>{roleSummary}</Text>
+      )}
 
       <Text style={styles.sectionTitle}>Constellation</Text>
       <Text style={styles.help}>
@@ -1390,6 +1492,20 @@ const styles = StyleSheet.create({
     fontSize: 28,
     marginTop: -2
   },
+  dossierTitleInput: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    color: colors.ink,
+    fontFamily: fonts.story,
+    fontSize: 26,
+    lineHeight: 32,
+    marginTop: -2,
+    minHeight: 44,
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
   emptyDetail: {
     gap: 8,
     padding: 24
@@ -1425,6 +1541,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase"
   },
   input: {
+    backgroundColor: colors.panel,
     borderColor: colors.line,
     borderRadius: 6,
     borderWidth: 1,
@@ -1437,6 +1554,7 @@ const styles = StyleSheet.create({
     textAlignVertical: "top"
   },
   inputTall: {
+    backgroundColor: colors.panel,
     borderColor: colors.line,
     borderRadius: 6,
     borderWidth: 1,

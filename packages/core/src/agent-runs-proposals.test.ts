@@ -5,6 +5,9 @@ import {
   AGENT_RUN_STATUSES,
   assertAgentProposalTransition,
   assertAgentRunTransition,
+  agentProposalListPreviewFromPayload,
+  agentProposalSummaryFromProposal,
+  computeAgentProposalContentHash,
   createAgentProposal,
   createAgentRun,
   createQueuedAgentRun,
@@ -100,6 +103,7 @@ describe("agent run and proposal factories", () => {
       outputSchemaId: "capture-reflection-v1",
       payload: reflectionPayload,
       contentHash: instructionContentHash("b".repeat(64)),
+      primaryTarget: { kind: "capture", id: BASE_CAPTURE },
       baseCaptureId: BASE_CAPTURE,
       baseCaptureWorkingVersion: 2,
       baseCaptureContentHash: captureContentHash("c".repeat(64)),
@@ -123,6 +127,7 @@ describe("agent run and proposal factories", () => {
       outputSchemaId: "capture-reflection-v1",
       payload: reflectionPayload,
       contentHash: instructionContentHash("b".repeat(64)),
+      primaryTarget: { kind: "capture", id: BASE_CAPTURE },
       baseCaptureId: BASE_CAPTURE,
       baseCaptureWorkingVersion: 2,
       baseCaptureContentHash: captureContentHash("c".repeat(64)),
@@ -134,6 +139,70 @@ describe("agent run and proposal factories", () => {
       }
     });
     expect(rejected.decision?.actorAccountId).toBe(accountId("owner"));
+  });
+
+  it("allows entity-targeted proposals without a Capture base", () => {
+    const proposal = createReadyAgentProposal({
+      id: agentProposalId("proposal-scene-draft"),
+      projectId: PROJECT,
+      runId: agentRunId("run-domain"),
+      receiptId: contextReceiptId("receipt-domain"),
+      status: "ready",
+      outputSchemaId: "capture-reflection-v1",
+      payload: reflectionPayload,
+      contentHash: instructionContentHash("b".repeat(64)),
+      primaryTarget: { kind: "scene", id: "scene-draft" },
+      createdAt: NOW,
+      updatedAt: NOW
+    });
+    expect(proposal.primaryTarget).toEqual({ kind: "scene", id: "scene-draft" });
+    expect(proposal.baseCaptureId).toBeUndefined();
+  });
+
+  it("requires a matching Capture base for Capture targets", () => {
+    expect(() =>
+      createReadyAgentProposal({
+        id: agentProposalId("proposal-invalid-capture-target"),
+        projectId: PROJECT,
+        runId: agentRunId("run-domain"),
+        receiptId: contextReceiptId("receipt-domain"),
+        status: "ready",
+        outputSchemaId: "capture-reflection-v1",
+        payload: reflectionPayload,
+        contentHash: instructionContentHash("b".repeat(64)),
+        primaryTarget: { kind: "capture", id: BASE_CAPTURE },
+        createdAt: NOW,
+        updatedAt: NOW
+      })
+    ).toThrow(DomainValidationError);
+  });
+
+  it("includes the primary target in proposal content identity", async () => {
+    const canonicalInputs: string[] = [];
+    const hashPort = {
+      async digestSha256Hex(value: string) {
+        canonicalInputs.push(value);
+        return "f".repeat(64);
+      }
+    };
+    await computeAgentProposalContentHash(
+      {
+        outputSchemaId: "capture-reflection-v1",
+        payload: reflectionPayload,
+        primaryTarget: { kind: "scene", id: "scene-a" }
+      },
+      hashPort
+    );
+    await computeAgentProposalContentHash(
+      {
+        outputSchemaId: "capture-reflection-v1",
+        payload: reflectionPayload,
+        primaryTarget: { kind: "scene", id: "scene-b" }
+      },
+      hashPort
+    );
+    expect(canonicalInputs[0]).not.toBe(canonicalInputs[1]);
+    expect(canonicalInputs[0]).toContain('"primaryTarget":{"id":"scene-a","kind":"scene"}');
   });
 });
 
@@ -270,5 +339,102 @@ describe("receipt capture binding", () => {
     expect(evaluation.ok).toBe(false);
     if (evaluation.ok) return;
     expect(evaluation.reason).toBe("context-stale");
+  });
+});
+
+describe("agentProposalListPreviewFromPayload", () => {
+  it("extracts catalog memo partner, title, and summary", () => {
+    expect(
+      agentProposalListPreviewFromPayload("catalog-memo-v1", {
+        schemaId: "catalog-memo-v1",
+        agentId: "idea-midwife",
+        title: "Harry Potter",
+        summary: "A grounded opening with strong promise.",
+        sections: [],
+        evidence: []
+      })
+    ).toEqual({
+      agentId: "idea-midwife",
+      agentLabel: "Idea Midwife",
+      title: "Harry Potter",
+      summary: "A grounded opening with strong promise."
+    });
+  });
+
+  it("extracts pacing doctor preview fields", () => {
+    expect(
+      agentProposalListPreviewFromPayload("pacing-findings-v1", {
+        schemaId: "paging-findings-v1",
+        title: "Act II lag",
+        summary: "The midpoint arrives late."
+      })
+    ).toEqual({
+      agentLabel: "Pacing Doctor",
+      title: "Act II lag",
+      summary: "The midpoint arrives late."
+    });
+  });
+
+  it("summarizes plan outlines from the outline body", () => {
+    expect(
+      agentProposalListPreviewFromPayload("plan-outline-v1", {
+        schemaId: "plan-outline-v1",
+        title: "Act I beats",
+        outline: "Opening image. Catalyst. Debate.",
+        sourceMode: "plan"
+      })
+    ).toEqual({
+      title: "Act I beats",
+      summary: "Opening image. Catalyst. Debate."
+    });
+  });
+
+  it("leaves capture reflection title empty and uses summary", () => {
+    expect(
+      agentProposalListPreviewFromPayload("capture-reflection-v1", {
+        schemaId: "capture-reflection-v1",
+        summary: "This note could anchor the opening scene.",
+        questions: ["Where does this belong?"],
+        possibleStoryJobs: [{ label: "Opening beat", rationale: "Strong hook." }]
+      })
+    ).toEqual({
+      summary: "This note could anchor the opening scene."
+    });
+  });
+
+  it("never throws on malformed payloads", () => {
+    expect(agentProposalListPreviewFromPayload("catalog-memo-v1", null)).toEqual({});
+    expect(agentProposalListPreviewFromPayload("catalog-memo-v1", "bad")).toEqual({});
+  });
+});
+
+describe("agentProposalSummaryFromProposal preview", () => {
+  it("includes preview extracted from proposal payload", () => {
+    const proposal = createReadyAgentProposal({
+      id: agentProposalId("proposal-preview"),
+      projectId: PROJECT,
+      runId: agentRunId("run-domain"),
+      receiptId: contextReceiptId("receipt-domain"),
+      status: "ready",
+      outputSchemaId: "catalog-memo-v1",
+      payload: {
+        schemaId: "catalog-memo-v1",
+        agentId: "genre-compass",
+        title: "Market fit check",
+        summary: "Genre signals are clear.",
+        sections: [],
+        evidence: []
+      },
+      contentHash: RECEIPT_HASH,
+      createdAt: NOW,
+      updatedAt: NOW,
+      primaryTarget: { kind: "project", id: PROJECT }
+    });
+    expect(agentProposalSummaryFromProposal(proposal).preview).toEqual({
+      agentId: "genre-compass",
+      agentLabel: "Genre Compass",
+      title: "Market fit check",
+      summary: "Genre signals are clear."
+    });
   });
 });

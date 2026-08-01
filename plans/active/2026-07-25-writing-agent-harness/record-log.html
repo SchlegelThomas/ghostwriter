@@ -53,6 +53,61 @@
         <li>CP5 Plan→Plans persistence + harness ADR amendment still open; CP3–CP4 not started.</li>
       </ul>
     </section>
+
+    <section>
+      <h2>2026-08-01 — Resume CP3–CP5; founder decisions</h2>
+      <ul>
+        <li>Branch: <code>feat/writing-agent-harness</code> from <code>main</code> (multi-provider runtime already merged).</li>
+        <li><strong>CP3 receipts:</strong> no egress-confirm for chat + read-tool loops (same light path as CP2).</li>
+        <li><strong>Whole-book access:</strong> not a vector DB prerequisite. No manuscript MCP search today. Path = <code>project.navigator.read</code> → budgeted <code>scene.workspace.read</code> (iterative). Optional keyword search later; embeddings deferred until novel-length pressure.</li>
+        <li><strong>CP4 toolkit:</strong> all agents — Scene Partner, Cover, Character Coach, Worldkeeper, Sketch Partner.</li>
+        <li><strong>CP5 Plan landing:</strong> typed agent proposal workflow (e.g. <code>plan-mode.outline</code>) into Plans projection.</li>
+        <li>Commits authorized per checkpoint on the feature branch; no push/PR until asked.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — CP3 Tools in the loop</h2>
+      <ul>
+        <li><code>@ghostwriter/ai</code>: parallel <code>completeWithTools</code> / <code>createToolLoopProvider</code> (AI SDK <code>generateText</code> + tools); structured path unchanged.</li>
+        <li>Chat tools: <code>project_navigator_read</code>, budgeted <code>scene_workspace_read</code> (≤4 reads / ≤64k chars/turn, per-scene truncate via capture slice helper), <code>capture_list</code>.</li>
+        <li><code>POST /api/workspace/chat</code> returns optional <code>toolTraces</code>; Agent dock renders compact step rows. Non-tool models fall back to structured completion.</li>
+        <li>Evidence: focused vitest (ai + workspace-chat tools/routes); <code>pnpm verify</code> after lint fix.</li>
+        <li>Still open: real BYOK browser walkthrough; CP4 toolkit deep-links; CP5 Plan→proposal + ADR.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — CP4 Toolkit agent mode</h2>
+      <ul>
+        <li>Agent-mode dock toolkit actions: Scene Partner, Cover, Character Coach, Worldkeeper, Sketch Partner.</li>
+        <li>Pure resolver <code>resolveAgentToolkitAction</code> with selection refusals; Plans deep-link + craft auto-start (receipt confirm stays in Plans); Cover opens Title Page.</li>
+        <li>Plans Scene Partner preserved. <code>pnpm verify</code> green (894 tests).</li>
+        <li>Still open: live browser walkthrough of each toolkit path; CP5 Plan→typed proposal + harness ADR.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — CP5 Plan mode + docs</h2>
+      <ul>
+        <li>Added <code>plan-mode.outline</code> workflow and <code>plan-outline-v1</code> schema; <code>persistPlanOutlineToPlans</code> creates Capture + ready proposal without a provider call.</li>
+        <li>API: <code>POST .../agent/plan-outlines</code>, <code>POST .../proposals/:id/acknowledge</code> (zero manuscript apply).</li>
+        <li>Agent dock Plan mode: <strong>Save to Plans</strong> opens Plans with capture + proposal deep-link.</li>
+        <li>Accepted <a href="../../../docs/adr/0013-writing-agent-harness-modes.md">ADR 0013</a>; PRODUCT/ARCHITECTURE/API updated.</li>
+        <li>Next: founder browser verify Plan save path; PR when asked.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — CP6 Streaming chat UX (started)</h2>
+      <ul>
+        <li>Founder: chat feels idle while the model works — add SSE for live status / tool steps / typing.</li>
+        <li>Approach: keep JSON <code>POST /api/workspace/chat</code>; add <code>POST /api/workspace/chat/stream</code> (fetch + ReadableStream).</li>
+        <li>Tool-loop streams via AI SDK <code>streamText</code> (status → tool_trace → text_delta → done). Structured fallback: status then done.</li>
+        <li>Shipped: <code>streamWithTools</code>, <code>POST /api/workspace/chat/stream</code>, client SSE parser, dock status pulse + typing caret. <code>pnpm verify</code> green (901 tests).</li>
+        <li>JSON fallback only when stream route unavailable — not on mid-stream errors.</li>
+      </ul>
+    </section>
   </main>
 </body>
 </html>

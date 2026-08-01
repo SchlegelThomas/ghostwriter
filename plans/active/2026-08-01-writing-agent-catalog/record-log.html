@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Writing agent catalog — record log</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Record log</p>
+      <h1>Writing agent catalog</h1>
+      <p class="meta"><strong>Branch:</strong> <code>feat/writing-agent-harness</code></p>
+    </header>
+
+    <section>
+      <h2>2026-08-01 — Founder decisions + plan opened</h2>
+      <ul>
+        <li>Multi-lens structure (not STC-only).</li>
+        <li>Stage names: Brainstorm / Structure / Writing / Editing / Commercial.</li>
+        <li>Deliver full catalog W0–W4 via feature-delivery checkpoints.</li>
+        <li>Landing: Plans for plan/outline-class; other recs in context. Entity “drafts”
+          (accept/edit/reject lists on entities) preferred — research recommends extending ADR 0011
+          proposals with a primary target rather than a second store. Today all durable proposals
+          require <code>baseCaptureId</code>; craft targets already exist on receipts.</li>
+        <li>Awaiting founder confirm: first draft surface (default: scene inspector + project-level
+          for Architect/Pacing) and go-ahead to start W0.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — Confirmed; W0 start</h2>
+      <ul>
+        <li>First Drafts surface: <strong>scene inspector</strong> + <strong>project-level</strong>
+          for Architect/Pacing (Cast in W3).</li>
+        <li>Go ahead W0 on <code>feat/writing-agent-harness</code>.</li>
+        <li>W0 outcome: Agent mode stage menus (Brainstorm / Structure / Writing / Editing /
+          Commercial); existing five toolkit jobs redistributed; refusals unchanged; no new runs.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — W0 complete</h2>
+      <ul>
+        <li><code>AGENT_CATALOG_STAGES</code> in <code>workspace-agent-toolkit.ts</code>; shipped five
+          redistributed; planned agents shown as Coming soon.</li>
+        <li><code>WorkspaceChatPanel</code> stage chips + docked menus; mutually exclusive with
+          mode/model pickers.</li>
+        <li>PRODUCT note updated; <code>pnpm verify</code> green (967 tests).</li>
+        <li>Next: F1 entity-drafts foundation (scene inspector + project-level) after founder browser
+          glance / go-ahead.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — W0 spacing polish</h2>
+      <ul>
+        <li>Stage agent menu scrolls (no clipped last row); last item drops bottom border.</li>
+        <li>Stage chips are a single horizontal scroller (no orphan Commercial wrap row); tighter padding.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — Full catalog finish authorized</h2>
+      <ul>
+        <li>Founder: finish F1 + W1–W4 via feature-delivery.</li>
+        <li>F1 first: primaryTarget on proposals, list Drafts on scene inspector + project Title Page;
+          keep one ADR 0011 store; nullable capture base when target ≠ capture.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — F1 domain / storage / API foundation</h2>
+      <ul>
+        <li>Extended ADR 0011 proposals with one primary Capture / scene / story-knowledge / book /
+          project target; no second drafts store. Capture-base fields are required for Capture
+          targets and optional, all-or-none provenance for entity targets.</li>
+        <li>Proposal hashes now include the primary target and any Capture base. Exact owner /
+          ready / hash apply remains; Capture revision recheck runs only when a base exists.</li>
+        <li>Migration <code>0021</code> backfills existing rows to their Capture target, relaxes
+          Capture columns, adds target/binding constraints, and indexes entity-ready listing.</li>
+        <li><code>GET .../agent/proposals</code> accepts paired target filters plus status (default
+          ready), capped at 100; client list helper carries the same filter.</li>
+        <li>Evidence: full core 246 tests green; storage 19 tests green (including an existing-row
+          migration backfill); backend route 7 tests green; affected package typechecks green.
+          Full <code>pnpm verify</code> green: 974 passed / 3 skipped.</li>
+        <li><strong>Still open:</strong> wire the thin Drafts list into scene inspector + project
+          Title Page, then parent coherence review / full verify. F1 remains unchecked.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — W1–W4 catalog platform implemented</h2>
+      <ul>
+        <li>Added strict <code>catalog-memo-v1</code>, workflow
+          <code>catalog-agent.memo</code>, deterministic scene-grounded fallback, optional BYOK
+          structured generation, and project / scene / story-knowledge target resolution.</li>
+        <li>All 18 planned memo agents are runnable from the five stage menus; existing five toolkit
+          deep-links remain separate. Structure jobs expose six selectable lenses with Save the Cat
+          as the default.</li>
+        <li>Catalog memos create receipt-backed ready proposals with <code>primaryTarget</code>.
+          Acknowledge marks catalog and plan memos applied without canon writes; Reject is unchanged.
+          Scene/project entity Drafts refresh after a run.</li>
+        <li>Focused evidence: core schema/builder/target tests, hermetic backend route +
+          acknowledge contract, toolkit catalog tests, and entity-draft action tests passed
+          (43 tests); core/backend/UI/client typechecks passed.</li>
+        <li><strong>Parent still owns:</strong> cumulative coherence review, full
+          <code>pnpm verify</code>, browser walkthrough, plan checkbox/acceptance truth, and handoff
+          or archive. Playwright remains deferred.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — Catalog playbooks / instruction modules</h2>
+      <ul>
+        <li>Founder asked where agent instructions live; answer was thin inline prompts only.</li>
+        <li>Shipped: <code>catalog-agent-playbooks.ts</code> (18 versioned doctrines),
+          <code>catalog-instruction-compiler.ts</code> (policy → workflow → playbook → lens →
+          untrusted project instructions), wired into BYOK + deterministic memos.</li>
+        <li>Ids/labels extracted to <code>catalog-agent-ids.ts</code>. Receipts now hash instruction layers.</li>
+        <li>Project <code>agent-instructions</code> body now loads into the untrusted layer on catalog runs
+          (same guidance service as craft partners).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — Versioned catalog playbooks + instruction compiler</h2>
+      <ul>
+        <li>Added <code>catalog-agent-playbooks.ts</code>: a versioned per-agent playbook for all 18
+          catalog agents (stage, craft doctrine, ordered memo sections with writer-facing notes,
+          evidence guidance, constraints), plus lens doctrine for all six
+          <code>CATALOG_MEMO_LENSES</code>. Doctrine names real technique — Save the Cat beats and
+          ten story genres, Swain scene/sequel, editorial-letter structure, setup/payoff ledgers,
+          query and synopsis conventions — instead of generic coaching copy.</li>
+        <li>Added <code>catalog-instruction-compiler.ts</code>, mirroring the craft compiler: product
+          policy → workflow contract <code>catalog-agent.memo</code> → agent doctrine → lens overlay →
+          untrusted project instructions → schema response line, with hashed
+          <code>InstructionLayerMetadata</code> (new <code>agent-doctrine</code> /
+          <code>lens-overlay</code> kinds) now recorded on the catalog context receipt.</li>
+        <li>Ids and labels moved to <code>catalog-agent-ids.ts</code> to keep playbooks free of a
+          service cycle; BYOK runs use the compiled instructions and canonical JSON context, and the
+          deterministic memo now uses playbook headings and notes with an honest summary that says no
+          model result was available.</li>
+        <li>Honesty rules are encoded per agent: Continuity Reader drops findings it cannot anchor to
+          a supplied scene id, Market Fit must state it has no live market data, Genre Compass and
+          Pitch Pack may not invent comps, Dialogue Coach may not reconstruct lines.</li>
+        <li>Evidence: new playbook and compiler suites plus updated service tests green; full
+          <code>pnpm verify</code> green (1009 passed / 3 skipped). PRODUCT note updated. No commit.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — Pacing schema + editable playbooks</h2>
+      <ul>
+        <li>Founder: deepen Pacing Doctor (typed findings + real beat %) AND make playbooks
+          editable from Settings.</li>
+        <li>Accepted shape: <code>pacing-findings-v1</code> acknowledge-only; scene % from
+          navigator order (equal-weight first; word-count optional).</li>
+        <li>Accepted shape: project-scoped catalog playbook <em>overrides</em> (doctrine/sections
+          only); code constraints stay authoritative. New Settings guidance/playbooks tab.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — Parent acceptance pass</h2>
+      <ul>
+        <li>Cast gap closed: Drafts also load for <code>storyKnowledge</code> selection
+          (<code>entityDraftTargetForSelection</code> + inspector).</li>
+        <li>Full <code>pnpm verify</code> green after catalog platform (993 tests); UI cast-target
+          tests green.</li>
+        <li>Plan checkboxes F1 + W1–W4 marked complete. Archive after founder browser verify.</li>
+        <li>Honest limit: new agents ship as typed <code>catalog-memo-v1</code> drafts (BYOK when
+          keyed, deterministic otherwise) — not full specialized apply into genre cards / beat boards
+          as separate canon types yet. Acknowledge/Reject on entity Drafts is the apply authority.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — Pacing Doctor typed findings</h2>
+      <ul>
+        <li>Pacing Doctor now branches from the generic catalog memo path to strict
+          <code>pacing-findings-v1</code>; all other catalog agents remain on
+          <code>catalog-memo-v1</code>.</li>
+        <li>Scene position is derived from canonical navigator manuscript order — books, parts,
+          chapters, scenes, then each book’s unassigned scenes — with every active scene assigned
+          an equal percentage interval. The model context receives that position map.</li>
+        <li>BYOK structured output targets the pacing schema and falls back to deterministic turns,
+          playbook-derived prescriptions and sections, plus scene-id evidence. Findings remain
+          acknowledge/reject only and never mutate manuscript canon.</li>
+        <li>Focused evidence: pacing position, schema/builder, catalog service branching,
+          instruction compiler, and entity-draft display suites green (32 tests); core and UI
+          typechecks green. Parent still owns broader verification and browser acceptance.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — Project catalog playbook overrides</h2>
+      <ul>
+        <li>Added one optimistic-versioned override per project + catalog agent. Writers may replace
+          doctrine and notes for known built-in headings; empty overrides, unknown headings, and
+          oversized text are rejected.</li>
+        <li>The effective playbook merges into both BYOK instructions and deterministic output.
+          Built-in constraints, evidence guidance, stage, agent id, and section order remain
+          authoritative and are not persisted as override fields.</li>
+        <li>Added migration <code>0022</code>, memory/Postgres repositories, owner-only list/detail/
+          put/delete routes, capability entries, client API bindings, and
+          <strong>Settings → Playbooks</strong> for the open project.</li>
+        <li>Evidence: override merge/validation/memory repository + Postgres parity, compiler,
+          catalog services, owner route PUT/GET/non-disclosure, and Settings focus suites green;
+          <code>pnpm verify</code> green (1023 passed / 3 skipped), including all workspace
+          typechecks and lint. <code>git diff --check</code> green. Browser walkthrough remains
+          parent/founder-owned; no Playwright was run.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — Playbooks as writer steering (UX + compile)</h2>
+      <ul>
+        <li>Founder report: Settings → Playbooks showed only stage labels and “Choose an agent,”
+          with nothing clickable. Root cause: the rail depended on the list API; a stale hermetic
+          backend (missing override routes/table) left <code>summaries</code> empty and hid load
+          errors.</li>
+        <li>Product correction: overrides are <strong>user steering on top of</strong> system
+          playbooks — not a replace of craft doctrine. Built-in playbook stays authoritative in
+          BYOK compile; steering lands in the untrusted layer
+          (<code>UNTRUSTED WRITER STEERING</code>). Deterministic memos still apply section-note
+          emphasis via merge for known headings.</li>
+        <li>UI: always render agents from <code>CATALOG_AGENT_IDS</code>; default-select Idea
+          Midwife; show built-in doctrine + “Your steering” / section emphasis; surface API
+          errors; mark agents with “Steering on.”</li>
+        <li>Hermetic backend restarted so catalog-playbook routes are live. Compiler + related
+          suites green; PRODUCT.md updated. Founder browser check still open.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — Entity draft card previews</h2>
+      <ul>
+        <li>Proposal list summaries now include structured <code>preview</code> (kind, partner agent,
+          title, summary) extracted in core from typed payloads.</li>
+        <li>Title Page and scene inspector Drafts panels render dedicated cards instead of opaque
+          “Catalog memo” rows — writers can distinguish Idea Midwife from Genre Compass etc.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — Ship branch</h2>
+      <ul>
+        <li>Founder directed: commit remaining catalog + dock QOL polish, push
+          <code>feat/writing-agent-harness</code>, open PR, babysit CI, merge.</li>
+        <li>Docs: PRODUCT / API / ARCHITECTURE / OPERATIONS (migrations <code>0021</code>/<code>0022</code>),
+          ADR 0014, WHERE-I-LEFT-OFF updated for ship. Playwright still deferred until founder
+          verifies the merged outcome.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

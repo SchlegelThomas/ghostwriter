@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   clampShellWidth,
-  nextSecondaryTabOnAgentOpen,
+  nextSecondaryModeOnAgentOpen,
   primarySideLabel,
   PRIMARY_WIDTH_DEFAULT,
   secondaryPanelStorageKey,
@@ -25,9 +25,9 @@ describe("workspace-shell-layout", () => {
     expect(PRIMARY_WIDTH_DEFAULT).toBeGreaterThan(200);
   });
 
-  it("opens the agent tab when the agent panel is requested", () => {
-    expect(nextSecondaryTabOnAgentOpen("properties", true)).toBe("agent");
-    expect(nextSecondaryTabOnAgentOpen("agent", false)).toBe("agent");
+  it("opens agent mode when the agent panel is requested", () => {
+    expect(nextSecondaryModeOnAgentOpen("inspector", true)).toBe("agent");
+    expect(nextSecondaryModeOnAgentOpen("agent", false)).toBe("agent");
   });
 
   it("labels primary side views", () => {

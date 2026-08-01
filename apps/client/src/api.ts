@@ -8,6 +8,11 @@ import type {
   CanvasRevisionId,
   CanvasRevisionMetadata,
   CanvasViewportPreference,
+  CatalogAgentEffort,
+  CatalogAgentId,
+  CatalogAgentPlaybook,
+  CatalogPlaybookOverride,
+  CatalogMemoLens,
   CaptureAttachmentAllowedMime,
   CaptureAttachmentRefusalCode,
   CaptureAttachmentState,
@@ -847,11 +852,33 @@ export type WorkspaceChatSelection = Readonly<{
   storyKnowledgeId?: string;
 }>;
 
+export type WorkspaceChatPriorTurn = Readonly<{
+  role: "user" | "assistant";
+  body: string;
+}>;
+
+export type WorkspaceChatAttachment = Readonly<{
+  kind: "image" | "video";
+  name: string;
+  mimeType: string;
+  dataBase64?: string;
+  byteLength: number;
+}>;
+
+export type WorkspaceChatToolTrace = Readonly<{
+  toolName: string;
+  title: string;
+  ok: boolean;
+  summary: string;
+  errorMessage?: string;
+}>;
+
 export type WorkspaceChatResponse = Readonly<{
   reply: string;
   mode?: WorkspaceChatMode;
   model?: AgentModelId;
   effort?: WorkspaceChatEffort;
+  toolTraces?: readonly WorkspaceChatToolTrace[];
   code?: string;
 }>;
 
@@ -862,6 +889,8 @@ export function sendWorkspaceChat(input: Readonly<{
   model?: AgentModelId;
   effort?: WorkspaceChatEffort;
   selection?: WorkspaceChatSelection;
+  priorTurns?: readonly WorkspaceChatPriorTurn[];
+  attachments?: readonly WorkspaceChatAttachment[];
 }>): Promise<WorkspaceChatResponse> {
   return requestJson(
     "/api/workspace/chat",
@@ -871,8 +900,204 @@ export function sendWorkspaceChat(input: Readonly<{
       ...(input.mode === undefined ? {} : { mode: input.mode }),
       ...(input.model === undefined ? {} : { model: input.model }),
       ...(input.effort === undefined ? {} : { effort: input.effort }),
-      ...(input.selection === undefined ? {} : { selection: input.selection })
+      ...(input.selection === undefined ? {} : { selection: input.selection }),
+      ...(input.priorTurns === undefined || input.priorTurns.length === 0
+        ? {}
+        : { priorTurns: input.priorTurns }),
+      ...(input.attachments === undefined || input.attachments.length === 0
+        ? {}
+        : { attachments: input.attachments })
     })
+  );
+}
+
+export type WorkspaceChatStreamHandlers = Readonly<{
+  onStatus?(phase: string, label: string): void;
+  onToolTrace?(trace: WorkspaceChatToolTrace): void;
+  onTextDelta?(delta: string): void;
+  onDone?(result: WorkspaceChatResponse): void;
+  onError?(error: Readonly<{ error: string; code?: string }>): void;
+}>;
+
+function parseWorkspaceChatSseBuffer(
+  buffer: string,
+  handlers: WorkspaceChatStreamHandlers
+): { remainder: string; result?: WorkspaceChatResponse } {
+  let remainder = buffer;
+  let result: WorkspaceChatResponse | undefined;
+
+  while (true) {
+    const boundary = remainder.indexOf("\n\n");
+    if (boundary === -1) break;
+
+    const rawEvent = remainder.slice(0, boundary);
+    remainder = remainder.slice(boundary + 2);
+
+    if (rawEvent.startsWith(":")) {
+      continue;
+    }
+
+    let eventName = "message";
+    const dataLines: string[] = [];
+    for (const line of rawEvent.split("\n")) {
+      if (line.startsWith("event:")) {
+        eventName = line.slice("event:".length).trim();
+      } else if (line.startsWith("data:")) {
+        dataLines.push(line.slice("data:".length).trimStart());
+      }
+    }
+    if (dataLines.length === 0) continue;
+
+    const payload = JSON.parse(dataLines.join("\n")) as Record<string, unknown>;
+    switch (eventName) {
+      case "status":
+        handlers.onStatus?.(
+          String(payload.phase ?? ""),
+          String(payload.label ?? "")
+        );
+        break;
+      case "tool_trace":
+        handlers.onToolTrace?.(payload as WorkspaceChatToolTrace);
+        break;
+      case "text_delta":
+        handlers.onTextDelta?.(String(payload.delta ?? ""));
+        break;
+      case "done":
+        result = payload as WorkspaceChatResponse;
+        handlers.onDone?.(result);
+        break;
+      case "error":
+        handlers.onError?.({
+          error: String(payload.error ?? "Chat could not complete that turn."),
+          ...(payload.code === undefined
+            ? {}
+            : { code: String(payload.code) })
+        });
+        break;
+      default:
+        break;
+    }
+  }
+
+  return { remainder, ...(result === undefined ? {} : { result }) };
+}
+
+export async function sendWorkspaceChatStream(
+  input: Readonly<{
+    message: string;
+    projectId?: string;
+    mode?: WorkspaceChatMode;
+    model?: AgentModelId;
+    effort?: WorkspaceChatEffort;
+    selection?: WorkspaceChatSelection;
+    priorTurns?: readonly WorkspaceChatPriorTurn[];
+    attachments?: readonly WorkspaceChatAttachment[];
+  }>,
+  handlers: WorkspaceChatStreamHandlers,
+  signal?: AbortSignal
+): Promise<WorkspaceChatResponse> {
+  const response = await fetch(apiUrl("/api/workspace/chat/stream"), {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      accept: "text/event-stream",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      message: input.message,
+      ...(input.projectId === undefined ? {} : { projectId: input.projectId }),
+      ...(input.mode === undefined ? {} : { mode: input.mode }),
+      ...(input.model === undefined ? {} : { model: input.model }),
+      ...(input.effort === undefined ? {} : { effort: input.effort }),
+      ...(input.selection === undefined ? {} : { selection: input.selection }),
+      ...(input.priorTurns === undefined || input.priorTurns.length === 0
+        ? {}
+        : { priorTurns: input.priorTurns }),
+      ...(input.attachments === undefined || input.attachments.length === 0
+        ? {}
+        : { attachments: input.attachments })
+    }),
+    signal
+  });
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as {
+      code?: string;
+      error?: string;
+    };
+    throw new GhostwriterApiError(
+      response.status,
+      body.code ?? "REQUEST_FAILED",
+      body.error ?? "Ghostwriter could not complete the request."
+    );
+  }
+
+  const reader = response.body?.getReader();
+  if (reader === undefined) {
+    throw new GhostwriterApiError(
+      502,
+      "STREAM_UNAVAILABLE",
+      "Ghostwriter could not open a chat stream."
+    );
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalResult: WorkspaceChatResponse | undefined;
+  let streamError: Readonly<{ error: string; code?: string }> | undefined;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parsed = parseWorkspaceChatSseBuffer(buffer, {
+      ...handlers,
+      onDone: (result) => {
+        finalResult = result;
+        handlers.onDone?.(result);
+      },
+      onError: (error) => {
+        streamError = error;
+        handlers.onError?.(error);
+      }
+    });
+    buffer = parsed.remainder;
+    if (parsed.result !== undefined) {
+      finalResult = parsed.result;
+    }
+  }
+
+  if (buffer.trim().length > 0) {
+    const parsed = parseWorkspaceChatSseBuffer(buffer, {
+      ...handlers,
+      onDone: (result) => {
+        finalResult = result;
+        handlers.onDone?.(result);
+      },
+      onError: (error) => {
+        streamError = error;
+        handlers.onError?.(error);
+      }
+    });
+    if (parsed.result !== undefined) {
+      finalResult = parsed.result;
+    }
+  }
+
+  if (finalResult !== undefined) {
+    return finalResult;
+  }
+  if (streamError !== undefined) {
+    throw new GhostwriterApiError(
+      502,
+      streamError.code ?? "WORKSPACE_CHAT_STREAM_FAILED",
+      streamError.error
+    );
+  }
+  throw new GhostwriterApiError(
+    502,
+    "WORKSPACE_CHAT_STREAM_INCOMPLETE",
+    "Chat ended before a reply arrived."
   );
 }
 
@@ -950,6 +1175,7 @@ export type AgentModelId = string;
 
 export type AgentWorkflowId =
   | "scene-partner.capture-reflection"
+  | "plan-mode.outline"
   | "sketch-partner.craft-fields"
   | "character-coach.sheet-fields"
   | "worldkeeper.backdrop-fields";
@@ -1028,14 +1254,67 @@ export type BackdropFieldsPayloadResponse = Readonly<{
   sensoryNotesFallback?: string;
 }>;
 
+export type PlanOutlinePayloadResponse = Readonly<{
+  schemaId: "plan-outline-v1";
+  title: string;
+  outline: string;
+  sourceMode: "plan";
+}>;
+
+export type CatalogMemoPayloadResponse = Readonly<{
+  schemaId: "catalog-memo-v1";
+  agentId: string;
+  title: string;
+  summary: string;
+  lens?: CatalogMemoLens;
+  sections: readonly Readonly<{ heading: string; body: string }>[];
+  evidence: readonly Readonly<{ label: string; sceneId?: string; quote?: string }>[];
+}>;
+
+export type PacingFindingsPayloadResponse = Readonly<{
+  schemaId: "pacing-findings-v1";
+  agentId: "pacing-doctor";
+  title: string;
+  summary: string;
+  lens?: CatalogMemoLens;
+  positionBasis: "equal-scene";
+  turns: readonly Readonly<{
+    id: "catalyst" | "commitment" | "midpoint" | "low-point" | "final-movement";
+    sceneId?: string;
+    sceneTitle?: string;
+    measuredPct?: number;
+    bandLow: number;
+    bandHigh: number;
+    driftNote?: string;
+  }>[];
+  flatRuns: readonly Readonly<{
+    fromSceneId: string;
+    toSceneId: string;
+    reason: string;
+  }>[];
+  prescriptions: readonly Readonly<{
+    action: "cut" | "merge" | "add-pressure" | "reorder";
+    body: string;
+    sceneIds?: readonly string[];
+  }>[];
+  sections: readonly Readonly<{ heading: string; body: string }>[];
+  evidence: readonly Readonly<{ label: string; sceneId?: string; quote?: string }>[];
+}>;
+
 export type AgentProposalPayloadResponse =
   | CaptureReflectionPayloadResponse
+  | PlanOutlinePayloadResponse
+  | CatalogMemoPayloadResponse
+  | PacingFindingsPayloadResponse
   | SketchFieldsPayloadResponse
   | CharacterSheetPayloadResponse
   | BackdropFieldsPayloadResponse;
 
 export type AgentOutputSchemaId =
   | "capture-reflection-v1"
+  | "plan-outline-v1"
+  | "catalog-memo-v1"
+  | "pacing-findings-v1"
   | "sketch-fields-v1"
   | "character-sheet-v1"
   | "backdrop-fields-v1";
@@ -1049,11 +1328,19 @@ export type AgentProposalResponse = Readonly<{
   outputSchemaId: AgentOutputSchemaId;
   payload: AgentProposalPayloadResponse;
   contentHash: string;
-  baseCaptureId: string;
-  baseCaptureWorkingVersion: number;
-  baseCaptureContentHash: string;
+  primaryTarget: AgentProposalPrimaryTargetResponse;
+  baseCaptureId?: string;
+  baseCaptureWorkingVersion?: number;
+  baseCaptureContentHash?: string;
   createdAt: string;
   updatedAt: string;
+}>;
+
+export type AgentProposalListPreviewResponse = Readonly<{
+  agentId?: string;
+  agentLabel?: string;
+  title?: string;
+  summary?: string;
 }>;
 
 export type AgentProposalSummaryResponse = Readonly<{
@@ -1063,9 +1350,25 @@ export type AgentProposalSummaryResponse = Readonly<{
   status: string;
   outputSchemaId: AgentOutputSchemaId;
   contentHash: string;
-  baseCaptureId: string;
+  primaryTarget: AgentProposalPrimaryTargetResponse;
+  baseCaptureId?: string;
   createdAt: string;
   updatedAt: string;
+  preview: AgentProposalListPreviewResponse;
+}>;
+
+export type AgentProposalTargetKind =
+  | "capture"
+  | "scene"
+  | "story-knowledge"
+  | "book"
+  | "project";
+
+export type AgentProposalStatus = "ready" | "rejected" | "stale" | "applied";
+
+export type AgentProposalPrimaryTargetResponse = Readonly<{
+  kind: AgentProposalTargetKind;
+  id: string;
 }>;
 
 export type StartCaptureReflectionResponse =
@@ -1323,11 +1626,21 @@ export async function cancelAgentRun(input: Readonly<{
 }
 
 export async function listAgentProposals(
-  projectId: string
+  projectId: string,
+  filter: Readonly<{
+    targetKind?: AgentProposalTargetKind;
+    targetId?: string;
+    status?: AgentProposalStatus;
+  }> = {}
 ): Promise<readonly AgentProposalSummaryResponse[]> {
+  const params = new URLSearchParams();
+  if (filter.targetKind !== undefined) params.set("targetKind", filter.targetKind);
+  if (filter.targetId !== undefined) params.set("targetId", filter.targetId);
+  if (filter.status !== undefined) params.set("status", filter.status);
+  const query = params.toString();
   const response = await requestJson<
     Readonly<{ proposals: readonly AgentProposalSummaryResponse[] }>
-  >(agentProjectPath(projectId, "proposals"));
+  >(agentProjectPath(projectId, `proposals${query.length === 0 ? "" : `?${query}`}`));
   return response.proposals;
 }
 
@@ -1356,6 +1669,134 @@ export async function rejectAgentProposal(input: Readonly<{
     jsonRequest("POST", {})
   );
   return response.proposal;
+}
+
+export async function acknowledgeAgentProposal(input: Readonly<{
+  projectId: string;
+  proposalId: string;
+}>): Promise<AgentProposalResponse> {
+  const response = await requestJson<Readonly<{ proposal: AgentProposalResponse }>>(
+    agentProjectPath(
+      input.projectId,
+      `proposals/${encodeURIComponent(input.proposalId)}/acknowledge`
+    ),
+    jsonRequest("POST", {})
+  );
+  return response.proposal;
+}
+
+export async function runCatalogAgent(input: Readonly<{
+  projectId: string;
+  agentId: CatalogAgentId;
+  lens?: CatalogMemoLens;
+  model?: string;
+  effort?: CatalogAgentEffort;
+  sceneId?: string;
+  storyKnowledgeId?: string;
+  bookId?: string;
+}>): Promise<AgentProposalResponse> {
+  const response = await requestJson<Readonly<{ proposal: AgentProposalResponse }>>(
+    agentProjectPath(input.projectId, "catalog-runs"),
+    jsonRequest("POST", {
+      agentId: input.agentId,
+      ...(input.lens === undefined ? {} : { lens: input.lens }),
+      ...(input.model === undefined ? {} : { model: input.model }),
+      ...(input.effort === undefined ? {} : { effort: input.effort }),
+      ...(input.sceneId === undefined ? {} : { sceneId: input.sceneId }),
+      ...(input.storyKnowledgeId === undefined
+        ? {}
+        : { storyKnowledgeId: input.storyKnowledgeId }),
+      ...(input.bookId === undefined ? {} : { bookId: input.bookId })
+    })
+  );
+  return response.proposal;
+}
+
+export type CatalogPlaybookSummaryResponse = Readonly<{
+  agentId: CatalogAgentId;
+  label: string;
+  stage: CatalogAgentPlaybook["stage"];
+  builtInVersion: string;
+  overridden: boolean;
+  doctrinePreview: string;
+}>;
+
+export type CatalogPlaybookDetailResponse = Readonly<{
+  builtIn: CatalogAgentPlaybook;
+  override: CatalogPlaybookOverride | null;
+  effective: CatalogAgentPlaybook;
+}>;
+
+function catalogPlaybookPath(projectId: string, agentId?: CatalogAgentId): string {
+  const base = `/api/projects/${encodeURIComponent(projectId)}/catalog-playbooks`;
+  return agentId === undefined ? base : `${base}/${encodeURIComponent(agentId)}`;
+}
+
+export async function listCatalogPlaybooks(
+  projectId: string
+): Promise<readonly CatalogPlaybookSummaryResponse[]> {
+  const response = await requestJson<
+    Readonly<{ playbooks: readonly CatalogPlaybookSummaryResponse[] }>
+  >(catalogPlaybookPath(projectId));
+  return response.playbooks;
+}
+
+export async function getCatalogPlaybook(input: Readonly<{
+  projectId: string;
+  agentId: CatalogAgentId;
+}>): Promise<CatalogPlaybookDetailResponse> {
+  return requestJson(catalogPlaybookPath(input.projectId, input.agentId));
+}
+
+export async function saveCatalogPlaybookOverride(input: Readonly<{
+  projectId: string;
+  agentId: CatalogAgentId;
+  doctrine?: string;
+  sections?: readonly Readonly<{ heading: string; note: string }>[];
+  expectedVersion?: number;
+}>): Promise<CatalogPlaybookDetailResponse> {
+  return requestJson(
+    catalogPlaybookPath(input.projectId, input.agentId),
+    jsonRequest("PUT", {
+      ...(input.doctrine === undefined ? {} : { doctrine: input.doctrine }),
+      ...(input.sections === undefined ? {} : { sections: input.sections }),
+      ...(input.expectedVersion === undefined
+        ? {}
+        : { expectedVersion: input.expectedVersion })
+    })
+  );
+}
+
+export async function resetCatalogPlaybookOverride(input: Readonly<{
+  projectId: string;
+  agentId: CatalogAgentId;
+}>): Promise<CatalogPlaybookDetailResponse> {
+  return requestJson(catalogPlaybookPath(input.projectId, input.agentId), {
+    method: "DELETE"
+  });
+}
+
+export type PersistPlanOutlineResponse = Readonly<{
+  captureId: string;
+  proposalId: string;
+  runId: string;
+  proposal: AgentProposalResponse;
+}>;
+
+export async function persistPlanOutline(input: Readonly<{
+  projectId: string;
+  outlineText: string;
+  title?: string;
+  model?: AgentModelId;
+}>): Promise<PersistPlanOutlineResponse> {
+  return requestJson<PersistPlanOutlineResponse>(
+    agentProjectPath(input.projectId, "plan-outlines"),
+    jsonRequest("POST", {
+      outlineText: input.outlineText,
+      ...(input.title === undefined ? {} : { title: input.title }),
+      ...(input.model === undefined ? {} : { model: input.model })
+    })
+  );
 }
 
 export type ApplyAgentProposalNewSceneInput = Readonly<{

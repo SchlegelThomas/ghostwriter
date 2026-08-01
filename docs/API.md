@@ -197,6 +197,17 @@ without echoing secrets. See ADR 0011 and ADR 0012.
 - Playbooks: `GET` / `POST /api/projects/{projectId}/playbooks`,
   `PATCH` / `DELETE /api/projects/{projectId}/playbooks/{playbookId}` — declarative, non-authoritative
   goal refinements (ADR 0011).
+- Catalog playbook overrides:
+  - `GET /api/projects/{projectId}/catalog-playbooks` lists built-in catalog summaries and whether
+    each has a project override.
+  - `GET /api/projects/{projectId}/catalog-playbooks/{agentId}` returns `{ builtIn, override,
+    effective }`.
+  - `PUT /api/projects/{projectId}/catalog-playbooks/{agentId}` accepts
+    `{ doctrine?, sections?: [{ heading, note }], expectedVersion? }`; at least one override is
+    required, doctrine is capped at 8,000 characters, and headings must match the built-in agent.
+  - `DELETE /api/projects/{projectId}/catalog-playbooks/{agentId}` resets to the built-in playbook.
+  These owner-only routes can override doctrine and section notes, never built-in constraints,
+  evidence guidance, stage, or agent identity.
 
 ## Agent runs and proposals
 
@@ -207,8 +218,27 @@ Typed noncanonical runs/proposals (context receipts, Capture reflection, craft p
 - `GET /api/projects/{projectId}/agent/runs` and `.../runs/{runId}` list/read run status.
 - `POST /api/projects/{projectId}/agent/runs/{runId}/cancel` cancels a run.
 - `GET /api/projects/{projectId}/agent/proposals` and `.../proposals/{proposalId}` list/read.
+  The list accepts paired `targetKind` / `targetId` filters and an optional proposal `status`
+  (default `ready`), and returns at most 100 newest-first summaries. Each proposal exposes one
+  `primaryTarget`; Capture-base fields are omitted for entity drafts that have no Capture base.
+- `POST /api/projects/{projectId}/agent/proposals/{proposalId}/reject` rejects a ready proposal.
+- `POST /api/projects/{projectId}/agent/proposals/{proposalId}/acknowledge` marks a
+  `plan-outline-v1`, `catalog-memo-v1`, or `pacing-findings-v1` proposal applied with zero
+  manuscript side effects.
+- `POST /api/projects/{projectId}/agent/plan-outlines` body `{ outlineText (1–8000), title?, model? }`
+  creates a Capture + ready `plan-mode.outline` proposal from a Plan-mode reply (no provider call).
+- `POST /api/projects/{projectId}/agent/catalog-runs` accepts
+  `{ agentId, lens?, model?, effort?, sceneId?, storyKnowledgeId?, bookId? }`. It creates a ready
+  `catalog-agent.memo` proposal targeted to the project, selected scene, or selected cast record.
+  Pacing Doctor returns `pacing-findings-v1`, with turn positions derived from equal-weight scenes
+  in navigator manuscript order; all other catalog agents return `catalog-memo-v1`. Structure
+  lenses are `save-the-cat` (default), `three-act`,
+  `heros-journey`, `scene-sequel`, `character-want-need`, and `genre-conventions`. A reachable
+  BYOK model may fill the strict schema; missing keys or unusable model output fall back to a
+  deterministic memo grounded in current scene titles and ids.
 - Apply / reject proposal routes accept the exact proposal hash; only first-party human sessions
-  apply. Core revalidates every version and applies all effects or none.
+  apply craft/reflection paths. Core revalidates a present Capture base and every canonical target
+  version, then applies all effects or none. See ADR 0014 for entity-draft proposal binding.
 
 Scene Partner Capture chat (BYOK structured turn, propose-only until promote/variant apply):
 
@@ -219,11 +249,34 @@ Scene Partner Capture chat (BYOK structured turn, propose-only until promote/var
 ## Workspace Agent chat
 
 - `POST /api/workspace/chat` accepts project/selection context, optional capability id, and Agent
-  dock prefs (`mode`: `chat` | `plan` | `agent`; model + effort). When `capabilityId` is a read
-  capability (e.g. `project.navigator.read`), the server invokes that tool. Otherwise, with a valid
-  BYOK key, it returns assistant text from `completeStructured` using server-assembled navigator
-  context. Without a key, the route returns a friendly unconfigured response (no silent failure
-  wall). Chat never mutates manuscript canon.
+  dock prefs (`mode`: `chat` | `plan` | `agent`; model + effort). Optional `priorTurns` (max 6
+  `{ role: "user"|"assistant"; body }` pairs) may be included for regenerate/edit coherence; the
+  server treats them as non-authoritative recent conversation text alongside server-assembled
+  project/selection context. When `message` equals a read capability id (e.g.
+  `project.navigator.read`), the server invokes that tool deterministically.
+  **Plan** mode instructs outline-friendly replies; the writer saves to Plans explicitly via
+  `POST /api/projects/{projectId}/agent/plan-outlines` (not auto-persisted each turn). Otherwise,
+  with a valid BYOK key and a tool-capable model (`supportsTools`), the route runs a
+  read-only tool loop (`project_navigator_read`, `scene_workspace_read`, `capture_list`) via
+  `@ghostwriter/ai` and returns assistant text plus optional `toolTraces` (compact writer-facing
+  step summaries). Scene reads are budgeted per turn (max 4 scenes, ~64k prose chars). Models
+  without tool support, or when tool-loop creation fails recoverably, fall back to
+  `completeStructured` with server-assembled navigator context (no `toolTraces`). Without a key,
+  the route returns a friendly unconfigured response (no silent failure wall). Chat never mutates
+  manuscript canon. Client abort of the stream request cancels in-flight provider work when the
+  SSE body is cancelled.
+
+- `POST /api/workspace/chat/stream` — same request body and auth as JSON chat; response is
+  `text/event-stream` (SSE). The client uses `fetch` + `ReadableStream` (POST + cookies). Named
+  events (JSON `data` payloads):
+  - `status` — `{ phase, label }` working-state phases (`starting`, `assembling_context`,
+    `thinking`, `reading_tools`, `writing`, …)
+  - `tool_trace` — `{ toolName, title, ok, summary, errorMessage? }` as each read tool finishes
+  - `text_delta` — `{ delta }` assistant text chunks during tool-loop streaming
+  - `done` — final `{ reply, mode, model, effort, toolTraces?, code? }` (same shape as JSON chat)
+  - `error` — `{ error, code }` hard failures
+  Comment keepalives (`: ping`) may appear during long waits. Structured / no-tools / no-key paths
+  emit `status` then `done` (or soft-error `done`) so the dock never looks idle.
 
 ## Book covers (Title Page)
 

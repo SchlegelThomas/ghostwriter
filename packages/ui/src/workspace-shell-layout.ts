@@ -2,7 +2,10 @@ import { ghostwriterTheme } from "./theme.js";
 
 const { shell } = ghostwriterTheme;
 
-export type WorkspaceSecondaryTab = "agent" | "properties";
+export type WorkspaceSecondaryMode = "agent" | "inspector";
+
+/** @deprecated Prefer {@link WorkspaceSecondaryMode}. */
+export type WorkspaceSecondaryTab = WorkspaceSecondaryMode;
 
 /** What the primary (left) sidebar hosts — Cursor-like side-bar views. */
 export type WorkspacePrimaryView = "explorer" | "characters";
@@ -81,12 +84,20 @@ export function writeStoredShellWidth(
   }
 }
 
-export function nextSecondaryTabOnAgentOpen(
-  current: WorkspaceSecondaryTab | undefined,
+export function nextSecondaryModeOnAgentOpen(
+  current: WorkspaceSecondaryMode | undefined,
   open: boolean
-): WorkspaceSecondaryTab {
+): WorkspaceSecondaryMode {
   if (!open) return current ?? "agent";
   return "agent";
+}
+
+/** @deprecated Prefer {@link nextSecondaryModeOnAgentOpen}. */
+export function nextSecondaryTabOnAgentOpen(
+  current: WorkspaceSecondaryMode | undefined,
+  open: boolean
+): WorkspaceSecondaryMode {
+  return nextSecondaryModeOnAgentOpen(current, open);
 }
 
 export type WorkspaceCenterMode = "draft" | "canvas" | "split";

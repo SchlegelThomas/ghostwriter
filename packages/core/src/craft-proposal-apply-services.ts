@@ -125,7 +125,10 @@ async function requireOwnedReadyCraftProposal(
 async function requireMatchingCaptureBase(
   dependencies: CraftProposalApplyServiceDependencies,
   proposal: AgentProposal
-): Promise<CaptureDocumentHead> {
+): Promise<CaptureDocumentHead | undefined> {
+  if (proposal.baseCaptureId === undefined) {
+    return undefined;
+  }
   const head = await dependencies.captureDocuments.get(proposal.baseCaptureId);
   if (head === undefined || head.projectId !== proposal.projectId) {
     throw new CaptureNotFoundError();
