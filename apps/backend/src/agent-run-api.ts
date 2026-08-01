@@ -9,6 +9,7 @@ import {
   AgentRunStateConflictError,
   CaptureNotFoundError,
   CapturePromotionNotEligibleError,
+  CatalogAgentTargetRequiredError,
   CraftTargetRequiredError,
   DomainValidationError,
   ProjectArchivedMutationError,
@@ -125,9 +126,16 @@ export function agentProposalResponse(proposal: AgentProposal) {
       outputSchemaId: proposal.outputSchemaId,
       payload: proposal.payload,
       contentHash: proposal.contentHash,
-      baseCaptureId: proposal.baseCaptureId,
-      baseCaptureWorkingVersion: proposal.baseCaptureWorkingVersion,
-      baseCaptureContentHash: proposal.baseCaptureContentHash,
+      primaryTarget: proposal.primaryTarget,
+      ...(proposal.baseCaptureId === undefined
+        ? {}
+        : { baseCaptureId: proposal.baseCaptureId }),
+      ...(proposal.baseCaptureWorkingVersion === undefined
+        ? {}
+        : { baseCaptureWorkingVersion: proposal.baseCaptureWorkingVersion }),
+      ...(proposal.baseCaptureContentHash === undefined
+        ? {}
+        : { baseCaptureContentHash: proposal.baseCaptureContentHash }),
       createdAt: proposal.createdAt,
       updatedAt: proposal.updatedAt,
       ...(proposal.decision === undefined ? {} : { decision: proposal.decision }),
@@ -144,9 +152,13 @@ export function agentProposalSummaryResponse(summary: AgentProposalSummary) {
     status: summary.status,
     outputSchemaId: summary.outputSchemaId,
     contentHash: summary.contentHash,
-    baseCaptureId: summary.baseCaptureId,
+    primaryTarget: summary.primaryTarget,
+    ...(summary.baseCaptureId === undefined
+      ? {}
+      : { baseCaptureId: summary.baseCaptureId }),
     createdAt: summary.createdAt,
-    updatedAt: summary.updatedAt
+    updatedAt: summary.updatedAt,
+    preview: summary.preview
   });
 }
 
@@ -286,6 +298,15 @@ export function mapAgentRunRouteError(
     };
   }
   if (error instanceof CraftTargetRequiredError) {
+    return {
+      status: 400,
+      body: {
+        error: error.message,
+        code: error.code
+      }
+    };
+  }
+  if (error instanceof CatalogAgentTargetRequiredError) {
     return {
       status: 400,
       body: {

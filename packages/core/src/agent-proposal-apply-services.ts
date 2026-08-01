@@ -198,6 +198,16 @@ async function requireMatchingCaptureBase(
   dependencies: AgentProposalApplyServiceDependencies,
   proposal: AgentProposal
 ): Promise<CaptureDocumentHead> {
+  if (
+    proposal.baseCaptureId === undefined ||
+    proposal.baseCaptureWorkingVersion === undefined ||
+    proposal.baseCaptureContentHash === undefined
+  ) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "This proposal apply mode requires a Capture base."
+    );
+  }
   const head = await dependencies.captureDocuments.get(proposal.baseCaptureId);
   if (head === undefined || head.projectId !== proposal.projectId) {
     throw new CaptureNotFoundError();
@@ -272,9 +282,9 @@ export function createAgentProposalApplyServices(
         const promotion = await dependencies.capturePromotions.promoteCaptureToScene({
           accountId: input.accountId,
           projectId: input.projectId,
-          captureId: proposal.baseCaptureId,
-          expectedCaptureWorkingVersion: proposal.baseCaptureWorkingVersion,
-          expectedCaptureContentHash: proposal.baseCaptureContentHash,
+          captureId: captureHead.captureId,
+          expectedCaptureWorkingVersion: captureHead.workingVersion,
+          expectedCaptureContentHash: captureHead.contentHash,
           expectedProjectVersion: input.expectedProjectVersion,
           title,
           manuscriptPlacement:

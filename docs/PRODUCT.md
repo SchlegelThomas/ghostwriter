@@ -105,6 +105,9 @@ On `feat/capture-to-story-agents`, writers can Capture first and integrate with 
   or a named scene variant that leaves the live working draft unchanged until apply;
 - Sketch Partner, Character Coach, and Worldkeeper propose typed craft deltas applied only through
   existing scene/story-knowledge commands;
+- entity drafts reuse those durable proposals with one primary Capture, scene, story-knowledge,
+  book, or project target; they remain noncanonical and require explicit owner Apply or Reject
+  (ADR 0014);
 - project-scoped MCP grants can read granted Captures and submit Capture-reflection proposals into
   the same Inbox; external clients cannot apply canon or retrieve credentials.
 
@@ -117,7 +120,7 @@ Fly, and post-gate Playwright remain pending before calling Capture shipped on p
 On the same branch, the workspace shell and Agent dock advanced:
 
 - Cursor-like chrome: activity rail, resizable Explorer primary, editor center, secondary
-  **Agent | Properties** (Agent defaults open);
+  **Agent** panel (Agent defaults open) or **Inspector / Context Dock** via toolbar — no tab chrome;
 - **Plans** (ex–Dreams & Ideas) opens as a center workspace; Capture stays modal; primary side on
   wide remains Explorer (manuscript tree);
 - **Cast** (Characters rail) opens as a center workspace — roster + dossier with visual gallery
@@ -135,23 +138,48 @@ On the same branch, the workspace shell and Agent dock advanced:
   configured; hermetic memory fake for E2E) — never a data URI in Lakebase;
 - Agent dock composer: modes **chat** / **Plan** / **agent**, real provider model ids + effort,
   persisted per project; picker lists only models the account can reach; **agent** mode requires
-  tool-capable models; **agent** mode also exposes a compact toolkit row (Scene Partner, Cover,
-  Character Coach, Worldkeeper, Sketch Partner) that deep-links into Plans or the Title Page cover
-  studio with dock status copy, or refuses with writer-facing guidance when selection is missing;
+  tool-capable models; **agent** mode exposes stage menus (**Brainstorm**, **Structure**,
+  **Writing**, **Editing**, **Commercial**) listing the writing-agent catalog — the five shipped
+  toolkit jobs (Scene Partner, Cover, Character Coach, Worldkeeper, Sketch Partner) are
+  redistributed across those stages; the full catalog is runnable as typed entity-draft memos,
+  including project-wide brainstorm/structure/editing/commercial jobs, scene-bound Dialogue and
+  Scene/Sequel coaches, and **Character Coach · Cast** on a selected cast record;
+  structure agents offer selectable Save the Cat, three-act, Hero's Journey, scene/sequel,
+  character want/need, and genre-conventions lenses; each catalog agent carries a **versioned craft
+  playbook in core** (doctrine, memo section headings, evidence rules, constraints) that is compiled
+  into layered BYOK instructions — product policy, workflow contract, agent doctrine, lens overlay,
+  then untrusted writer steering / project instructions — and reused for the deterministic memo;
+  while a project is open, **Settings → Playbooks** lets its owner add **writer steering** (tone,
+  emphasis, house rules) and optional section notes that sit on top of the built-in playbook for
+  that project; built-in doctrine, evidence guidance, constraints, stage, and agent identity stay
+  authoritative and are never replaced by steering;
+  memos use BYOK when
+  available and a grounded deterministic result otherwise, then land in Scene or Project **Drafts**
+  as structured cards (kind, partner agent, title, summary preview) for
+  Acknowledge/Reject without manuscript writes; **Pacing Doctor** instead produces typed
+  `pacing-findings-v1` Drafts whose turn percentages give each active scene equal weight in
+  navigator manuscript order (not word-count order), with scene anchors, prescriptions, and the
+  playbook sections preserved for review; existing toolkit agents still deep-link into Plans or the Title Page
+  cover studio and all context-dependent jobs refuse with writer-facing guidance when selection
+  is missing;
   **chat** completes with BYOK via the selected provider and server-assembled project context;
   the dock streams working state during turns (status labels, tool traces as they finish, typing
   caret while reply text arrives) via `POST /api/workspace/chat/stream`, with JSON chat as fallback;
   replies render lite markdown; working steps collapse into a “Worked · N steps” group; writers can
   copy turns, keep multiple local chat sessions (tabs), fork / edit-resend / regenerate, stop
   mid-stream, and use follow-up chips (Save to Plans / Open scene);
+  composer uses Enter to send (Shift+Enter newline), optional image/video attachment chips (metadata
+  reaches the model as turn context; video is not frame-ingested yet), and browser dictation into the
+  draft when Speech Recognition is available;
   **Plan** replies can be explicitly **Saved to Plans** as a typed `plan-outline-v1` proposal bound
   to a new Capture (acknowledge/reject only — no manuscript apply); Settings owns multi-provider keys;
   capability ids still invoke read tools;
 - Manuscript Explorer: header icons + right-click context menu; Canvas owns full center with a
   compact chapter chip strip (no canvas Quick Build).
 
-**Proposed next:** Founder browser verification of writing-agent harness + Agent dock QOL (A–E) and
-post-gate Playwright; confirm production deploy/migrate for provider credentials when ready.
+**Proposed next:** Founder browser verification of writing-agent harness, Agent dock QOL, and the
+writing-agent catalog (stage menus → entity Drafts → Acknowledge/Reject), then post-gate Playwright;
+confirm production deploy/migrate for provider credentials and proposal primary-target columns when ready.
 
 ## Prior writing milestone — implemented locally 2026-07-12
 

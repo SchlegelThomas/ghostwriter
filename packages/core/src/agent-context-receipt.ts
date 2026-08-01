@@ -17,6 +17,7 @@ import {
   PLAN_MODE_OUTLINE_WORKFLOW_ID
 } from "./agent-domain.js";
 import type { CaptureContentHash, CaptureDocumentHead } from "./capture-documents.js";
+import type { AgentProposalPrimaryTarget } from "./agent-runs-proposals.js";
 import {
   DomainValidationError,
   type CaptureId,
@@ -86,6 +87,7 @@ export type ContextReceipt = Readonly<{
   outputSchemaId: AgentOutputSchemaId;
   targetSceneId?: SceneId;
   targetStoryKnowledgeId?: StoryKnowledgeId;
+  primaryTarget?: AgentProposalPrimaryTarget;
   receiptHash: InstructionContentHash;
   createdAt: string;
 }>;

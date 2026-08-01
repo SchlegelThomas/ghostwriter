@@ -10,6 +10,8 @@ import {
   projectId,
   sceneId,
   storyKnowledgeId,
+  AGENT_PROPOSAL_STATUSES,
+  AGENT_PROPOSAL_TARGET_KINDS,
   CAPTURE_REFLECTION_WORKFLOW_ID,
   CHARACTER_COACH_WORKFLOW_ID,
   SKETCH_PARTNER_WORKFLOW_ID,
@@ -235,10 +237,52 @@ export function registerAgentRunRoutes(
 
   app.get("/api/projects/:projectId/agent/proposals", async (context) => {
     try {
+      const targetKind = context.req.query("targetKind");
+      const targetId = context.req.query("targetId")?.trim();
+      const status = context.req.query("status") ?? "ready";
+      if ((targetKind === undefined) !== (targetId === undefined)) {
+        return context.json(
+          {
+            error: "targetKind and targetId must be supplied together.",
+            code: "INVALID_REQUEST"
+          },
+          400
+        );
+      }
+      if (
+        (targetKind !== undefined &&
+          !AGENT_PROPOSAL_TARGET_KINDS.includes(
+            targetKind as (typeof AGENT_PROPOSAL_TARGET_KINDS)[number]
+          )) ||
+        targetId === ""
+      ) {
+        return context.json(
+          { error: "Invalid proposal target filter.", code: "INVALID_REQUEST" },
+          400
+        );
+      }
+      if (
+        !AGENT_PROPOSAL_STATUSES.includes(
+          status as (typeof AGENT_PROPOSAL_STATUSES)[number]
+        )
+      ) {
+        return context.json(
+          { error: "Invalid proposal status filter.", code: "INVALID_REQUEST" },
+          400
+        );
+      }
       const authSession = context.get("authSession");
-      const proposals = await captureReflection.listProposalSummaries({
+      const proposals = await foundation.listProposalSummaries({
         accountId: accountId(authSession.account.id),
-        projectId: projectId(context.req.param("projectId"))
+        projectId: projectId(context.req.param("projectId")),
+        status: status as (typeof AGENT_PROPOSAL_STATUSES)[number],
+        ...(targetKind === undefined || targetId === undefined
+          ? {}
+          : {
+              targetKind:
+                targetKind as (typeof AGENT_PROPOSAL_TARGET_KINDS)[number],
+              targetId
+            })
       });
       return context.json({
         proposals: proposals.map(agentProposalSummaryResponse)

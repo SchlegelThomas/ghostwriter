@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { readFile } from "node:fs/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   AGENT_FOUNDATION_LIST_MAX,
@@ -145,6 +146,7 @@ function readyProposal(runId = RUN_ID, proposalId = PROPOSAL_ID) {
     outputSchemaId: "capture-reflection-v1",
     payload: reflectionPayload,
     contentHash: CONTENT_HASH,
+    primaryTarget: { kind: "capture", id: BASE_CAPTURE },
     baseCaptureId: BASE_CAPTURE,
     baseCaptureWorkingVersion: 2,
     baseCaptureContentHash: captureContentHash("c".repeat(64)),
@@ -262,6 +264,53 @@ describe("postgres agent foundation repositories", () => {
     expect(await db.select().from(contextReceipts)).toEqual([]);
     expect(await db.select().from(agentRuns)).toEqual([]);
     expect(await db.select().from(agentProposals)).toEqual([]);
+  });
+
+  it("backfills existing Capture proposals before enforcing primary targets", async () => {
+    const { client, close } = createPgliteDatabase();
+    closers.push(close);
+    await client.exec(`
+      CREATE TABLE agent_proposals (
+        project_id text NOT NULL,
+        base_capture_id text NOT NULL,
+        base_capture_working_version integer NOT NULL,
+        base_capture_content_hash text NOT NULL,
+        status text NOT NULL,
+        created_at text NOT NULL
+      );
+      INSERT INTO agent_proposals (
+        project_id,
+        base_capture_id,
+        base_capture_working_version,
+        base_capture_content_hash,
+        status,
+        created_at
+      ) VALUES (
+        'project-backfill',
+        'capture-backfill',
+        3,
+        '${"c".repeat(64)}',
+        'ready',
+        '${NOW}'
+      );
+    `);
+    const migration = await readFile(
+      new URL("../drizzle/0021_fixed_amazoness.sql", import.meta.url),
+      "utf8"
+    );
+    await client.exec(migration.replaceAll("--> statement-breakpoint", ""));
+    const result = await client.query<{
+      primary_target_kind: string;
+      primary_target_id: string;
+    }>(
+      "SELECT primary_target_kind, primary_target_id FROM agent_proposals"
+    );
+    expect(result.rows).toEqual([
+      {
+        primary_target_kind: "capture",
+        primary_target_id: "capture-backfill"
+      }
+    ]);
   });
 
   it("does not persist forbidden raw or content-bearing columns", async () => {
@@ -424,6 +473,34 @@ describe("postgres agent foundation repositories", () => {
     expect(loaded?.contentHash).toBe(CONTENT_HASH);
   });
 
+  it("stores and filters entity-targeted proposals without a Capture base", async () => {
+    const { receipts, runs, proposals } = await setupPostgresFoundation();
+    await receipts.insertImmutable(sampleReceipt());
+    await runs.create(queuedRun());
+    const entityProposal = createReadyAgentProposal({
+      ...readyProposal(),
+      id: agentProposalId("proposal-scene-draft-pg"),
+      primaryTarget: { kind: "scene", id: "scene-arrival-at-bellwether" },
+      baseCaptureId: undefined,
+      baseCaptureWorkingVersion: undefined,
+      baseCaptureContentHash: undefined
+    });
+    await proposals.create(entityProposal);
+
+    const matching = await proposals.listByProject(BELLWETHER_FIXTURE_PROJECT_ID, {
+      targetKind: "scene",
+      targetId: "scene-arrival-at-bellwether",
+      status: "ready"
+    });
+    expect(matching).toEqual([entityProposal]);
+    expect(
+      await proposals.listByProject(BELLWETHER_FIXTURE_PROJECT_ID, {
+        targetKind: "capture",
+        targetId: BASE_CAPTURE
+      })
+    ).toEqual([]);
+  });
+
   it("completes reflection atomically and rolls back on status conflict", async () => {
     const { runs, proposals, completion, receipts } = await setupPostgresFoundation();
     await receipts.insertImmutable(sampleReceipt());
@@ -492,10 +569,16 @@ describe("postgres agent foundation repositories", () => {
       next: readyRun()
     });
     await expect(
-      proposals.create({
-        ...readyProposal(),
-        baseCaptureId: captureId("capture-missing-fk")
-      })
+      proposals.create(
+        createReadyAgentProposal({
+          ...readyProposal(),
+          primaryTarget: {
+            kind: "capture",
+            id: captureId("capture-missing-fk")
+          },
+          baseCaptureId: captureId("capture-missing-fk")
+        })
+      )
     ).rejects.toThrow("Agent foundation persistence failed.");
   });
 

@@ -369,11 +369,11 @@ export function agentModelLabelWithProvider(
 export function workspaceAgentModeLabel(mode: WorkspaceAgentMode): string {
   switch (mode) {
     case "chat":
-      return "chat";
+      return "Chat";
     case "plan":
       return "Plan";
     case "agent":
-      return "agent";
+      return "Agent";
   }
 }
 

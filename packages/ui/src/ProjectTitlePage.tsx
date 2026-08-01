@@ -34,6 +34,11 @@ import {
   workspaceImageModelPickerOptions,
   type WorkspaceAvailableModel
 } from "./workspace-agent-prefs.js";
+import {
+  EntityDraftsPanel,
+  type EntityDraftsPanelProps
+} from "./EntityDraftsPanel.js";
+import type { EntityDraftSummary } from "./entity-draft-model.js";
 import { ghostwriterTheme } from "./theme.js";
 import type { OpenSettingsHandler } from "./settings-focus.js";
 
@@ -97,7 +102,20 @@ export type ProjectTitlePageProps = Readonly<{
     bookId: BookId;
     imageUrl: string;
   }>): Promise<string | undefined>;
-}>;
+}> &
+  Readonly<{
+    entityDrafts?: readonly EntityDraftSummary[];
+    entityDraftsLoading?: boolean;
+    entityDraftMutatingProposalId?: string;
+    entityDraftExpandedId?: string;
+    entityDraftExpandedBody?: string;
+    entityDraftExpandedLoading?: boolean;
+    entityDraftDetailTitles?: Readonly<Record<string, string>>;
+    onRejectEntityDraft?(proposalId: string): void;
+    onAcknowledgeEntityDraft?(proposalId: string): void;
+    onRefreshEntityDrafts?(): void;
+    onSelectEntityDraft?(proposalId: string): void;
+  }>;
 
 type SaveStatus = "idle" | "saved" | "unchanged" | "error";
 
@@ -508,7 +526,18 @@ export function ProjectTitlePage({
   preferredImageModelId,
   onOpenSettings,
   onApplyCoverImage,
-  onResolveCoverDisplayUrl
+  onResolveCoverDisplayUrl,
+  entityDrafts,
+  entityDraftsLoading,
+  entityDraftMutatingProposalId,
+  entityDraftExpandedId,
+  entityDraftExpandedBody,
+  entityDraftExpandedLoading,
+  entityDraftDetailTitles,
+  onRejectEntityDraft,
+  onAcknowledgeEntityDraft,
+  onRefreshEntityDrafts,
+  onSelectEntityDraft
 }: ProjectTitlePageProps) {
   const activeBooks = useMemo(
     () => project.books.filter((book) => book.archivedAt === undefined),
@@ -579,6 +608,27 @@ export function ProjectTitlePage({
   const coverImageBusy = coverJobStarting || coverApplying || jobInFlight;
   const coverActionsDisabled =
     busy || coverImageBusy || !imageGenerationAvailable;
+
+  const titlePageDraftsPanel: EntityDraftsPanelProps | undefined =
+    entityDrafts !== undefined ||
+    onRefreshEntityDrafts !== undefined ||
+    onRejectEntityDraft !== undefined ||
+    onSelectEntityDraft !== undefined
+      ? {
+          drafts: entityDrafts ?? [],
+          loading: entityDraftsLoading,
+          busy: busy || entityDraftMutatingProposalId !== undefined,
+          mutatingProposalId: entityDraftMutatingProposalId,
+          expandedDraftId: entityDraftExpandedId,
+          expandedBody: entityDraftExpandedBody,
+          expandedLoading: entityDraftExpandedLoading,
+          detailTitles: entityDraftDetailTitles,
+          onReject: onRejectEntityDraft,
+          onAcknowledge: onAcknowledgeEntityDraft,
+          onRefresh: onRefreshEntityDrafts,
+          onSelect: onSelectEntityDraft
+        }
+      : undefined;
 
   const savedCoverDisplayUrl = useCoverDisplayUrl(
     focusedBook?.id,
@@ -1146,6 +1196,10 @@ export function ProjectTitlePage({
         {activeBooks.length === 1 ? "book" : "books"} on the shelf · open one
         to work the cover
       </Text>
+
+      {titlePageDraftsPanel === undefined ? null : (
+        <EntityDraftsPanel {...titlePageDraftsPanel} />
+      )}
 
       <View accessibilityLabel="Book cover shelf" style={styles.shelf}>
         {activeBooks.map((book) => (

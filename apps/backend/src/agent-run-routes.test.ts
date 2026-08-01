@@ -160,12 +160,25 @@ describe("agent run routes", () => {
     expect(startedBody.kind).toBe("ready");
     expect(startedBody.run.status).toBe("ready");
     expect(startedBody.proposal.payload.summary).toContain("harbor signal");
+    expect(startedBody.proposal.primaryTarget).toEqual({
+      kind: "capture",
+      id: captureId
+    });
     expect(JSON.stringify(startedBody)).not.toContain(OPENAI_KEY);
 
     const listed = await app.request(`/api/projects/${PROJECT}/agent/proposals`);
     expect(listed.status).toBe(200);
     const listedBody = await listed.json();
     expect(listedBody.proposals).toHaveLength(1);
+    const targeted = await app.request(
+      `/api/projects/${PROJECT}/agent/proposals?targetKind=capture&targetId=${encodeURIComponent(captureId)}`
+    );
+    expect(targeted.status).toBe(200);
+    expect((await targeted.json()).proposals).toHaveLength(1);
+    const otherTarget = await app.request(
+      `/api/projects/${PROJECT}/agent/proposals?targetKind=scene&targetId=scene-missing`
+    );
+    expect((await otherTarget.json()).proposals).toEqual([]);
 
     const rejected = await app.request(
       `/api/projects/${PROJECT}/agent/proposals/${startedBody.proposal.id}/reject`,
@@ -177,6 +190,14 @@ describe("agent run routes", () => {
     );
     expect(rejected.status).toBe(200);
     expect((await rejected.json()).proposal.status).toBe("rejected");
+    const readyAfterReject = await app.request(
+      `/api/projects/${PROJECT}/agent/proposals`
+    );
+    expect((await readyAfterReject.json()).proposals).toEqual([]);
+    const rejectedList = await app.request(
+      `/api/projects/${PROJECT}/agent/proposals?status=rejected`
+    );
+    expect((await rejectedList.json()).proposals).toHaveLength(1);
   });
 
   it("applies a ready proposal as a new scene", async () => {
@@ -451,6 +472,44 @@ describe("agent run routes", () => {
     expect(fetched.status).toBe(200);
     const fetchedBody = await fetched.json();
     expect(fetchedBody.proposal.outputSchemaId).toBe("plan-outline-v1");
+  });
+
+  it("creates a ready project catalog memo without a configured key", async () => {
+    const { app } = await openSeededApp();
+    const response = await app.request(
+      `/api/projects/${PROJECT}/agent/catalog-runs`,
+      {
+        method: "POST",
+        headers: originHeaders("POST"),
+        body: JSON.stringify({
+          agentId: "story-architect",
+          lens: "three-act"
+        })
+      }
+    );
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.proposal).toMatchObject({
+      status: "ready",
+      outputSchemaId: "catalog-memo-v1",
+      primaryTarget: { kind: "project", id: PROJECT },
+      payload: {
+        schemaId: "catalog-memo-v1",
+        agentId: "story-architect",
+        lens: "three-act"
+      }
+    });
+
+    const acknowledged = await app.request(
+      `/api/projects/${PROJECT}/agent/proposals/${body.proposal.id}/acknowledge`,
+      {
+        method: "POST",
+        headers: originHeaders("POST"),
+        body: JSON.stringify({})
+      }
+    );
+    expect(acknowledged.status).toBe(200);
+    expect((await acknowledged.json()).proposal.status).toBe("applied");
   });
 
   it("returns content-free 503 when encryption is unavailable", async () => {

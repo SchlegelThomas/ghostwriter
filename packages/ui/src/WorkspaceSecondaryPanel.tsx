@@ -1,72 +1,38 @@
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ghostwriterTheme } from "./theme.js";
-import type { WorkspaceSecondaryTab } from "./workspace-shell-layout.js";
+import type { WorkspaceSecondaryMode } from "./workspace-shell-layout.js";
 
 const { colors, fonts } = ghostwriterTheme;
 
 export type WorkspaceSecondaryPanelProps = Readonly<{
-  tab: WorkspaceSecondaryTab;
-  onTabChange(tab: WorkspaceSecondaryTab): void;
+  mode: WorkspaceSecondaryMode;
   width: number;
   agent: ReactNode;
-  properties: ReactNode;
+  inspector: ReactNode;
+  inspectorLabel?: string;
   onCollapse?(): void;
 }>;
 
-function TabButton({
-  label,
-  selected,
-  onPress
-}: Readonly<{
-  label: string;
-  selected: boolean;
-  onPress(): void;
-}>) {
-  return (
-    <Pressable
-      accessibilityRole="tab"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.tab,
-        selected && styles.tabSelected,
-        pressed && styles.pressed
-      ]}
-    >
-      <Text style={[styles.tabLabel, selected && styles.tabLabelSelected]}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-/** Cursor-like secondary side: Agent (MCP chat) | Properties. */
+/** Cursor-like secondary side: Agent chat or inspector / Context Dock (no tab chrome). */
 export function WorkspaceSecondaryPanel({
-  tab,
-  onTabChange,
+  mode,
   width,
   agent,
-  properties,
+  inspector,
+  inspectorLabel = "Inspector",
   onCollapse
 }: WorkspaceSecondaryPanelProps) {
+  const headerLabel = mode === "agent" ? "Agent" : inspectorLabel;
+
   return (
     <View
       accessibilityLabel="Secondary side panel"
       style={[styles.root, { width }]}
     >
-      <View accessibilityRole="tablist" style={styles.tabs}>
-        <TabButton
-          label="Agent"
-          onPress={() => onTabChange("agent")}
-          selected={tab === "agent"}
-        />
-        <TabButton
-          label="Properties"
-          onPress={() => onTabChange("properties")}
-          selected={tab === "properties"}
-        />
-        <View style={styles.tabSpacer} />
+      <View style={styles.header}>
+        <Text style={styles.headerLabel}>{headerLabel}</Text>
+        <View style={styles.headerSpacer} />
         {onCollapse === undefined ? null : (
           <Pressable
             accessibilityLabel="Collapse secondary panel"
@@ -80,7 +46,7 @@ export function WorkspaceSecondaryPanel({
       </View>
       <View style={styles.body}>
         <View style={styles.bodyFill}>
-          {tab === "agent" ? agent : properties}
+          {mode === "agent" ? agent : inspector}
         </View>
       </View>
     </View>
@@ -100,33 +66,22 @@ const styles = StyleSheet.create({
     minWidth: 0,
     overflow: "hidden"
   },
-  tabs: {
+  header: {
     alignItems: "center",
     borderBottomColor: colors.line,
     borderBottomWidth: 1,
     flexDirection: "row",
     flexShrink: 0,
     gap: 2,
-    paddingHorizontal: 6,
-    paddingVertical: 6
-  },
-  tab: {
-    borderRadius: 6,
     paddingHorizontal: 10,
-    paddingVertical: 6
+    paddingVertical: 8
   },
-  tabSelected: {
-    backgroundColor: colors.accentSoft
-  },
-  tabLabel: {
-    color: colors.muted,
+  headerLabel: {
+    color: colors.kicker,
     fontFamily: fonts.uiSemibold,
     fontSize: 11
   },
-  tabLabelSelected: {
-    color: colors.kicker
-  },
-  tabSpacer: {
+  headerSpacer: {
     flex: 1
   },
   collapse: {

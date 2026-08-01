@@ -33,7 +33,9 @@ import {
   primaryCaptureFromReceipt,
   validateAgentProposalPayload,
   type AgentProposal,
+  type AgentProposalStatus,
   type AgentProposalSummary,
+  type AgentProposalTargetKind,
   type AgentRun,
   type AgentRunSummary,
   type AgentRunTerminalDiagnosticCode,
@@ -145,6 +147,9 @@ export type AgentFoundationServices = Readonly<{
     accountId: AccountId;
     projectId: ProjectId;
     limit?: number;
+    targetKind?: AgentProposalTargetKind;
+    targetId?: string;
+    status?: AgentProposalStatus;
   }>): Promise<readonly AgentProposalSummary[]>;
 }>;
 
@@ -479,10 +484,20 @@ export function createAgentFoundationServices(
         receipt.outputSchemaId,
         input.rawPayload
       );
+      const primaryTarget =
+        receipt.targetStoryKnowledgeId !== undefined
+          ? ({
+              kind: "story-knowledge",
+              id: receipt.targetStoryKnowledgeId
+            } as const)
+          : receipt.targetSceneId !== undefined
+            ? ({ kind: "scene", id: receipt.targetSceneId } as const)
+            : ({ kind: "capture", id: receiptBinding.captureId } as const);
       const contentHash = await computeAgentProposalContentHash(
         {
           outputSchemaId: receipt.outputSchemaId,
           payload,
+          primaryTarget,
           baseCaptureId: receiptBinding.captureId,
           baseCaptureWorkingVersion: receiptBinding.workingVersion,
           baseCaptureContentHash: receiptBinding.contentHash
@@ -499,6 +514,7 @@ export function createAgentFoundationServices(
         outputSchemaId: receipt.outputSchemaId,
         payload,
         contentHash,
+        primaryTarget,
         baseCaptureId: receiptBinding.captureId,
         baseCaptureWorkingVersion: receiptBinding.workingVersion,
         baseCaptureContentHash: receiptBinding.contentHash,
@@ -642,10 +658,14 @@ export function createAgentFoundationServices(
       if (current === undefined || current.projectId !== input.projectId) {
         throw new AgentProposalNotFoundError();
       }
-      if (current.outputSchemaId !== "plan-outline-v1") {
+      if (
+        current.outputSchemaId !== "plan-outline-v1" &&
+        current.outputSchemaId !== "catalog-memo-v1" &&
+        current.outputSchemaId !== "pacing-findings-v1"
+      ) {
         throw new DomainValidationError(
           "INVALID_AGENT_POLICY",
-          "Only plan-outline proposals can be acknowledged without apply."
+          "Only findings, memo, and plan-outline proposals can be acknowledged without apply."
         );
       }
       if (current.status !== "ready") {
@@ -703,7 +723,10 @@ export function createAgentFoundationServices(
     async listProposalSummaries(input) {
       await requireOwnedProject(dependencies, input.accountId, input.projectId);
       const proposals = await dependencies.proposals.listByProject(input.projectId, {
-        limit: input.limit
+        limit: input.limit,
+        targetKind: input.targetKind,
+        targetId: input.targetId,
+        status: input.status
       });
       return proposals.map(agentProposalSummaryFromProposal);
     }

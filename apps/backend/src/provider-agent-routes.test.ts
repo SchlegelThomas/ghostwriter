@@ -444,4 +444,47 @@ describe("provider and agent guidance routes", () => {
       ).status
     ).toBe(400);
   });
+
+  it("saves and reads owner-scoped catalog playbook overrides", async () => {
+    const { app } = await openSeededApp();
+    const path = `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/catalog-playbooks/pacing-doctor`;
+    const saved = await app.request(path, {
+      method: "PUT",
+      headers: originHeaders("PUT"),
+      body: JSON.stringify({
+        doctrine: "Read pressure turns before scene length.",
+        sections: [{ heading: "Density read", note: "Count meaningful turns." }]
+      })
+    });
+    expect(saved.status).toBe(200);
+    const body = await saved.json();
+    expect(body.override.version).toBe(1);
+    expect(body.effective.doctrine).toContain("pressure turns");
+    expect(body.effective.constraints).toContain("Propose only");
+
+    const read = await app.request(path);
+    expect(read.status).toBe(200);
+    expect((await read.json()).override.sections[0].heading).toBe("Density read");
+
+    const stranger = await openSeededApp({
+      auth: {
+        handler: () => Response.json({ auth: "handled" }),
+        getSession: async () => ({
+          account: {
+            id: "account-catalog-stranger",
+            name: "Stranger",
+            email: "catalog-stranger@example.test",
+            emailVerified: true
+          },
+          session: {
+            id: "session-catalog-stranger",
+            expiresAt: "2026-08-02T00:00:00.000Z"
+          }
+        }),
+        ensureDemoCredentialAccount: async () => {},
+        signInDemo: async () => Response.json({ ok: true })
+      }
+    });
+    expect((await stranger.app.request(path)).status).toBe(404);
+  });
 });

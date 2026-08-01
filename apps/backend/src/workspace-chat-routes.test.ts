@@ -13,7 +13,12 @@ import {
   TEST_BACKEND_ORIGIN,
   testBackendClosers
 } from "./test-backend-app.js";
-import { assembleWorkspaceChatContext, buildWorkspaceChatInputText } from "./workspace-chat-routes.js";
+import {
+  assembleWorkspaceChatContext,
+  buildWorkspaceChatInputText,
+  formatWorkspaceChatAttachmentsContext,
+  workspaceChatRequestSchema
+} from "./workspace-chat-routes.js";
 
 const TEST_ORIGIN = TEST_BACKEND_ORIGIN;
 const OPENAI_KEY = "sk-valid-openai-key-1234567890";
@@ -110,6 +115,68 @@ describe("buildWorkspaceChatInputText", () => {
     expect(text).toContain("Assistant: Here is a draft outline.");
     expect(text).toContain("Writer message:");
     expect(text).toContain("Try again with more detail");
+  });
+});
+
+describe("workspaceChatRequestSchema attachments", () => {
+  it("accepts bounded image attachments", () => {
+    const parsed = workspaceChatRequestSchema.safeParse({
+      message: "See this cover",
+      attachments: [
+        {
+          kind: "image",
+          name: "cover.png",
+          mimeType: "image/png",
+          byteLength: 1024,
+          dataBase64: "aGVsbG8="
+        }
+      ]
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects too many attachments", () => {
+    const parsed = workspaceChatRequestSchema.safeParse({
+      message: "Too many",
+      attachments: [
+        { kind: "image", name: "a.png", mimeType: "image/png", byteLength: 1 },
+        { kind: "image", name: "b.png", mimeType: "image/png", byteLength: 1 },
+        { kind: "image", name: "c.png", mimeType: "image/png", byteLength: 1 },
+        { kind: "image", name: "d.png", mimeType: "image/png", byteLength: 1 }
+      ]
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects video inline binary", () => {
+    const parsed = workspaceChatRequestSchema.safeParse({
+      message: "Clip",
+      attachments: [
+        {
+          kind: "video",
+          name: "clip.mp4",
+          mimeType: "video/mp4",
+          byteLength: 1000,
+          dataBase64: "abc"
+        }
+      ]
+    });
+    expect(parsed.success).toBe(false);
+  });
+});
+
+describe("formatWorkspaceChatAttachmentsContext", () => {
+  it("notes video metadata honestly", () => {
+    const text = formatWorkspaceChatAttachmentsContext([
+      {
+        kind: "video",
+        name: "pitch.mp4",
+        mimeType: "video/mp4",
+        byteLength: 5000
+      }
+    ]);
+    expect(text).toContain("pitch.mp4");
+    expect(text).toContain("not ingested as frames");
   });
 });
 

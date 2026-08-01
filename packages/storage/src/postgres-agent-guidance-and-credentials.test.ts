@@ -4,6 +4,7 @@ import {
   BELLWETHER_FIXTURE_PROJECT_ID,
   accountId,
   createAccountAiCollaborationProfile,
+  createCatalogPlaybookOverride,
   createMemoryAccountAiCollaborationProfileRepository,
   createMemoryProjectAgentInstructionsRepository,
   createMemoryProjectPlaybookRepository,
@@ -31,10 +32,12 @@ import {
   createPostgresProjectPlaybookRepository
 } from "./postgres-agent-guidance-repository.js";
 import { createPostgresProviderCredentialRepository } from "./postgres-provider-credential-repository.js";
+import { createPostgresCatalogPlaybookOverrideRepository } from "./postgres-catalog-playbook-override-repository.js";
 import { createPostgresProjectRepository } from "./postgres-project-repository.js";
 import {
   aiCollaborationProfiles,
   projectAgentInstructions,
+  projectCatalogPlaybookOverrides,
   projectPlaybooks,
   providerCredentials,
   user
@@ -120,6 +123,8 @@ async function setupPostgresGuidance() {
       createPostgresAccountAiCollaborationProfileRepository(repositoryDatabase),
     projectInstructions:
       createPostgresProjectAgentInstructionsRepository(repositoryDatabase),
+    catalogPlaybookOverrides:
+      createPostgresCatalogPlaybookOverrideRepository(repositoryDatabase),
     playbooks: createPostgresProjectPlaybookRepository(repositoryDatabase)
   };
 }
@@ -144,7 +149,45 @@ describe("postgres provider credentials and agent guidance", () => {
     expect(await db.select().from(providerCredentials)).toEqual([]);
     expect(await db.select().from(aiCollaborationProfiles)).toEqual([]);
     expect(await db.select().from(projectAgentInstructions)).toEqual([]);
+    expect(await db.select().from(projectCatalogPlaybookOverrides)).toEqual([]);
     expect(await db.select().from(projectPlaybooks)).toEqual([]);
+  });
+
+  it("upserts and resets project catalog playbook overrides", async () => {
+    const { catalogPlaybookOverrides } = await setupPostgresGuidance();
+    const first = createCatalogPlaybookOverride({
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+      agentId: "pacing-doctor",
+      version: 1,
+      doctrine: "Measure pressure per scene.",
+      contentHash: HASH,
+      createdAt: NOW,
+      updatedAt: NOW
+    });
+    expect((await catalogPlaybookOverrides.upsert(first, undefined)).ok).toBe(true);
+    const second = createCatalogPlaybookOverride({
+      ...first,
+      version: 2,
+      doctrine: "Measure pressure at every turn.",
+      updatedAt: LATER
+    });
+    expect((await catalogPlaybookOverrides.upsert(second, 1)).ok).toBe(true);
+    expect((await catalogPlaybookOverrides.upsert({ ...second, version: 3 }, 1)).ok).toBe(
+      false
+    );
+    expect(
+      (await catalogPlaybookOverrides.delete(
+        BELLWETHER_FIXTURE_PROJECT_ID,
+        "pacing-doctor",
+        2
+      )).ok
+    ).toBe(true);
+    expect(
+      await catalogPlaybookOverrides.get(
+        BELLWETHER_FIXTURE_PROJECT_ID,
+        "pacing-doctor"
+      )
+    ).toBeUndefined();
   });
 
   it("stores encrypted credential envelopes without plaintext columns", async () => {

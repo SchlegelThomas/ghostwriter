@@ -225,6 +225,16 @@ variants, and relational Story Canvas state/history/preferences. PGlite migratio
 contracts pass locally; these migrations remain unapplied to production until the normal PR branch
 and merge-driven backend workflows run.
 
+Writing-agent catalog work adds:
+
+- **`0021`** — proposal `primaryTarget` for entity drafts (scene / story-knowledge / book /
+  project), backfilling Capture-bound rows.
+- **`0022`** — `project_catalog_playbook_overrides` for per-project writer steering on catalog
+  agents (Settings → Playbooks).
+
+Both migrate on the PR Lakebase branch in CI and on `production` via the backend deploy workflow
+after merge. Confirm deploy logs after merge if Drafts or Playbooks look empty in production.
+
 ### Per-PR database branches
 
 `.github/workflows/db-branch.yml` creates `pr-<number>` from `production` (with a TTL), migrates it,

@@ -1,5 +1,12 @@
 import { useState, type ReactElement } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View
+} from "react-native";
 import { ghostwriterTheme } from "./theme.js";
 import type { OpenSettingsHandler } from "./settings-focus.js";
 import type { WorkspaceImageModelPickerOption } from "./workspace-agent-prefs.js";
@@ -26,60 +33,101 @@ export function ImageModelPicker({
   const selected =
     options.find((entry) => entry.value === value) ?? options[0]!;
 
+  function closePicker(): void {
+    setOpen(false);
+  }
+
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <View style={styles.dropdown}>
-        <Pressable
-          accessibilityLabel={label}
-          accessibilityRole="button"
-          accessibilityState={{ expanded: open, disabled }}
-          disabled={disabled}
-          onPress={() => setOpen((current) => !current)}
-          style={({ pressed }) => [
-            styles.trigger,
-            pressed && styles.pressed,
-            disabled && styles.disabled
-          ]}
+      <Pressable
+        accessibilityLabel={label}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open, disabled }}
+        disabled={disabled}
+        onPress={() => setOpen(true)}
+        style={({ pressed }) => [
+          styles.trigger,
+          pressed && styles.pressed,
+          disabled && styles.disabled
+        ]}
+      >
+        <Text numberOfLines={1} style={styles.triggerText}>
+          {selected.label}
+        </Text>
+        <Text style={styles.caret}>▾</Text>
+      </Pressable>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={closePicker}
+        transparent
+        visible={open}
+      >
+        <View
+          accessibilityLabel={`Choose ${label.toLowerCase()}`}
+          accessibilityViewIsModal
+          style={styles.pickerRoot}
+          {...({ "aria-modal": true } as object)}
         >
-          <Text numberOfLines={1} style={styles.triggerText}>
-            {selected.label}
-          </Text>
-          <Text style={styles.caret}>{open ? "▴" : "▾"}</Text>
-        </Pressable>
-        {open ? (
-          <View accessibilityRole="menu" style={styles.menu}>
-            {options.map((option) => {
-              const isSelected = option.value === selected.value;
-              return (
-                <Pressable
-                  accessibilityRole="menuitem"
-                  accessibilityState={{ selected: isSelected }}
-                  key={option.value}
-                  onPress={() => {
-                    onChange(option.value);
-                    setOpen(false);
-                  }}
-                  style={({ pressed }) => [
-                    styles.item,
-                    isSelected && styles.itemSelected,
-                    pressed && styles.pressed
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.itemText,
-                      isSelected && styles.itemTextSelected
+          <Pressable
+            accessibilityLabel="Dismiss image model picker"
+            accessibilityRole="button"
+            onPress={closePicker}
+            style={styles.pickerBackdrop}
+          />
+          <View style={styles.pickerCard}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>{label}</Text>
+              <Pressable
+                accessibilityLabel="Close image model picker"
+                accessibilityRole="button"
+                onPress={closePicker}
+                style={({ pressed }) => [
+                  styles.pickerClose,
+                  pressed && styles.pressed
+                ]}
+              >
+                <Text style={styles.pickerCloseText}>×</Text>
+              </Pressable>
+            </View>
+            <ScrollView
+              accessibilityRole="menu"
+              keyboardShouldPersistTaps="handled"
+              style={styles.pickerList}
+            >
+              {options.map((option) => {
+                const isSelected = option.value === selected.value;
+                return (
+                  <Pressable
+                    accessibilityRole="menuitem"
+                    accessibilityState={{ selected: isSelected }}
+                    key={option.value}
+                    onPress={() => {
+                      onChange(option.value);
+                      closePicker();
+                    }}
+                    style={({ pressed }) => [
+                      styles.item,
+                      isSelected && styles.itemSelected,
+                      pressed && styles.pressed
                     ]}
                   >
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
+                    <Text
+                      style={[
+                        styles.itemText,
+                        isSelected && styles.itemTextSelected
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           </View>
-        ) : null}
-      </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -118,10 +166,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     textTransform: "uppercase"
   },
-  dropdown: {
-    position: "relative",
-    zIndex: 4
-  },
   trigger: {
     alignItems: "center",
     backgroundColor: colors.panel,
@@ -144,22 +188,66 @@ const styles = StyleSheet.create({
     fontFamily: fonts.ui,
     fontSize: 10
   },
-  menu: {
+  pickerRoot: {
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 0,
+    padding: 24
+  },
+  pickerBackdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(18, 16, 14, 0.42)"
+  },
+  pickerCard: {
+    alignSelf: "center",
     backgroundColor: colors.panel,
     borderColor: colors.line,
-    borderRadius: 6,
+    borderRadius: 12,
     borderWidth: 1,
-    marginTop: 4,
-    maxWidth: "100%",
-    minWidth: "100%",
+    gap: 10,
+    maxHeight: "80%",
+    maxWidth: 520,
+    minHeight: 200,
     overflow: "hidden",
-    position: "absolute",
-    top: "100%",
-    zIndex: 10
+    paddingBottom: 8,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    width: "100%",
+    zIndex: 2,
+    ...({
+      boxShadow: "0 18px 44px rgba(28, 22, 16, 0.22)"
+    } as object)
+  },
+  pickerHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between"
+  },
+  pickerTitle: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 15
+  },
+  pickerClose: {
+    alignItems: "center",
+    height: 28,
+    justifyContent: "center",
+    width: 28
+  },
+  pickerCloseText: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 22,
+    lineHeight: 24
+  },
+  pickerList: {
+    flexGrow: 0,
+    maxHeight: 360
   },
   item: {
-    paddingHorizontal: 12,
-    paddingVertical: 8
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 10
   },
   itemSelected: {
     backgroundColor: colors.accentSoft
@@ -167,10 +255,9 @@ const styles = StyleSheet.create({
   itemText: {
     color: colors.ink,
     fontFamily: fonts.ui,
-    fontSize: 12
+    fontSize: 13
   },
   itemTextSelected: {
-    color: colors.kicker,
     fontFamily: fonts.uiSemibold
   },
   unavailableBlock: {

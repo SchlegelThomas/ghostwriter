@@ -60,6 +60,10 @@ an external service, and Anthropic workload identity federation authenticates ma
 - A custom playbook is versioned project data with a bounded trigger, allowed context classes,
   output schema identifier, and guidance text. It is not code, an MCP tool definition, a URL-fetch
   instruction, or a capability grant.
+- Catalog agents may also have one versioned override per project and agent id. That override may
+  replace craft doctrine and notes for known built-in section headings, but it is untrusted
+  guidance: built-in constraints, evidence guidance, workflow/stage, agent identity, tools,
+  resource scope, and canonical authority are not overridable.
 - Manuscript prose, Captures, uploads, user preferences, playbooks, model output, and MCP content are
   all untrusted data. Prompt hierarchy is explanatory defense in depth; server policy and typed
   ports are the security boundary.

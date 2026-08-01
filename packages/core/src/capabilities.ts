@@ -639,6 +639,32 @@ export const PROJECT_PLAYBOOK_UPDATE_CAPABILITY = Object.freeze({
   })
 }) satisfies GhostwriterCapability;
 
+export const PROJECT_CATALOG_PLAYBOOK_READ_CAPABILITY = Object.freeze({
+  id: "project.catalogPlaybook.read",
+  title: "Read effective catalog agent playbooks",
+  access: "read",
+  scope: "project",
+  coreUseCase: "CatalogPlaybookOverrideServices.get/list",
+  bindings: Object.freeze({
+    ui: "SettingsPanel · Playbooks",
+    web: "GET /api/projects/{projectId}/catalog-playbooks",
+    mcpException: AGENT_MCP_DEFER
+  })
+}) satisfies GhostwriterCapability;
+
+export const PROJECT_CATALOG_PLAYBOOK_UPDATE_CAPABILITY = Object.freeze({
+  id: "project.catalogPlaybook.update",
+  title: "Customize project catalog agent playbooks",
+  access: "apply",
+  scope: "project",
+  coreUseCase: "CatalogPlaybookOverrideServices.upsert/reset",
+  bindings: Object.freeze({
+    ui: "SettingsPanel · Playbooks",
+    web: "PUT|DELETE /api/projects/{projectId}/catalog-playbooks/{agentId}",
+    mcpException: AGENT_MCP_DEFER
+  })
+}) satisfies GhostwriterCapability;
+
 export const AGENT_CONTEXT_PREVIEW_CAPABILITY = Object.freeze({
   id: "agent.context.preview",
   title: "Preview compiled agent context and egress receipt",
@@ -662,6 +688,20 @@ export const AGENT_RUN_CREATE_CAPABILITY = Object.freeze({
     ui: "CaptureHandoffPanel",
     web: "POST /api/projects/{projectId}/agent/runs",
     mcp: "ghostwriter_propose_capture_reflection"
+  })
+}) satisfies GhostwriterCapability;
+
+export const CATALOG_AGENT_RUN_CREATE_CAPABILITY = Object.freeze({
+  id: "agent.catalogRun.create",
+  title: "Create a catalog craft memo proposal",
+  access: "propose",
+  scope: "project",
+  coreUseCase: "runCatalogAgent",
+  bindings: Object.freeze({
+    ui: "WorkspaceChatPanel + EntityDraftsPanel",
+    web: "POST /api/projects/{projectId}/agent/catalog-runs",
+    mcpException:
+      "Catalog memo runs are first-party until scoped non-Capture context grants are designed."
   })
 }) satisfies GhostwriterCapability;
 
@@ -749,10 +789,13 @@ export const GHOSTWRITER_CAPABILITIES: readonly GhostwriterCapability[] = Object
   PROJECT_AGENT_INSTRUCTIONS_UPDATE_CAPABILITY,
   PROJECT_PLAYBOOK_READ_CAPABILITY,
   PROJECT_PLAYBOOK_UPDATE_CAPABILITY,
+  PROJECT_CATALOG_PLAYBOOK_READ_CAPABILITY,
+  PROJECT_CATALOG_PLAYBOOK_UPDATE_CAPABILITY,
   MCP_GRANT_DISCOVER_CAPABILITY,
   MCP_GRANT_MANAGE_CAPABILITY,
   AGENT_CONTEXT_PREVIEW_CAPABILITY,
   AGENT_RUN_CREATE_CAPABILITY,
+  CATALOG_AGENT_RUN_CREATE_CAPABILITY,
   AGENT_RUN_READ_CAPABILITY,
   AGENT_RUN_CANCEL_CAPABILITY,
   AGENT_PROPOSAL_READ_CAPABILITY,

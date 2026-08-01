@@ -2,6 +2,7 @@ import { relations, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   boolean,
+  check,
   doublePrecision,
   index,
   integer,
@@ -743,6 +744,28 @@ export const projectAgentInstructions = pgTable("project_agent_instructions", {
   updatedAt: text("updated_at").notNull()
 });
 
+export const projectCatalogPlaybookOverrides = pgTable(
+  "project_catalog_playbook_overrides",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    agentId: text("agent_id").notNull(),
+    version: integer("version").notNull(),
+    doctrine: text("doctrine"),
+    sections: jsonb("sections"),
+    contentHash: text("content_hash").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull()
+  },
+  (table) => [
+    primaryKey({
+      name: "project_catalog_playbook_overrides_pk",
+      columns: [table.projectId, table.agentId]
+    })
+  ]
+);
+
 export const projectPlaybooks = pgTable(
   "project_playbooks",
   {
@@ -833,15 +856,17 @@ export const agentProposals = pgTable(
     receiptId: text("receipt_id")
       .notNull()
       .references(() => contextReceipts.id, { onDelete: "restrict" }),
-    baseCaptureId: text("base_capture_id")
-      .notNull()
-      .references(() => captures.captureId, { onDelete: "restrict" }),
+    primaryTargetKind: text("primary_target_kind").notNull(),
+    primaryTargetId: text("primary_target_id").notNull(),
+    baseCaptureId: text("base_capture_id").references(() => captures.captureId, {
+      onDelete: "restrict"
+    }),
     status: text("status").notNull(),
     outputSchemaId: text("output_schema_id").notNull(),
     payload: jsonb("payload").notNull(),
     contentHash: text("content_hash").notNull(),
-    baseCaptureWorkingVersion: integer("base_capture_working_version").notNull(),
-    baseCaptureContentHash: text("base_capture_content_hash").notNull(),
+    baseCaptureWorkingVersion: integer("base_capture_working_version"),
+    baseCaptureContentHash: text("base_capture_content_hash"),
     decisionActorAccountId: text("decision_actor_account_id").references(() => user.id, {
       onDelete: "restrict"
     }),
@@ -859,7 +884,39 @@ export const agentProposals = pgTable(
       table.createdAt
     ),
     index("agent_proposals_run_id_index").on(table.runId),
-    index("agent_proposals_base_capture_id_index").on(table.baseCaptureId)
+    index("agent_proposals_base_capture_id_index").on(table.baseCaptureId),
+    index("agent_proposals_primary_target_index").on(
+      table.projectId,
+      table.primaryTargetKind,
+      table.primaryTargetId,
+      table.status,
+      table.createdAt
+    ),
+    check(
+      "agent_proposals_primary_target_kind_check",
+      sql`${table.primaryTargetKind} in ('capture', 'scene', 'story-knowledge', 'book', 'project')`
+    ),
+    check(
+      "agent_proposals_capture_binding_check",
+      sql`(
+        (${table.primaryTargetKind} = 'capture'
+          and ${table.baseCaptureId} is not null
+          and ${table.baseCaptureWorkingVersion} is not null
+          and ${table.baseCaptureContentHash} is not null
+          and ${table.primaryTargetId} = ${table.baseCaptureId})
+        or
+        (${table.primaryTargetKind} <> 'capture'
+          and (
+            (${table.baseCaptureId} is null
+              and ${table.baseCaptureWorkingVersion} is null
+              and ${table.baseCaptureContentHash} is null)
+            or
+            (${table.baseCaptureId} is not null
+              and ${table.baseCaptureWorkingVersion} is not null
+              and ${table.baseCaptureContentHash} is not null)
+          ))
+      )`
+    )
   ]
 );
 
@@ -959,6 +1016,7 @@ export const ghostwriterSchema = {
   providerCredentials,
   aiCollaborationProfiles,
   projectAgentInstructions,
+  projectCatalogPlaybookOverrides,
   projectPlaybooks,
   contextReceipts,
   agentRuns,

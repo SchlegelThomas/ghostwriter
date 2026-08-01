@@ -1,5 +1,5 @@
 import type {
-  AgentFoundationListOptions,
+  AgentProposalListOptions,
   AgentProposalRepository,
   CreateAgentProposalOutcome,
   MarkAgentProposalAppliedInput,
@@ -77,10 +77,16 @@ export function createMemoryAgentProposalRepository(): AgentProposalRepository &
       const proposal = state.proposals.get(proposalId);
       return proposal === undefined ? undefined : cloneProposal(proposal);
     },
-    async listByProject(projectId: ProjectId, options: AgentFoundationListOptions = {}) {
+    async listByProject(projectId: ProjectId, options: AgentProposalListOptions = {}) {
       const limit = normalizeAgentFoundationListLimit(options.limit);
       const matches = [...state.proposals.values()].filter(
-        (proposal) => proposal.projectId === projectId
+        (proposal) =>
+          proposal.projectId === projectId &&
+          (options.targetKind === undefined ||
+            proposal.primaryTarget.kind === options.targetKind) &&
+          (options.targetId === undefined ||
+            proposal.primaryTarget.id === options.targetId) &&
+          (options.status === undefined || proposal.status === options.status)
       );
       return sortNewestFirstProposals(matches).slice(0, limit).map(cloneProposal);
     },

@@ -8,6 +8,8 @@ import type {
   AgentModelId,
   BookId,
   CanvasCommand,
+  CatalogAgentId,
+  CatalogMemoLens,
   CanvasObjectId,
   CanvasRevisionId,
   ProjectCommand,
@@ -86,10 +88,15 @@ import {
   workspaceModeForComposition,
   resolveAgentToolkitAction,
   type AgentToolkitId,
-  type PlansAgentDeepLink
+  type PlansAgentDeepLink,
+  type EntityDraftSummary,
+  type EntityDraftTarget,
+  entityDraftDetailTitle,
+  entityDraftPrimaryAction,
+  formatEntityDraftDetailBody
 } from "@ghostwriter/ui";
 import { useFonts } from "expo-font";
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState, useCallback } from "react";
 import { ActivityIndicator, Linking, View } from "react-native";
 import {
   DraftPanel,
@@ -134,6 +141,7 @@ import {
   promoteCaptureToScene,
   persistPlanOutline,
   releaseSceneLease,
+  runCatalogAgent,
   restoreCanvasRevision,
   saveCanvasPreference,
   sendWorkspaceChat,
@@ -142,6 +150,11 @@ import {
   synthesizeReaderSpeech,
   undoCanvas,
   updateWriterProfile,
+  listAgentProposals,
+  getAgentProposal,
+  rejectAgentProposal,
+  acknowledgeAgentProposal,
+  type AgentProposalSummaryResponse,
   type BookCoverImageJobOption,
   type BookCoverImageJobStatus,
   type CharacterVisualJobOption,
@@ -152,8 +165,11 @@ import {
   type CanvasSceneGeometryInput,
   type CanvasScenePlacementInput,
   type CanvasWorkspaceResponse,
-  type CurrentWriter
+  type CurrentWriter,
+  type WorkspaceChatAttachment
 } from "./src/api.js";
+import { useDictationSpeechRecognition } from "./src/useDictationSpeechRecognition.js";
+import { getSpeechRecognitionConstructor } from "./src/speech-recognition-dictation.js";
 import {
   canvasFailureDisposition,
   preferredCanvasSceneId
@@ -282,6 +298,44 @@ function projectSceneIds(project: ProjectNavigator): readonly SceneId[] {
   return projectScenes(project).map((scene) => scene.id);
 }
 
+function mapProposalSummaryToEntityDraft(
+  proposal: AgentProposalSummaryResponse
+): EntityDraftSummary {
+  return Object.freeze({
+    id: proposal.id,
+    outputSchemaId: proposal.outputSchemaId,
+    createdAt: proposal.createdAt,
+    ...(proposal.baseCaptureId === undefined
+      ? {}
+      : { baseCaptureId: proposal.baseCaptureId }),
+    preview: proposal.preview
+  });
+}
+
+function buildEntityDraftPlansDeepLink(
+  draft: EntityDraftSummary
+): PlansAgentDeepLink {
+  let workflowStep: PlansAgentDeepLink["workflowStep"] = "scene-partner";
+  if (draft.outputSchemaId === "plan-outline-v1") {
+    workflowStep = "plan-outline";
+  } else if (
+    draft.outputSchemaId === "sketch-fields-v1" ||
+    draft.outputSchemaId === "character-sheet-v1"
+  ) {
+    workflowStep = "craft-partner";
+  } else if (draft.outputSchemaId === "backdrop-fields-v1") {
+    workflowStep = "worldkeeper";
+  }
+  return Object.freeze({
+    ...(draft.baseCaptureId === undefined ? {} : { captureId: draft.baseCaptureId }),
+    proposalId: draft.id,
+    ...(draft.outputSchemaId === "plan-outline-v1"
+      ? { highlight: "plan-outline" as const }
+      : {}),
+    workflowStep
+  });
+}
+
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
     [ghostwriterTheme.fonts.brand]: Parisienne_400Regular,
@@ -361,6 +415,13 @@ export default function App() {
   const readerAudioRef = useRef<{ pause(): void } | null>(null);
   const chatAbortRef = useRef<AbortController | undefined>(undefined);
   const [chatStreaming, setChatStreaming] = useState(false);
+  const [chatDictating, setChatDictating] = useState(false);
+  const chatDictateAppendRef = useRef<((text: string) => void) | undefined>(
+    undefined
+  );
+  const chatDictationAvailable =
+    typeof window !== "undefined" &&
+    getSpeechRecognitionConstructor() !== undefined;
   const [chatSessionsState, setChatSessionsState] =
     useState<WorkspaceChatSessionsState>(() => emptyWorkspaceChatSessionsState());
   const [chatMode, setChatMode] = useState<WorkspaceAgentMode>(
@@ -380,6 +441,19 @@ export default function App() {
     () => [...activeWorkspaceChatMessages(chatSessionsState)],
     [chatSessionsState]
   );
+
+  useDictationSpeechRecognition({
+    active: chatDictating,
+    onInsertProse: (text) => chatDictateAppendRef.current?.(text),
+    onStopDictation: () => setChatDictating(false),
+    setAssistStatus: () => undefined,
+    statusCopy: {
+      listening: "Listening — speech enters the Agent composer.",
+      unavailable: "Dictation is unavailable in this browser.",
+      couldNotStart: "Could not start dictation.",
+      stopped: "Dictation stopped — microphone permission or engine error."
+    }
+  });
   const chatSessionTabs = useMemo(
     () =>
       chatSessionsState.sessions.map((session) =>
@@ -454,6 +528,26 @@ export default function App() {
   const [castFocusKnowledgeId, setCastFocusKnowledgeId] = useState<
     StoryKnowledgeId | undefined
   >();
+  const [entityDraftTarget, setEntityDraftTarget] = useState<
+    EntityDraftTarget | undefined
+  >();
+  const [entityDrafts, setEntityDrafts] = useState<
+    readonly EntityDraftSummary[]
+  >([]);
+  const [entityDraftsLoading, setEntityDraftsLoading] = useState(false);
+  const [entityDraftMutatingProposalId, setEntityDraftMutatingProposalId] =
+    useState<string | undefined>();
+  const [entityDraftExpandedId, setEntityDraftExpandedId] = useState<
+    string | undefined
+  >();
+  const [entityDraftExpandedBody, setEntityDraftExpandedBody] = useState<
+    string | undefined
+  >();
+  const [entityDraftExpandedLoading, setEntityDraftExpandedLoading] =
+    useState(false);
+  const [entityDraftDetailTitles, setEntityDraftDetailTitles] = useState<
+    Readonly<Record<string, string>>
+  >({});
   const coverJobPollRef = useRef<ReturnType<typeof setInterval> | undefined>(
     undefined
   );
@@ -2236,6 +2330,21 @@ export default function App() {
     setReaderSpeaking(false);
   }
 
+  function workspaceChatAttachmentsForApi(
+    attachments: WorkspaceChatSendInput["attachments"]
+  ): readonly WorkspaceChatAttachment[] | undefined {
+    if (attachments === undefined || attachments.length === 0) return undefined;
+    return attachments.map(({ kind, name, mimeType, byteLength, dataBase64 }) =>
+      Object.freeze({
+        kind,
+        name,
+        mimeType,
+        byteLength,
+        ...(dataBase64 === undefined ? {} : { dataBase64 })
+      })
+    );
+  }
+
   async function handleChatSend(input: WorkspaceChatSendInput): Promise<void> {
     chatAbortRef.current?.abort();
     const abortController = new AbortController();
@@ -2280,6 +2389,7 @@ export default function App() {
       selectedProject === undefined || selectedSceneId === undefined
         ? undefined
         : sceneSelection(selectedProject, selectedSceneId);
+    const chatAttachments = workspaceChatAttachmentsForApi(input.attachments);
     const chatRequest = {
       message: input.message,
       projectId: selectedProject?.id,
@@ -2287,6 +2397,7 @@ export default function App() {
       model: input.model,
       effort: input.effort,
       ...(priorTurns.length === 0 ? {} : { priorTurns }),
+      ...(chatAttachments === undefined ? {} : { attachments: chatAttachments }),
       ...(selection === undefined
         ? {}
         : {
@@ -2569,6 +2680,169 @@ export default function App() {
     setPlansAgentDeepLink(result.deepLink);
     void openInboxWorkspace();
     appendChatStatusMessage(result.statusMessage);
+  }
+
+  async function handleCatalogAgentRun(
+    agentId: CatalogAgentId,
+    toolkitSelection: Parameters<typeof resolveAgentToolkitAction>[1],
+    lens?: CatalogMemoLens
+  ): Promise<void> {
+    if (selectedProject === undefined) return;
+    try {
+      const proposal = await runCatalogAgent({
+        projectId: selectedProject.id,
+        agentId,
+        model: chatModel,
+        effort: chatEffort,
+        ...(lens === undefined ? {} : { lens }),
+        ...(toolkitSelection.sceneId === undefined
+          ? {}
+          : { sceneId: toolkitSelection.sceneId }),
+        ...(toolkitSelection.storyKnowledgeId === undefined
+          ? {}
+          : { storyKnowledgeId: toolkitSelection.storyKnowledgeId }),
+        ...(toolkitSelection.bookId === undefined
+          ? {}
+          : { bookId: toolkitSelection.bookId })
+      });
+      appendChatStatusMessage(
+        proposal.primaryTarget.kind === "scene"
+          ? "Draft ready on Scene."
+          : proposal.primaryTarget.kind === "story-knowledge"
+            ? "Draft ready on Cast."
+            : "Draft ready on Project."
+      );
+      await loadEntityDrafts();
+    } catch (cause) {
+      appendChatStatusMessage(
+        cause instanceof GhostwriterApiError
+          ? cause.message
+          : "Ghostwriter could not run that catalog agent."
+      );
+    }
+  }
+
+  const loadEntityDrafts = useCallback(async () => {
+    if (selectedProject === undefined || entityDraftTarget === undefined) {
+      setEntityDrafts([]);
+      setEntityDraftDetailTitles({});
+      return;
+    }
+    setEntityDraftsLoading(true);
+    try {
+      const proposals = await listAgentProposals(selectedProject.id, {
+        targetKind: entityDraftTarget.targetKind,
+        targetId: entityDraftTarget.targetId,
+        status: "ready"
+      });
+      setEntityDrafts(proposals.map(mapProposalSummaryToEntityDraft));
+    } catch {
+      setEntityDrafts([]);
+    } finally {
+      setEntityDraftsLoading(false);
+    }
+  }, [entityDraftTarget, selectedProject]);
+
+  useEffect(() => {
+    setEntityDraftExpandedId(undefined);
+    setEntityDraftExpandedBody(undefined);
+    void loadEntityDrafts();
+  }, [loadEntityDrafts]);
+
+  async function handleRejectEntityDraft(proposalId: string): Promise<void> {
+    if (selectedProject === undefined) return;
+    setEntityDraftMutatingProposalId(proposalId);
+    try {
+      await rejectAgentProposal({
+        projectId: selectedProject.id,
+        proposalId
+      });
+      if (entityDraftExpandedId === proposalId) {
+        setEntityDraftExpandedId(undefined);
+        setEntityDraftExpandedBody(undefined);
+      }
+      await loadEntityDrafts();
+    } catch (cause) {
+      appendChatStatusMessage(
+        cause instanceof GhostwriterApiError
+          ? cause.message
+          : "Ghostwriter could not reject that draft."
+      );
+    } finally {
+      setEntityDraftMutatingProposalId(undefined);
+    }
+  }
+
+  async function handleAcknowledgeEntityDraft(
+    proposalId: string
+  ): Promise<void> {
+    if (selectedProject === undefined) return;
+    setEntityDraftMutatingProposalId(proposalId);
+    try {
+      await acknowledgeAgentProposal({
+        projectId: selectedProject.id,
+        proposalId
+      });
+      if (entityDraftExpandedId === proposalId) {
+        setEntityDraftExpandedId(undefined);
+        setEntityDraftExpandedBody(undefined);
+      }
+      await loadEntityDrafts();
+    } catch (cause) {
+      appendChatStatusMessage(
+        cause instanceof GhostwriterApiError
+          ? cause.message
+          : "Ghostwriter could not acknowledge that draft."
+      );
+    } finally {
+      setEntityDraftMutatingProposalId(undefined);
+    }
+  }
+
+  async function handleSelectEntityDraft(proposalId: string): Promise<void> {
+    const draft = entityDrafts.find((candidate) => candidate.id === proposalId);
+    if (draft === undefined || selectedProject === undefined) return;
+
+    if (entityDraftPrimaryAction(draft) === "open-in-plans") {
+      if (draft.baseCaptureId !== undefined) {
+        setInboxSelectedCaptureId(draft.baseCaptureId);
+      }
+      setPlansAgentDeepLink(buildEntityDraftPlansDeepLink(draft));
+      void openInboxWorkspace();
+      return;
+    }
+
+    if (entityDraftExpandedId === proposalId) {
+      setEntityDraftExpandedId(undefined);
+      setEntityDraftExpandedBody(undefined);
+      return;
+    }
+
+    setEntityDraftExpandedId(proposalId);
+    setEntityDraftExpandedBody(undefined);
+    setEntityDraftExpandedLoading(true);
+    try {
+      const proposal = await getAgentProposal({
+        projectId: selectedProject.id,
+        proposalId
+      });
+      const title = entityDraftDetailTitle(
+        proposal.outputSchemaId,
+        proposal.payload
+      );
+      if (title !== undefined) {
+        setEntityDraftDetailTitles((current) =>
+          Object.freeze({ ...current, [proposalId]: title })
+        );
+      }
+      setEntityDraftExpandedBody(
+        formatEntityDraftDetailBody(proposal.outputSchemaId, proposal.payload)
+      );
+    } catch {
+      setEntityDraftExpandedBody("Could not load this draft.");
+    } finally {
+      setEntityDraftExpandedLoading(false);
+    }
   }
 
   async function handleCanvasFailure(cause: unknown): Promise<void> {
@@ -3192,10 +3466,37 @@ export default function App() {
                   : { basePrompt: characterVisualJob.basePrompt })
               }
         }
+        entityDraftDetailTitles={entityDraftDetailTitles}
+        entityDraftExpandedBody={entityDraftExpandedBody}
+        entityDraftExpandedId={entityDraftExpandedId}
+        entityDraftExpandedLoading={entityDraftExpandedLoading}
+        entityDraftMutatingProposalId={entityDraftMutatingProposalId}
+        entityDrafts={entityDrafts}
+        entityDraftsLoading={entityDraftsLoading}
+        onAcknowledgeEntityDraft={(proposalId) =>
+          void handleAcknowledgeEntityDraft(proposalId)
+        }
+        onEntityDraftTargetChange={setEntityDraftTarget}
+        onRefreshEntityDrafts={() => void loadEntityDrafts()}
+        onRejectEntityDraft={(proposalId) =>
+          void handleRejectEntityDraft(proposalId)
+        }
+        onSelectEntityDraft={(proposalId) =>
+          void handleSelectEntityDraft(proposalId)
+        }
         inboxSelectedCaptureId={inboxSelectedCaptureId}
         onAgentToolkitAction={handleAgentToolkitAction}
+        onCatalogAgentRun={(agentId, selection, lens) =>
+          void handleCatalogAgentRun(agentId, selection, lens)
+        }
         onBack={() => void leaveProject()}
         onChatSend={handleChatSend}
+        chatDictating={chatDictating}
+        onChatToggleDictation={() => setChatDictating((current) => !current)}
+        chatDictationAvailable={chatDictationAvailable}
+        onBindChatDictateAppend={(append) => {
+          chatDictateAppendRef.current = append;
+        }}
         onSavePlanToPlans={(outlineText) => void handleSavePlanToPlans(outlineText)}
         planOutlineText={planOutlineText}
         onCommand={runCommand}
@@ -3409,6 +3710,7 @@ export default function App() {
       >
         <SettingsPanel
           accountId={writer.account.id}
+          projectId={selectedProject.id}
           activeTab={settingsTab}
           onClose={() => {
             setSettingsOpen(false);

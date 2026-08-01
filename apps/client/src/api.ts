@@ -8,6 +8,11 @@ import type {
   CanvasRevisionId,
   CanvasRevisionMetadata,
   CanvasViewportPreference,
+  CatalogAgentEffort,
+  CatalogAgentId,
+  CatalogAgentPlaybook,
+  CatalogPlaybookOverride,
+  CatalogMemoLens,
   CaptureAttachmentAllowedMime,
   CaptureAttachmentRefusalCode,
   CaptureAttachmentState,
@@ -852,6 +857,14 @@ export type WorkspaceChatPriorTurn = Readonly<{
   body: string;
 }>;
 
+export type WorkspaceChatAttachment = Readonly<{
+  kind: "image" | "video";
+  name: string;
+  mimeType: string;
+  dataBase64?: string;
+  byteLength: number;
+}>;
+
 export type WorkspaceChatToolTrace = Readonly<{
   toolName: string;
   title: string;
@@ -877,6 +890,7 @@ export function sendWorkspaceChat(input: Readonly<{
   effort?: WorkspaceChatEffort;
   selection?: WorkspaceChatSelection;
   priorTurns?: readonly WorkspaceChatPriorTurn[];
+  attachments?: readonly WorkspaceChatAttachment[];
 }>): Promise<WorkspaceChatResponse> {
   return requestJson(
     "/api/workspace/chat",
@@ -889,7 +903,10 @@ export function sendWorkspaceChat(input: Readonly<{
       ...(input.selection === undefined ? {} : { selection: input.selection }),
       ...(input.priorTurns === undefined || input.priorTurns.length === 0
         ? {}
-        : { priorTurns: input.priorTurns })
+        : { priorTurns: input.priorTurns }),
+      ...(input.attachments === undefined || input.attachments.length === 0
+        ? {}
+        : { attachments: input.attachments })
     })
   );
 }
@@ -974,6 +991,7 @@ export async function sendWorkspaceChatStream(
     effort?: WorkspaceChatEffort;
     selection?: WorkspaceChatSelection;
     priorTurns?: readonly WorkspaceChatPriorTurn[];
+    attachments?: readonly WorkspaceChatAttachment[];
   }>,
   handlers: WorkspaceChatStreamHandlers,
   signal?: AbortSignal
@@ -994,7 +1012,10 @@ export async function sendWorkspaceChatStream(
       ...(input.selection === undefined ? {} : { selection: input.selection }),
       ...(input.priorTurns === undefined || input.priorTurns.length === 0
         ? {}
-        : { priorTurns: input.priorTurns })
+        : { priorTurns: input.priorTurns }),
+      ...(input.attachments === undefined || input.attachments.length === 0
+        ? {}
+        : { attachments: input.attachments })
     }),
     signal
   });
@@ -1240,9 +1261,51 @@ export type PlanOutlinePayloadResponse = Readonly<{
   sourceMode: "plan";
 }>;
 
+export type CatalogMemoPayloadResponse = Readonly<{
+  schemaId: "catalog-memo-v1";
+  agentId: string;
+  title: string;
+  summary: string;
+  lens?: CatalogMemoLens;
+  sections: readonly Readonly<{ heading: string; body: string }>[];
+  evidence: readonly Readonly<{ label: string; sceneId?: string; quote?: string }>[];
+}>;
+
+export type PacingFindingsPayloadResponse = Readonly<{
+  schemaId: "pacing-findings-v1";
+  agentId: "pacing-doctor";
+  title: string;
+  summary: string;
+  lens?: CatalogMemoLens;
+  positionBasis: "equal-scene";
+  turns: readonly Readonly<{
+    id: "catalyst" | "commitment" | "midpoint" | "low-point" | "final-movement";
+    sceneId?: string;
+    sceneTitle?: string;
+    measuredPct?: number;
+    bandLow: number;
+    bandHigh: number;
+    driftNote?: string;
+  }>[];
+  flatRuns: readonly Readonly<{
+    fromSceneId: string;
+    toSceneId: string;
+    reason: string;
+  }>[];
+  prescriptions: readonly Readonly<{
+    action: "cut" | "merge" | "add-pressure" | "reorder";
+    body: string;
+    sceneIds?: readonly string[];
+  }>[];
+  sections: readonly Readonly<{ heading: string; body: string }>[];
+  evidence: readonly Readonly<{ label: string; sceneId?: string; quote?: string }>[];
+}>;
+
 export type AgentProposalPayloadResponse =
   | CaptureReflectionPayloadResponse
   | PlanOutlinePayloadResponse
+  | CatalogMemoPayloadResponse
+  | PacingFindingsPayloadResponse
   | SketchFieldsPayloadResponse
   | CharacterSheetPayloadResponse
   | BackdropFieldsPayloadResponse;
@@ -1250,6 +1313,8 @@ export type AgentProposalPayloadResponse =
 export type AgentOutputSchemaId =
   | "capture-reflection-v1"
   | "plan-outline-v1"
+  | "catalog-memo-v1"
+  | "pacing-findings-v1"
   | "sketch-fields-v1"
   | "character-sheet-v1"
   | "backdrop-fields-v1";
@@ -1263,11 +1328,19 @@ export type AgentProposalResponse = Readonly<{
   outputSchemaId: AgentOutputSchemaId;
   payload: AgentProposalPayloadResponse;
   contentHash: string;
-  baseCaptureId: string;
-  baseCaptureWorkingVersion: number;
-  baseCaptureContentHash: string;
+  primaryTarget: AgentProposalPrimaryTargetResponse;
+  baseCaptureId?: string;
+  baseCaptureWorkingVersion?: number;
+  baseCaptureContentHash?: string;
   createdAt: string;
   updatedAt: string;
+}>;
+
+export type AgentProposalListPreviewResponse = Readonly<{
+  agentId?: string;
+  agentLabel?: string;
+  title?: string;
+  summary?: string;
 }>;
 
 export type AgentProposalSummaryResponse = Readonly<{
@@ -1277,9 +1350,25 @@ export type AgentProposalSummaryResponse = Readonly<{
   status: string;
   outputSchemaId: AgentOutputSchemaId;
   contentHash: string;
-  baseCaptureId: string;
+  primaryTarget: AgentProposalPrimaryTargetResponse;
+  baseCaptureId?: string;
   createdAt: string;
   updatedAt: string;
+  preview: AgentProposalListPreviewResponse;
+}>;
+
+export type AgentProposalTargetKind =
+  | "capture"
+  | "scene"
+  | "story-knowledge"
+  | "book"
+  | "project";
+
+export type AgentProposalStatus = "ready" | "rejected" | "stale" | "applied";
+
+export type AgentProposalPrimaryTargetResponse = Readonly<{
+  kind: AgentProposalTargetKind;
+  id: string;
 }>;
 
 export type StartCaptureReflectionResponse =
@@ -1537,11 +1626,21 @@ export async function cancelAgentRun(input: Readonly<{
 }
 
 export async function listAgentProposals(
-  projectId: string
+  projectId: string,
+  filter: Readonly<{
+    targetKind?: AgentProposalTargetKind;
+    targetId?: string;
+    status?: AgentProposalStatus;
+  }> = {}
 ): Promise<readonly AgentProposalSummaryResponse[]> {
+  const params = new URLSearchParams();
+  if (filter.targetKind !== undefined) params.set("targetKind", filter.targetKind);
+  if (filter.targetId !== undefined) params.set("targetId", filter.targetId);
+  if (filter.status !== undefined) params.set("status", filter.status);
+  const query = params.toString();
   const response = await requestJson<
     Readonly<{ proposals: readonly AgentProposalSummaryResponse[] }>
-  >(agentProjectPath(projectId, "proposals"));
+  >(agentProjectPath(projectId, `proposals${query.length === 0 ? "" : `?${query}`}`));
   return response.proposals;
 }
 
@@ -1584,6 +1683,97 @@ export async function acknowledgeAgentProposal(input: Readonly<{
     jsonRequest("POST", {})
   );
   return response.proposal;
+}
+
+export async function runCatalogAgent(input: Readonly<{
+  projectId: string;
+  agentId: CatalogAgentId;
+  lens?: CatalogMemoLens;
+  model?: string;
+  effort?: CatalogAgentEffort;
+  sceneId?: string;
+  storyKnowledgeId?: string;
+  bookId?: string;
+}>): Promise<AgentProposalResponse> {
+  const response = await requestJson<Readonly<{ proposal: AgentProposalResponse }>>(
+    agentProjectPath(input.projectId, "catalog-runs"),
+    jsonRequest("POST", {
+      agentId: input.agentId,
+      ...(input.lens === undefined ? {} : { lens: input.lens }),
+      ...(input.model === undefined ? {} : { model: input.model }),
+      ...(input.effort === undefined ? {} : { effort: input.effort }),
+      ...(input.sceneId === undefined ? {} : { sceneId: input.sceneId }),
+      ...(input.storyKnowledgeId === undefined
+        ? {}
+        : { storyKnowledgeId: input.storyKnowledgeId }),
+      ...(input.bookId === undefined ? {} : { bookId: input.bookId })
+    })
+  );
+  return response.proposal;
+}
+
+export type CatalogPlaybookSummaryResponse = Readonly<{
+  agentId: CatalogAgentId;
+  label: string;
+  stage: CatalogAgentPlaybook["stage"];
+  builtInVersion: string;
+  overridden: boolean;
+  doctrinePreview: string;
+}>;
+
+export type CatalogPlaybookDetailResponse = Readonly<{
+  builtIn: CatalogAgentPlaybook;
+  override: CatalogPlaybookOverride | null;
+  effective: CatalogAgentPlaybook;
+}>;
+
+function catalogPlaybookPath(projectId: string, agentId?: CatalogAgentId): string {
+  const base = `/api/projects/${encodeURIComponent(projectId)}/catalog-playbooks`;
+  return agentId === undefined ? base : `${base}/${encodeURIComponent(agentId)}`;
+}
+
+export async function listCatalogPlaybooks(
+  projectId: string
+): Promise<readonly CatalogPlaybookSummaryResponse[]> {
+  const response = await requestJson<
+    Readonly<{ playbooks: readonly CatalogPlaybookSummaryResponse[] }>
+  >(catalogPlaybookPath(projectId));
+  return response.playbooks;
+}
+
+export async function getCatalogPlaybook(input: Readonly<{
+  projectId: string;
+  agentId: CatalogAgentId;
+}>): Promise<CatalogPlaybookDetailResponse> {
+  return requestJson(catalogPlaybookPath(input.projectId, input.agentId));
+}
+
+export async function saveCatalogPlaybookOverride(input: Readonly<{
+  projectId: string;
+  agentId: CatalogAgentId;
+  doctrine?: string;
+  sections?: readonly Readonly<{ heading: string; note: string }>[];
+  expectedVersion?: number;
+}>): Promise<CatalogPlaybookDetailResponse> {
+  return requestJson(
+    catalogPlaybookPath(input.projectId, input.agentId),
+    jsonRequest("PUT", {
+      ...(input.doctrine === undefined ? {} : { doctrine: input.doctrine }),
+      ...(input.sections === undefined ? {} : { sections: input.sections }),
+      ...(input.expectedVersion === undefined
+        ? {}
+        : { expectedVersion: input.expectedVersion })
+    })
+  );
+}
+
+export async function resetCatalogPlaybookOverride(input: Readonly<{
+  projectId: string;
+  agentId: CatalogAgentId;
+}>): Promise<CatalogPlaybookDetailResponse> {
+  return requestJson(catalogPlaybookPath(input.projectId, input.agentId), {
+    method: "DELETE"
+  });
 }
 
 export type PersistPlanOutlineResponse = Readonly<{

@@ -63,6 +63,7 @@ function readyProposalRecord() {
     outputSchemaId: "capture-reflection-v1",
     payload: reflectionPayload,
     contentHash: instructionContentHash("b".repeat(64)),
+    primaryTarget: { kind: "capture", id: CAPTURE },
     baseCaptureId: CAPTURE,
     baseCaptureWorkingVersion: 2,
     baseCaptureContentHash: captureContentHash("c".repeat(64)),
@@ -170,6 +171,7 @@ describe("memory agent proposal repository identity enforcement", () => {
 
   it.each([
     ["receiptId", { receiptId: contextReceiptId("receipt-tampered") }],
+    ["primaryTarget", { primaryTarget: { kind: "scene" as const, id: "scene-tampered" } }],
     [
       "baseCaptureContentHash",
       { baseCaptureContentHash: captureContentHash("f".repeat(64)) }
@@ -194,5 +196,31 @@ describe("memory agent proposal repository identity enforcement", () => {
     if (outcome.ok) return;
     expect(outcome.reason).toBe("status-conflict");
     expect(await proposals.get(current.id)).toEqual(current);
+  });
+
+  it("filters entity proposals by primary target and status", async () => {
+    const proposals = createMemoryAgentProposalRepository();
+    const sceneProposal = createReadyAgentProposal({
+      ...readyProposalRecord(),
+      id: agentProposalId("proposal-scene-target"),
+      primaryTarget: { kind: "scene", id: "scene-target" },
+      baseCaptureId: undefined,
+      baseCaptureWorkingVersion: undefined,
+      baseCaptureContentHash: undefined
+    });
+    await proposals.create(sceneProposal);
+    expect(
+      await proposals.listByProject(PROJECT, {
+        targetKind: "scene",
+        targetId: "scene-target",
+        status: "ready"
+      })
+    ).toEqual([sceneProposal]);
+    expect(
+      await proposals.listByProject(PROJECT, {
+        targetKind: "project",
+        targetId: PROJECT
+      })
+    ).toEqual([]);
   });
 });

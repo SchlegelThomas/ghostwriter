@@ -113,6 +113,8 @@ import { registerBookCoverImageRoutes } from "./book-cover-image-routes.js";
 import { registerCharacterVisualRoutes } from "./character-visual-routes.js";
 import { registerMcpGrantRoutes } from "./mcp-grant-routes.js";
 import { registerWorkspaceChatRoutes } from "./workspace-chat-routes.js";
+import { registerCatalogAgentRoutes } from "./catalog-agent-routes.js";
+import { registerCatalogPlaybookRoutes } from "./catalog-playbook-routes.js";
 import type { createToolLoopProvider } from "@ghostwriter/ai";
 import {
   mapAgentGuidanceRouteError,
@@ -1418,6 +1420,8 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
 
   registerProviderAgentRoutes(app, { agentProvider: dependencies.agentProvider });
   registerAgentRunRoutes(app, { agentProvider: dependencies.agentProvider });
+  registerCatalogAgentRoutes(app, { agentProvider: dependencies.agentProvider });
+  registerCatalogPlaybookRoutes(app, { agentProvider: dependencies.agentProvider });
   registerScenePartnerRoutes(app, {
     agentProvider: dependencies.agentProvider,
     captures: dependencies.captures,

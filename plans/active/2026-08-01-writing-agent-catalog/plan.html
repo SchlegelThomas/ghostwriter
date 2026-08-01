@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Writing agent catalog</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan</p>
+      <h1>Writing agent catalog</h1>
+      <p class="meta"><strong>Status:</strong> active<br>
+        <strong>Branch:</strong> <code>feat/writing-agent-harness</code> (continues harness PR until split)<br>
+        <strong>Owner:</strong> founder + parent agent<br>
+        <strong>Skill:</strong> <code>ghostwriter-feature-delivery</code></p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Make Ghostwriter’s Agent dock a <strong>stage-organized catalog of real craft jobs</strong> —
+        brainstorm → structure → writing → editing → commercialization — grounded in professional
+        writing practice (multi-lens structure including Save the Cat, scene/sequel, character
+        want/need; editorial ladder developmental → line → copy) rather than generic chat personas.</p>
+      <p>Agents detect/confirm book type (genre / story promise), give pacing and structural feedback
+        with evidence, and help craft work — always <strong>propose-only</strong>. Structure/outline
+        artifacts may land in <strong>Plans</strong>; other recommendations land <strong>in context</strong>
+        on the entity they concern via <strong>entity drafts</strong> (accept / edit / reject lists
+        attached to scene, cast, book, project — extending ADR 0011 proposals, not a second store).</p>
+      <p><strong>Out of scope:</strong> autonomous multi-agent swarms; silent manuscript writes;
+        marketplace skills; web research as authority; Playwright until founder verifies each major
+        wave; inventing a parallel “drafts” table that bypasses proposal hash/apply.</p>
+    </section>
+
+    <section>
+      <h2>Founder decisions (2026-08-01)</h2>
+      <ol>
+        <li><strong>Structure lenses:</strong> multi-lens from the start (Save the Cat beats +
+          three-act / Hero’s Journey + scene/sequel + character want/need + genre conventions).
+          Writer can set preferred lens; agents may recommend a lens but never lock the project to one.</li>
+        <li><strong>Stage names:</strong> keep <strong>Brainstorm / Structure / Writing / Editing /
+          Commercial</strong>.</li>
+        <li><strong>Scope:</strong> deliver the full catalog (W0–W4) via feature-delivery vertical
+          checkpoints — not a single bang.</li>
+        <li><strong>Landing:</strong> Plans for plan/outline-class artifacts; other outputs attach
+          where they make sense. Prefer <strong>entity drafts</strong> (recs on the entity) over
+          forcing everything through Capture/Inbox.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Domain / design audit</h2>
+      <ul>
+        <li><strong>Today:</strong> dock modes chat / Plan / agent; five toolkit deep-links;
+          durable proposals are Capture-bound (<code>baseCaptureId</code> required); craft targets
+          live on receipt/payload; writing-assist is ephemeral (ADR 0009).</li>
+        <li><strong>Entity drafts (accepted direction):</strong> extend ADR 0011 proposals with a
+          <em>primary target</em> (<code>capture | scene | story-knowledge | book | project</code>),
+          keep typed <code>outputSchemaId</code> + content-hash apply/reject/stale, index ready
+          proposals on that target for entity UI. Capture remains optional context seed when useful;
+          Plans stays the home for Capture-first idea work and plan-outline proposals.</li>
+        <li><strong>Prose apply:</strong> still via named variants / editor insert / existing apply
+          commands — drafts are recommendations, not a third prose store.</li>
+        <li><strong>Living design:</strong> Mockups 4.0 (writing agents / craft) + 5.0 (BYOK /
+          proposals / Inbox). Stage menu is additive chrome; entity draft rails are new UX on
+          existing surfaces (Draft inspector, Cast dossier, Title Page, project).</li>
+        <li><strong>Authority:</strong> ADR 0011 / 0013 — model never applies; exact hash + revision
+          recheck. MCP ceiling remains read + propose.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Catalog (target)</h2>
+      <h3>Brainstorm</h3>
+      <ul>
+        <li>Idea Midwife · Genre Compass · What-if Engine · Sketch Partner (exists)</li>
+      </ul>
+      <h3>Structure</h3>
+      <ul>
+        <li>Story Architect (multi-lens beat board) · Pacing Doctor · Promise Keeper · Outline Expander</li>
+      </ul>
+      <h3>Writing</h3>
+      <ul>
+        <li>Scene Partner (exists) · Scene/Sequel Coach · Dialogue Coach · Character Coach (exists) · Worldkeeper (exists)</li>
+      </ul>
+      <h3>Editing</h3>
+      <ul>
+        <li>Developmental Editor · Continuity Reader · Line Editor · Copy Editor · (opt-in authenticity pass later)</li>
+      </ul>
+      <h3>Commercial</h3>
+      <ul>
+        <li>Pitch Pack · Query Coach · Cover (exists) · Series Bible · Market Fit (light)</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria (epic)</h2>
+      <ul>
+        <li><strong>W0:</strong> Agent mode exposes stage menus; existing five jobs redistributed;
+          context refusals unchanged; no new silent writes.</li>
+        <li><strong>Foundation:</strong> Entity-draft binding + list UI on at least one entity
+          (scene or project) with accept/edit/reject against ADR 0011 rules; ADR amended.</li>
+        <li><strong>W1:</strong> Genre Compass + Story Architect + Pacing Doctor produce typed
+          proposals with evidence; multi-lens selectable; genre card writer-overridable.</li>
+        <li><strong>W2:</strong> Developmental Editor + Continuity Reader (findings invalidate
+          without citations).</li>
+        <li><strong>W3:</strong> Dialogue + Scene/Sequel coaches; Character Coach Cast-native entry.</li>
+        <li><strong>W4:</strong> Pitch Pack + Query Coach + Series Bible; Cover remains Title Page.</li>
+        <li>Prior harness + dock QOL remain coherent; <code>pnpm verify</code> green; Playwright
+          only after founder verifies each major wave outcome.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks (vertical checkpoints)</h2>
+      <ol>
+        <li><strong>W0 — Stage menu chrome:</strong> Replace flat toolkit chips with Brainstorm /
+          Structure / Writing / Editing / Commercial menus; map existing five agents; PRODUCT copy.</li>
+        <li><strong>F1 — Entity drafts foundation:</strong> Domain + storage + API to bind proposals
+          to primary targets; list ready drafts on entity; accept/reject/edit-rebase; ADR 0011
+          amendment; thin UI on one surface (prefer scene inspector or project Title Page).</li>
+        <li><strong>W1a — Genre Compass:</strong> Infer + confirm genre/story-promise card on project;
+          writable override; feeds later agents.</li>
+        <li><strong>W1b — Story Architect:</strong> Multi-lens beat board / outline → Plans or project
+          draft; Save/acknowledge path.</li>
+        <li><strong>W1c — Pacing Doctor:</strong> Scene map vs lens % bands; findings with scene
+          anchors on project/book drafts.</li>
+        <li><strong>W2a — Developmental Editor:</strong> Editorial-letter schema → project/book drafts.</li>
+        <li><strong>W2b — Continuity Reader:</strong> Evidence-linked findings on scene/project.</li>
+        <li><strong>W3 — Writing coaches:</strong> Dialogue + Scene/Sequel; Cast entry for Character Coach.</li>
+        <li><strong>W4 — Commercial pack:</strong> Pitch / Query / Series Bible; Cover unchanged home.</li>
+        <li><strong>Docs / handoff:</strong> PRODUCT, API, ADR; WHERE-I-LEFT-OFF per wave.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li>Vitest: menu resolver + enablement/refusals; proposal primary-target normalize; schema
+          validators; pacing % helpers; continuity citation gate.</li>
+        <li>API contract tests for new draft list/apply routes.</li>
+        <li>Browser walkthrough per checkpoint (success + refusal); record in record-log.</li>
+        <li><code>pnpm verify</code> before each wave handoff. No Playwright until founder verifies.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p>Update <code>docs/PRODUCT.md</code> (catalog + entity drafts). Update <code>docs/API.md</code>
+        for draft list/bind routes. Amend <a href="../../../docs/adr/0011-byok-context-proposals-playbooks-and-mcp-grants.md">ADR 0011</a>
+        (or short ADR 0014) for primary-target proposals / entity drafts. Living design:
+        <a href="../../designs/Ghostwriter Mockups 4.0.html">Mockups 4.0</a>,
+        <a href="../../designs/Ghostwriter Mockups 5.0.html">Mockups 5.0</a> — additive; surface
+        conflicts rather than silent overwrite.</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li><strong>Accepted:</strong> Multi-lens; stage names; full W0–W4 via checkpoints; Plans for
+          plan-class; entity drafts for contextual recs.</li>
+        <li><strong>Accepted direction:</strong> Entity drafts = ADR 0011 proposals with primary
+          target — not a second store. Capture-only invariant relaxes carefully with migration.</li>
+        <li><strong>Risk:</strong> Scope — keep waves shippable; W0+F1 before smart agents.</li>
+        <li><strong>Risk:</strong> Continuity without search/RAG — budgeted scene reads first;
+          embeddings later if needed.</li>
+        <li><strong>Accepted:</strong> First Drafts surfaces = scene inspector + project Title Page;
+          Cast via story-knowledge inspector Drafts for Character Coach · Cast.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked> Plan drafted with founder decisions</li>
+        <li><input type="checkbox" checked> Founder confirms entity-draft first surface + ADR approach</li>
+        <li><input type="checkbox" checked> W0 Stage menu chrome</li>
+        <li><input type="checkbox" checked> F1 Entity drafts foundation + ADR</li>
+        <li><input type="checkbox" checked> W1 Genre + Architect + Pacing</li>
+        <li><input type="checkbox" checked> W2 Developmental + Continuity</li>
+        <li><input type="checkbox" checked> W3 Writing coaches + Cast Coach entry</li>
+        <li><input type="checkbox" checked> W4 Commercial pack</li>
+        <li><input type="checkbox" checked> Docs + verify (await founder browser / archive)</li>
+        <li><input type="checkbox" checked> Catalog playbooks: per-agent craft doctrine + compiler</li>
+        <li><input type="checkbox" checked> Pacing Doctor typed findings + equal-scene %</li>
+        <li><input type="checkbox" checked> Project catalog playbook overrides: storage, API, compiler + Settings UI</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

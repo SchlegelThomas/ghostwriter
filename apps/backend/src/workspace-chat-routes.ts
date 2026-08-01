@@ -53,6 +53,37 @@ export type WorkspaceChatMode = (typeof WORKSPACE_CHAT_MODES)[number];
 export const WORKSPACE_CHAT_EFFORTS = ["fast", "standard", "high"] as const;
 export type WorkspaceChatEffort = (typeof WORKSPACE_CHAT_EFFORTS)[number];
 
+export const WORKSPACE_CHAT_MAX_ATTACHMENTS = 3;
+export const WORKSPACE_CHAT_MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+const workspaceChatAttachmentSchema = z
+  .object({
+    kind: z.enum(["image", "video"]),
+    name: z.string().trim().min(1).max(200),
+    mimeType: z.string().trim().min(1).max(100),
+    dataBase64: z.string().max(12_000_000).optional(),
+    byteLength: z.number().int().min(0).max(WORKSPACE_CHAT_MAX_IMAGE_BYTES)
+  })
+  .superRefine((attachment, context) => {
+    if (
+      attachment.kind === "image" &&
+      attachment.byteLength > WORKSPACE_CHAT_MAX_IMAGE_BYTES
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Image attachment exceeds size limit."
+      });
+    }
+    if (attachment.kind === "video" && attachment.dataBase64 !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Video attachments must not include inline binary data."
+      });
+    }
+  });
+
+export type WorkspaceChatAttachment = z.infer<typeof workspaceChatAttachmentSchema>;
+
 export const workspaceChatRequestSchema = z.object({
   message: z.string().trim().min(1).max(4_000),
   projectId: z.string().trim().min(1).max(200).optional(),
@@ -74,6 +105,7 @@ export const workspaceChatRequestSchema = z.object({
     )
     .max(6)
     .optional(),
+  attachments: z.array(workspaceChatAttachmentSchema).max(WORKSPACE_CHAT_MAX_ATTACHMENTS).optional(),
   selection: z
     .object({
       kind: z.string().trim().min(1).max(64),
@@ -293,6 +325,7 @@ function buildWorkspaceChatInputText(input: Readonly<{
   message: string;
   contextText: string;
   priorTurns?: readonly WorkspaceChatPriorTurn[];
+  attachments?: readonly WorkspaceChatAttachment[];
 }>): string {
   const lines = ["Project context:", input.contextText, ""];
   if (input.priorTurns !== undefined && input.priorTurns.length > 0) {
@@ -303,7 +336,38 @@ function buildWorkspaceChatInputText(input: Readonly<{
     }
     lines.push("");
   }
+  const attachmentContext = formatWorkspaceChatAttachmentsContext(
+    input.attachments
+  );
+  if (attachmentContext.length > 0) {
+    lines.push(attachmentContext, "");
+  }
   lines.push("Writer message:", input.message);
+  return lines.join("\n");
+}
+
+export function formatWorkspaceChatAttachmentsContext(
+  attachments: readonly WorkspaceChatAttachment[] | undefined
+): string {
+  if (attachments === undefined || attachments.length === 0) return "";
+  const lines = ["Writer attachments (this turn):"];
+  for (const attachment of attachments) {
+    if (attachment.kind === "video") {
+      lines.push(
+        `- video: ${attachment.name} (${attachment.mimeType}, ${attachment.byteLength} bytes) — binary not ingested as frames yet`
+      );
+      continue;
+    }
+    if (attachment.dataBase64 !== undefined && attachment.dataBase64.length > 0) {
+      lines.push(
+        `- image: ${attachment.name} (${attachment.mimeType}, ${attachment.byteLength} bytes) — image data included in request metadata; vision ingestion may vary by model`
+      );
+      continue;
+    }
+    lines.push(
+      `- image: ${attachment.name} (${attachment.mimeType}, ${attachment.byteLength} bytes) — metadata only`
+    );
+  }
   return lines.join("\n");
 }
 
@@ -587,7 +651,8 @@ export function registerWorkspaceChatRoutes(
       const inputText = buildWorkspaceChatInputText({
         message: normalizedMessage,
         contextText,
-        priorTurns: parsed.data.priorTurns
+        priorTurns: parsed.data.priorTurns,
+        attachments: parsed.data.attachments
       });
 
       if (
@@ -885,7 +950,8 @@ export function registerWorkspaceChatRoutes(
         const inputText = buildWorkspaceChatInputText({
           message: normalizedMessage,
           contextText,
-          priorTurns: parsed.data.priorTurns
+          priorTurns: parsed.data.priorTurns,
+          attachments: parsed.data.attachments
         });
 
         writeSse(controller, "status", {

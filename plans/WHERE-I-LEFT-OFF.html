@@ -18,23 +18,25 @@
       <h2>Done recently</h2>
       <ul>
         <li><a href="archive/2026-07-26-multi-provider-models/plan.html">Multi-provider models</a> merged in <a href="https://github.com/SchlegelThomas/ghostwriter/pull/16">PR #16</a>.</li>
-        <li><a href="active/2026-07-25-writing-agent-harness/plan.html">Writing-agent harness</a> CP3–CP6 on <code>feat/writing-agent-harness</code>: tools, toolkit deep-links, Plan→Plans, streaming.</li>
-        <li><a href="active/2026-08-01-agent-dock-qol/plan.html">Agent dock QOL</a> slices A–E: markdown, grouped working, sessions/tabs, fork/regen, stop/chips.</li>
+        <li><a href="active/2026-07-25-writing-agent-harness/plan.html">Writing-agent harness</a> + <a href="active/2026-08-01-agent-dock-qol/plan.html">Agent dock QOL</a> + <a href="active/2026-08-01-writing-agent-catalog/plan.html">Writing agent catalog</a> implemented on <code>feat/writing-agent-harness</code> (shipping).</li>
+        <li>Catalog: entity drafts (ADR 0014, migration <code>0021</code>), craft playbooks + writer steering (migration <code>0022</code>), Pacing Doctor <code>pacing-findings-v1</code>, Drafts card previews, Cast dossier editing, image model modal picker, active catalog-partner banner.</li>
       </ul>
     </section>
 
     <section>
       <h2>Proposed next</h2>
       <ul>
-        <li>Founder browser verify harness + Agent dock QOL end-to-end; open PR when asked.</li>
-        <li>Confirm production deploy/migrate for <code>0020</code> / <code>provider_credential_keys</code> after merge.</li>
+        <li>After PR merge: confirm production migrate/deploy for <code>0021</code>/<code>0022</code> (Drafts + Playbooks).</li>
+        <li>Founder browser verify full outcome; then post-gate Playwright if directed.</li>
+        <li>Archive harness / dock QOL / catalog plans once merge + verify are settled.</li>
       </ul>
     </section>
 
     <section>
       <h2>Incomplete</h2>
       <ol>
-        <li>Live browser walkthrough (post-gate Playwright when verified).</li>
+        <li>Founder browser walkthrough (post-gate Playwright when verified).</li>
+        <li>Optional: specialized apply beyond catalog-memo acknowledge (persist genre card, beat board types).</li>
         <li>Optional owner-profile cleanup to drop legacy <code>provider_credentials</code> once confident.</li>
       </ol>
     </section>

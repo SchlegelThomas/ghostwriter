@@ -8,8 +8,13 @@ import {
   TextInput,
   View
 } from "react-native";
-import { ArrowUp, CaretDown, CaretRight, Check, CopySimple, DotsThree, Plus } from "phosphor-react-native";
-import type { AgentModelId } from "@ghostwriter/core";
+import { ArrowUp, CaretDown, CaretRight, Check, CopySimple, DotsThree, Microphone, Paperclip, Plus, X } from "phosphor-react-native";
+import {
+  CATALOG_MEMO_LENSES,
+  type AgentModelId,
+  type CatalogAgentId,
+  type CatalogMemoLens
+} from "@ghostwriter/core";
 import { AgentChatMarkdown } from "./AgentChatMarkdown.js";
 import {
   agentWorkingGroupState,
@@ -20,7 +25,6 @@ import type { OpenSettingsHandler } from "./settings-focus.js";
 import { AgentModelPickerMenu } from "./AgentModelPickerMenu.js";
 import {
   agentModelLabelWithProvider,
-  WORKSPACE_AGENT_EFFORTS,
   WORKSPACE_AGENT_MODES,
   workspaceAgentEffortLabel,
   workspaceAgentModeLabel,
@@ -36,9 +40,24 @@ import {
 } from "./workspace-chat-follow-ups.js";
 import type { WorkspaceChatPriorTurn } from "./workspace-chat-sessions.js";
 import {
-  AGENT_TOOLKIT_ACTIONS,
+  AGENT_CATALOG_STAGES,
+  agentCatalogStageLabel,
+  findShippedCatalogAgentId,
+  findShippedToolkitId,
+  formatActiveCatalogPartnerSummary,
+  type ActiveWorkspaceCatalogPartner,
+  type AgentCatalogStageId,
   type AgentToolkitId
 } from "./workspace-agent-toolkit.js";
+import {
+  composerAttachmentAcceptAttribute,
+  readComposerAttachmentFile,
+  resolveComposerSendMessage,
+  shouldSubmitChatOnEnterKey,
+  WORKSPACE_CHAT_MAX_ATTACHMENTS,
+  type WorkspaceChatComposerKeyEvent,
+  type WorkspaceChatPendingAttachment
+} from "./workspace-chat-composer.js";
 
 const { colors, fonts } = ghostwriterTheme;
 
@@ -69,6 +88,7 @@ export type WorkspaceChatSendInput = Readonly<{
   existingUserMessageId?: string;
   priorTurns?: readonly WorkspaceChatPriorTurn[];
   baseMessages?: readonly WorkspaceChatMessage[];
+  attachments?: readonly WorkspaceChatPendingAttachment[];
 }>;
 
 export type WorkspaceChatSessionTab = Readonly<{
@@ -93,6 +113,7 @@ export type WorkspaceChatPanelProps = Readonly<{
   onOpenSettings?: OpenSettingsHandler;
   selectionSummary?: string;
   onToolkitAction?(id: AgentToolkitId): void;
+  onCatalogAgentRun?(id: CatalogAgentId, lens?: CatalogMemoLens): void;
   /** Latest Plan-mode assistant reply available to save. */
   planOutlineText?: string;
   onSavePlanToPlans?(outlineText: string): void;
@@ -109,11 +130,15 @@ export type WorkspaceChatPanelProps = Readonly<{
   onRetryFailedTurn?(): void;
   onOpenScene?(): void;
   canOpenScene?: boolean;
-  /** Docked in the secondary shell — no outer border; close returns to Properties. */
+  /** Docked in the secondary shell — collapse control lives in the shell header. */
   variant?: "floating" | "docked";
+  dictating?: boolean;
+  onToggleDictation?(): void;
+  dictationAvailable?: boolean;
+  onBindDictateAppend?(append: (text: string) => void): void;
 }>;
 
-type PickerKind = "mode" | "model" | "effort" | null;
+type PickerKind = "mode" | "model" | null;
 
 export function WorkspaceChatPanel({
   messages,
@@ -132,6 +157,7 @@ export function WorkspaceChatPanel({
   onOpenSettings,
   selectionSummary,
   onToolkitAction,
+  onCatalogAgentRun,
   planOutlineText,
   onSavePlanToPlans,
   chatSessions = [],
@@ -147,14 +173,30 @@ export function WorkspaceChatPanel({
   onRetryFailedTurn,
   onOpenScene,
   canOpenScene = false,
-  variant = "floating"
+  variant = "floating",
+  dictating = false,
+  onToggleDictation,
+  dictationAvailable = false,
+  onBindDictateAppend
 }: WorkspaceChatPanelProps) {
   const [draft, setDraft] = useState("");
+  const [pendingAttachments, setPendingAttachments] = useState<
+    readonly WorkspaceChatPendingAttachment[]
+  >([]);
+  const [attachmentError, setAttachmentError] = useState<string>();
   const [sending, setSending] = useState(false);
   const [editUserMessageId, setEditUserMessageId] = useState<string | null>(
     null
   );
   const [openPicker, setOpenPicker] = useState<PickerKind>(null);
+  const [openStageMenu, setOpenStageMenu] = useState<AgentCatalogStageId | null>(
+    null
+  );
+  const [catalogLens, setCatalogLens] =
+    useState<CatalogMemoLens>("save-the-cat");
+  const [activeCatalogPartner, setActiveCatalogPartner] = useState<
+    ActiveWorkspaceCatalogPartner | null
+  >(null);
   const [sessionMenuId, setSessionMenuId] = useState<string | null>(null);
   const [turnMenuId, setTurnMenuId] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
@@ -164,32 +206,119 @@ export function WorkspaceChatPanel({
     scrollRef.current?.scrollToEnd({ animated: true });
   }, [messages]);
 
+  useEffect(() => {
+    onBindDictateAppend?.((text) => {
+      if (text.length === 0) return;
+      setDraft((current) => current + text);
+    });
+  }, [onBindDictateAppend]);
+
+  useEffect(() => {
+    if (mode !== "agent") {
+      setActiveCatalogPartner(null);
+      setOpenStageMenu(null);
+    }
+  }, [mode]);
+
+  useEffect(() => {
+    setActiveCatalogPartner((current) => {
+      if (current === null || current.stageId !== "structure") return current;
+      if (current.lens === catalogLens) return current;
+      return { ...current, lens: catalogLens };
+    });
+  }, [catalogLens]);
+
+  const composerDisabled = busy || sending || chatStreaming;
+
   if (!open) return null;
 
   async function send(): Promise<void> {
-    const text = draft.trim();
-    if (text.length === 0 || sending || busy || chatStreaming) return;
+    const message = resolveComposerSendMessage(draft, pendingAttachments);
+    if (
+      message.length === 0 ||
+      sending ||
+      busy ||
+      chatStreaming
+    ) {
+      return;
+    }
+    const attachmentsSnapshot = pendingAttachments;
+    const editSnapshot = editUserMessageId;
+    const draftSnapshot = draft;
     setSending(true);
     setOpenPicker(null);
+    setOpenStageMenu(null);
+    // Clear immediately on submit — do not wait for the stream to finish.
+    setDraft("");
+    setPendingAttachments([]);
+    setAttachmentError(undefined);
+    setEditUserMessageId(null);
     try {
       await onSend({
-        message: text,
+        message,
         mode,
         model,
         effort,
-        ...(editUserMessageId === null
+        ...(attachmentsSnapshot.length === 0
           ? {}
-          : { resendFromMessageId: editUserMessageId })
+          : { attachments: attachmentsSnapshot }),
+        ...(editSnapshot === null
+          ? {}
+          : { resendFromMessageId: editSnapshot })
       });
-      setDraft("");
-      setEditUserMessageId(null);
+    } catch {
+      setDraft(draftSnapshot);
+      setPendingAttachments(attachmentsSnapshot);
+      setEditUserMessageId(editSnapshot);
     } finally {
       setSending(false);
     }
   }
 
-  const composerDisabled = busy || sending || chatStreaming;
-  const canSend = !composerDisabled && draft.trim().length > 0;
+  async function pickAttachments(): Promise<void> {
+    if (composerDisabled || typeof document === "undefined") return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = composerAttachmentAcceptAttribute();
+    input.multiple = true;
+    input.onchange = () => {
+      void (async () => {
+        const files =
+          input.files === null ? [] : Array.from(input.files);
+        if (files.length === 0) return;
+        const remaining = WORKSPACE_CHAT_MAX_ATTACHMENTS - pendingAttachments.length;
+        if (remaining <= 0) {
+          setAttachmentError(`At most ${WORKSPACE_CHAT_MAX_ATTACHMENTS} attachments.`);
+          return;
+        }
+        const selected = files.slice(0, remaining);
+        const next: WorkspaceChatPendingAttachment[] = [...pendingAttachments];
+        for (const file of selected) {
+          const read = await readComposerAttachmentFile(file);
+          if ("error" in read) {
+            setAttachmentError(read.error);
+            continue;
+          }
+          next.push(read);
+        }
+        setPendingAttachments(next);
+        if (next.length > pendingAttachments.length) {
+          setAttachmentError(undefined);
+        }
+      })();
+    };
+    input.click();
+  }
+
+  function removeAttachment(id: string): void {
+    setPendingAttachments((current) =>
+      current.filter((attachment) => attachment.id !== id)
+    );
+  }
+
+  const canSend =
+    !composerDisabled &&
+    (draft.trim().length > 0 || pendingAttachments.length > 0);
   const lastUserMessageId = findLastUserMessageId(messages);
   const lastAssistantMessageId = findLastAssistantMessageId(messages);
   const assistantFollowUpChips = resolveAssistantFollowUpChips({
@@ -205,7 +334,7 @@ export function WorkspaceChatPanel({
     availableModels,
     mode
   );
-  const modelChipLabel = agentModelLabelWithProvider(model, availableModels);
+  const modelChipLabel = `${agentModelLabelWithProvider(model, availableModels)} · ${workspaceAgentEffortLabel(effort)}`;
 
   return (
     <View
@@ -494,27 +623,195 @@ export function WorkspaceChatPanel({
         </ScrollView>
       </View>
 
-      {mode === "agent" && onToolkitAction !== undefined ? (
-        <View style={styles.toolkitRow}>
-          {AGENT_TOOLKIT_ACTIONS.map((action) => (
-            <Pressable
-              accessibilityRole="button"
-              key={action.id}
-              onPress={() => onToolkitAction(action.id)}
-              style={({ pressed }) => [
-                styles.toolkitAction,
-                pressed && styles.pressed
-              ]}
+      {mode === "agent" &&
+      (onToolkitAction !== undefined || onCatalogAgentRun !== undefined) ? (
+        <View style={styles.toolkitSection}>
+          {openStageMenu !== null ? (
+            <View style={styles.toolkitMenuDock}>
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled
+                style={styles.toolkitMenuScroll}
+              >
+                <View style={styles.toolkitMenuScrollContent}>
+                  {openStageMenu === "structure" ? (
+                    <View style={styles.toolkitLensBlock}>
+                      <Text style={styles.toolkitLensLabel}>Structure lens</Text>
+                      <View style={styles.toolkitLensRow}>
+                        {CATALOG_MEMO_LENSES.map((lens) => (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: catalogLens === lens }}
+                            key={lens}
+                            onPress={() => setCatalogLens(lens)}
+                            style={[
+                              styles.toolkitLensChip,
+                              catalogLens === lens && styles.toolkitLensChipSelected
+                            ]}
+                          >
+                            <Text style={styles.toolkitLensChipText}>
+                              {lens.replaceAll("-", " ")}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
+                  {AGENT_CATALOG_STAGES.find(
+                    (stage) => stage.id === openStageMenu
+                  )?.agents.map((entry, index, agents) => {
+                    const shipped = entry.status === "shipped";
+                    const toolkitId = findShippedToolkitId(entry);
+                    const catalogAgentId = findShippedCatalogAgentId(entry);
+                    const last = index === agents.length - 1;
+                    return (
+                      <Pressable
+                        accessibilityHint={entry.blurb}
+                        accessibilityLabel={entry.label}
+                        accessibilityRole="menuitem"
+                        accessibilityState={{ disabled: !shipped }}
+                        disabled={!shipped}
+                        key={entry.id}
+                        onPress={() => {
+                          if (toolkitId !== undefined) {
+                            onToolkitAction?.(toolkitId);
+                          } else if (catalogAgentId !== undefined) {
+                            onCatalogAgentRun?.(
+                              catalogAgentId,
+                              openStageMenu === "structure"
+                                ? catalogLens
+                                : undefined
+                            );
+                          } else {
+                            return;
+                          }
+                          setActiveCatalogPartner({
+                            entryId: entry.id,
+                            label: entry.label,
+                            stageId: openStageMenu,
+                            ...(openStageMenu === "structure"
+                              ? { lens: catalogLens }
+                              : {})
+                          });
+                          setOpenStageMenu(null);
+                        }}
+                        style={({ pressed }) => [
+                          styles.toolkitMenuItem,
+                          last && styles.toolkitMenuItemLast,
+                          !shipped && styles.toolkitMenuItemDisabled,
+                          activeCatalogPartner?.entryId === entry.id &&
+                            styles.toolkitMenuItemActive,
+                          pressed && shipped && styles.pressed
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.toolkitMenuItemLabel,
+                            !shipped && styles.toolkitMenuItemLabelDisabled,
+                            activeCatalogPartner?.entryId === entry.id &&
+                              styles.toolkitMenuItemLabelActive
+                          ]}
+                        >
+                          {entry.label}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.toolkitMenuItemBlurb,
+                            !shipped && styles.toolkitMenuItemBlurbDisabled
+                          ]}
+                        >
+                          {shipped ? entry.blurb : "Coming soon"}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            </View>
+          ) : null}
+          <ScrollView
+            contentContainerStyle={styles.toolkitRowContent}
+            horizontal
+            keyboardShouldPersistTaps="handled"
+            showsHorizontalScrollIndicator={false}
+            style={styles.toolkitRow}
+          >
+            {AGENT_CATALOG_STAGES.map((stage) => {
+              const stageActive =
+                openStageMenu === stage.id ||
+                activeCatalogPartner?.stageId === stage.id;
+              return (
+                <Pressable
+                  accessibilityLabel={
+                    activeCatalogPartner?.stageId === stage.id
+                      ? `${stage.label}, working with ${activeCatalogPartner.label}`
+                      : stage.label
+                  }
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    expanded: openStageMenu === stage.id,
+                    selected: activeCatalogPartner?.stageId === stage.id
+                  }}
+                  key={stage.id}
+                  onPress={() => {
+                    setOpenPicker(null);
+                    setOpenStageMenu((current) =>
+                      current === stage.id ? null : stage.id
+                    );
+                  }}
+                  style={({ pressed }) => [
+                    styles.toolkitAction,
+                    stageActive && styles.toolkitActionSelected,
+                    pressed && styles.pressed
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.toolkitActionText,
+                      stageActive && styles.toolkitActionTextSelected
+                    ]}
+                  >
+                    {agentCatalogStageLabel(stage.id)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          {activeCatalogPartner === null ? null : (
+            <View
+              accessibilityLabel={`Working with ${formatActiveCatalogPartnerSummary(activeCatalogPartner)}`}
+              style={styles.activePartnerBanner}
             >
-              <Text style={styles.toolkitActionText}>{action.label}</Text>
-            </Pressable>
-          ))}
+              <View style={styles.activePartnerCopy}>
+                <Text style={styles.activePartnerEyebrow}>Working with</Text>
+                <Text numberOfLines={2} style={styles.activePartnerLabel}>
+                  {formatActiveCatalogPartnerSummary(activeCatalogPartner)}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityLabel="Clear active writing agent"
+                accessibilityRole="button"
+                onPress={() => setActiveCatalogPartner(null)}
+                style={({ pressed }) => [
+                  styles.activePartnerClear,
+                  pressed && styles.pressed
+                ]}
+              >
+                <X color={colors.muted} size={12} weight="bold" />
+              </Pressable>
+            </View>
+          )}
         </View>
       ) : null}
 
       <View style={styles.composer}>
         {openPicker === "model" ? (
           <AgentModelPickerMenu
+            effort={effort}
+            onApplyModelEffort={(next, nextEffort) => {
+              if (next !== model) onModelChange(next);
+              onEffortChange(nextEffort);
+            }}
             onDismiss={() => setOpenPicker(null)}
             onOpenSettings={
               onOpenSettings === undefined
@@ -531,27 +828,14 @@ export function WorkspaceChatPanel({
             options={modelPickerOptions}
             selectedValue={model}
           />
-        ) : openPicker !== null ? (
+        ) : openPicker === "mode" ? (
           <View style={styles.pickerMenuDock}>
-            {(openPicker === "mode"
-              ? WORKSPACE_AGENT_MODES.map((value) => ({
-                  value,
-                  label: workspaceAgentModeLabel(value)
-                }))
-              : WORKSPACE_AGENT_EFFORTS.map((value) => ({
-                  value,
-                  label: workspaceAgentEffortLabel(value)
-                }))
-            ).map((option) => (
+            {WORKSPACE_AGENT_MODES.map((value) => (
               <Pressable
                 accessibilityRole="menuitem"
-                key={option.value}
+                key={value}
                 onPress={() => {
-                  if (openPicker === "mode") {
-                    onModeChange(option.value as WorkspaceAgentMode);
-                  } else {
-                    onEffortChange(option.value as WorkspaceAgentEffort);
-                  }
+                  onModeChange(value);
                   setOpenPicker(null);
                 }}
                 style={({ pressed }) => [
@@ -559,18 +843,56 @@ export function WorkspaceChatPanel({
                   pressed && styles.pressed
                 ]}
               >
-                <Text style={styles.pickerOptionText}>{option.label}</Text>
+                <Text style={styles.pickerOptionText}>
+                  {workspaceAgentModeLabel(value)}
+                </Text>
               </Pressable>
             ))}
           </View>
         ) : null}
 
         <View style={styles.composerShell}>
+          {pendingAttachments.length > 0 ? (
+            <View style={styles.attachmentRow}>
+              {pendingAttachments.map((attachment) => (
+                <View key={attachment.id} style={styles.attachmentChip}>
+                  <Text numberOfLines={1} style={styles.attachmentChipText}>
+                    {attachment.kind === "image" ? "Image · " : "Video · "}
+                    {attachment.name}
+                  </Text>
+                  <Pressable
+                    accessibilityLabel={`Remove ${attachment.name}`}
+                    accessibilityRole="button"
+                    disabled={composerDisabled}
+                    onPress={() => removeAttachment(attachment.id)}
+                    style={({ pressed }) => [
+                      styles.attachmentRemove,
+                      pressed && styles.pressed
+                    ]}
+                  >
+                    <X color={colors.muted} size={10} weight="bold" />
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          ) : null}
+          {attachmentError === undefined ? null : (
+            <Text style={styles.attachmentError}>{attachmentError}</Text>
+          )}
           <TextInput
+            accessibilityHint="Enter to send, Shift+Enter for newline"
             accessibilityLabel="Chat message"
             editable={!composerDisabled}
             multiline
             onChangeText={setDraft}
+            onKeyPress={(event) => {
+              const keyEvent = event as unknown as WorkspaceChatComposerKeyEvent & {
+                preventDefault(): void;
+              };
+              if (!shouldSubmitChatOnEnterKey(keyEvent)) return;
+              keyEvent.preventDefault();
+              void send();
+            }}
             onSubmitEditing={() => void send()}
             placeholder="Ask about this project…"
             placeholderTextColor={colors.muted}
@@ -579,38 +901,71 @@ export function WorkspaceChatPanel({
           />
           <View style={styles.composerToolbar}>
             <View style={styles.pickerRow}>
+              {typeof document !== "undefined" ? (
+                <Pressable
+                  accessibilityLabel="Attach image or video"
+                  accessibilityRole="button"
+                  disabled={
+                    composerDisabled ||
+                    pendingAttachments.length >= WORKSPACE_CHAT_MAX_ATTACHMENTS
+                  }
+                  onPress={() => void pickAttachments()}
+                  style={({ pressed }) => [
+                    styles.iconToolButton,
+                    pressed && styles.pressed,
+                    composerDisabled && styles.disabled
+                  ]}
+                >
+                  <Paperclip color={colors.muted} size={14} weight="regular" />
+                </Pressable>
+              ) : null}
+              {onToggleDictation === undefined ? null : (
+                <Pressable
+                  accessibilityLabel={dictating ? "Stop dictation" : "Dictate"}
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    selected: dictating,
+                    disabled: !dictationAvailable || composerDisabled
+                  }}
+                  disabled={!dictationAvailable || composerDisabled}
+                  onPress={onToggleDictation}
+                  style={({ pressed }) => [
+                    styles.iconToolButton,
+                    dictating && styles.iconToolButtonActive,
+                    pressed && styles.pressed,
+                    (!dictationAvailable || composerDisabled) && styles.disabled
+                  ]}
+                >
+                  <Microphone
+                    color={dictating ? colors.kicker : colors.muted}
+                    size={14}
+                    weight={dictating ? "fill" : "regular"}
+                  />
+                </Pressable>
+              )}
               <ComposerChip
                 accessibilityLabel="Agent mode"
                 disabled={composerDisabled}
                 label={workspaceAgentModeLabel(mode)}
-                onPress={() =>
+                onPress={() => {
+                  setOpenStageMenu(null);
                   setOpenPicker((current) =>
                     current === "mode" ? null : "mode"
-                  )
-                }
+                  );
+                }}
                 selected={openPicker === "mode"}
               />
               <ComposerChip
-                accessibilityLabel="Agent model"
+                accessibilityLabel="Agent model and effort"
                 disabled={composerDisabled || modelPickerOptions.length === 0}
                 label={modelChipLabel}
-                onPress={() =>
+                onPress={() => {
+                  setOpenStageMenu(null);
                   setOpenPicker((current) =>
                     current === "model" ? null : "model"
-                  )
-                }
+                  );
+                }}
                 selected={openPicker === "model"}
-              />
-              <ComposerChip
-                accessibilityLabel="Agent effort"
-                disabled={composerDisabled}
-                label={workspaceAgentEffortLabel(effort)}
-                onPress={() =>
-                  setOpenPicker((current) =>
-                    current === "effort" ? null : "effort"
-                  )
-                }
-                selected={openPicker === "effort"}
               />
             </View>
             <Pressable
@@ -1286,26 +1641,173 @@ const styles = StyleSheet.create({
     minHeight: 0,
     minWidth: 0
   },
+  toolkitSection: {
+    flexShrink: 0,
+    position: "relative",
+    zIndex: 35
+  },
+  toolkitMenuDock: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    bottom: "100%",
+    left: 8,
+    marginBottom: 4,
+    maxHeight: 220,
+    minWidth: 200,
+    overflow: "hidden",
+    position: "absolute",
+    right: 8,
+    zIndex: 30
+  },
+  toolkitMenuScroll: {
+    maxHeight: 220
+  },
+  toolkitMenuScrollContent: {
+    paddingBottom: 4,
+    paddingTop: 2
+  },
+  toolkitLensBlock: {
+    borderBottomColor: colors.line,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  toolkitLensLabel: {
+    color: colors.muted,
+    fontFamily: fonts.uiMedium,
+    fontSize: 10,
+    textTransform: "uppercase"
+  },
+  toolkitLensRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4
+  },
+  toolkitLensChip: {
+    borderColor: colors.line,
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 6,
+    paddingVertical: 3
+  },
+  toolkitLensChipSelected: {
+    borderColor: colors.kicker
+  },
+  toolkitLensChipText: {
+    color: colors.ink,
+    fontFamily: fonts.ui,
+    fontSize: 10,
+    textTransform: "capitalize"
+  },
+  toolkitMenuItem: {
+    borderBottomColor: colors.line,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 7
+  },
+  toolkitMenuItemLast: {
+    borderBottomWidth: 0
+  },
+  toolkitMenuItemDisabled: {
+    opacity: 0.55
+  },
+  toolkitMenuItemActive: {
+    backgroundColor: colors.accentSoft
+  },
+  toolkitMenuItemLabel: {
+    color: colors.ink,
+    fontFamily: fonts.uiMedium,
+    fontSize: 12,
+    lineHeight: 16
+  },
+  toolkitMenuItemLabelDisabled: {
+    color: colors.muted
+  },
+  toolkitMenuItemLabelActive: {
+    color: colors.kicker,
+    fontFamily: fonts.uiSemibold
+  },
+  toolkitMenuItemBlurb: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 10,
+    lineHeight: 14
+  },
+  toolkitMenuItemBlurbDisabled: {
+    fontStyle: "italic"
+  },
   toolkitRow: {
     borderTopColor: colors.line,
     borderTopWidth: StyleSheet.hairlineWidth,
+    flexGrow: 0,
+    flexShrink: 0
+  },
+  toolkitRowContent: {
+    alignItems: "center",
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 6
   },
   toolkitAction: {
     borderColor: colors.line,
     borderRadius: 6,
     borderWidth: StyleSheet.hairlineWidth,
+    flexShrink: 0,
     paddingHorizontal: 8,
-    paddingVertical: 5
+    paddingVertical: 4
+  },
+  toolkitActionSelected: {
+    backgroundColor: colors.panel,
+    borderColor: colors.kicker
   },
   toolkitActionText: {
     color: colors.kicker,
     fontFamily: fonts.uiMedium,
-    fontSize: 11
+    fontSize: 11,
+    lineHeight: 14
+  },
+  toolkitActionTextSelected: {
+    color: colors.ink
+  },
+  activePartnerBanner: {
+    alignItems: "center",
+    backgroundColor: colors.accentSoft,
+    borderTopColor: colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  activePartnerCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0
+  },
+  activePartnerEyebrow: {
+    color: colors.kicker,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 9,
+    letterSpacing: 0.5,
+    textTransform: "uppercase"
+  },
+  activePartnerLabel: {
+    color: colors.ink,
+    fontFamily: fonts.uiMedium,
+    fontSize: 12,
+    lineHeight: 16
+  },
+  activePartnerClear: {
+    alignItems: "center",
+    borderRadius: 999,
+    height: 24,
+    justifyContent: "center",
+    width: 24
   },
   savePlanRow: {
     borderTopColor: colors.line,
@@ -1604,6 +2106,55 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 4,
     minWidth: 0
+  },
+  iconToolButton: {
+    alignItems: "center",
+    borderRadius: 6,
+    height: 28,
+    justifyContent: "center",
+    width: 28
+  },
+  iconToolButtonActive: {
+    backgroundColor: colors.accentSoft
+  },
+  attachmentRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    paddingHorizontal: 2
+  },
+  attachmentChip: {
+    alignItems: "center",
+    backgroundColor: colors.wash,
+    borderColor: colors.line,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 4,
+    maxWidth: "100%",
+    paddingLeft: 8,
+    paddingRight: 4,
+    paddingVertical: 4
+  },
+  attachmentChipText: {
+    color: colors.muted,
+    flexShrink: 1,
+    fontFamily: fonts.uiMedium,
+    fontSize: 10,
+    maxWidth: 160
+  },
+  attachmentRemove: {
+    alignItems: "center",
+    borderRadius: 999,
+    height: 18,
+    justifyContent: "center",
+    width: 18
+  },
+  attachmentError: {
+    color: colors.amber,
+    fontFamily: fonts.ui,
+    fontSize: 10,
+    paddingHorizontal: 2
   },
   pickerChip: {
     borderRadius: 6,

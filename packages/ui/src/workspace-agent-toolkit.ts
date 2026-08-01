@@ -1,4 +1,11 @@
-import type { BookId, SceneId, StoryKnowledgeId } from "@ghostwriter/core";
+import {
+  isCatalogAgentId,
+  type BookId,
+  type CatalogAgentId,
+  type CatalogMemoLens,
+  type SceneId,
+  type StoryKnowledgeId
+} from "@ghostwriter/core";
 import type { ManuscriptSelection } from "./manuscript-selection.js";
 
 export type AgentToolkitId =
@@ -221,13 +228,268 @@ export function buildAgentToolkitSelection(
   };
 }
 
+export type AgentCatalogStageId =
+  | "brainstorm"
+  | "structure"
+  | "writing"
+  | "editing"
+  | "commercial";
+
+export type AgentCatalogEntry =
+  | Readonly<{
+      id: AgentToolkitId | CatalogAgentId;
+      label: string;
+      blurb: string;
+      status: "shipped";
+    }>
+  | Readonly<{ id: string; label: string; blurb: string; status: "coming-soon" }>;
+
+export type AgentCatalogStage = Readonly<{
+  id: AgentCatalogStageId;
+  label: string;
+  agents: readonly AgentCatalogEntry[];
+}>;
+
+const AGENT_CATALOG_STAGE_LABELS: Readonly<Record<AgentCatalogStageId, string>> =
+  Object.freeze({
+    brainstorm: "Brainstorm",
+    structure: "Structure",
+    writing: "Writing",
+    editing: "Editing",
+    commercial: "Commercial"
+  });
+
+export function agentCatalogStageLabel(id: AgentCatalogStageId): string {
+  return AGENT_CATALOG_STAGE_LABELS[id];
+}
+
+/** Sticky partner chosen from a stage menu in the Agent dock. */
+export type ActiveWorkspaceCatalogPartner = Readonly<{
+  entryId: string;
+  label: string;
+  stageId: AgentCatalogStageId;
+  lens?: CatalogMemoLens;
+}>;
+
+export function formatActiveCatalogPartnerSummary(
+  partner: ActiveWorkspaceCatalogPartner
+): string {
+  const stage = agentCatalogStageLabel(partner.stageId);
+  if (partner.lens === undefined) {
+    return `${partner.label} · ${stage}`;
+  }
+  return `${partner.label} · ${stage} · ${partner.lens.replaceAll("-", " ")}`;
+}
+
+export function findShippedToolkitId(
+  entry: AgentCatalogEntry
+): AgentToolkitId | undefined {
+  if (entry.status !== "shipped" || isCatalogAgentId(entry.id)) return undefined;
+  return entry.id as AgentToolkitId;
+}
+
+export function findShippedCatalogAgentId(
+  entry: AgentCatalogEntry
+): CatalogAgentId | undefined {
+  return entry.status === "shipped" && isCatalogAgentId(entry.id)
+    ? entry.id
+    : undefined;
+}
+
+export function shippedToolkitIdsInCatalog(): readonly AgentToolkitId[] {
+  const ids: AgentToolkitId[] = [];
+  for (const stage of AGENT_CATALOG_STAGES) {
+    for (const agent of stage.agents) {
+      const toolkitId = findShippedToolkitId(agent);
+      if (toolkitId !== undefined) {
+        ids.push(toolkitId);
+      }
+    }
+  }
+  return Object.freeze(ids);
+}
+
+export const AGENT_CATALOG_STAGES: readonly AgentCatalogStage[] = Object.freeze([
+  Object.freeze({
+    id: "brainstorm",
+    label: AGENT_CATALOG_STAGE_LABELS.brainstorm,
+    agents: Object.freeze([
+      Object.freeze({
+        id: "sketch-partner",
+        label: "Sketch Partner",
+        blurb: "Shape scenes from your Plans idea with craft prompts.",
+        status: "shipped"
+      }),
+      Object.freeze({
+        id: "idea-midwife",
+        label: "Idea Midwife",
+        blurb: "Turn raw sparks into story-ready concepts.",
+        status: "shipped"
+      }),
+      Object.freeze({
+        id: "genre-compass",
+        label: "Genre Compass",
+        blurb: "Find the genre lane that fits your idea.",
+        status: "shipped"
+      }),
+      Object.freeze({
+        id: "what-if-engine",
+        label: "What-if Engine",
+        blurb: "Explore branching possibilities from a seed.",
+        status: "shipped"
+      })
+    ])
+  }),
+  Object.freeze({
+    id: "structure",
+    label: AGENT_CATALOG_STAGE_LABELS.structure,
+    agents: Object.freeze([
+      Object.freeze({
+        id: "story-architect",
+        label: "Story Architect",
+        blurb: "Build act and beat structure for your outline.",
+        status: "shipped"
+      }),
+      Object.freeze({
+        id: "pacing-doctor",
+        label: "Pacing Doctor",
+        blurb: "Diagnose rhythm and tension across the manuscript.",
+        status: "shipped"
+      }),
+      Object.freeze({
+        id: "promise-keeper",
+        label: "Promise Keeper",
+        blurb: "Track setup, payoff, and reader promises.",
+        status: "shipped"
+      }),
+      Object.freeze({
+        id: "outline-expander",
+        label: "Outline Expander",
+        blurb: "Grow beats into scene-level outlines.",
+        status: "shipped"
+      })
+    ])
+  }),
+  Object.freeze({
+    id: "writing",
+    label: AGENT_CATALOG_STAGE_LABELS.writing,
+    agents: Object.freeze([
+      Object.freeze({
+        id: "scene-partner",
+        label: "Scene Partner",
+        blurb: "Run scene craft from a Plans capture.",
+        status: "shipped"
+      }),
+      Object.freeze({
+        id: "character-coach",
+        label: "Character Coach",
+        blurb: "Develop cast sheets from a Plans capture.",
+        status: "shipped"
+      }),
+      Object.freeze({
+        id: "worldkeeper",
+        label: "Worldkeeper",
+        blurb: "Ground scenes in backdrop and world detail.",
+        status: "shipped"
+      }),
+      Object.freeze({
+        id: "scene-sequel-coach",
+        label: "Scene/Sequel Coach",
+        blurb: "Balance action and reaction in scene flow.",
+        status: "shipped"
+      }),
+      Object.freeze({
+        id: "dialogue-coach",
+        label: "Dialogue Coach",
+        blurb: "Sharpen voice and subtext in conversation.",
+        status: "shipped"
+      }),
+      Object.freeze({
+        id: "character-coach-cast",
+        label: "Character Coach · Cast",
+        blurb: "Review want, need, pressure, and voice for the selected cast member.",
+        status: "shipped"
+      })
+    ])
+  }),
+  Object.freeze({
+    id: "editing",
+    label: AGENT_CATALOG_STAGE_LABELS.editing,
+    agents: Object.freeze([
+      Object.freeze({
+        id: "developmental-editor",
+        label: "Developmental Editor",
+        blurb: "Big-picture story and structure feedback.",
+        status: "shipped"
+      }),
+      Object.freeze({
+        id: "continuity-reader",
+        label: "Continuity Reader",
+        blurb: "Catch timeline, logic, and lore gaps.",
+        status: "shipped"
+      }),
+      Object.freeze({
+        id: "line-editor",
+        label: "Line Editor",
+        blurb: "Improve clarity, rhythm, and prose style.",
+        status: "shipped"
+      }),
+      Object.freeze({
+        id: "copy-editor",
+        label: "Copy Editor",
+        blurb: "Polish grammar, spelling, and consistency.",
+        status: "shipped"
+      })
+    ])
+  }),
+  Object.freeze({
+    id: "commercial",
+    label: AGENT_CATALOG_STAGE_LABELS.commercial,
+    agents: Object.freeze([
+      Object.freeze({
+        id: "cover",
+        label: "Cover",
+        blurb: "Generate cover concepts on the Title Page.",
+        status: "shipped"
+      }),
+      Object.freeze({
+        id: "pitch-pack",
+        label: "Pitch Pack",
+        blurb: "Package logline, comps, and pitch materials.",
+        status: "shipped"
+      }),
+      Object.freeze({
+        id: "query-coach",
+        label: "Query Coach",
+        blurb: "Draft and refine agent query letters.",
+        status: "shipped"
+      }),
+      Object.freeze({
+        id: "series-bible",
+        label: "Series Bible",
+        blurb: "Document series arc and recurring elements.",
+        status: "shipped"
+      }),
+      Object.freeze({
+        id: "market-fit",
+        label: "Market Fit",
+        blurb: "Align positioning with genre and audience.",
+        status: "shipped"
+      })
+    ])
+  })
+]);
+
 export const AGENT_TOOLKIT_ACTIONS: readonly Readonly<{
   id: AgentToolkitId;
   label: string;
-}>[] = Object.freeze([
-  Object.freeze({ id: "scene-partner", label: "Scene Partner" }),
-  Object.freeze({ id: "cover", label: "Cover" }),
-  Object.freeze({ id: "character-coach", label: "Character Coach" }),
-  Object.freeze({ id: "worldkeeper", label: "Worldkeeper" }),
-  Object.freeze({ id: "sketch-partner", label: "Sketch Partner" })
-]);
+}>[] = Object.freeze(
+  AGENT_CATALOG_STAGES.flatMap((stage) =>
+    stage.agents.flatMap((agent) => {
+      const toolkitId = findShippedToolkitId(agent);
+      return toolkitId === undefined
+        ? []
+        : [Object.freeze({ id: toolkitId, label: agent.label })];
+    })
+  )
+);

@@ -7,8 +7,16 @@ import type {
 } from "@ghostwriter/core";
 import { describe, expect, it } from "vitest";
 import {
+  AGENT_CATALOG_STAGES,
+  AGENT_TOOLKIT_ACTIONS,
+  agentCatalogStageLabel,
   buildAgentToolkitSelection,
+  findShippedToolkitId,
+  findShippedCatalogAgentId,
+  formatActiveCatalogPartnerSummary,
   resolveAgentToolkitAction,
+  shippedToolkitIdsInCatalog,
+  type AgentCatalogStageId,
   type AgentToolkitSelection
 } from "./workspace-agent-toolkit.js";
 
@@ -22,6 +30,76 @@ function selection(
 ): AgentToolkitSelection {
   return { ...overrides };
 }
+
+const EXPECTED_STAGE_IDS: readonly AgentCatalogStageId[] = [
+  "brainstorm",
+  "structure",
+  "writing",
+  "editing",
+  "commercial"
+];
+
+const SHIPPED_TOOLKIT_IDS = [
+  "scene-partner",
+  "cover",
+  "character-coach",
+  "worldkeeper",
+  "sketch-partner"
+] as const;
+
+describe("AGENT_CATALOG_STAGES", () => {
+  it("includes every stage with the correct label", () => {
+    expect(AGENT_CATALOG_STAGES.map((stage) => stage.id)).toEqual(
+      EXPECTED_STAGE_IDS
+    );
+    for (const stage of AGENT_CATALOG_STAGES) {
+      expect(stage.label).toBe(agentCatalogStageLabel(stage.id));
+    }
+  });
+
+  it("lists exactly the five shipped toolkit ids once each", () => {
+    expect([...shippedToolkitIdsInCatalog()].sort()).toEqual(
+      [...SHIPPED_TOOLKIT_IDS].sort()
+    );
+    const shippedInCatalog = AGENT_CATALOG_STAGES.flatMap((stage) =>
+      stage.agents.flatMap((entry) => {
+        const toolkitId = findShippedToolkitId(entry);
+        return toolkitId === undefined ? [] : [toolkitId];
+      })
+    );
+    expect(shippedInCatalog.sort()).toEqual([...SHIPPED_TOOLKIT_IDS].sort());
+    expect(new Set(shippedInCatalog).size).toBe(SHIPPED_TOOLKIT_IDS.length);
+  });
+
+  it("derives AGENT_TOOLKIT_ACTIONS from shipped catalog entries", () => {
+    expect(AGENT_TOOLKIT_ACTIONS.map((action) => action.id).sort()).toEqual(
+      [...SHIPPED_TOOLKIT_IDS].sort()
+    );
+  });
+
+  it("ships every planned catalog memo agent", () => {
+    const ids = AGENT_CATALOG_STAGES.flatMap((stage) =>
+      stage.agents.flatMap((entry) => {
+        const id = findShippedCatalogAgentId(entry);
+        return id === undefined ? [] : [id];
+      })
+    );
+    expect(ids).toContain("genre-compass");
+    expect(ids).toContain("character-coach-cast");
+    expect(ids).toContain("market-fit");
+    expect(ids).toHaveLength(18);
+  });
+
+  it("does not pass coming-soon entries to resolveAgentToolkitAction", () => {
+    for (const stage of AGENT_CATALOG_STAGES) {
+      for (const entry of stage.agents) {
+        if (entry.status === "coming-soon") {
+          expect(findShippedToolkitId(entry)).toBeUndefined();
+        }
+      }
+    }
+  });
+});
 
 describe("resolveAgentToolkitAction", () => {
   it("opens Scene Partner when a capture is selected", () => {
@@ -171,6 +249,26 @@ describe("resolveAgentToolkitAction", () => {
       refusalMessage:
         "Select a book (or open Title Page) before cover options."
     });
+  });
+});
+
+describe("formatActiveCatalogPartnerSummary", () => {
+  it("joins label and stage, and lens when present", () => {
+    expect(
+      formatActiveCatalogPartnerSummary({
+        entryId: "idea-midwife",
+        label: "Idea Midwife",
+        stageId: "brainstorm"
+      })
+    ).toBe("Idea Midwife · Brainstorm");
+    expect(
+      formatActiveCatalogPartnerSummary({
+        entryId: "story-architect",
+        label: "Story Architect",
+        stageId: "structure",
+        lens: "save-the-cat"
+      })
+    ).toBe("Story Architect · Structure · save the cat");
   });
 });
 

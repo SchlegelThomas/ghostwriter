@@ -59,6 +59,45 @@
         <li>Handoff: founder browser verify then PR when asked. Playwright deferred.</li>
       </ul>
     </section>
+
+    <section>
+      <h2>2026-08-01 — Composer follow-ups</h2>
+      <ul>
+        <li>Remove Agent|Properties tab chrome: secondary dock is Agent-only when opened from Agent rail.
+          Selection inspector / Context Dock remains via Show inspector / Context Dock (not a sibling tab).</li>
+        <li>Enter sends; Shift+Enter newline.</li>
+        <li>Composer: attach images/videos (chips; images can ride with the turn for model consideration;
+          video is attached as named context — most models won’t ingest video bits yet) + dictate (Web Speech).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — Enter bug root cause + one model chip</h2>
+      <ul>
+        <li><strong>Bug:</strong> Enter never sent because react-native-web 0.21.2 <code>TextInput</code> assigns
+          <code>supportedProps.onKeyDown = handleKeyDown</code>, dropping any caller-supplied <code>onKeyDown</code>,
+          and only calls <code>onSubmitEditing</code> for multiline when <code>blurOnSubmit</code> is set.
+          <strong>Fix:</strong> use the forwarded <code>onKeyPress</code> hook and <code>preventDefault()</code>
+          (which also suppresses RNW’s own Enter path). Helper now ignores IME composition
+          (<code>isComposing</code> / <code>keyCode 229</code>) and native-shaped events, so native keeps newline.
+          Do not set <code>blurOnSubmit</code> — it would blur the composer after each send.</li>
+        <li><strong>Model + effort are one chip</strong> (<code>Model · Effort</code>) opening the model menu;
+          rows expose <code>Edit</code> which pins that model’s <strong>Effort</strong> options in the adjacent pane
+          without dismissing, per Cursor-like nested menus. Row body still selects and closes.
+          Edit is a sibling of the row pressable (not nested) so select-and-close can’t swallow it, and hover is
+          tracked on both so the control stays reachable.</li>
+        <li><code>pnpm verify</code> green (963 tests).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — Ship with writing-agent harness PR</h2>
+      <ul>
+        <li>Additional polish on the same branch: Chat/Plan/Agent casing; sticky “Working with”
+          catalog partner banner; clear composer on send; Cast dossier editability; image model
+          modal picker. Ships with catalog work on <code>feat/writing-agent-harness</code>.</li>
+      </ul>
+    </section>
   </main>
 </body>
 </html>

@@ -6,6 +6,7 @@ import {
   CANVAS_MAX_DIMENSION,
   CANVAS_MAX_ZOOM,
   CANVAS_MIN_ZOOM,
+  CATALOG_AGENT_IDS,
   canvasLinkId,
   canvasObjectId,
   canvasRevisionId,
@@ -1054,6 +1055,27 @@ export const saveProjectAgentInstructionsRequestSchema = z.object({
   expectedVersion: optionalPositiveVersion
 });
 
+const catalogPlaybookSectionOverrideSchema = z
+  .object({
+    heading: z.string().trim().min(1).max(200),
+    note: z.string().trim().min(1).max(4_000)
+  })
+  .strict();
+
+export const saveCatalogPlaybookOverrideRequestSchema = z
+  .object({
+    doctrine: z.string().trim().min(1).max(8_000).optional(),
+    sections: z.array(catalogPlaybookSectionOverrideSchema).min(1).max(24).optional(),
+    expectedVersion: optionalPositiveVersion
+  })
+  .strict()
+  .refine(
+    (value) => value.doctrine !== undefined || value.sections !== undefined,
+    "Doctrine or section notes are required."
+  );
+
+export const catalogAgentIdSchema = z.enum(CATALOG_AGENT_IDS);
+
 const playbookTriggerSchema = z.enum(["capture-reflection", "manual"]);
 const agentContextClassSchema = z.enum(["capture"]);
 const agentOutputSchemaIdSchema = z.enum([
@@ -1113,6 +1135,46 @@ const agentWorkflowIdSchema = z.enum([
   "character-coach.sheet-fields",
   "worldkeeper.backdrop-fields"
 ]);
+
+export const catalogAgentRunRequestSchema = z
+  .object({
+    agentId: z.enum([
+      "idea-midwife",
+      "genre-compass",
+      "what-if-engine",
+      "story-architect",
+      "pacing-doctor",
+      "promise-keeper",
+      "outline-expander",
+      "scene-sequel-coach",
+      "dialogue-coach",
+      "character-coach-cast",
+      "developmental-editor",
+      "continuity-reader",
+      "line-editor",
+      "copy-editor",
+      "pitch-pack",
+      "query-coach",
+      "series-bible",
+      "market-fit"
+    ]),
+    lens: z
+      .enum([
+        "save-the-cat",
+        "three-act",
+        "heros-journey",
+        "scene-sequel",
+        "character-want-need",
+        "genre-conventions"
+      ])
+      .optional(),
+    model: agentModelIdSchema.optional(),
+    effort: z.enum(["fast", "standard", "high"]).optional(),
+    sceneId: id.optional(),
+    storyKnowledgeId: id.optional(),
+    bookId: id.optional()
+  })
+  .strict();
 
 export const agentContextPreviewRequestSchema = z.object({
   captureId: id,
