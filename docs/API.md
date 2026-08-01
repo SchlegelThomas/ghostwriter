@@ -219,11 +219,16 @@ Scene Partner Capture chat (BYOK structured turn, propose-only until promote/var
 ## Workspace Agent chat
 
 - `POST /api/workspace/chat` accepts project/selection context, optional capability id, and Agent
-  dock prefs (`mode`: `chat` | `plan` | `agent`; model + effort). When `capabilityId` is a read
-  capability (e.g. `project.navigator.read`), the server invokes that tool. Otherwise, with a valid
-  BYOK key, it returns assistant text from `completeStructured` using server-assembled navigator
-  context. Without a key, the route returns a friendly unconfigured response (no silent failure
-  wall). Chat never mutates manuscript canon.
+  dock prefs (`mode`: `chat` | `plan` | `agent`; model + effort). When `message` equals a read
+  capability id (e.g. `project.navigator.read`), the server invokes that tool deterministically.
+  Otherwise, with a valid BYOK key and a tool-capable model (`supportsTools`), the route runs a
+  read-only tool loop (`project_navigator_read`, `scene_workspace_read`, `capture_list`) via
+  `@ghostwriter/ai` and returns assistant text plus optional `toolTraces` (compact writer-facing
+  step summaries). Scene reads are budgeted per turn (max 4 scenes, ~64k prose chars). Models
+  without tool support, or when tool-loop creation fails recoverably, fall back to
+  `completeStructured` with server-assembled navigator context (no `toolTraces`). Without a key,
+  the route returns a friendly unconfigured response (no silent failure wall). Chat never mutates
+  manuscript canon.
 
 ## Book covers (Title Page)
 

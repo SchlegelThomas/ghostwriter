@@ -17,6 +17,16 @@ export type {
   TokenUsage
 } from "./types.js";
 
+export type {
+  ToolLoopCompletionFailure,
+  ToolLoopCompletionInput,
+  ToolLoopCompletionProvider,
+  ToolLoopCompletionResult,
+  ToolLoopCompletionSuccess,
+  ToolLoopToolDefinition,
+  ToolTraceStep
+} from "./tool-loop-types.js";
+
 export {
   filterAnthropicDiscoveredModels,
   filterDiscoveredModelsForProvider,
@@ -48,11 +58,20 @@ export { combineAbortWithTimeout, type AbortReason, type CombinedAbort } from ".
 
 export {
   createFakeStructuredCompletionProvider,
+  createFakeToolLoopProvider,
   type FakeProviderFailure,
   type FakeProviderFailureMode,
   type FakeProviderFixture,
-  type FakeProviderResolver
+  type FakeProviderResolver,
+  type FakeToolLoopFixture,
+  type FakeToolLoopResolver
 } from "./fake-provider.js";
+
+export { completeWithToolsWithLanguageModel } from "./aisdk/tool-completion.js";
+
+export {
+  createToolLoopProvider
+} from "./create-tool-loop-provider.js";
 
 export {
   buildOpenAiResponsesRequest,

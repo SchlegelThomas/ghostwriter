@@ -2140,7 +2140,10 @@ export default function App() {
         {
           id: `chat-assistant-${Date.now()}`,
           role: "assistant",
-          body: result.reply
+          body: result.reply,
+          ...(result.toolTraces === undefined || result.toolTraces.length === 0
+            ? {}
+            : { toolTraces: result.toolTraces })
         }
       ]);
     } catch (cause) {

@@ -847,11 +847,20 @@ export type WorkspaceChatSelection = Readonly<{
   storyKnowledgeId?: string;
 }>;
 
+export type WorkspaceChatToolTrace = Readonly<{
+  toolName: string;
+  title: string;
+  ok: boolean;
+  summary: string;
+  errorMessage?: string;
+}>;
+
 export type WorkspaceChatResponse = Readonly<{
   reply: string;
   mode?: WorkspaceChatMode;
   model?: AgentModelId;
   effort?: WorkspaceChatEffort;
+  toolTraces?: readonly WorkspaceChatToolTrace[];
   code?: string;
 }>;
 

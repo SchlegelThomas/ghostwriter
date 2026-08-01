@@ -113,6 +113,7 @@ import { registerBookCoverImageRoutes } from "./book-cover-image-routes.js";
 import { registerCharacterVisualRoutes } from "./character-visual-routes.js";
 import { registerMcpGrantRoutes } from "./mcp-grant-routes.js";
 import { registerWorkspaceChatRoutes } from "./workspace-chat-routes.js";
+import type { createToolLoopProvider } from "@ghostwriter/ai";
 import {
   mapAgentGuidanceRouteError,
   providerAgentErrorStatusAndBody
@@ -135,6 +136,8 @@ export type BackendDependencies = Readonly<{
   objectStorage: CaptureObjectStoragePort;
   /** Optional Scene Partner / cover image generator (hermetic/tests inject fakes). */
   scenePartnerGenerateImage?: ScenePartnerImageGenerator;
+  /** Optional test seam for workspace chat tool-loop provider creation. */
+  workspaceChatCreateToolLoopProvider?: typeof createToolLoopProvider;
   /**
    * Founder demo seed sign-in. Default enabled in production/dev; disable with
    * `GHOSTWRITER_DEMO_SEED=0`. When omitted, the route is treated as disabled.
@@ -591,7 +594,14 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
 
   registerWorkspaceChatRoutes(app, {
     services: dependencies.services,
-    agentProvider: dependencies.agentProvider
+    writing: dependencies.writing,
+    captures: dependencies.captures,
+    agentProvider: dependencies.agentProvider,
+    ...(dependencies.workspaceChatCreateToolLoopProvider === undefined
+      ? {}
+      : {
+          createToolLoopProvider: dependencies.workspaceChatCreateToolLoopProvider
+        })
   });
 
   app.post("/api/projects/:projectId/writing-assist", async (context) => {

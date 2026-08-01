@@ -12,7 +12,7 @@
       <p class="eyebrow">Ghostwriter delivery plan</p>
       <h1>Writing agent harness</h1>
       <p class="meta"><strong>Status:</strong> active<br>
-        <strong>Branch:</strong> <code>feat/capture-to-story-agents</code> (shared until harness needs its own branch)<br>
+        <strong>Branch:</strong> <code>feat/writing-agent-harness</code><br>
         <strong>Owner:</strong> founder + parent agent</p>
     </header>
 
@@ -65,9 +65,9 @@
       <ol>
         <li><strong>CP1 — Composer chrome:</strong> Mode picker + model/effort picker on <code>WorkspaceChatPanel</code> (docked). Persist last mode/model/effort per project in localStorage. Empty/disabled states when no BYOK key. No LLM yet — UI + prefs only, wire into send payload stubs.</li>
         <li><strong>CP2 — chat mode completion:</strong> Upgrade <code>POST /api/workspace/chat</code> to receipt-backed chat: server assembles project/selection context, calls OpenAI via existing <code>packages/ai</code> + BYOK runtime, streams or returns assistant text. Tool-only fallback when key missing. Vitest + hermetic fake provider.</li>
-        <li><strong>CP3 — Tools in the loop:</strong> Allow chat/agent to call a bounded set of read capabilities (navigator, scene metadata, capture list) as tools; show tool traces in chat. Still propose-only for mutations.</li>
-        <li><strong>CP4 — Toolkit agents (agent mode):</strong> Mode → Ghostwriter agents (Scene Partner, Cover, Character Coach, …). Starting a job uses existing run/proposal or Scene Partner turn APIs; dock shows status + link to review/apply (Plans or inline proposal card).</li>
-        <li><strong>CP5 — Plan mode + docs:</strong> Structure/outline proposals as durable proposals that land in Plans; PRODUCT/ARCHITECTURE/ADR note for harness modes; WHERE-I-LEFT-OFF.</li>
+        <li><strong>CP3 — Tools in the loop:</strong> Allow chat/agent to call a bounded set of read capabilities (<code>project.navigator.read</code>, budgeted <code>scene.workspace.read</code> for whole-book access via iterative reads, <code>capture.list</code>) as tools; show tool-step traces in chat. No egress-confirm modal for this light path. Still propose-only for mutations. No vector DB in this plan — defer embeddings until budgeted scene reads are insufficient at novel scale.</li>
+        <li><strong>CP4 — Toolkit agents (agent mode):</strong> Mode → all toolkit agents in v1: Scene Partner, Cover, Character Coach, Worldkeeper, Sketch Partner. Starting a job uses existing run/proposal or Scene Partner turn APIs; dock shows status + link to review/apply (Plans or inline proposal card). Deep-link; do not delete Plans Partner.</li>
+        <li><strong>CP5 — Plan mode + docs:</strong> Plan-mode outlines persist as a typed agent proposal (new workflow, e.g. <code>plan-mode.outline</code>) that lands in center-pane Plans; PRODUCT/ARCHITECTURE/ADR note for harness modes; WHERE-I-LEFT-OFF.</li>
       </ol>
     </section>
 
@@ -97,6 +97,9 @@
         <li><strong>Effort:</strong> Map to provider knobs (e.g. reasoning effort / max tokens / “fast vs thorough”) — exact OpenAI fields TBD in CP2; UI labels Fast / Standard / High first.</li>
         <li><strong>Multi-provider:</strong> Catalog may list OpenAI models only in v1; Anthropic later behind same port.</li>
         <li><strong>Cost:</strong> Every chat turn spends BYOK budget — keep receipt/confirm for expensive agent jobs; lighter chat may skip modal and show inline destination chip (decision in CP2).</li>
+        <li><strong>Accepted (CP3):</strong> No egress-confirm modal for chat/tool-read loops. Whole-book access = navigator + budgeted per-scene workspace reads (not one-shot manuscript dump). Vector/RAG deferred; no manuscript MCP search today.</li>
+        <li><strong>Accepted (CP4):</strong> Ship all five toolkit agents from agent mode (Scene Partner, Cover, Character Coach, Worldkeeper, Sketch Partner).</li>
+        <li><strong>Accepted (CP5):</strong> Plan → Plans via typed agent proposal workflow (not Capture-only).</li>
         <li><strong>Dual chat:</strong> Keep Scene Partner in Plans vs fold into dock — CP4 should deep-link, not delete Plans Partner in v1.</li>
       </ul>
     </section>
@@ -107,7 +110,7 @@
         <li><input type="checkbox" checked> Plan accepted (mode naming + CP1 start)</li>
         <li><input type="checkbox" checked> CP1 Composer chrome (mode + model/effort)</li>
         <li><input type="checkbox" checked> CP2 chat mode BYOK completion</li>
-        <li><input type="checkbox"> CP3 Tools in the loop</li>
+        <li><input type="checkbox" checked> CP3 Tools in the loop</li>
         <li><input type="checkbox"> CP4 Toolkit agent mode in dock</li>
         <li><input type="checkbox"> CP5 Plan mode + docs/ADR</li>
       </ul>

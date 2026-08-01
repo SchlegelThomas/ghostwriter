@@ -26,10 +26,19 @@ import {
 
 const { colors, fonts } = ghostwriterTheme;
 
+export type WorkspaceChatToolTrace = Readonly<{
+  toolName: string;
+  title: string;
+  ok: boolean;
+  summary: string;
+  errorMessage?: string;
+}>;
+
 export type WorkspaceChatMessage = Readonly<{
   id: string;
   role: "user" | "assistant" | "system";
   body: string;
+  toolTraces?: readonly WorkspaceChatToolTrace[];
 }>;
 
 export type WorkspaceChatSendInput = Readonly<{
@@ -198,6 +207,23 @@ export function WorkspaceChatPanel({
                 ]}
               >
                 <Text style={styles.messageRole}>{message.role}</Text>
+                {message.toolTraces !== undefined &&
+                message.toolTraces.length > 0 ? (
+                  <View style={styles.toolTraceList}>
+                    {message.toolTraces.map((trace) => (
+                      <View key={`${message.id}-${trace.toolName}-${trace.summary}`}>
+                        <Text style={styles.toolTraceLine}>
+                          {trace.title} · {trace.summary}
+                        </Text>
+                        {!trace.ok && trace.errorMessage !== undefined ? (
+                          <Text style={styles.toolTraceError}>
+                            {trace.errorMessage}
+                          </Text>
+                        ) : null}
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
                 <Text style={styles.messageBody}>{message.body}</Text>
               </View>
             ))
@@ -507,6 +533,21 @@ const styles = StyleSheet.create({
     fontSize: 9,
     letterSpacing: 0.6,
     textTransform: "uppercase"
+  },
+  toolTraceList: {
+    gap: 3
+  },
+  toolTraceLine: {
+    color: colors.muted,
+    fontFamily: fonts.uiMedium,
+    fontSize: 11,
+    lineHeight: 15
+  },
+  toolTraceError: {
+    color: colors.amber,
+    fontFamily: fonts.ui,
+    fontSize: 10,
+    lineHeight: 14
   },
   messageBody: {
     color: colors.ink,

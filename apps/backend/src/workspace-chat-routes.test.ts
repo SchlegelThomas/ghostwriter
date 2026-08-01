@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createFakeStructuredCompletionProvider } from "@ghostwriter/ai";
+import {
+  createFakeStructuredCompletionProvider,
+  createFakeToolLoopProvider,
+  type ToolLoopCompletionInput,
+  type createToolLoopProvider
+} from "@ghostwriter/ai";
 import { BELLWETHER_FIXTURE_NAVIGATOR, BELLWETHER_FIXTURE_PROJECT_ID } from "@ghostwriter/core";
 import type { OpenAiCompletionProviderFactory } from "./agent-provider-runtime.js";
 import { createTestProviderKekRuntimeConfig } from "./provider-kek-config.js";
@@ -34,11 +39,18 @@ async function openSeededApp(
   options?: Readonly<{
     kekConfig?: ReturnType<typeof createTestProviderKekRuntimeConfig> | undefined;
     openAiCompletionProviderFactory?: OpenAiCompletionProviderFactory;
+    workspaceChatCreateToolLoopProvider?: typeof createToolLoopProvider;
   }>
 ) {
   return createSeededBackendApp(undefined, {
     kekConfig: options?.kekConfig,
-    openAiCompletionProviderFactory: options?.openAiCompletionProviderFactory
+    openAiCompletionProviderFactory: options?.openAiCompletionProviderFactory,
+    ...(options?.workspaceChatCreateToolLoopProvider === undefined
+      ? {}
+      : {
+          workspaceChatCreateToolLoopProvider:
+            options.workspaceChatCreateToolLoopProvider
+        })
   });
 }
 
@@ -189,5 +201,63 @@ describe("POST /api/workspace/chat", () => {
       mode: "chat",
       reply: expect.stringContaining("Writer message:")
     });
+  });
+
+  it("returns toolTraces when the tool-loop provider runs", async () => {
+    const recordedToolNames: string[] = [];
+    const { app } = await openSeededApp({
+      kekConfig: createTestProviderKekRuntimeConfig(),
+      openAiCompletionProviderFactory: fakeWorkspaceChatFactory(),
+      workspaceChatCreateToolLoopProvider: () =>
+        createFakeToolLoopProvider((input: ToolLoopCompletionInput) => {
+          recordedToolNames.push(...input.tools.map((tool) => tool.name));
+          return {
+            text: "Used read tools to inspect the project.",
+            toolTraces: [
+              {
+                toolName: "project_navigator_read",
+                title: "Read manuscript hierarchy",
+                input: {},
+                output: {
+                  title: BELLWETHER_FIXTURE_NAVIGATOR.title,
+                  totals: BELLWETHER_FIXTURE_NAVIGATOR.totals
+                },
+                ok: true
+              }
+            ]
+          };
+        })
+    });
+    await configureOpenAi(app);
+    const chat = await app.request("/api/workspace/chat", {
+      method: "POST",
+      headers: originHeaders(),
+      body: JSON.stringify({
+        message: "What scenes should I revise next?",
+        projectId: PROJECT,
+        mode: "agent",
+        model: "gpt-4.1-mini",
+        effort: "fast"
+      })
+    });
+    expect(chat.status).toBe(200);
+    const body = await chat.json();
+    expect(body).toMatchObject({
+      mode: "agent",
+      model: "gpt-4.1-mini",
+      effort: "fast",
+      reply: "Used read tools to inspect the project.",
+      toolTraces: [
+        expect.objectContaining({
+          toolName: "project_navigator_read",
+          title: "Read manuscript hierarchy",
+          ok: true,
+          summary: expect.stringContaining("Hierarchy")
+        })
+      ]
+    });
+    expect(recordedToolNames).toEqual(
+      expect.arrayContaining(["project_navigator_read"])
+    );
   });
 });

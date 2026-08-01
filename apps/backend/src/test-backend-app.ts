@@ -38,6 +38,7 @@ import {
   type OpenAiCompletionProviderFactory,
   type OpenAiValidationProviderFactory
 } from "./agent-provider-runtime.js";
+import type { createToolLoopProvider } from "@ghostwriter/ai";
 import { createTestProviderKekRuntimeConfig } from "./provider-kek-config.js";
 import type { ScenePartnerImageGenerator } from "./scene-partner-routes.js";
 
@@ -89,6 +90,7 @@ export async function createSeededBackendApp(
     listModelsFactory?: import("./agent-provider-runtime.js").ModelListFactory;
     scenePartnerGenerateImage?: ScenePartnerImageGenerator;
     demoSeed?: Readonly<{ enabled: boolean }>;
+    workspaceChatCreateToolLoopProvider?: typeof createToolLoopProvider;
   }>
 ) {
   const { db, close } = createPgliteDatabase();
@@ -210,7 +212,19 @@ export async function createSeededBackendApp(
       ...(options?.demoSeed === undefined ? {} : { demoSeed: options.demoSeed }),
       ...(options?.scenePartnerGenerateImage === undefined
         ? {}
-        : { scenePartnerGenerateImage: options.scenePartnerGenerateImage })
+        : { scenePartnerGenerateImage: options.scenePartnerGenerateImage }),
+      ...(options?.workspaceChatCreateToolLoopProvider === undefined
+        ? options?.openAiCompletionProviderFactory === undefined
+          ? {}
+          : {
+              workspaceChatCreateToolLoopProvider: () => {
+                throw new Error("Hermetic workspace chat uses structured completion.");
+              }
+            }
+        : {
+            workspaceChatCreateToolLoopProvider:
+              options.workspaceChatCreateToolLoopProvider
+          })
     }),
     objectStorage: objectStorage as ReturnType<typeof createMemoryCaptureObjectStorage>
   };

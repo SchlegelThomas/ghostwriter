@@ -53,6 +53,29 @@
         <li>CP5 Plan→Plans persistence + harness ADR amendment still open; CP3–CP4 not started.</li>
       </ul>
     </section>
+
+    <section>
+      <h2>2026-08-01 — Resume CP3–CP5; founder decisions</h2>
+      <ul>
+        <li>Branch: <code>feat/writing-agent-harness</code> from <code>main</code> (multi-provider runtime already merged).</li>
+        <li><strong>CP3 receipts:</strong> no egress-confirm for chat + read-tool loops (same light path as CP2).</li>
+        <li><strong>Whole-book access:</strong> not a vector DB prerequisite. No manuscript MCP search today. Path = <code>project.navigator.read</code> → budgeted <code>scene.workspace.read</code> (iterative). Optional keyword search later; embeddings deferred until novel-length pressure.</li>
+        <li><strong>CP4 toolkit:</strong> all agents — Scene Partner, Cover, Character Coach, Worldkeeper, Sketch Partner.</li>
+        <li><strong>CP5 Plan landing:</strong> typed agent proposal workflow (e.g. <code>plan-mode.outline</code>) into Plans projection.</li>
+        <li>Commits authorized per checkpoint on the feature branch; no push/PR until asked.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — CP3 Tools in the loop</h2>
+      <ul>
+        <li><code>@ghostwriter/ai</code>: parallel <code>completeWithTools</code> / <code>createToolLoopProvider</code> (AI SDK <code>generateText</code> + tools); structured path unchanged.</li>
+        <li>Chat tools: <code>project_navigator_read</code>, budgeted <code>scene_workspace_read</code> (≤4 reads / ≤64k chars/turn, per-scene truncate via capture slice helper), <code>capture_list</code>.</li>
+        <li><code>POST /api/workspace/chat</code> returns optional <code>toolTraces</code>; Agent dock renders compact step rows. Non-tool models fall back to structured completion.</li>
+        <li>Evidence: focused vitest (ai + workspace-chat tools/routes); <code>pnpm verify</code> after lint fix.</li>
+        <li>Still open: real BYOK browser walkthrough; CP4 toolkit deep-links; CP5 Plan→proposal + ADR.</li>
+      </ul>
+    </section>
   </main>
 </body>
 </html>
