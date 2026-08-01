@@ -33,6 +33,17 @@ export type ToolLoopCompletionInput = {
   signal?: AbortSignal | undefined;
 };
 
+export type ToolLoopStreamEvent =
+  | { type: "status"; phase: string; label: string }
+  | { type: "tool_trace"; trace: ToolTraceStep }
+  | { type: "text_delta"; delta: string }
+  | { type: "done"; result: ToolLoopCompletionSuccess }
+  | { type: "error"; diagnostic: AiDiagnostic };
+
+export type ToolLoopStreamInput = ToolLoopCompletionInput & {
+  onEvent?: (event: ToolLoopStreamEvent) => void;
+};
+
 export type ToolLoopCompletionSuccess = {
   ok: true;
   text: string;
@@ -56,4 +67,5 @@ export interface ToolLoopCompletionProvider {
   completeWithTools(
     input: ToolLoopCompletionInput
   ): Promise<ToolLoopCompletionResult>;
+  streamWithTools(input: ToolLoopStreamInput): Promise<ToolLoopCompletionResult>;
 }

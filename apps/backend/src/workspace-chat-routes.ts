@@ -33,8 +33,13 @@ import { discoverModelsForAccount } from "./model-discovery.js";
 import {
   createWorkspaceChatTools,
   mapWorkspaceChatToolTraces,
+  summarizeWorkspaceChatToolTrace,
   type WorkspaceChatToolTrace
 } from "./workspace-chat-tools.js";
+import {
+  createWorkspaceChatSseResponse,
+  writeSse
+} from "./workspace-chat-sse.js";
 
 type WorkspaceChatEnvironment = {
   Variables: {
@@ -671,5 +676,340 @@ export function registerWorkspaceChatRoutes(
       }
       throw error;
     }
+  });
+
+  app.post("/api/workspace/chat/stream", async (context) => {
+    const parsed = await parseJsonRequest(
+      context.req.raw,
+      workspaceChatRequestSchema
+    );
+    if (!parsed.success) {
+      return invalidRequestResponse(context, parsed);
+    }
+
+    const mode = parsed.data.mode ?? "chat";
+    const model = parsed.data.model ?? CAPTURE_REFLECTION_DEFAULT_MODEL;
+    const effort = parsed.data.effort ?? "standard";
+
+    return createWorkspaceChatSseResponse(async (controller) => {
+      writeSse(controller, "status", {
+        phase: "starting",
+        label: "Starting…"
+      });
+
+      const normalizedMessage = parsed.data.message.trim();
+      const normalizedId = normalizedMessage.toLocaleLowerCase();
+
+      const requestedCapability = GHOSTWRITER_CAPABILITIES.find(
+        (capability) => capability.id.toLocaleLowerCase() === normalizedId
+      );
+
+      if (
+        requestedCapability?.id === "project.navigator.read" &&
+        requestedCapability.access === "read"
+      ) {
+        writeSse(controller, "status", {
+          phase: "assembling_context",
+          label: "Reading project…"
+        });
+        if (parsed.data.projectId === undefined) {
+          writeSse(controller, "status", {
+            phase: "writing",
+            label: "Finishing…"
+          });
+          writeSse(controller, "done", {
+            reply:
+              "Open a project before running the manuscript hierarchy capability.",
+            mode,
+            model,
+            effort
+          });
+          return;
+        }
+        const authSession = context.get("authSession");
+        let navigator: ProjectNavigator | undefined;
+        try {
+          navigator = await services.getProjectNavigator(
+            accountId(authSession.account.id),
+            projectId(parsed.data.projectId)
+          );
+        } catch (error) {
+          if (
+            error instanceof DomainValidationError ||
+            error instanceof ProjectAccessDeniedError
+          ) {
+            writeSse(controller, "error", {
+              error: "Project not found.",
+              code: "PROJECT_NOT_FOUND"
+            });
+            return;
+          }
+          throw error;
+        }
+        if (navigator === undefined) {
+          writeSse(controller, "error", {
+            error: "Project not found.",
+            code: "PROJECT_NOT_FOUND"
+          });
+          return;
+        }
+        writeSse(controller, "status", {
+          phase: "writing",
+          label: "Finishing…"
+        });
+        writeSse(controller, "done", {
+          reply: [
+            `Ran ${requestedCapability.title}.`,
+            `${navigator.title} · project version ${navigator.version}`,
+            `${navigator.totals.books} books · ${navigator.totals.scenes} scenes · ${navigator.totals.storyKnowledge} story records`,
+            `Books: ${navigator.books.map((book) => book.title).join(", ")}`
+          ].join("\n"),
+          mode,
+          model,
+          effort
+        });
+        return;
+      }
+
+      writeSse(controller, "status", {
+        phase: "assembling_context",
+        label: "Reading project…"
+      });
+
+      let navigator: ProjectNavigator | undefined;
+      if (parsed.data.projectId !== undefined) {
+        const authSession = context.get("authSession");
+        try {
+          navigator = await services.getProjectNavigator(
+            accountId(authSession.account.id),
+            projectId(parsed.data.projectId)
+          );
+        } catch (error) {
+          if (
+            error instanceof DomainValidationError ||
+            error instanceof ProjectAccessDeniedError
+          ) {
+            writeSse(controller, "error", {
+              error: "Project not found.",
+              code: "PROJECT_NOT_FOUND"
+            });
+            return;
+          }
+          throw error;
+        }
+        if (navigator === undefined) {
+          writeSse(controller, "error", {
+            error: "Project not found.",
+            code: "PROJECT_NOT_FOUND"
+          });
+          return;
+        }
+      }
+
+      const contextText = assembleWorkspaceChatContext({
+        navigator,
+        selection: parsed.data.selection
+      });
+
+      try {
+        if (agentProvider.policy.callsDisabled) {
+          throw new ProviderCallsDisabledError();
+        }
+        if (!agentProvider.policy.encryptionAvailable) {
+          throw new ProviderEncryptionUnavailableError();
+        }
+
+        const authSession = context.get("authSession");
+        const account = accountId(authSession.account.id);
+        const configured = await agentProvider.providerCredentials.listCredentialStatuses(
+          account
+        );
+        const hasReachableCredential = configured.some(
+          (status) =>
+            status.validationState === "unvalidated" ||
+            status.validationState === "valid" ||
+            status.validationState === "invalid"
+        );
+
+        let resolvedProviderId = providerForAvailableModel(model, []);
+        let modelSupportsTools = false;
+        if (hasReachableCredential) {
+          const available = await discoverModelsForAccount({
+            accountId: authSession.account.id,
+            configured,
+            resolveApiKey: async (providerId) =>
+              agentProvider.resolveProviderApiKey({ accountId: account, providerId }),
+            ...(agentProvider.listModelsFactory === undefined
+              ? {}
+              : { createListingProvider: agentProvider.listModelsFactory })
+          });
+          resolvedProviderId = providerForAvailableModel(model, available.models);
+          const modelEntry = available.models.find((entry) => entry.id === model);
+          modelSupportsTools = modelEntry?.supportsTools === true;
+          if (
+            resolvedProviderId === undefined ||
+            !available.models.some((entry) => entry.id === model && entry.supportsChat)
+          ) {
+            writeSse(controller, "error", {
+              error: "That model is not available for this account.",
+              code: "MODEL_NOT_AVAILABLE"
+            });
+            return;
+          }
+        }
+
+        const limits = EFFORT_LIMITS[effort];
+        const inputText = buildWorkspaceChatInputText({
+          message: normalizedMessage,
+          contextText
+        });
+
+        writeSse(controller, "status", {
+          phase: "thinking",
+          label: "Thinking…"
+        });
+
+        if (
+          modelSupportsTools &&
+          resolvedProviderId !== undefined &&
+          parsed.data.projectId !== undefined
+        ) {
+          const apiKey = await agentProvider.resolveProviderApiKey({
+            accountId: account,
+            providerId: resolvedProviderId
+          });
+          const toolLoopProvider = createToolLoopProviderForChat(dependencies, {
+            providerId: resolvedProviderId,
+            apiKey
+          });
+          if (toolLoopProvider !== undefined) {
+            await toolLoopProvider.streamWithTools({
+              workflow: "workspace-chat.turn",
+              model,
+              instructions: toolLoopInstructions(mode),
+              inputText,
+              tools: createWorkspaceChatTools({
+                accountId: account,
+                projectId: projectId(parsed.data.projectId),
+                services,
+                writing,
+                captures,
+                ...(navigator === undefined ? {} : { navigator })
+              }),
+              maxSteps: TOOL_LOOP_MAX_STEPS[effort],
+              maxOutputTokens: limits.maxOutputTokens,
+              maxDurationMs: limits.maxDurationMs,
+              onEvent: (event) => {
+                switch (event.type) {
+                  case "status":
+                    writeSse(controller, "status", {
+                      phase: event.phase,
+                      label: event.label
+                    });
+                    break;
+                  case "tool_trace":
+                    writeSse(
+                      controller,
+                      "tool_trace",
+                      summarizeWorkspaceChatToolTrace(event.trace)
+                    );
+                    break;
+                  case "text_delta":
+                    writeSse(controller, "text_delta", { delta: event.delta });
+                    break;
+                  case "error":
+                    writeSse(controller, "error", {
+                      error: providerCompletionError(event.diagnostic.code).body
+                        .error,
+                      code: providerCompletionError(event.diagnostic.code).body.code
+                    });
+                    break;
+                  case "done":
+                    writeSse(controller, "done", {
+                      reply: event.result.text.trim(),
+                      mode,
+                      model,
+                      effort,
+                      ...(event.result.toolTraces.length === 0
+                        ? {}
+                        : {
+                            toolTraces: mapWorkspaceChatToolTraces(
+                              event.result.toolTraces
+                            )
+                          })
+                    });
+                    break;
+                  default:
+                    break;
+                }
+              }
+            });
+            return;
+          }
+        }
+
+        const provider = (await agentProvider.createCompletionProviderForModel({
+          accountId: account,
+          model,
+          ...(resolvedProviderId === undefined ? {} : { providerId: resolvedProviderId })
+        })) as unknown as StructuredCompletionProvider;
+
+        const completion = await provider.completeStructured({
+          workflow: "workspace-chat.turn",
+          model,
+          instructions: MODE_INSTRUCTIONS[mode],
+          inputText,
+          outputSchema: {
+            name: WORKSPACE_CHAT_TURN_SCHEMA_NAME,
+            schema: WORKSPACE_CHAT_TURN_V1_JSON_SCHEMA as Record<string, unknown>
+          },
+          maxOutputTokens: limits.maxOutputTokens,
+          maxDurationMs: limits.maxDurationMs,
+          validateOutput: isWorkspaceChatTurnV1
+        });
+
+        if (!completion.ok) {
+          const mapped = providerCompletionError(completion.diagnostic.code);
+          writeSse(controller, "error", mapped.body);
+          return;
+        }
+
+        writeSse(controller, "done", {
+          reply: completion.output.reply.trim(),
+          mode,
+          model,
+          effort
+        });
+      } catch (error) {
+        if (
+          error instanceof ProviderCredentialNotFoundError ||
+          error instanceof ProviderCallsDisabledError ||
+          error instanceof ProviderEncryptionUnavailableError
+        ) {
+          const mapped = providerAgentErrorStatusAndBody(error);
+          const unavailable = providerUnavailableReply(
+            mapped?.body.code ?? "PROVIDER_NOT_CONFIGURED"
+          );
+          writeSse(controller, "status", {
+            phase: "writing",
+            label: "Finishing…"
+          });
+          writeSse(controller, "done", {
+            reply: unavailable.reply,
+            mode,
+            model,
+            effort,
+            code: unavailable.code
+          });
+          return;
+        }
+        const mapped = providerAgentErrorStatusAndBody(error);
+        if (mapped !== undefined) {
+          writeSse(controller, "error", mapped.body);
+          return;
+        }
+        throw error;
+      }
+    });
   });
 }

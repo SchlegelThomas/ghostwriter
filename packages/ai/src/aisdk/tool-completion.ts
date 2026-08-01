@@ -1,6 +1,7 @@
 import {
   generateText,
   stepCountIs,
+  streamText,
   tool,
   type LanguageModel,
   type ToolSet
@@ -14,6 +15,8 @@ import type {
 import type {
   ToolLoopCompletionInput,
   ToolLoopCompletionResult,
+  ToolLoopCompletionSuccess,
+  ToolLoopStreamInput,
   ToolLoopToolDefinition,
   ToolTraceStep
 } from "../tool-loop-types.js";
@@ -116,6 +119,36 @@ function buildToolSet(tools: readonly ToolLoopToolDefinition[]): ToolSet {
   return toolSet;
 }
 
+function mapStreamPartToToolTrace(part: {
+  type: string;
+  toolName: string;
+  title?: string;
+  input: unknown;
+  output?: unknown;
+  error?: unknown;
+}): ToolTraceStep | undefined {
+  if (part.type === "tool-result") {
+    return {
+      toolName: part.toolName,
+      title: part.title ?? part.toolName,
+      input: part.input,
+      output: part.output,
+      ok: true
+    };
+  }
+  if (part.type === "tool-error") {
+    return {
+      toolName: part.toolName,
+      title: part.title ?? part.toolName,
+      input: part.input,
+      output: part.error,
+      ok: false,
+      errorMessage: errorMessageFromUnknown(part.error)
+    };
+  }
+  return undefined;
+}
+
 export async function completeWithToolsWithLanguageModel(
   model: LanguageModel,
   input: ToolLoopCompletionInput
@@ -160,6 +193,89 @@ export async function completeWithToolsWithLanguageModel(
       ok: false,
       diagnostic: mapAiSdkError(error, combined, input.signal)
     };
+  } finally {
+    combined.dispose();
+  }
+}
+
+export async function streamWithToolsWithLanguageModel(
+  model: LanguageModel,
+  input: ToolLoopStreamInput
+): Promise<ToolLoopCompletionResult> {
+  const emit = input.onEvent;
+  const combined = combineAbortWithTimeout(input.signal, input.maxDurationMs);
+
+  try {
+    if (combined.signal.aborted) {
+      const reason = combined.reason();
+      const diagnostic = aiDiagnostic(
+        reason === "timeout" ? "timeout" : "cancelled"
+      );
+      emit?.({ type: "error", diagnostic });
+      return { ok: false, diagnostic };
+    }
+
+    emit?.({ type: "status", phase: "thinking", label: "Thinking…" });
+
+    const result = streamText({
+      model,
+      tools: buildToolSet(input.tools),
+      stopWhen: stepCountIs(input.maxSteps),
+      instructions: input.instructions,
+      prompt: input.inputText,
+      maxOutputTokens: input.maxOutputTokens,
+      abortSignal: combined.signal
+    });
+
+    const toolTraces: ToolTraceStep[] = [];
+
+    for await (const part of result.fullStream) {
+      if (part.type === "text-delta") {
+        emit?.({ type: "text_delta", delta: part.text });
+        continue;
+      }
+
+      const trace = mapStreamPartToToolTrace(
+        part as {
+          type: string;
+          toolName: string;
+          title?: string;
+          input: unknown;
+          output?: unknown;
+          error?: unknown;
+        }
+      );
+      if (trace !== undefined) {
+        toolTraces.push(trace);
+        emit?.({ type: "tool_trace", trace });
+      }
+    }
+
+    const text = (await result.text).trim();
+    if (text.length === 0) {
+      const diagnostic = aiDiagnostic("validation_failed");
+      emit?.({ type: "error", diagnostic });
+      return { ok: false, diagnostic };
+    }
+
+    const steps = await result.steps;
+    const response = await result.response;
+    const success: ToolLoopCompletionSuccess = {
+      ok: true,
+      text,
+      toolTraces:
+        toolTraces.length > 0 ? toolTraces : mapToolTracesFromSteps(steps),
+      usage: usageFromAiSdk(await result.usage),
+      providerResponseId: response.id ?? "",
+      providerModel: response.modelId ?? input.model,
+      finishStatus: mapFinishReason(await result.finishReason)
+    };
+    emit?.({ type: "done", result: success });
+    return success;
+  } catch (error) {
+    const diagnostic = mapAiSdkError(error, combined, input.signal);
+    emit?.({ type: "error", diagnostic });
+    return { ok: false, diagnostic };
   } finally {
     combined.dispose();
   }

@@ -97,6 +97,17 @@
         <li>Next: founder browser verify Plan save path; PR when asked.</li>
       </ul>
     </section>
+
+    <section>
+      <h2>2026-08-01 — CP6 Streaming chat UX (started)</h2>
+      <ul>
+        <li>Founder: chat feels idle while the model works — add SSE for live status / tool steps / typing.</li>
+        <li>Approach: keep JSON <code>POST /api/workspace/chat</code>; add <code>POST /api/workspace/chat/stream</code> (fetch + ReadableStream).</li>
+        <li>Tool-loop streams via AI SDK <code>streamText</code> (status → tool_trace → text_delta → done). Structured fallback: status then done.</li>
+        <li>Shipped: <code>streamWithTools</code>, <code>POST /api/workspace/chat/stream</code>, client SSE parser, dock status pulse + typing caret. <code>pnpm verify</code> green (901 tests).</li>
+        <li>JSON fallback only when stream route unavailable — not on mid-stream errors.</li>
+      </ul>
+    </section>
   </main>
 </body>
 </html>

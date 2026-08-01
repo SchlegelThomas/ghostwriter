@@ -121,6 +121,35 @@ describe("createFakeToolLoopProvider", () => {
       expect(result.toolTraces[0]?.toolName).toBe("project_navigator_read");
     }
   });
+
+  it("streamWithTools emits status, tool traces, text deltas, then done", async () => {
+    const events: string[] = [];
+    const provider = createFakeToolLoopProvider({
+      text: "Streamed reply.",
+      toolTraces: [
+        {
+          toolName: "project_navigator_read",
+          title: "Read project",
+          input: {},
+          output: { ok: true },
+          ok: true
+        }
+      ]
+    });
+
+    const result = await provider.streamWithTools({
+      ...baseInput,
+      onEvent: (event) => {
+        events.push(event.type);
+      }
+    });
+
+    expect(result.ok).toBe(true);
+    expect(events[0]).toBe("status");
+    expect(events).toContain("tool_trace");
+    expect(events.filter((type) => type === "text_delta").length).toBeGreaterThan(0);
+    expect(events.at(-1)).toBe("done");
+  });
 });
 
 describe("createToolLoopProvider", () => {

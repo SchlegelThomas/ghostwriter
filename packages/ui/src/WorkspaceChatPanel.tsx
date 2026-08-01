@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  Animated,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -43,6 +44,8 @@ export type WorkspaceChatMessage = Readonly<{
   role: "user" | "assistant" | "system";
   body: string;
   toolTraces?: readonly WorkspaceChatToolTrace[];
+  streaming?: boolean;
+  statusLabel?: string;
 }>;
 
 export type WorkspaceChatSendInput = Readonly<{
@@ -107,7 +110,7 @@ export function WorkspaceChatPanel({
   useEffect(() => {
     if (messages.length === 0) return;
     scrollRef.current?.scrollToEnd({ animated: true });
-  }, [messages.length]);
+  }, [messages]);
 
   if (!open) return null;
 
@@ -224,11 +227,26 @@ export function WorkspaceChatPanel({
                 ]}
               >
                 <Text style={styles.messageRole}>{message.role}</Text>
+                {message.streaming &&
+                message.statusLabel !== undefined &&
+                message.body.trim().length === 0 ? (
+                  <StreamingStatusLine label={message.statusLabel} />
+                ) : message.streaming && message.statusLabel !== undefined ? (
+                  <StreamingStatusLine
+                    label={message.statusLabel}
+                    subdued
+                  />
+                ) : null}
                 {message.toolTraces !== undefined &&
                 message.toolTraces.length > 0 ? (
                   <View style={styles.toolTraceList}>
-                    {message.toolTraces.map((trace) => (
-                      <View key={`${message.id}-${trace.toolName}-${trace.summary}`}>
+                    {message.toolTraces.map((trace, index) => (
+                      <View
+                        key={`${message.id}-${trace.toolName}-${index}`}
+                        style={
+                          message.streaming ? styles.toolTraceStreaming : undefined
+                        }
+                      >
                         <Text style={styles.toolTraceLine}>
                           {trace.title} · {trace.summary}
                         </Text>
@@ -241,7 +259,12 @@ export function WorkspaceChatPanel({
                     ))}
                   </View>
                 ) : null}
-                <Text style={styles.messageBody}>{message.body}</Text>
+                {message.body.length > 0 || !message.streaming ? (
+                  <View style={styles.messageBodyRow}>
+                    <Text style={styles.messageBody}>{message.body}</Text>
+                    {message.streaming ? <StreamingCaret /> : null}
+                  </View>
+                ) : null}
               </View>
             ))
           )}
@@ -399,6 +422,83 @@ export function WorkspaceChatPanel({
         </View>
       </View>
     </View>
+  );
+}
+
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return false;
+  }
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function StreamingStatusLine({
+  label,
+  subdued = false
+}: Readonly<{ label: string; subdued?: boolean }>) {
+  const opacity = useRef(new Animated.Value(subdued ? 0.72 : 1)).current;
+
+  useEffect(() => {
+    if (prefersReducedMotion()) return;
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: subdued ? 0.45 : 0.55,
+          duration: 900,
+          useNativeDriver: true
+        }),
+        Animated.timing(opacity, {
+          toValue: subdued ? 0.72 : 1,
+          duration: 900,
+          useNativeDriver: true
+        })
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [opacity, subdued]);
+
+  return (
+    <Animated.View
+      accessibilityLiveRegion="polite"
+      style={{ opacity: prefersReducedMotion() ? 1 : opacity }}
+    >
+      <Text
+        style={[styles.streamingStatus, subdued && styles.streamingStatusSubdued]}
+      >
+        {label}
+      </Text>
+    </Animated.View>
+  );
+}
+
+function StreamingCaret() {
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (prefersReducedMotion()) return;
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 0.15,
+          duration: 520,
+          useNativeDriver: true
+        }),
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 520,
+          useNativeDriver: true
+        })
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [opacity]);
+
+  return (
+    <Animated.Text style={[styles.streamingCaret, { opacity }]}>
+      |
+    </Animated.Text>
   );
 }
 
@@ -638,11 +738,37 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 14
   },
+  toolTraceStreaming: {
+    opacity: 0.92
+  },
+  messageBodyRow: {
+    alignItems: "flex-end",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 1
+  },
   messageBody: {
     color: colors.ink,
+    flexShrink: 1,
     fontFamily: fonts.ui,
     fontSize: 13,
     lineHeight: 19
+  },
+  streamingStatus: {
+    color: colors.muted,
+    fontFamily: fonts.uiMedium,
+    fontSize: 12,
+    lineHeight: 17
+  },
+  streamingStatusSubdued: {
+    fontSize: 11
+  },
+  streamingCaret: {
+    color: colors.kicker,
+    fontFamily: fonts.ui,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 1
   },
   composer: {
     borderTopColor: colors.line,

@@ -6,7 +6,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createXai } from "@ai-sdk/xai";
 import type { LanguageModel } from "ai";
-import { completeWithToolsWithLanguageModel } from "./aisdk/tool-completion.js";
+import { completeWithToolsWithLanguageModel, streamWithToolsWithLanguageModel } from "./aisdk/tool-completion.js";
 import { type AiProviderId } from "./create-provider.js";
 import { ANTHROPIC_API_ORIGIN } from "./anthropic/provider.js";
 import { DEEPSEEK_API_ORIGIN } from "./deepseek/provider.js";
@@ -19,7 +19,8 @@ import { XAI_API_ORIGIN } from "./xai/provider.js";
 import type {
   ToolLoopCompletionInput,
   ToolLoopCompletionProvider,
-  ToolLoopCompletionResult
+  ToolLoopCompletionResult,
+  ToolLoopStreamInput
 } from "./tool-loop-types.js";
 
 type LanguageModelFactory = (modelId: string) => LanguageModel;
@@ -106,6 +107,11 @@ export function createToolLoopProvider(input: Readonly<{
       toolInput: ToolLoopCompletionInput
     ): Promise<ToolLoopCompletionResult> {
       return completeWithToolsWithLanguageModel(languageModel(toolInput.model), toolInput);
+    },
+    async streamWithTools(
+      toolInput: ToolLoopStreamInput
+    ): Promise<ToolLoopCompletionResult> {
+      return streamWithToolsWithLanguageModel(languageModel(toolInput.model), toolInput);
     }
   };
 }

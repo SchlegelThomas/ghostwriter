@@ -885,6 +885,188 @@ export function sendWorkspaceChat(input: Readonly<{
   );
 }
 
+export type WorkspaceChatStreamHandlers = Readonly<{
+  onStatus?(phase: string, label: string): void;
+  onToolTrace?(trace: WorkspaceChatToolTrace): void;
+  onTextDelta?(delta: string): void;
+  onDone?(result: WorkspaceChatResponse): void;
+  onError?(error: Readonly<{ error: string; code?: string }>): void;
+}>;
+
+function parseWorkspaceChatSseBuffer(
+  buffer: string,
+  handlers: WorkspaceChatStreamHandlers
+): { remainder: string; result?: WorkspaceChatResponse } {
+  let remainder = buffer;
+  let result: WorkspaceChatResponse | undefined;
+
+  while (true) {
+    const boundary = remainder.indexOf("\n\n");
+    if (boundary === -1) break;
+
+    const rawEvent = remainder.slice(0, boundary);
+    remainder = remainder.slice(boundary + 2);
+
+    if (rawEvent.startsWith(":")) {
+      continue;
+    }
+
+    let eventName = "message";
+    const dataLines: string[] = [];
+    for (const line of rawEvent.split("\n")) {
+      if (line.startsWith("event:")) {
+        eventName = line.slice("event:".length).trim();
+      } else if (line.startsWith("data:")) {
+        dataLines.push(line.slice("data:".length).trimStart());
+      }
+    }
+    if (dataLines.length === 0) continue;
+
+    const payload = JSON.parse(dataLines.join("\n")) as Record<string, unknown>;
+    switch (eventName) {
+      case "status":
+        handlers.onStatus?.(
+          String(payload.phase ?? ""),
+          String(payload.label ?? "")
+        );
+        break;
+      case "tool_trace":
+        handlers.onToolTrace?.(payload as WorkspaceChatToolTrace);
+        break;
+      case "text_delta":
+        handlers.onTextDelta?.(String(payload.delta ?? ""));
+        break;
+      case "done":
+        result = payload as WorkspaceChatResponse;
+        handlers.onDone?.(result);
+        break;
+      case "error":
+        handlers.onError?.({
+          error: String(payload.error ?? "Chat could not complete that turn."),
+          ...(payload.code === undefined
+            ? {}
+            : { code: String(payload.code) })
+        });
+        break;
+      default:
+        break;
+    }
+  }
+
+  return { remainder, ...(result === undefined ? {} : { result }) };
+}
+
+export async function sendWorkspaceChatStream(
+  input: Readonly<{
+    message: string;
+    projectId?: string;
+    mode?: WorkspaceChatMode;
+    model?: AgentModelId;
+    effort?: WorkspaceChatEffort;
+    selection?: WorkspaceChatSelection;
+  }>,
+  handlers: WorkspaceChatStreamHandlers,
+  signal?: AbortSignal
+): Promise<WorkspaceChatResponse> {
+  const response = await fetch(apiUrl("/api/workspace/chat/stream"), {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      accept: "text/event-stream",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      message: input.message,
+      ...(input.projectId === undefined ? {} : { projectId: input.projectId }),
+      ...(input.mode === undefined ? {} : { mode: input.mode }),
+      ...(input.model === undefined ? {} : { model: input.model }),
+      ...(input.effort === undefined ? {} : { effort: input.effort }),
+      ...(input.selection === undefined ? {} : { selection: input.selection })
+    }),
+    signal
+  });
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as {
+      code?: string;
+      error?: string;
+    };
+    throw new GhostwriterApiError(
+      response.status,
+      body.code ?? "REQUEST_FAILED",
+      body.error ?? "Ghostwriter could not complete the request."
+    );
+  }
+
+  const reader = response.body?.getReader();
+  if (reader === undefined) {
+    throw new GhostwriterApiError(
+      502,
+      "STREAM_UNAVAILABLE",
+      "Ghostwriter could not open a chat stream."
+    );
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalResult: WorkspaceChatResponse | undefined;
+  let streamError: Readonly<{ error: string; code?: string }> | undefined;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parsed = parseWorkspaceChatSseBuffer(buffer, {
+      ...handlers,
+      onDone: (result) => {
+        finalResult = result;
+        handlers.onDone?.(result);
+      },
+      onError: (error) => {
+        streamError = error;
+        handlers.onError?.(error);
+      }
+    });
+    buffer = parsed.remainder;
+    if (parsed.result !== undefined) {
+      finalResult = parsed.result;
+    }
+  }
+
+  if (buffer.trim().length > 0) {
+    const parsed = parseWorkspaceChatSseBuffer(buffer, {
+      ...handlers,
+      onDone: (result) => {
+        finalResult = result;
+        handlers.onDone?.(result);
+      },
+      onError: (error) => {
+        streamError = error;
+        handlers.onError?.(error);
+      }
+    });
+    if (parsed.result !== undefined) {
+      finalResult = parsed.result;
+    }
+  }
+
+  if (finalResult !== undefined) {
+    return finalResult;
+  }
+  if (streamError !== undefined) {
+    throw new GhostwriterApiError(
+      502,
+      streamError.code ?? "WORKSPACE_CHAT_STREAM_FAILED",
+      streamError.error
+    );
+  }
+  throw new GhostwriterApiError(
+    502,
+    "WORKSPACE_CHAT_STREAM_INCOMPLETE",
+    "Chat ended before a reply arrived."
+  );
+}
+
 export type WritingAssistApiProposal = Readonly<{
   id: string;
   role: string;

@@ -23,6 +23,8 @@ export type {
   ToolLoopCompletionProvider,
   ToolLoopCompletionResult,
   ToolLoopCompletionSuccess,
+  ToolLoopStreamEvent,
+  ToolLoopStreamInput,
   ToolLoopToolDefinition,
   ToolTraceStep
 } from "./tool-loop-types.js";
@@ -67,7 +69,7 @@ export {
   type FakeToolLoopResolver
 } from "./fake-provider.js";
 
-export { completeWithToolsWithLanguageModel } from "./aisdk/tool-completion.js";
+export { completeWithToolsWithLanguageModel, streamWithToolsWithLanguageModel } from "./aisdk/tool-completion.js";
 
 export {
   createToolLoopProvider

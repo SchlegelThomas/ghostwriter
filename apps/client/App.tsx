@@ -119,6 +119,7 @@ import {
   restoreCanvasRevision,
   saveCanvasPreference,
   sendWorkspaceChat,
+  sendWorkspaceChatStream,
   signOut,
   synthesizeReaderSpeech,
   undoCanvas,
@@ -2111,60 +2112,125 @@ export default function App() {
       selectedProject === undefined || selectedSceneId === undefined
         ? undefined
         : sceneSelection(selectedProject, selectedSceneId);
+    const chatRequest = {
+      message: input.message,
+      projectId: selectedProject?.id,
+      mode: input.mode,
+      model: input.model,
+      effort: input.effort,
+      ...(selection === undefined
+        ? {}
+        : {
+            selection: {
+              kind: selection.kind,
+              ...("bookId" in selection ? { bookId: selection.bookId } : {}),
+              ...("partId" in selection && selection.partId !== undefined
+                ? { partId: selection.partId }
+                : {}),
+              ...("chapterId" in selection && selection.chapterId !== undefined
+                ? { chapterId: selection.chapterId }
+                : {}),
+              ...("sceneId" in selection ? { sceneId: selection.sceneId } : {}),
+              ...("storyKnowledgeId" in selection
+                ? { storyKnowledgeId: selection.storyKnowledgeId }
+                : {})
+            }
+          })
+    } as const;
+    const assistantId = `chat-assistant-${Date.now()}`;
+    setChatMessages((current) => [
+      ...current,
+      {
+        id: assistantId,
+        role: "assistant",
+        body: "",
+        streaming: true,
+        statusLabel: "Thinking…",
+        toolTraces: []
+      }
+    ]);
+
+    const finalizeAssistant = (update: Partial<WorkspaceChatMessage>): void => {
+      setChatMessages((current) =>
+        current.map((message) =>
+          message.id === assistantId
+            ? { ...message, ...update, streaming: false }
+            : message
+        )
+      );
+    };
+
     try {
-      const result = await sendWorkspaceChat({
-        message: input.message,
-        projectId: selectedProject?.id,
-        mode: input.mode,
-        model: input.model,
-        effort: input.effort,
-        ...(selection === undefined
-          ? {}
-          : {
-              selection: {
-                kind: selection.kind,
-                ...("bookId" in selection
-                  ? { bookId: selection.bookId }
-                  : {}),
-                ...("partId" in selection && selection.partId !== undefined
-                  ? { partId: selection.partId }
-                  : {}),
-                ...("chapterId" in selection &&
-                selection.chapterId !== undefined
-                  ? { chapterId: selection.chapterId }
-                  : {}),
-                ...("sceneId" in selection
-                  ? { sceneId: selection.sceneId }
-                  : {}),
-                ...("storyKnowledgeId" in selection
-                  ? { storyKnowledgeId: selection.storyKnowledgeId }
-                  : {})
-              }
-            })
-      });
-      setChatMessages((current) => [
-        ...current,
-        {
-          id: `chat-assistant-${Date.now()}`,
-          role: "assistant",
-          body: result.reply,
-          ...(result.toolTraces === undefined || result.toolTraces.length === 0
-            ? {}
-            : { toolTraces: result.toolTraces })
+      const result = await sendWorkspaceChatStream(chatRequest, {
+        onStatus: (_phase, label) => {
+          setChatMessages((current) =>
+            current.map((message) =>
+              message.id === assistantId
+                ? { ...message, statusLabel: label }
+                : message
+            )
+          );
+        },
+        onToolTrace: (trace) => {
+          setChatMessages((current) =>
+            current.map((message) =>
+              message.id === assistantId
+                ? {
+                    ...message,
+                    toolTraces: [...(message.toolTraces ?? []), trace]
+                  }
+                : message
+            )
+          );
+        },
+        onTextDelta: (delta) => {
+          setChatMessages((current) =>
+            current.map((message) =>
+              message.id === assistantId
+                ? { ...message, body: `${message.body}${delta}`, statusLabel: "Writing…" }
+                : message
+            )
+          );
         }
-      ]);
+      });
+      finalizeAssistant({
+        body: result.reply,
+        ...(result.toolTraces === undefined || result.toolTraces.length === 0
+          ? {}
+          : { toolTraces: result.toolTraces }),
+        statusLabel: undefined
+      });
     } catch (cause) {
-      setChatMessages((current) => [
-        ...current,
-        {
+      const canFallbackToJson =
+        cause instanceof GhostwriterApiError &&
+        (cause.status === 404 ||
+          cause.code === "STREAM_UNAVAILABLE" ||
+          cause.code === "REQUEST_FAILED");
+      if (canFallbackToJson) {
+        try {
+          const result = await sendWorkspaceChat(chatRequest);
+          finalizeAssistant({
+            body: result.reply,
+            ...(result.toolTraces === undefined || result.toolTraces.length === 0
+              ? {}
+              : { toolTraces: result.toolTraces }),
+            statusLabel: undefined
+          });
+          return;
+        } catch {
+          // fall through to system error
+        }
+      }
+      setChatMessages((current) =>
+        current.filter((message) => message.id !== assistantId).concat({
           id: `chat-system-${Date.now()}`,
           role: "system",
           body:
             cause instanceof GhostwriterApiError
               ? cause.message
               : "Chat could not complete that turn."
-        }
-      ]);
+        })
+      );
     }
   }
 

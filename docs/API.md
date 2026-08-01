@@ -237,6 +237,18 @@ Scene Partner Capture chat (BYOK structured turn, propose-only until promote/var
   the route returns a friendly unconfigured response (no silent failure wall). Chat never mutates
   manuscript canon.
 
+- `POST /api/workspace/chat/stream` — same request body and auth as JSON chat; response is
+  `text/event-stream` (SSE). The client uses `fetch` + `ReadableStream` (POST + cookies). Named
+  events (JSON `data` payloads):
+  - `status` — `{ phase, label }` working-state phases (`starting`, `assembling_context`,
+    `thinking`, `reading_tools`, `writing`, …)
+  - `tool_trace` — `{ toolName, title, ok, summary, errorMessage? }` as each read tool finishes
+  - `text_delta` — `{ delta }` assistant text chunks during tool-loop streaming
+  - `done` — final `{ reply, mode, model, effort, toolTraces?, code? }` (same shape as JSON chat)
+  - `error` — `{ error, code }` hard failures
+  Comment keepalives (`: ping`) may appear during long waits. Structured / no-tools / no-key paths
+  emit `status` then `done` (or soft-error `done`) so the dock never looks idle.
+
 ## Book covers (Title Page)
 
 `book.update` may set optional `cover` `{ concept?, notes?, imageUrl? }`. `imageUrl` must be an

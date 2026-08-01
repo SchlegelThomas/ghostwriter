@@ -261,3 +261,62 @@ describe("POST /api/workspace/chat", () => {
     );
   });
 });
+
+describe("POST /api/workspace/chat/stream", () => {
+  it("returns event-stream with status and done for tool-loop turns", async () => {
+    const { app } = await openSeededApp({
+      kekConfig: createTestProviderKekRuntimeConfig(),
+      openAiCompletionProviderFactory: fakeWorkspaceChatFactory(),
+      workspaceChatCreateToolLoopProvider: () =>
+        createFakeToolLoopProvider({
+          text: "Streaming tool-loop reply.",
+          toolTraces: [
+            {
+              toolName: "project_navigator_read",
+              title: "Read manuscript hierarchy",
+              input: {},
+              output: { title: BELLWETHER_FIXTURE_NAVIGATOR.title },
+              ok: true
+            }
+          ]
+        })
+    });
+    await configureOpenAi(app);
+    const chat = await app.request("/api/workspace/chat/stream", {
+      method: "POST",
+      headers: originHeaders(),
+      body: JSON.stringify({
+        message: "What should I revise next?",
+        projectId: PROJECT,
+        mode: "agent",
+        model: "gpt-4.1-mini",
+        effort: "fast"
+      })
+    });
+    expect(chat.status).toBe(200);
+    expect(chat.headers.get("content-type")).toContain("text/event-stream");
+    const body = await chat.text();
+    expect(body).toContain("event: status");
+    expect(body).toContain("event: done");
+    expect(body).toContain("Streaming tool-loop reply.");
+  });
+
+  it("streams provider-soft done when no key is configured", async () => {
+    const { app } = await openSeededApp({
+      kekConfig: createTestProviderKekRuntimeConfig()
+    });
+    const chat = await app.request("/api/workspace/chat/stream", {
+      method: "POST",
+      headers: originHeaders(),
+      body: JSON.stringify({
+        message: "Hello agent",
+        projectId: PROJECT
+      })
+    });
+    expect(chat.status).toBe(200);
+    const body = await chat.text();
+    expect(body).toContain("event: status");
+    expect(body).toContain("event: done");
+    expect(body).toContain("PROVIDER_NOT_CONFIGURED");
+  });
+});

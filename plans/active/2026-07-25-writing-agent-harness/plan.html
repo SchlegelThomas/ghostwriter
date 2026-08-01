@@ -68,6 +68,7 @@
         <li><strong>CP3 — Tools in the loop:</strong> Allow chat/agent to call a bounded set of read capabilities (<code>project.navigator.read</code>, budgeted <code>scene.workspace.read</code> for whole-book access via iterative reads, <code>capture.list</code>) as tools; show tool-step traces in chat. No egress-confirm modal for this light path. Still propose-only for mutations. No vector DB in this plan — defer embeddings until budgeted scene reads are insufficient at novel scale.</li>
         <li><strong>CP4 — Toolkit agents (agent mode):</strong> Mode → all toolkit agents in v1: Scene Partner, Cover, Character Coach, Worldkeeper, Sketch Partner. Starting a job uses existing run/proposal or Scene Partner turn APIs; dock shows status + link to review/apply (Plans or inline proposal card). Deep-link; do not delete Plans Partner.</li>
         <li><strong>CP5 — Plan mode + docs:</strong> Plan-mode outlines persist as a typed agent proposal (new workflow, e.g. <code>plan-mode.outline</code>) that lands in center-pane Plans; PRODUCT/ARCHITECTURE/ADR note for harness modes; WHERE-I-LEFT-OFF.</li>
+        <li><strong>CP6 — Streaming chat UX:</strong> SSE on workspace chat so the dock shows live status / tool steps / typing while the model works (no silent wait). Keep JSON route; add <code>/stream</code>.</li>
       </ol>
     </section>
 
@@ -113,6 +114,7 @@
         <li><input type="checkbox" checked> CP3 Tools in the loop</li>
         <li><input type="checkbox" checked> CP4 Toolkit agent mode in dock</li>
         <li><input type="checkbox" checked> CP5 Plan mode + docs/ADR</li>
+        <li><input type="checkbox" checked> CP6 Streaming chat UX (SSE + typing)</li>
       </ul>
     </section>
   </main>

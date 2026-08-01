@@ -139,6 +139,8 @@ On the same branch, the workspace shell and Agent dock advanced:
   Character Coach, Worldkeeper, Sketch Partner) that deep-links into Plans or the Title Page cover
   studio with dock status copy, or refuses with writer-facing guidance when selection is missing;
   **chat** completes with BYOK via the selected provider and server-assembled project context;
+  the dock streams working state during turns (status labels, tool traces as they finish, typing
+  caret while reply text arrives) via `POST /api/workspace/chat/stream`, with JSON chat as fallback;
   **Plan** replies can be explicitly **Saved to Plans** as a typed `plan-outline-v1` proposal bound
   to a new Capture (acknowledge/reject only — no manuscript apply); Settings owns multi-provider keys;
   capability ids still invoke read tools;

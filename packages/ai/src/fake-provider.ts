@@ -11,6 +11,8 @@ import type {
   ToolLoopCompletionInput,
   ToolLoopCompletionProvider,
   ToolLoopCompletionResult,
+  ToolLoopCompletionSuccess,
+  ToolLoopStreamInput,
   ToolTraceStep
 } from "./tool-loop-types.js";
 
@@ -178,6 +180,54 @@ async function resolveToolLoopFixture(
   return resolver;
 }
 
+function chunkTextForStream(text: string): readonly string[] {
+  const chunks: string[] = [];
+  for (const token of text.match(/\S+\s*|\s+/g) ?? [text]) {
+    chunks.push(token);
+  }
+  return chunks.length > 0 ? chunks : [text];
+}
+
+async function completeFakeToolLoopFromFixture(
+  input: ToolLoopCompletionInput,
+  fixture: FakeToolLoopFixture
+): Promise<ToolLoopCompletionResult> {
+  if (input.signal?.aborted) {
+    return { ok: false, diagnostic: aiDiagnostic("cancelled") };
+  }
+
+  if (fixture.failure) {
+    return { ok: false, diagnostic: aiDiagnostic(fixture.failure.code) };
+  }
+
+  try {
+    if (fixture.delayMs && fixture.delayMs > 0) {
+      await sleep(fixture.delayMs, input.signal ?? new AbortController().signal);
+    }
+  } catch {
+    return { ok: false, diagnostic: aiDiagnostic("cancelled") };
+  }
+
+  if (input.signal?.aborted) {
+    return { ok: false, diagnostic: aiDiagnostic("cancelled") };
+  }
+
+  const text = fixture.text.trim();
+  if (text.length === 0) {
+    return { ok: false, diagnostic: aiDiagnostic("validation_failed") };
+  }
+
+  return {
+    ok: true,
+    text,
+    toolTraces: fixture.toolTraces ?? [],
+    usage: fixture.usage ?? DEFAULT_USAGE,
+    providerResponseId: fixture.providerResponseId ?? "fake-tool-resp-stable",
+    providerModel: fixture.providerModel ?? input.model,
+    finishStatus: fixture.finishStatus ?? "completed"
+  };
+}
+
 export function createFakeToolLoopProvider(
   resolver: FakeToolLoopResolver
 ): ToolLoopCompletionProvider {
@@ -186,13 +236,27 @@ export function createFakeToolLoopProvider(
       input: ToolLoopCompletionInput
     ): Promise<ToolLoopCompletionResult> {
       const fixture = await resolveToolLoopFixture(resolver, input);
+      return completeFakeToolLoopFromFixture(input, fixture);
+    },
+
+    async streamWithTools(
+      input: ToolLoopStreamInput
+    ): Promise<ToolLoopCompletionResult> {
+      const emit = input.onEvent;
+      emit?.({ type: "status", phase: "thinking", label: "Thinking…" });
+
+      const fixture = await resolveToolLoopFixture(resolver, input);
 
       if (input.signal?.aborted) {
-        return { ok: false, diagnostic: aiDiagnostic("cancelled") };
+        const diagnostic = aiDiagnostic("cancelled");
+        emit?.({ type: "error", diagnostic });
+        return { ok: false, diagnostic };
       }
 
       if (fixture.failure) {
-        return { ok: false, diagnostic: aiDiagnostic(fixture.failure.code) };
+        const diagnostic = aiDiagnostic(fixture.failure.code);
+        emit?.({ type: "error", diagnostic });
+        return { ok: false, diagnostic };
       }
 
       try {
@@ -200,19 +264,33 @@ export function createFakeToolLoopProvider(
           await sleep(fixture.delayMs, input.signal ?? new AbortController().signal);
         }
       } catch {
-        return { ok: false, diagnostic: aiDiagnostic("cancelled") };
+        const diagnostic = aiDiagnostic("cancelled");
+        emit?.({ type: "error", diagnostic });
+        return { ok: false, diagnostic };
       }
 
       if (input.signal?.aborted) {
-        return { ok: false, diagnostic: aiDiagnostic("cancelled") };
+        const diagnostic = aiDiagnostic("cancelled");
+        emit?.({ type: "error", diagnostic });
+        return { ok: false, diagnostic };
+      }
+
+      for (const trace of fixture.toolTraces ?? []) {
+        emit?.({ type: "tool_trace", trace });
       }
 
       const text = fixture.text.trim();
       if (text.length === 0) {
-        return { ok: false, diagnostic: aiDiagnostic("validation_failed") };
+        const diagnostic = aiDiagnostic("validation_failed");
+        emit?.({ type: "error", diagnostic });
+        return { ok: false, diagnostic };
       }
 
-      return {
+      for (const delta of chunkTextForStream(text)) {
+        emit?.({ type: "text_delta", delta });
+      }
+
+      const success: ToolLoopCompletionSuccess = {
         ok: true,
         text,
         toolTraces: fixture.toolTraces ?? [],
@@ -221,6 +299,8 @@ export function createFakeToolLoopProvider(
         providerModel: fixture.providerModel ?? input.model,
         finishStatus: fixture.finishStatus ?? "completed"
       };
+      emit?.({ type: "done", result: success });
+      return success;
     }
   };
 }
