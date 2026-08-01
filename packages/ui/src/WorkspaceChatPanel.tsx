@@ -8,8 +8,13 @@ import {
   TextInput,
   View
 } from "react-native";
-import { ArrowUp } from "phosphor-react-native";
+import { ArrowUp, CaretDown, CaretRight, Check, CopySimple } from "phosphor-react-native";
 import type { AgentModelId } from "@ghostwriter/core";
+import { AgentChatMarkdown } from "./AgentChatMarkdown.js";
+import {
+  agentWorkingGroupState,
+  type AgentWorkingGroupState
+} from "./agent-working-summary.js";
 import { ghostwriterTheme } from "./theme.js";
 import type { OpenSettingsHandler } from "./settings-focus.js";
 import { AgentModelPickerMenu } from "./AgentModelPickerMenu.js";
@@ -218,54 +223,7 @@ export function WorkspaceChatPanel({
             </View>
           ) : (
             messages.map((message) => (
-              <View
-                key={message.id}
-                style={[
-                  styles.message,
-                  message.role === "user" && styles.messageUser,
-                  message.role === "system" && styles.messageSystem
-                ]}
-              >
-                <Text style={styles.messageRole}>{message.role}</Text>
-                {message.streaming &&
-                message.statusLabel !== undefined &&
-                message.body.trim().length === 0 ? (
-                  <StreamingStatusLine label={message.statusLabel} />
-                ) : message.streaming && message.statusLabel !== undefined ? (
-                  <StreamingStatusLine
-                    label={message.statusLabel}
-                    subdued
-                  />
-                ) : null}
-                {message.toolTraces !== undefined &&
-                message.toolTraces.length > 0 ? (
-                  <View style={styles.toolTraceList}>
-                    {message.toolTraces.map((trace, index) => (
-                      <View
-                        key={`${message.id}-${trace.toolName}-${index}`}
-                        style={
-                          message.streaming ? styles.toolTraceStreaming : undefined
-                        }
-                      >
-                        <Text style={styles.toolTraceLine}>
-                          {trace.title} · {trace.summary}
-                        </Text>
-                        {!trace.ok && trace.errorMessage !== undefined ? (
-                          <Text style={styles.toolTraceError}>
-                            {trace.errorMessage}
-                          </Text>
-                        ) : null}
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
-                {message.body.length > 0 || !message.streaming ? (
-                  <View style={styles.messageBodyRow}>
-                    <Text style={styles.messageBody}>{message.body}</Text>
-                    {message.streaming ? <StreamingCaret /> : null}
-                  </View>
-                ) : null}
-              </View>
+              <ChatTurn key={message.id} message={message} />
             ))
           )}
         </ScrollView>
@@ -432,44 +390,217 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-function StreamingStatusLine({
-  label,
-  subdued = false
-}: Readonly<{ label: string; subdued?: boolean }>) {
-  const opacity = useRef(new Animated.Value(subdued ? 0.72 : 1)).current;
+const NO_TRACES: readonly WorkspaceChatToolTrace[] = Object.freeze([]);
+
+/** One turn of the conversation: the writer's words, or the agent's reply. */
+function ChatTurn({ message }: Readonly<{ message: WorkspaceChatMessage }>) {
+  const streaming = message.streaming === true;
+  const traces = message.toolTraces ?? NO_TRACES;
+  const hasBody = message.body.trim().length > 0;
+
+  if (message.role === "user") {
+    return (
+      <View style={styles.turnUser}>
+        <View style={styles.userSaid}>
+          <AgentChatMarkdown text={message.body} tone="user" />
+        </View>
+        <CopyMessageButton align="end" compact text={message.body} />
+      </View>
+    );
+  }
+
+  if (message.role === "system") {
+    return (
+      <View style={styles.turnSystem}>
+        <Text style={styles.systemNote}>{message.body}</Text>
+      </View>
+    );
+  }
+
+  const working = agentWorkingGroupState({
+    streaming,
+    ...(message.statusLabel === undefined
+      ? {}
+      : { statusLabel: message.statusLabel }),
+    traces: traces.map((trace) => ({ title: trace.title, ok: trace.ok }))
+  });
+
+  return (
+    <View style={styles.turnAssistant}>
+      {working.visible ? (
+        <WorkingGroup state={working} streaming={streaming} traces={traces} />
+      ) : null}
+      {hasBody || streaming ? (
+        <AgentChatMarkdown
+          text={message.body}
+          {...(streaming ? { trailing: <StreamingCaret /> } : {})}
+        />
+      ) : working.visible ? null : (
+        <Text style={styles.emptyReply}>No reply came back.</Text>
+      )}
+      {streaming ? null : <CopyMessageButton align="start" text={message.body} />}
+    </View>
+  );
+}
+
+/** Status and tool steps, live while working and folded once the reply lands. */
+function WorkingGroup({
+  state,
+  streaming,
+  traces
+}: Readonly<{
+  state: AgentWorkingGroupState;
+  streaming: boolean;
+  traces: readonly WorkspaceChatToolTrace[];
+}>) {
+  const [override, setOverride] = useState<boolean | undefined>(undefined);
+  const opacity = usePulse(streaming);
+
+  const expanded = state.toggleable && (override ?? state.defaultExpanded);
+  const Caret = expanded ? CaretDown : CaretRight;
+
+  const label = (
+    <Animated.Text numberOfLines={1} style={[styles.workingLabel, { opacity }]}>
+      {state.label}
+    </Animated.Text>
+  );
+
+  return (
+    <View
+      accessibilityLiveRegion={streaming ? "polite" : "none"}
+      style={styles.working}
+    >
+      {state.toggleable ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          onPress={() => setOverride(!expanded)}
+          style={({ pressed }) => [
+            styles.workingHeader,
+            pressed && styles.pressed
+          ]}
+        >
+          <Caret color={colors.muted} size={10} weight="bold" />
+          {label}
+        </Pressable>
+      ) : (
+        <View style={styles.workingHeader}>
+          <View style={styles.workingCaretSpace} />
+          {label}
+        </View>
+      )}
+      {expanded ? (
+        <View style={styles.workingSteps}>
+          {traces.map((trace, index) => (
+            <View key={`${trace.toolName}-${index}`}>
+              <Text style={styles.toolTraceLine}>
+                {trace.title} · {trace.summary}
+              </Text>
+              {!trace.ok && trace.errorMessage !== undefined ? (
+                <Text style={styles.toolTraceError}>{trace.errorMessage}</Text>
+              ) : null}
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function clipboardWriteText(): ((text: string) => Promise<void>) | undefined {
+  if (typeof navigator === "undefined") return undefined;
+  const clipboard: Clipboard | undefined = navigator.clipboard;
+  if (clipboard === undefined || typeof clipboard.writeText !== "function") {
+    return undefined;
+  }
+  return (text) => clipboard.writeText(text);
+}
+
+/** Copies a turn verbatim — markdown and all — where the platform allows it. */
+function CopyMessageButton({
+  align,
+  compact = false,
+  text
+}: Readonly<{ align: "start" | "end"; compact?: boolean; text: string }>) {
+  const [copied, setCopied] = useState(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined
+  );
+
+  useEffect(
+    () => () => {
+      if (resetTimer.current !== undefined) clearTimeout(resetTimer.current);
+    },
+    []
+  );
+
+  const write = clipboardWriteText();
+  if (write === undefined || text.trim().length === 0) return null;
+
+  const copy = async (): Promise<void> => {
+    try {
+      await write(text);
+    } catch {
+      return;
+    }
+    setCopied(true);
+    if (resetTimer.current !== undefined) clearTimeout(resetTimer.current);
+    resetTimer.current = setTimeout(() => setCopied(false), 1600);
+  };
+
+  return (
+    <View style={[styles.turnActions, align === "end" && styles.turnActionsEnd]}>
+      <Pressable
+        accessibilityLabel={copied ? "Copied" : "Copy message"}
+        accessibilityRole="button"
+        onPress={() => void copy()}
+        style={({ pressed }) => [styles.copyButton, pressed && styles.pressed]}
+      >
+        {copied ? (
+          <Check color={colors.green} size={10} weight="bold" />
+        ) : (
+          <CopySimple color={colors.muted} size={10} weight="regular" />
+        )}
+        {compact && !copied ? null : (
+          <Text style={[styles.copyLabel, copied && styles.copyLabelDone]}>
+            {copied ? "Copied" : "Copy"}
+          </Text>
+        )}
+      </Pressable>
+    </View>
+  );
+}
+
+function usePulse(active: boolean): Animated.Value {
+  const opacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    if (prefersReducedMotion()) return;
+    if (!active || prefersReducedMotion()) {
+      opacity.setValue(1);
+      return;
+    }
     const animation = Animated.loop(
       Animated.sequence([
         Animated.timing(opacity, {
-          toValue: subdued ? 0.45 : 0.55,
+          toValue: 0.5,
           duration: 900,
           useNativeDriver: true
         }),
         Animated.timing(opacity, {
-          toValue: subdued ? 0.72 : 1,
+          toValue: 1,
           duration: 900,
           useNativeDriver: true
         })
       ])
     );
     animation.start();
-    return () => animation.stop();
-  }, [opacity, subdued]);
+    return () => {
+      animation.stop();
+      opacity.setValue(1);
+    };
+  }, [active, opacity]);
 
-  return (
-    <Animated.View
-      accessibilityLiveRegion="polite"
-      style={{ opacity: prefersReducedMotion() ? 1 : opacity }}
-    >
-      <Text
-        style={[styles.streamingStatus, subdued && styles.streamingStatusSubdued]}
-      >
-        {label}
-      </Text>
-    </Animated.View>
-  );
+  return opacity;
 }
 
 function StreamingCaret() {
@@ -653,9 +784,9 @@ const styles = StyleSheet.create({
   },
   messages: {
     flexGrow: 1,
-    gap: 10,
+    gap: 18,
     paddingHorizontal: 12,
-    paddingVertical: 12
+    paddingVertical: 14
   },
   messagesEmpty: {
     flexGrow: 1,
@@ -699,32 +830,93 @@ const styles = StyleSheet.create({
     fontFamily: fonts.uiSemibold,
     fontSize: 11
   },
-  message: {
-    backgroundColor: colors.panel,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 9
+  turnAssistant: {
+    gap: 8
   },
-  messageUser: {
+  turnUser: {
+    alignItems: "flex-end",
+    gap: 2
+  },
+  userSaid: {
     backgroundColor: colors.accentSoft,
-    borderColor: "#d4b7aa"
+    borderRadius: 12,
+    maxWidth: "94%",
+    paddingHorizontal: 11,
+    paddingVertical: 8
   },
-  messageSystem: {
+  turnSystem: {
     backgroundColor: colors.amberSoft,
-    borderColor: colors.amber
+    borderColor: colors.amber,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 10,
+    paddingVertical: 7
   },
-  messageRole: {
-    color: colors.kicker,
-    fontFamily: fonts.uiSemibold,
-    fontSize: 9,
-    letterSpacing: 0.6,
-    textTransform: "uppercase"
+  systemNote: {
+    color: colors.amber,
+    fontFamily: fonts.ui,
+    fontSize: 12,
+    lineHeight: 17
   },
-  toolTraceList: {
-    gap: 3
+  working: {
+    gap: 5
+  },
+  workingHeader: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderRadius: 5,
+    flexDirection: "row",
+    gap: 5,
+    maxWidth: "100%",
+    paddingVertical: 1
+  },
+  workingCaretSpace: {
+    width: 10
+  },
+  workingLabel: {
+    color: colors.muted,
+    flexShrink: 1,
+    fontFamily: fonts.uiMedium,
+    fontSize: 11,
+    lineHeight: 16
+  },
+  workingSteps: {
+    borderLeftColor: colors.line,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+    marginLeft: 4,
+    paddingLeft: 10
+  },
+  turnActions: {
+    flexDirection: "row"
+  },
+  turnActionsEnd: {
+    justifyContent: "flex-end"
+  },
+  copyButton: {
+    alignItems: "center",
+    borderRadius: 5,
+    flexDirection: "row",
+    gap: 4,
+    marginHorizontal: -4,
+    opacity: 0.78,
+    paddingHorizontal: 4,
+    paddingVertical: 2
+  },
+  copyLabel: {
+    color: colors.muted,
+    fontFamily: fonts.uiMedium,
+    fontSize: 10
+  },
+  copyLabelDone: {
+    color: colors.green
+  },
+  emptyReply: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 12,
+    fontStyle: "italic",
+    lineHeight: 18
   },
   toolTraceLine: {
     color: colors.muted,
@@ -737,31 +929,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.ui,
     fontSize: 10,
     lineHeight: 14
-  },
-  toolTraceStreaming: {
-    opacity: 0.92
-  },
-  messageBodyRow: {
-    alignItems: "flex-end",
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 1
-  },
-  messageBody: {
-    color: colors.ink,
-    flexShrink: 1,
-    fontFamily: fonts.ui,
-    fontSize: 13,
-    lineHeight: 19
-  },
-  streamingStatus: {
-    color: colors.muted,
-    fontFamily: fonts.uiMedium,
-    fontSize: 12,
-    lineHeight: 17
-  },
-  streamingStatusSubdued: {
-    fontSize: 11
   },
   streamingCaret: {
     color: colors.kicker,

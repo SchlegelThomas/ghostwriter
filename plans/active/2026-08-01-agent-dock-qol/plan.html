@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent dock QOL (flowy chat)</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan</p>
+      <h1>Agent dock QOL</h1>
+      <p class="meta"><strong>Status:</strong> active<br>
+        <strong>Branch:</strong> <code>feat/writing-agent-harness</code> (continues harness PR)<br>
+        <strong>Owner:</strong> founder + parent agent</p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Make the Agent dock feel like a <strong>continuous writing conversation</strong> — Cursor-inspired QOL
+        (grouping, markdown, sessions/tabs, fork, copy) adapted for Ghostwriter’s chat / Plan / agent
+        modes, propose-only invariants, and manuscript selection. Prefer a soft, flowy rhythm over a
+        debug console.</p>
+      <p><strong>Out of scope:</strong> multi-agent parallel runners; marketplace skills; silent
+        manuscript writes; turning Agent into a second editor; Playwright until founder verifies;
+        server-synced chat history (local persistence first).</p>
+    </section>
+
+    <section>
+      <h2>Domain / design audit</h2>
+      <ul>
+        <li><strong>Canonical:</strong> manuscript, captures, proposals unchanged. Chat sessions are
+          <em>noncanonical UI state</em> (like agent prefs), not a second story store.</li>
+        <li><strong>Messages:</strong> today UI-only; each API turn is one writer message +
+          server-assembled project/selection context. Optional prior-turn snippets may be sent for
+          regenerate/edit coherence without becoming authority.</li>
+        <li><strong>Authority:</strong> ADR 0011 / 0013 — propose-only; no client-pasted canon as truth.</li>
+        <li><strong>Living design:</strong> Mockups 4.0/5.0 — writing agents / BYOK; harness modes from
+          writing-agent-harness plan. Soft chrome may diverge from harsh ASSISTANT labels.</li>
+        <li><strong>MCP:</strong> no new mutation capabilities; dock QOL is UI + existing chat/stream.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria (epic)</h2>
+      <ul>
+        <li><strong>A:</strong> Assistant replies render markdown (headings, bold/italic, lists, links,
+          inline code); softer turn chrome (no harsh ASSISTANT stamp); copy message action.</li>
+        <li><strong>B:</strong> Status + tool traces group into a collapsible “Working” block per turn;
+          collapsed by default when the turn finishes; expandable while/after streaming.</li>
+        <li><strong>C:</strong> Multiple chat sessions per project with tabs/history; new chat; rename;
+          persist in localStorage (account+project); resume last session; clear/archive.</li>
+        <li><strong>D:</strong> Fork chat from a message into a new session; edit &amp; resend last user
+          message; regenerate assistant turn (same mode/model/effort defaults).</li>
+        <li><strong>E:</strong> Stop generation while streaming; retry failed turns; follow-up chips
+          under replies (e.g. open scene / Save to Plans when relevant); selection can deep-link open.</li>
+        <li>Prior harness features (stream, toolkit, Plan→Plans) remain coherent.</li>
+        <li><code>pnpm verify</code> green; no Playwright until founder verifies.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks (vertical checkpoints)</h2>
+      <ol>
+        <li><strong>A — Readability:</strong> Lite markdown renderer in <code>packages/ui</code> (no HTML
+          dump); restyle turns; copy control. Vitest for markdown helper.</li>
+        <li><strong>B — Grouped working:</strong> Collapsible working group for statusLabel + toolTraces;
+          streaming-aware expand state.</li>
+        <li><strong>C — Sessions:</strong> <code>workspace-chat-sessions.ts</code> prefs module; App owns
+          session map; tab strip / history menu in dock; persist + quota.</li>
+        <li><strong>D — Branching:</strong> Fork / edit-resend / regenerate wired through App chat send;
+          optional <code>priorTurns</code> on chat/stream for coherence (bounded).</li>
+        <li><strong>E — Continuity + stop:</strong> AbortController wired client→fetch→tool loop;
+          Stop button; retry; follow-up chips + open-scene callback.</li>
+        <li><strong>Docs:</strong> PRODUCT/API note; plan record; WHERE-I-LEFT-OFF.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li>Vitest: markdown lite; session normalize/persist; working-group collapse helpers;
+          resolve follow-up chips; abort wiring unit where practical.</li>
+        <li>Focused UI/client typecheck; <code>pnpm verify</code>.</li>
+        <li>Manual: stream with tools → grouped Working; markdown reply; new tab / fork / regenerate;
+          Stop mid-stream; scene chip opens Draft.</li>
+        <li>No Playwright until founder verifies complete outcome.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p>Update <code>docs/PRODUCT.md</code> (Agent dock QOL). Light <code>docs/API.md</code> if
+        <code>priorTurns</code> added. No new ADR unless session persistence becomes server-canonical
+        (local-only → no ADR). Living design: Mockups 4.0 / harness plan — additive UI, not a living-design rewrite.</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li><strong>Accepted:</strong> Sessions are local noncanonical UI state; not offline manuscript.</li>
+        <li><strong>Accepted:</strong> Lite markdown (subset) over heavy HTML markdown deps for RN-web.</li>
+        <li><strong>Accepted:</strong> Fork/edit/regenerate may send bounded prior turns for coherence;
+          server context remains authoritative for project/selection.</li>
+        <li><strong>Risk:</strong> localStorage quota — cap messages per session and session count.</li>
+        <li><strong>Risk:</strong> Stop must abort provider work; wire signal through SSE + streamWithTools.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked> Plan accepted (A–E direction)</li>
+        <li><input type="checkbox" checked> A Readability (markdown + chrome + copy)</li>
+        <li><input type="checkbox" checked> B Grouped working</li>
+        <li><input type="checkbox"> C Sessions + tabs</li>
+        <li><input type="checkbox"> D Fork / edit / regenerate</li>
+        <li><input type="checkbox"> E Continuity chips + stop/retry</li>
+        <li><input type="checkbox"> Docs + verify + handoff</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
