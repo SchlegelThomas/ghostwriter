@@ -11,34 +11,40 @@
     <header>
       <p class="eyebrow">Session handoff</p>
       <h1>Where we left off</h1>
-      <p><strong>Last updated:</strong> 2026-08-01 · <strong>Current branch:</strong> <code>feat/writing-agent-harness</code></p>
+      <p><strong>Last updated:</strong> 2026-08-01 · <strong>Merged:</strong> <a href="https://github.com/SchlegelThomas/ghostwriter/pull/18">PR #18</a></p>
     </header>
 
     <section>
       <h2>Done recently</h2>
       <ul>
-        <li><a href="archive/2026-07-26-multi-provider-models/plan.html">Multi-provider models</a> merged in <a href="https://github.com/SchlegelThomas/ghostwriter/pull/16">PR #16</a>.</li>
-        <li><a href="active/2026-07-25-writing-agent-harness/plan.html">Writing-agent harness</a> + <a href="active/2026-08-01-agent-dock-qol/plan.html">Agent dock QOL</a> + <a href="active/2026-08-01-writing-agent-catalog/plan.html">Writing agent catalog</a> implemented on <code>feat/writing-agent-harness</code> (shipping).</li>
-        <li>Catalog: entity drafts (ADR 0014, migration <code>0021</code>), craft playbooks + writer steering (migration <code>0022</code>), Pacing Doctor <code>pacing-findings-v1</code>, Drafts card previews, Cast dossier editing, image model modal picker, active catalog-partner banner.</li>
+        <li><a href="https://github.com/SchlegelThomas/ghostwriter/pull/18">PR #18</a> merged: writing-agent harness + dock QOL + catalog / entity drafts / playbook steering.</li>
+        <li>Required CI <code>checks</code> green; <code>pnpm verify</code> 1036 passed before ship.</li>
+        <li>Lakebase PR <code>provision</code> and production backend deploy <strong>failed</strong> on
+          <code>must be owner of table agent_proposals</code> while applying migration <code>0021</code>
+          (same founder-ownership pattern as OPERATIONS).</li>
       </ul>
+    </section>
+
+    <section>
+      <h2>Blocked — production migrate (owner)</h2>
+      <p>Apply <code>0021</code>/<code>0022</code> to <code>production</code> as table owner, then re-run backend deploy:</p>
+      <pre>databricks auth login --profile ghostwriter-owner
+export DATABRICKS_PROFILE=ghostwriter-owner
+export LAKEBASE_PROJECT_ID=ghostwriter
+export LAKEBASE_USER=tas9117@gmail.com
+export LAKEBASE_ENDPOINT_ID=primary
+./scripts/lakebase.sh migrate production
+gh run rerun 30722035089 --failed</pre>
+      <p>Long-term: transfer application table ownership to the SP so CI/deploy ALTER no longer needs the owner profile.</p>
     </section>
 
     <section>
       <h2>Proposed next</h2>
       <ul>
-        <li>After PR merge: confirm production migrate/deploy for <code>0021</code>/<code>0022</code> (Drafts + Playbooks).</li>
-        <li>Founder browser verify full outcome; then post-gate Playwright if directed.</li>
-        <li>Archive harness / dock QOL / catalog plans once merge + verify are settled.</li>
+        <li>Unblock production migrate/deploy (above).</li>
+        <li>Founder browser verify catalog Drafts / Playbooks / Pacing / dock; archive harness + QOL + catalog plans.</li>
+        <li>Post-gate Playwright only after that verify.</li>
       </ul>
-    </section>
-
-    <section>
-      <h2>Incomplete</h2>
-      <ol>
-        <li>Founder browser walkthrough (post-gate Playwright when verified).</li>
-        <li>Optional: specialized apply beyond catalog-memo acknowledge (persist genre card, beat board types).</li>
-        <li>Optional owner-profile cleanup to drop legacy <code>provider_credentials</code> once confident.</li>
-      </ol>
     </section>
   </main>
 </body>
