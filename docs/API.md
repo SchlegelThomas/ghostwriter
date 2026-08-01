@@ -224,8 +224,11 @@ Scene Partner Capture chat (BYOK structured turn, propose-only until promote/var
 ## Workspace Agent chat
 
 - `POST /api/workspace/chat` accepts project/selection context, optional capability id, and Agent
-  dock prefs (`mode`: `chat` | `plan` | `agent`; model + effort). When `message` equals a read
-  capability id (e.g. `project.navigator.read`), the server invokes that tool deterministically.
+  dock prefs (`mode`: `chat` | `plan` | `agent`; model + effort). Optional `priorTurns` (max 6
+  `{ role: "user"|"assistant"; body }` pairs) may be included for regenerate/edit coherence; the
+  server treats them as non-authoritative recent conversation text alongside server-assembled
+  project/selection context. When `message` equals a read capability id (e.g.
+  `project.navigator.read`), the server invokes that tool deterministically.
   **Plan** mode instructs outline-friendly replies; the writer saves to Plans explicitly via
   `POST /api/projects/{projectId}/agent/plan-outlines` (not auto-persisted each turn). Otherwise,
   with a valid BYOK key and a tool-capable model (`supportsTools`), the route runs a
@@ -235,7 +238,8 @@ Scene Partner Capture chat (BYOK structured turn, propose-only until promote/var
   without tool support, or when tool-loop creation fails recoverably, fall back to
   `completeStructured` with server-assembled navigator context (no `toolTraces`). Without a key,
   the route returns a friendly unconfigured response (no silent failure wall). Chat never mutates
-  manuscript canon.
+  manuscript canon. Client abort of the stream request cancels in-flight provider work when the
+  SSE body is cancelled.
 
 - `POST /api/workspace/chat/stream` — same request body and auth as JSON chat; response is
   `text/event-stream` (SSE). The client uses `fetch` + `ReadableStream` (POST + cookies). Named

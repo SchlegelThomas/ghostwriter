@@ -65,6 +65,15 @@ export const workspaceChatRequestSchema = z.object({
     .refine(isAgentModelId, { message: "Unknown agent model." })
     .optional(),
   effort: z.enum(WORKSPACE_CHAT_EFFORTS).optional(),
+  priorTurns: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        body: z.string().trim().min(1).max(4_000)
+      })
+    )
+    .max(6)
+    .optional(),
   selection: z
     .object({
       kind: z.string().trim().min(1).max(64),
@@ -275,18 +284,30 @@ export function assembleWorkspaceChatContext(input: Readonly<{
   return lines.join("\n");
 }
 
+export type WorkspaceChatPriorTurn = Readonly<{
+  role: "user" | "assistant";
+  body: string;
+}>;
+
 function buildWorkspaceChatInputText(input: Readonly<{
   message: string;
   contextText: string;
+  priorTurns?: readonly WorkspaceChatPriorTurn[];
 }>): string {
-  return [
-    "Project context:",
-    input.contextText,
-    "",
-    "Writer message:",
-    input.message
-  ].join("\n");
+  const lines = ["Project context:", input.contextText, ""];
+  if (input.priorTurns !== undefined && input.priorTurns.length > 0) {
+    lines.push("Recent conversation (non-authoritative):");
+    for (const turn of input.priorTurns) {
+      const speaker = turn.role === "user" ? "Writer" : "Assistant";
+      lines.push(`${speaker}: ${turn.body}`);
+    }
+    lines.push("");
+  }
+  lines.push("Writer message:", input.message);
+  return lines.join("\n");
 }
+
+export { buildWorkspaceChatInputText };
 
 function providerUnavailableReply(code: string): Readonly<{
   reply: string;
@@ -565,7 +586,8 @@ export function registerWorkspaceChatRoutes(
       const limits = EFFORT_LIMITS[effort];
       const inputText = buildWorkspaceChatInputText({
         message: normalizedMessage,
-        contextText
+        contextText,
+        priorTurns: parsed.data.priorTurns
       });
 
       if (
@@ -691,7 +713,8 @@ export function registerWorkspaceChatRoutes(
     const model = parsed.data.model ?? CAPTURE_REFLECTION_DEFAULT_MODEL;
     const effort = parsed.data.effort ?? "standard";
 
-    return createWorkspaceChatSseResponse(async (controller) => {
+    return createWorkspaceChatSseResponse(async (controller, signal) => {
+      if (signal.aborted) return;
       writeSse(controller, "status", {
         phase: "starting",
         label: "Starting…"
@@ -861,7 +884,8 @@ export function registerWorkspaceChatRoutes(
         const limits = EFFORT_LIMITS[effort];
         const inputText = buildWorkspaceChatInputText({
           message: normalizedMessage,
-          contextText
+          contextText,
+          priorTurns: parsed.data.priorTurns
         });
 
         writeSse(controller, "status", {
@@ -883,6 +907,7 @@ export function registerWorkspaceChatRoutes(
             apiKey
           });
           if (toolLoopProvider !== undefined) {
+            if (signal.aborted) return;
             await toolLoopProvider.streamWithTools({
               workflow: "workspace-chat.turn",
               model,
@@ -899,7 +924,9 @@ export function registerWorkspaceChatRoutes(
               maxSteps: TOOL_LOOP_MAX_STEPS[effort],
               maxOutputTokens: limits.maxOutputTokens,
               maxDurationMs: limits.maxDurationMs,
+              signal,
               onEvent: (event) => {
+                if (signal.aborted) return;
                 switch (event.type) {
                   case "status":
                     writeSse(controller, "status", {
@@ -965,8 +992,11 @@ export function registerWorkspaceChatRoutes(
           },
           maxOutputTokens: limits.maxOutputTokens,
           maxDurationMs: limits.maxDurationMs,
-          validateOutput: isWorkspaceChatTurnV1
+          validateOutput: isWorkspaceChatTurnV1,
+          signal
         });
+
+        if (signal.aborted) return;
 
         if (!completion.ok) {
           const mapped = providerCompletionError(completion.diagnostic.code);
@@ -981,6 +1011,7 @@ export function registerWorkspaceChatRoutes(
           effort
         });
       } catch (error) {
+        if (signal.aborted) return;
         if (
           error instanceof ProviderCredentialNotFoundError ||
           error instanceof ProviderCallsDisabledError ||

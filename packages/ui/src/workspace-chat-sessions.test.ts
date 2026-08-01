@@ -5,9 +5,11 @@ import {
   WORKSPACE_CHAT_MESSAGES_MAX,
   WORKSPACE_CHAT_SESSIONS_MAX,
   appendWorkspaceChatMessage,
+  collectWorkspaceChatPriorTurns,
   createWorkspaceChatSession,
   deleteWorkspaceChatSession,
   emptyWorkspaceChatSessionsState,
+  forkWorkspaceChatSession,
   loadWorkspaceChatSessions,
   normalizeWorkspaceChatSessionsState,
   renameWorkspaceChatSession,
@@ -151,5 +153,47 @@ describe("workspace-chat-sessions", () => {
     expect(
       state.sessions.find((session) => session.id === secondId)?.title
     ).toBe("Scene beats");
+  });
+
+  it("forks a session through a chosen message and activates it", () => {
+    let state = emptyWorkspaceChatSessionsState();
+    state = renameWorkspaceChatSession(state, state.activeSessionId, "Parent");
+    state = appendWorkspaceChatMessage(
+      state,
+      state.activeSessionId,
+      userMessage("u1", "First")
+    );
+    state = appendWorkspaceChatMessage(
+      state,
+      state.activeSessionId,
+      assistantMessage("a1", "Reply")
+    );
+    const forked = forkWorkspaceChatSession(state, state.activeSessionId, "u1");
+    expect(forked).not.toBeNull();
+    const next = forked!;
+    expect(next.activeSessionId).not.toBe(state.activeSessionId);
+    const session = next.sessions.find(
+      (entry) => entry.id === next.activeSessionId
+    );
+    expect(session?.title).toBe("Fork · Parent");
+    expect(session?.messages.map((message) => message.id)).toEqual(["u1"]);
+  });
+
+  it("collects bounded prior turns for regenerate coherence", () => {
+    const messages = [
+      userMessage("u1", "One"),
+      assistantMessage("a1", "Alpha"),
+      userMessage("u2", "Two"),
+      assistantMessage("a2", "Beta")
+    ];
+    expect(collectWorkspaceChatPriorTurns(messages)).toEqual([
+      { role: "user", body: "One" },
+      { role: "assistant", body: "Alpha" },
+      { role: "user", body: "Two" },
+      { role: "assistant", body: "Beta" }
+    ]);
+    expect(
+      collectWorkspaceChatPriorTurns(messages, 2).map((turn) => turn.body)
+    ).toEqual(["Two", "Beta"]);
   });
 });

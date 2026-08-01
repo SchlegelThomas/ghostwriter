@@ -13,7 +13,7 @@ import {
   TEST_BACKEND_ORIGIN,
   testBackendClosers
 } from "./test-backend-app.js";
-import { assembleWorkspaceChatContext } from "./workspace-chat-routes.js";
+import { assembleWorkspaceChatContext, buildWorkspaceChatInputText } from "./workspace-chat-routes.js";
 
 const TEST_ORIGIN = TEST_BACKEND_ORIGIN;
 const OPENAI_KEY = "sk-valid-openai-key-1234567890";
@@ -92,6 +92,24 @@ describe("assembleWorkspaceChatContext", () => {
     expect(text).toContain(`scene="${scene.title}"`);
     expect(text).toContain(`chapter="${chapter.title}"`);
     expect(text).toContain(`book="${book.title}"`);
+  });
+});
+
+describe("buildWorkspaceChatInputText", () => {
+  it("includes bounded prior turns as non-authoritative context", () => {
+    const text = buildWorkspaceChatInputText({
+      message: "Try again with more detail",
+      contextText: "Project: Bellwether",
+      priorTurns: [
+        { role: "user", body: "Outline act one" },
+        { role: "assistant", body: "Here is a draft outline." }
+      ]
+    });
+    expect(text).toContain("Recent conversation (non-authoritative):");
+    expect(text).toContain("Writer: Outline act one");
+    expect(text).toContain("Assistant: Here is a draft outline.");
+    expect(text).toContain("Writer message:");
+    expect(text).toContain("Try again with more detail");
   });
 });
 

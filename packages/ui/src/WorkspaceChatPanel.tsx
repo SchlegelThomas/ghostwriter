@@ -30,6 +30,12 @@ import {
   type WorkspaceAvailableModel
 } from "./workspace-agent-prefs.js";
 import {
+  resolveAssistantFollowUpChips,
+  resolveSystemFollowUpChips,
+  type WorkspaceChatFollowUpChip
+} from "./workspace-chat-follow-ups.js";
+import type { WorkspaceChatPriorTurn } from "./workspace-chat-sessions.js";
+import {
   AGENT_TOOLKIT_ACTIONS,
   type AgentToolkitId
 } from "./workspace-agent-toolkit.js";
@@ -51,6 +57,7 @@ export type WorkspaceChatMessage = Readonly<{
   toolTraces?: readonly WorkspaceChatToolTrace[];
   streaming?: boolean;
   statusLabel?: string;
+  retryable?: boolean;
 }>;
 
 export type WorkspaceChatSendInput = Readonly<{
@@ -58,6 +65,10 @@ export type WorkspaceChatSendInput = Readonly<{
   mode: WorkspaceAgentMode;
   model: AgentModelId;
   effort: WorkspaceAgentEffort;
+  resendFromMessageId?: string;
+  existingUserMessageId?: string;
+  priorTurns?: readonly WorkspaceChatPriorTurn[];
+  baseMessages?: readonly WorkspaceChatMessage[];
 }>;
 
 export type WorkspaceChatSessionTab = Readonly<{
@@ -91,6 +102,13 @@ export type WorkspaceChatPanelProps = Readonly<{
   onNewChatSession?(): void;
   onRenameChatSession?(sessionId: string, title: string): void;
   onDeleteChatSession?(sessionId: string): void;
+  chatStreaming?: boolean;
+  onStop?(): void;
+  onForkMessage?(messageId: string): void;
+  onRegenerateMessage?(messageId: string): void;
+  onRetryFailedTurn?(): void;
+  onOpenScene?(): void;
+  canOpenScene?: boolean;
   /** Docked in the secondary shell — no outer border; close returns to Properties. */
   variant?: "floating" | "docked";
 }>;
@@ -122,12 +140,23 @@ export function WorkspaceChatPanel({
   onNewChatSession,
   onRenameChatSession,
   onDeleteChatSession,
+  chatStreaming = false,
+  onStop,
+  onForkMessage,
+  onRegenerateMessage,
+  onRetryFailedTurn,
+  onOpenScene,
+  canOpenScene = false,
   variant = "floating"
 }: WorkspaceChatPanelProps) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [editUserMessageId, setEditUserMessageId] = useState<string | null>(
+    null
+  );
   const [openPicker, setOpenPicker] = useState<PickerKind>(null);
   const [sessionMenuId, setSessionMenuId] = useState<string | null>(null);
+  const [turnMenuId, setTurnMenuId] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -139,25 +168,39 @@ export function WorkspaceChatPanel({
 
   async function send(): Promise<void> {
     const text = draft.trim();
-    if (text.length === 0 || sending || busy) return;
+    if (text.length === 0 || sending || busy || chatStreaming) return;
     setSending(true);
     setOpenPicker(null);
     try {
-      await onSend({ message: text, mode, model, effort });
+      await onSend({
+        message: text,
+        mode,
+        model,
+        effort,
+        ...(editUserMessageId === null
+          ? {}
+          : { resendFromMessageId: editUserMessageId })
+      });
       setDraft("");
+      setEditUserMessageId(null);
     } finally {
       setSending(false);
     }
   }
 
-  const composerDisabled = busy || sending;
+  const composerDisabled = busy || sending || chatStreaming;
   const canSend = !composerDisabled && draft.trim().length > 0;
-  const canSavePlanToPlans =
-    mode === "plan" &&
-    onSavePlanToPlans !== undefined &&
-    planOutlineText !== undefined &&
-    planOutlineText.trim().length > 0 &&
-    !composerDisabled;
+  const lastUserMessageId = findLastUserMessageId(messages);
+  const lastAssistantMessageId = findLastAssistantMessageId(messages);
+  const assistantFollowUpChips = resolveAssistantFollowUpChips({
+    mode,
+    planOutlineText,
+    canSavePlan:
+      onSavePlanToPlans !== undefined &&
+      planOutlineText !== undefined &&
+      planOutlineText.trim().length > 0,
+    canOpenScene: canOpenScene && onOpenScene !== undefined
+  });
   const modelPickerOptions = workspaceAgentModelPickerOptions(
     availableModels,
     mode
@@ -304,11 +347,28 @@ export function WorkspaceChatPanel({
       ) : null}
 
       {selectionSummary !== undefined && selectionSummary.trim().length > 0 ? (
-        <View style={styles.selectionChip}>
-          <Text numberOfLines={1} style={styles.selectionChipText}>
-            {selectionSummary}
-          </Text>
-        </View>
+        onOpenScene !== undefined && canOpenScene ? (
+          <Pressable
+            accessibilityLabel="Open selected scene"
+            accessibilityRole="button"
+            onPress={onOpenScene}
+            style={({ pressed }) => [
+              styles.selectionChip,
+              styles.selectionChipPressable,
+              pressed && styles.pressed
+            ]}
+          >
+            <Text numberOfLines={1} style={styles.selectionChipText}>
+              {selectionSummary}
+            </Text>
+          </Pressable>
+        ) : (
+          <View style={styles.selectionChip}>
+            <Text numberOfLines={1} style={styles.selectionChipText}>
+              {selectionSummary}
+            </Text>
+          </View>
+        )
       ) : null}
 
       <View style={styles.messageArea}>
@@ -358,8 +418,77 @@ export function WorkspaceChatPanel({
               ) : null}
             </View>
           ) : (
-            messages.map((message) => (
-              <ChatTurn key={message.id} message={message} />
+            messages.map((message, index) => (
+              <ChatTurn
+                assistantFollowUpChips={
+                  index === messages.length - 1 &&
+                  message.role === "assistant" &&
+                  message.streaming !== true
+                    ? assistantFollowUpChips
+                    : undefined
+                }
+                canEditResend={
+                  message.role === "user" && message.id === lastUserMessageId
+                }
+                canFork={onForkMessage !== undefined}
+                canRegenerate={
+                  message.role === "assistant" &&
+                  message.id === lastAssistantMessageId &&
+                  message.streaming !== true
+                }
+                key={message.id}
+                menuOpen={turnMenuId === message.id}
+                message={message}
+                onEditResend={
+                  message.role === "user" &&
+                  message.id === lastUserMessageId
+                    ? () => {
+                        setTurnMenuId(null);
+                        setEditUserMessageId(message.id);
+                        setDraft(message.body);
+                      }
+                    : undefined
+                }
+                onFollowUpChip={(chip) => {
+                  if (chip.id === "save-plan" && planOutlineText !== undefined) {
+                    onSavePlanToPlans?.(planOutlineText);
+                    return;
+                  }
+                  if (chip.id === "open-scene") {
+                    onOpenScene?.();
+                    return;
+                  }
+                  if (chip.id === "retry") {
+                    onRetryFailedTurn?.();
+                  }
+                }}
+                onFork={
+                  onForkMessage === undefined
+                    ? undefined
+                    : () => {
+                        setTurnMenuId(null);
+                        onForkMessage(message.id);
+                      }
+                }
+                onRegenerate={
+                  onRegenerateMessage === undefined
+                    ? undefined
+                    : () => {
+                        setTurnMenuId(null);
+                        onRegenerateMessage(message.id);
+                      }
+                }
+                onToggleMenu={() =>
+                  setTurnMenuId((current) =>
+                    current === message.id ? null : message.id
+                  )
+                }
+                systemFollowUpChips={
+                  message.role === "system"
+                    ? resolveSystemFollowUpChips(message.retryable === true)
+                    : undefined
+                }
+              />
             ))
           )}
         </ScrollView>
@@ -380,21 +509,6 @@ export function WorkspaceChatPanel({
               <Text style={styles.toolkitActionText}>{action.label}</Text>
             </Pressable>
           ))}
-        </View>
-      ) : null}
-
-      {canSavePlanToPlans ? (
-        <View style={styles.savePlanRow}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => onSavePlanToPlans?.(planOutlineText!)}
-            style={({ pressed }) => [
-              styles.savePlanButton,
-              pressed && styles.pressed
-            ]}
-          >
-            <Text style={styles.savePlanButtonText}>Save to Plans</Text>
-          </Pressable>
         </View>
       ) : null}
 
@@ -500,23 +614,54 @@ export function WorkspaceChatPanel({
               />
             </View>
             <Pressable
-              accessibilityLabel="Send"
+              accessibilityLabel={chatStreaming ? "Stop" : "Send"}
               accessibilityRole="button"
-              disabled={!canSend}
-              onPress={() => void send()}
+              disabled={chatStreaming ? onStop === undefined : !canSend}
+              onPress={() => {
+                if (chatStreaming) {
+                  onStop?.();
+                  return;
+                }
+                void send();
+              }}
               style={({ pressed }) => [
                 styles.sendButton,
+                chatStreaming && styles.stopButton,
                 pressed && styles.pressed,
-                !canSend && styles.disabled
+                (chatStreaming ? onStop === undefined : !canSend) && styles.disabled
               ]}
             >
-              <ArrowUp color="#ffffff" size={13} weight="thin" />
+              {chatStreaming ? (
+                <Text style={styles.stopButtonText}>■</Text>
+              ) : (
+                <ArrowUp color="#ffffff" size={13} weight="thin" />
+              )}
             </Pressable>
           </View>
         </View>
       </View>
     </View>
   );
+}
+
+function findLastUserMessageId(
+  messages: readonly WorkspaceChatMessage[]
+): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role === "user") return message.id;
+  }
+  return undefined;
+}
+
+function findLastAssistantMessageId(
+  messages: readonly WorkspaceChatMessage[]
+): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role === "assistant") return message.id;
+  }
+  return undefined;
 }
 
 function promptRenameSession(
@@ -541,10 +686,40 @@ function prefersReducedMotion(): boolean {
 const NO_TRACES: readonly WorkspaceChatToolTrace[] = Object.freeze([]);
 
 /** One turn of the conversation: the writer's words, or the agent's reply. */
-function ChatTurn({ message }: Readonly<{ message: WorkspaceChatMessage }>) {
+function ChatTurn({
+  assistantFollowUpChips,
+  canEditResend,
+  canFork,
+  canRegenerate,
+  menuOpen,
+  message,
+  onEditResend,
+  onFollowUpChip,
+  onFork,
+  onRegenerate,
+  onToggleMenu,
+  systemFollowUpChips
+}: Readonly<{
+  assistantFollowUpChips?: readonly WorkspaceChatFollowUpChip[];
+  canEditResend: boolean;
+  canFork: boolean;
+  canRegenerate: boolean;
+  menuOpen: boolean;
+  message: WorkspaceChatMessage;
+  onEditResend?(): void;
+  onFollowUpChip?(chip: WorkspaceChatFollowUpChip): void;
+  onFork?(): void;
+  onRegenerate?(): void;
+  onToggleMenu?(): void;
+  systemFollowUpChips?: readonly WorkspaceChatFollowUpChip[];
+}>) {
   const streaming = message.streaming === true;
   const traces = message.toolTraces ?? NO_TRACES;
   const hasBody = message.body.trim().length > 0;
+  const showTurnMenu =
+    canFork ||
+    (canEditResend && onEditResend !== undefined) ||
+    (canRegenerate && onRegenerate !== undefined);
 
   if (message.role === "user") {
     return (
@@ -552,15 +727,32 @@ function ChatTurn({ message }: Readonly<{ message: WorkspaceChatMessage }>) {
         <View style={styles.userSaid}>
           <AgentChatMarkdown text={message.body} tone="user" />
         </View>
-        <CopyMessageButton align="end" compact text={message.body} />
+        <View style={[styles.turnActions, styles.turnActionsEnd]}>
+          {showTurnMenu ? (
+            <TurnActionMenu
+              canEditResend={canEditResend}
+              canFork={canFork}
+              canRegenerate={false}
+              menuOpen={menuOpen}
+              onEditResend={onEditResend}
+              onFork={onFork}
+              onToggleMenu={onToggleMenu}
+            />
+          ) : null}
+          <CopyMessageButton align="end" compact text={message.body} />
+        </View>
       </View>
     );
   }
 
   if (message.role === "system") {
+    const chips = systemFollowUpChips ?? NO_CHIPS;
     return (
       <View style={styles.turnSystem}>
         <Text style={styles.systemNote}>{message.body}</Text>
+        {chips.length > 0 ? (
+          <FollowUpChips chips={chips} onPress={onFollowUpChip} />
+        ) : null}
       </View>
     );
   }
@@ -572,6 +764,7 @@ function ChatTurn({ message }: Readonly<{ message: WorkspaceChatMessage }>) {
       : { statusLabel: message.statusLabel }),
     traces: traces.map((trace) => ({ title: trace.title, ok: trace.ok }))
   });
+  const chips = assistantFollowUpChips ?? NO_CHIPS;
 
   return (
     <View style={styles.turnAssistant}>
@@ -586,7 +779,128 @@ function ChatTurn({ message }: Readonly<{ message: WorkspaceChatMessage }>) {
       ) : working.visible ? null : (
         <Text style={styles.emptyReply}>No reply came back.</Text>
       )}
-      {streaming ? null : <CopyMessageButton align="start" text={message.body} />}
+      {streaming ? null : (
+        <View style={styles.turnActions}>
+          {showTurnMenu ? (
+            <TurnActionMenu
+              canEditResend={false}
+              canFork={canFork}
+              canRegenerate={canRegenerate}
+              menuOpen={menuOpen}
+              onFork={onFork}
+              onRegenerate={onRegenerate}
+              onToggleMenu={onToggleMenu}
+            />
+          ) : null}
+          <CopyMessageButton align="start" text={message.body} />
+        </View>
+      )}
+      {!streaming && chips.length > 0 ? (
+        <FollowUpChips chips={chips} onPress={onFollowUpChip} />
+      ) : null}
+    </View>
+  );
+}
+
+const NO_CHIPS: readonly WorkspaceChatFollowUpChip[] = Object.freeze([]);
+
+function FollowUpChips({
+  chips,
+  onPress
+}: Readonly<{
+  chips: readonly WorkspaceChatFollowUpChip[];
+  onPress?(chip: WorkspaceChatFollowUpChip): void;
+}>) {
+  if (onPress === undefined) return null;
+  return (
+    <View style={styles.followUpRow}>
+      {chips.map((chip) => (
+        <Pressable
+          accessibilityRole="button"
+          key={chip.id}
+          onPress={() => onPress(chip)}
+          style={({ pressed }) => [
+            styles.followUpChip,
+            pressed && styles.pressed
+          ]}
+        >
+          <Text style={styles.followUpChipText}>{chip.label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+function TurnActionMenu({
+  canEditResend,
+  canFork,
+  canRegenerate,
+  menuOpen,
+  onEditResend,
+  onFork,
+  onRegenerate,
+  onToggleMenu
+}: Readonly<{
+  canEditResend: boolean;
+  canFork: boolean;
+  canRegenerate: boolean;
+  menuOpen: boolean;
+  onEditResend?(): void;
+  onFork?(): void;
+  onRegenerate?(): void;
+  onToggleMenu?(): void;
+}>) {
+  if (onToggleMenu === undefined) return null;
+  return (
+    <View style={styles.turnMenuWrap}>
+      <Pressable
+        accessibilityLabel="Message actions"
+        accessibilityRole="button"
+        onPress={onToggleMenu}
+        style={({ pressed }) => [styles.turnMenuButton, pressed && styles.pressed]}
+      >
+        <DotsThree color={colors.muted} size={12} weight="bold" />
+      </Pressable>
+      {menuOpen ? (
+        <View style={styles.turnMenu}>
+          {canFork && onFork !== undefined ? (
+            <Pressable
+              accessibilityRole="menuitem"
+              onPress={onFork}
+              style={({ pressed }) => [
+                styles.turnMenuItem,
+                pressed && styles.pressed
+              ]}
+            >
+              <Text style={styles.turnMenuItemText}>Fork</Text>
+            </Pressable>
+          ) : null}
+          {canRegenerate && onRegenerate !== undefined ? (
+            <Pressable
+              accessibilityRole="menuitem"
+              onPress={onRegenerate}
+              style={({ pressed }) => [
+                styles.turnMenuItem,
+                pressed && styles.pressed
+              ]}
+            >
+              <Text style={styles.turnMenuItemText}>Regenerate</Text>
+            </Pressable>
+          ) : null}
+          {canEditResend && onEditResend !== undefined ? (
+            <Pressable
+              accessibilityRole="menuitem"
+              onPress={onEditResend}
+              style={({ pressed }) => [
+                styles.turnMenuItem,
+                pressed && styles.pressed
+              ]}
+            >
+              <Text style={styles.turnMenuItemText}>Edit & resend</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -876,6 +1190,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 4
   },
+  selectionChipPressable: {
+    borderColor: colors.kicker
+  },
   selectionChipText: {
     color: colors.muted,
     fontFamily: fonts.uiMedium,
@@ -1123,6 +1440,55 @@ const styles = StyleSheet.create({
   turnActionsEnd: {
     justifyContent: "flex-end"
   },
+  turnMenuWrap: {
+    position: "relative"
+  },
+  turnMenuButton: {
+    alignItems: "center",
+    borderRadius: 5,
+    height: 18,
+    justifyContent: "center",
+    opacity: 0.78,
+    width: 18
+  },
+  turnMenu: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    left: 0,
+    minWidth: 108,
+    position: "absolute",
+    top: "100%",
+    zIndex: 20
+  },
+  turnMenuItem: {
+    paddingHorizontal: 10,
+    paddingVertical: 7
+  },
+  turnMenuItemText: {
+    color: colors.ink,
+    fontFamily: fonts.ui,
+    fontSize: 11
+  },
+  followUpRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6
+  },
+  followUpChip: {
+    backgroundColor: colors.wash,
+    borderColor: colors.line,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 9,
+    paddingVertical: 5
+  },
+  followUpChipText: {
+    color: colors.kicker,
+    fontFamily: fonts.uiMedium,
+    fontSize: 10
+  },
   copyButton: {
     alignItems: "center",
     borderRadius: 5,
@@ -1262,6 +1628,15 @@ const styles = StyleSheet.create({
     height: 24,
     justifyContent: "center",
     width: 24
+  },
+  stopButton: {
+    backgroundColor: colors.amber
+  },
+  stopButtonText: {
+    color: "#ffffff",
+    fontFamily: fonts.uiSemibold,
+    fontSize: 9,
+    lineHeight: 10
   },
   pressed: {
     opacity: 0.72

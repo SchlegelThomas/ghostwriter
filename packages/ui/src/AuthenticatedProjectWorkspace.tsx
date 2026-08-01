@@ -281,6 +281,13 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   onNewChatSession?(): void;
   onRenameChatSession?(sessionId: string, title: string): void;
   onDeleteChatSession?(sessionId: string): void;
+  chatStreaming?: boolean;
+  onChatStop?(): void;
+  onForkChatMessage?(messageId: string): void;
+  onRegenerateChatMessage?(messageId: string): void;
+  onRetryChatTurn?(): void;
+  onOpenChatScene?(): void;
+  canOpenChatScene?: boolean;
   inboxSelectedCaptureId?: string;
   onAgentToolkitAction?(
     id: AgentToolkitId,
@@ -489,6 +496,13 @@ export function AuthenticatedProjectWorkspace({
   onNewChatSession,
   onRenameChatSession,
   onDeleteChatSession,
+  chatStreaming = false,
+  onChatStop,
+  onForkChatMessage,
+  onRegenerateChatMessage,
+  onRetryChatTurn,
+  onOpenChatScene,
+  canOpenChatScene = false,
   inboxSelectedCaptureId,
   onAgentToolkitAction,
   onStartCoverOptionsJob,
@@ -2568,7 +2582,9 @@ export function AuthenticatedProjectWorkspace({
                   activeChatSessionId={activeChatSessionId}
                   availableModels={chatAvailableModels}
                   busy={busy}
+                  canOpenScene={canOpenChatScene}
                   chatSessions={chatSessions}
+                  chatStreaming={chatStreaming}
                   effort={chatEffort}
                   messages={chatMessages}
                   mode={chatMode}
@@ -2577,13 +2593,18 @@ export function AuthenticatedProjectWorkspace({
                   onClose={() => setSecondaryTab("properties")}
                   onDeleteChatSession={onDeleteChatSession}
                   onEffortChange={(next) => onChatEffortChange?.(next)}
+                  onForkMessage={onForkChatMessage}
                   onModeChange={(next) => onChatModeChange?.(next)}
                   onModelChange={(next) => onChatModelChange?.(next)}
                   onNewChatSession={onNewChatSession}
+                  onOpenScene={onOpenChatScene}
                   onOpenSettings={onOpenSettings}
+                  onRegenerateMessage={onRegenerateChatMessage}
                   onRenameChatSession={onRenameChatSession}
+                  onRetryFailedTurn={onRetryChatTurn}
                   onSend={(input) => onChatSend?.(input)}
                   onSavePlanToPlans={onSavePlanToPlans}
+                  onStop={onChatStop}
                   planOutlineText={planOutlineText}
                   onToolkitAction={
                     onAgentToolkitAction === undefined

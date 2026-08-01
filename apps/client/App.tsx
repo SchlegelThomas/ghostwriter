@@ -68,14 +68,19 @@ import {
   activeWorkspaceChatMessages,
   activeWorkspaceChatSession,
   appendWorkspaceChatMessage,
+  collectWorkspaceChatPriorTurns,
   createWorkspaceChatSession,
   deleteWorkspaceChatSession,
   emptyWorkspaceChatSessionsState,
+  findLastUserMessage,
+  forkWorkspaceChatSession,
   loadWorkspaceChatSessions,
+  removeLastAssistantTurn,
   renameWorkspaceChatSession,
   replaceWorkspaceChatMessages,
   saveWorkspaceChatSessions,
   setActiveWorkspaceChatSession,
+  truncateMessagesBeforeUserMessage,
   updateActiveWorkspaceChatSessionPrefs,
   sceneSelection,
   workspaceModeForComposition,
@@ -354,6 +359,8 @@ export default function App() {
     useState<ReaderVoicePack>("default");
   const [readerSpeaking, setReaderSpeaking] = useState(false);
   const readerAudioRef = useRef<{ pause(): void } | null>(null);
+  const chatAbortRef = useRef<AbortController | undefined>(undefined);
+  const [chatStreaming, setChatStreaming] = useState(false);
   const [chatSessionsState, setChatSessionsState] =
     useState<WorkspaceChatSessionsState>(() => emptyWorkspaceChatSessionsState());
   const [chatMode, setChatMode] = useState<WorkspaceAgentMode>(
@@ -2230,12 +2237,45 @@ export default function App() {
   }
 
   async function handleChatSend(input: WorkspaceChatSendInput): Promise<void> {
-    const userMessage: WorkspaceChatMessage = {
-      id: `chat-user-${Date.now()}`,
-      role: "user",
-      body: input.message
-    };
-    appendActiveChatMessage(userMessage);
+    chatAbortRef.current?.abort();
+    const abortController = new AbortController();
+    chatAbortRef.current = abortController;
+    setChatStreaming(true);
+
+    let messagesForTurn = [...(input.baseMessages ?? chatMessages)];
+    if (input.resendFromMessageId !== undefined) {
+      messagesForTurn = [
+        ...truncateMessagesBeforeUserMessage(
+          messagesForTurn,
+          input.resendFromMessageId
+        )
+      ];
+      replaceActiveChatMessages(() => messagesForTurn);
+    }
+
+    const priorTurns =
+      input.priorTurns ??
+      collectWorkspaceChatPriorTurns(
+        input.existingUserMessageId === undefined
+          ? messagesForTurn
+          : truncateMessagesBeforeUserMessage(
+              messagesForTurn,
+              input.existingUserMessageId
+            )
+      );
+
+    const userMessageId =
+      input.existingUserMessageId ?? `chat-user-${Date.now()}`;
+    if (input.existingUserMessageId === undefined) {
+      const userMessage: WorkspaceChatMessage = {
+        id: userMessageId,
+        role: "user",
+        body: input.message
+      };
+      appendActiveChatMessage(userMessage);
+      messagesForTurn = [...messagesForTurn, userMessage];
+    }
+
     const selection =
       selectedProject === undefined || selectedSceneId === undefined
         ? undefined
@@ -2246,6 +2286,7 @@ export default function App() {
       mode: input.mode,
       model: input.model,
       effort: input.effort,
+      ...(priorTurns.length === 0 ? {} : { priorTurns }),
       ...(selection === undefined
         ? {}
         : {
@@ -2285,39 +2326,50 @@ export default function App() {
       );
     };
 
+    let partialBody = "";
+
     try {
-      const result = await sendWorkspaceChatStream(chatRequest, {
-        onStatus: (_phase, label) => {
-          replaceActiveChatMessages((current) =>
-            current.map((message) =>
-              message.id === assistantId
-                ? { ...message, statusLabel: label }
-                : message
-            )
-          );
+      const result = await sendWorkspaceChatStream(
+        chatRequest,
+        {
+          onStatus: (_phase, label) => {
+            replaceActiveChatMessages((current) =>
+              current.map((message) =>
+                message.id === assistantId
+                  ? { ...message, statusLabel: label }
+                  : message
+              )
+            );
+          },
+          onToolTrace: (trace) => {
+            replaceActiveChatMessages((current) =>
+              current.map((message) =>
+                message.id === assistantId
+                  ? {
+                      ...message,
+                      toolTraces: [...(message.toolTraces ?? []), trace]
+                    }
+                  : message
+              )
+            );
+          },
+          onTextDelta: (delta) => {
+            partialBody += delta;
+            replaceActiveChatMessages((current) =>
+              current.map((message) =>
+                message.id === assistantId
+                  ? {
+                      ...message,
+                      body: `${message.body}${delta}`,
+                      statusLabel: "Writing…"
+                    }
+                  : message
+              )
+            );
+          }
         },
-        onToolTrace: (trace) => {
-          replaceActiveChatMessages((current) =>
-            current.map((message) =>
-              message.id === assistantId
-                ? {
-                    ...message,
-                    toolTraces: [...(message.toolTraces ?? []), trace]
-                  }
-                : message
-            )
-          );
-        },
-        onTextDelta: (delta) => {
-          replaceActiveChatMessages((current) =>
-            current.map((message) =>
-              message.id === assistantId
-                ? { ...message, body: `${message.body}${delta}`, statusLabel: "Writing…" }
-                : message
-            )
-          );
-        }
-      });
+        abortController.signal
+      );
       finalizeAssistant({
         body: result.reply,
         ...(result.toolTraces === undefined || result.toolTraces.length === 0
@@ -2326,6 +2378,17 @@ export default function App() {
         statusLabel: undefined
       });
     } catch (cause) {
+      if (
+        abortController.signal.aborted ||
+        (cause instanceof DOMException && cause.name === "AbortError")
+      ) {
+        finalizeAssistant({
+          body:
+            partialBody.trim().length > 0 ? partialBody.trim() : "Stopped.",
+          statusLabel: undefined
+        });
+        return;
+      }
       const canFallbackToJson =
         cause instanceof GhostwriterApiError &&
         (cause.status === 404 ||
@@ -2347,16 +2410,97 @@ export default function App() {
         }
       }
       replaceActiveChatMessages((current) =>
-        current.filter((message) => message.id !== assistantId).concat({
-          id: `chat-system-${Date.now()}`,
-          role: "system",
-          body:
-            cause instanceof GhostwriterApiError
-              ? cause.message
-              : "Chat could not complete that turn."
-        })
+        current
+          .filter((message) => message.id !== assistantId)
+          .concat({
+            id: `chat-system-${Date.now()}`,
+            role: "system",
+            body:
+              cause instanceof GhostwriterApiError
+                ? cause.message
+                : "Chat could not complete that turn.",
+            retryable: true
+          })
       );
+    } finally {
+      setChatStreaming(false);
+      if (chatAbortRef.current === abortController) {
+        chatAbortRef.current = undefined;
+      }
     }
+  }
+
+  function handleChatStop(): void {
+    chatAbortRef.current?.abort();
+  }
+
+  function handleForkChatMessage(messageId: string): void {
+    setChatSessionsState((current) => {
+      const next = forkWorkspaceChatSession(
+        current,
+        current.activeSessionId,
+        messageId,
+        { mode: chatMode, model: chatModel, effort: chatEffort }
+      );
+      if (next === null) return current;
+      persistChatSessions(next);
+      const session = next.sessions.find(
+        (entry) => entry.id === next.activeSessionId
+      );
+      if (session !== undefined) {
+        setChatMode(session.mode ?? chatMode);
+        setChatModel(session.model ?? chatModel);
+        setChatEffort(session.effort ?? chatEffort);
+      }
+      return next;
+    });
+  }
+
+  function handleRegenerateChatMessage(messageId: string): void {
+    const active = activeWorkspaceChatSession(chatSessionsState);
+    if (active === undefined) return;
+    const message = active.messages.find((entry) => entry.id === messageId);
+    if (message?.role !== "assistant") return;
+    const truncated = removeLastAssistantTurn(active.messages);
+    const lastUser = findLastUserMessage(truncated);
+    if (lastUser === undefined) return;
+    replaceActiveChatMessages(() => [...truncated]);
+    void handleChatSend({
+      message: lastUser.body,
+      mode: chatMode,
+      model: chatModel,
+      effort: chatEffort,
+      existingUserMessageId: lastUser.id,
+      baseMessages: truncated,
+      priorTurns: collectWorkspaceChatPriorTurns(
+        truncateMessagesBeforeUserMessage(truncated, lastUser.id)
+      )
+    });
+  }
+
+  function handleRetryChatTurn(): void {
+    const lastUser = findLastUserMessage(chatMessages);
+    if (lastUser === undefined) return;
+    const withoutSystem = chatMessages.filter(
+      (message) => message.role !== "system"
+    );
+    replaceActiveChatMessages(() => withoutSystem);
+    void handleChatSend({
+      message: lastUser.body,
+      mode: chatMode,
+      model: chatModel,
+      effort: chatEffort,
+      existingUserMessageId: lastUser.id,
+      baseMessages: withoutSystem,
+      priorTurns: collectWorkspaceChatPriorTurns(
+        truncateMessagesBeforeUserMessage(withoutSystem, lastUser.id)
+      )
+    });
+  }
+
+  function handleOpenChatScene(): void {
+    if (selectedSceneId === undefined) return;
+    void selectWorkspaceScene(selectedSceneId);
   }
 
   function appendChatStatusMessage(body: string): void {
@@ -2967,6 +3111,13 @@ export default function App() {
         onNewChatSession={handleNewChatSession}
         onRenameChatSession={handleRenameChatSession}
         onDeleteChatSession={handleDeleteChatSession}
+        chatStreaming={chatStreaming}
+        onChatStop={handleChatStop}
+        onForkChatMessage={handleForkChatMessage}
+        onRegenerateChatMessage={handleRegenerateChatMessage}
+        onRetryChatTurn={handleRetryChatTurn}
+        onOpenChatScene={handleOpenChatScene}
+        canOpenChatScene={selectedSceneId !== undefined}
         chatProviderConfigured={chatProviderConfigured}
         chatAvailableModels={chatAvailableModels}
         imageAvailableModels={imageAvailableModels}

@@ -34,6 +34,7 @@ export * from "./ImageModelPicker.js";
 export * from "./AgentModelPickerMenu.js";
 export * from "./workspace-agent-prefs.js";
 export * from "./workspace-chat-sessions.js";
+export * from "./workspace-chat-follow-ups.js";
 export * from "./workspace-agent-toolkit.js";
 export * from "./model-preferences.js";
 export * from "./settings-focus.js";

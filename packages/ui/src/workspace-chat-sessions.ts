@@ -11,8 +11,14 @@ import {
 
 export const WORKSPACE_CHAT_SESSIONS_MAX = 12;
 export const WORKSPACE_CHAT_MESSAGES_MAX = 80;
+export const WORKSPACE_CHAT_PRIOR_TURNS_MAX = 6;
 export const DEFAULT_CHAT_SESSION_TITLE = "New chat";
 export const AUTO_TITLE_MAX_LENGTH = 40;
+
+export type WorkspaceChatPriorTurn = Readonly<{
+  role: "user" | "assistant";
+  body: string;
+}>;
 
 export type WorkspaceChatSession = Readonly<{
   id: string;
@@ -115,7 +121,8 @@ export function normalizeWorkspaceChatMessage(
     ...(typeof record.statusLabel === "string"
       ? { statusLabel: record.statusLabel }
       : {}),
-    ...(toolTraces === undefined ? {} : { toolTraces })
+    ...(toolTraces === undefined ? {} : { toolTraces }),
+    ...(record.retryable === true ? { retryable: true } : {})
   });
 }
 
@@ -354,7 +361,7 @@ export function createWorkspaceChatSession(
     ...(prefs.model === undefined ? {} : { model: prefs.model }),
     ...(prefs.effort === undefined ? {} : { effort: prefs.effort })
   });
-  let sessions = Object.freeze([session, ...state.sessions]);
+  const sessions = Object.freeze([session, ...state.sessions]);
   let next = Object.freeze({
     activeSessionId: session.id,
     sessions
@@ -502,4 +509,103 @@ export function sessionAgentPrefsFromState(
     model: session?.model ?? DEFAULT_WORKSPACE_AGENT_PREFS.model,
     effort: session?.effort ?? DEFAULT_WORKSPACE_AGENT_PREFS.effort
   });
+}
+
+export function truncateMessagesBeforeUserMessage(
+  messages: readonly WorkspaceChatMessage[],
+  userMessageId: string
+): readonly WorkspaceChatMessage[] {
+  const index = messages.findIndex((message) => message.id === userMessageId);
+  if (index === -1) return messages;
+  return Object.freeze(messages.slice(0, index));
+}
+
+export function removeLastAssistantTurn(
+  messages: readonly WorkspaceChatMessage[]
+): readonly WorkspaceChatMessage[] {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === "assistant") {
+      return Object.freeze(messages.slice(0, index));
+    }
+  }
+  return messages;
+}
+
+export function findLastUserMessage(
+  messages: readonly WorkspaceChatMessage[]
+): WorkspaceChatMessage | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role === "user") return message;
+  }
+  return undefined;
+}
+
+export function collectWorkspaceChatPriorTurns(
+  messages: readonly WorkspaceChatMessage[],
+  maxTurns: number = WORKSPACE_CHAT_PRIOR_TURNS_MAX
+): readonly WorkspaceChatPriorTurn[] {
+  const turns: WorkspaceChatPriorTurn[] = [];
+  for (
+    let index = messages.length - 1;
+    index >= 0 && turns.length < maxTurns;
+    index -= 1
+  ) {
+    const message = messages[index];
+    if (message === undefined) continue;
+    if (message.role !== "user" && message.role !== "assistant") continue;
+    const body = message.body.trim();
+    if (body.length === 0) continue;
+    turns.unshift(Object.freeze({ role: message.role, body }));
+  }
+  return Object.freeze(turns);
+}
+
+export function forkWorkspaceChatSession(
+  state: WorkspaceChatSessionsState,
+  sourceSessionId: string,
+  messageId: string,
+  prefs: Readonly<{
+    mode?: WorkspaceAgentMode;
+    model?: AgentModelId;
+    effort?: WorkspaceAgentEffort;
+  }> = {}
+): WorkspaceChatSessionsState | null {
+  const source = state.sessions.find((session) => session.id === sourceSessionId);
+  if (source === undefined) return null;
+  const messageIndex = source.messages.findIndex(
+    (message) => message.id === messageId
+  );
+  if (messageIndex === -1) return null;
+  const now = new Date().toISOString();
+  const forkedMessages = trimSessionMessages(
+    source.messages.slice(0, messageIndex + 1)
+  );
+  const session = Object.freeze({
+    ...createEmptyChatSession(now),
+    title: `Fork · ${source.title}`,
+    updatedAt: now,
+    messages: forkedMessages,
+    ...(prefs.mode !== undefined
+      ? { mode: prefs.mode }
+      : source.mode === undefined
+        ? {}
+        : { mode: source.mode }),
+    ...(prefs.model !== undefined
+      ? { model: prefs.model }
+      : source.model === undefined
+        ? {}
+        : { model: source.model }),
+    ...(prefs.effort !== undefined
+      ? { effort: prefs.effort }
+      : source.effort === undefined
+        ? {}
+        : { effort: source.effort })
+  });
+  let next = Object.freeze({
+    activeSessionId: session.id,
+    sessions: Object.freeze([session, ...state.sessions])
+  });
+  next = enforceSessionCountCap(next);
+  return next;
 }

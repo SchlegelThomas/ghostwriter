@@ -847,6 +847,11 @@ export type WorkspaceChatSelection = Readonly<{
   storyKnowledgeId?: string;
 }>;
 
+export type WorkspaceChatPriorTurn = Readonly<{
+  role: "user" | "assistant";
+  body: string;
+}>;
+
 export type WorkspaceChatToolTrace = Readonly<{
   toolName: string;
   title: string;
@@ -871,6 +876,7 @@ export function sendWorkspaceChat(input: Readonly<{
   model?: AgentModelId;
   effort?: WorkspaceChatEffort;
   selection?: WorkspaceChatSelection;
+  priorTurns?: readonly WorkspaceChatPriorTurn[];
 }>): Promise<WorkspaceChatResponse> {
   return requestJson(
     "/api/workspace/chat",
@@ -880,7 +886,10 @@ export function sendWorkspaceChat(input: Readonly<{
       ...(input.mode === undefined ? {} : { mode: input.mode }),
       ...(input.model === undefined ? {} : { model: input.model }),
       ...(input.effort === undefined ? {} : { effort: input.effort }),
-      ...(input.selection === undefined ? {} : { selection: input.selection })
+      ...(input.selection === undefined ? {} : { selection: input.selection }),
+      ...(input.priorTurns === undefined || input.priorTurns.length === 0
+        ? {}
+        : { priorTurns: input.priorTurns })
     })
   );
 }
@@ -964,6 +973,7 @@ export async function sendWorkspaceChatStream(
     model?: AgentModelId;
     effort?: WorkspaceChatEffort;
     selection?: WorkspaceChatSelection;
+    priorTurns?: readonly WorkspaceChatPriorTurn[];
   }>,
   handlers: WorkspaceChatStreamHandlers,
   signal?: AbortSignal
@@ -981,7 +991,10 @@ export async function sendWorkspaceChatStream(
       ...(input.mode === undefined ? {} : { mode: input.mode }),
       ...(input.model === undefined ? {} : { model: input.model }),
       ...(input.effort === undefined ? {} : { effort: input.effort }),
-      ...(input.selection === undefined ? {} : { selection: input.selection })
+      ...(input.selection === undefined ? {} : { selection: input.selection }),
+      ...(input.priorTurns === undefined || input.priorTurns.length === 0
+        ? {}
+        : { priorTurns: input.priorTurns })
     }),
     signal
   });

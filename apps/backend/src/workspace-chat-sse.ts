@@ -36,21 +36,25 @@ export function createWorkspaceChatSseResponse(
   ) => Promise<void>
 ): Response {
   let pingTimer: ReturnType<typeof setInterval> | undefined;
+  let abortController: AbortController | undefined;
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const abortController = new AbortController();
+      abortController = new AbortController();
       pingTimer = setInterval(() => {
         try {
           writeSseComment(controller, "ping");
         } catch {
-          clearInterval(pingTimer);
+          if (pingTimer !== undefined) clearInterval(pingTimer);
         }
       }, 15_000);
 
       try {
         await run(controller, abortController.signal);
       } catch {
+        if (abortController.signal.aborted) {
+          return;
+        }
         writeSse(controller, "error", {
           error: "The writing agent could not complete this turn.",
           code: "WORKSPACE_CHAT_STREAM_FAILED"
@@ -63,6 +67,7 @@ export function createWorkspaceChatSseResponse(
       }
     },
     cancel() {
+      abortController?.abort();
       if (pingTimer !== undefined) {
         clearInterval(pingTimer);
       }

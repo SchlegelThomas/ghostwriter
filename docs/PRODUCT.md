@@ -141,14 +141,17 @@ On the same branch, the workspace shell and Agent dock advanced:
   **chat** completes with BYOK via the selected provider and server-assembled project context;
   the dock streams working state during turns (status labels, tool traces as they finish, typing
   caret while reply text arrives) via `POST /api/workspace/chat/stream`, with JSON chat as fallback;
+  replies render lite markdown; working steps collapse into a “Worked · N steps” group; writers can
+  copy turns, keep multiple local chat sessions (tabs), fork / edit-resend / regenerate, stop
+  mid-stream, and use follow-up chips (Save to Plans / Open scene);
   **Plan** replies can be explicitly **Saved to Plans** as a typed `plan-outline-v1` proposal bound
   to a new Capture (acknowledge/reject only — no manuscript apply); Settings owns multi-provider keys;
   capability ids still invoke read tools;
 - Manuscript Explorer: header icons + right-click context menu; Canvas owns full center with a
   compact chapter chip strip (no canvas Quick Build).
 
-**Proposed next:** Founder browser verification of writing-agent harness CP3–CP5 (including Plan→Plans
-save) and post-gate Playwright; confirm production deploy/migrate for provider credentials when ready.
+**Proposed next:** Founder browser verification of writing-agent harness + Agent dock QOL (A–E) and
+post-gate Playwright; confirm production deploy/migrate for provider credentials when ready.
 
 ## Prior writing milestone — implemented locally 2026-07-12
 
