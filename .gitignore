@@ -8,6 +8,7 @@ blob-report/
 .env
 .env.*
 !.env.example
+!fly.env.example
 .wrangler/
 /ghostwriter_client.json
 /client_secret_*.json

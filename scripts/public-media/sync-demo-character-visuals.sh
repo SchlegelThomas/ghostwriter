@@ -23,7 +23,9 @@ while IFS=$'\t' read -r objectKey filename; do
     exit 1
   fi
   echo "Uploading $objectKey"
+  # Wrangler 4 defaults object puts to local persistence; production needs --remote.
   wrangler r2 object put "$BUCKET/$objectKey" \
+    --remote \
     --file "$filePath" \
     --content-type "image/png"
 done < <(node "$LIST_SCRIPT")
