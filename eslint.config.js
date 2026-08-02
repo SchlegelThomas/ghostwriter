@@ -7,7 +7,8 @@ export default [
       "node_modules/",
       "**/dist/**",
       "**/.expo/**",
-      "**/functions/env.d.ts"
+      "**/functions/env.d.ts",
+      "scripts/**/*.mjs"
     ]
   },
   js.configs.recommended,
