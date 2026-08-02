@@ -1,59 +1,59 @@
 # Public character media (Cloudflare R2)
 
-Character portrait PNGs for the Harry Potter demo and applied Cast visuals can be served from a **public** R2 bucket with a custom domain. Capture attachments remain on the private bucket.
+Character portrait PNGs for the Harry Potter demo and applied Cast visuals are served from a
+**public** R2 bucket with custom domain `https://media.ghost-writer.studio`. Capture attachments
+remain on the private bucket `ghostwriter-capture`. See ADR 0017 and `docs/OPERATIONS.md`.
 
 ## Prerequisites
 
-- [Wrangler](https://developers.cloudflare.com/workers/wrangler/) via **browser OAuth** (`wrangler login`) — no Cloudflare API token
-- R2 enabled on the Ghostwriter Cloudflare account (one dashboard toggle if not already)
+- [Wrangler](https://developers.cloudflare.com/workers/wrangler/) via **browser OAuth** (`wrangler login`)
+- R2 enabled on the Ghostwriter Cloudflare account
 - DNS zone `ghost-writer.studio` on that account
-- For Fly: one-time R2 **S3** access keys (dashboard → R2 → API Tokens). Wrangler OAuth
-  can create buckets/domains/sync objects; the Fly Node backend still needs S3 keys.
+- For Fly: R2 **S3** Access Key ID + Secret (R2 → API Tokens). Store as GitHub secrets
+  `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` — not the Pages `CLOUDFLARE_API_TOKEN`.
+
+## Production status (2026-08-02)
+
+- Buckets: `ghostwriter-capture`, `ghostwriter-public-media`
+- Domain: `media.ghost-writer.studio` (SSL active)
+- Demo fixtures synced remote; sample portrait returns HTTP 200
+- Fly secrets set via `ops-fly-r2-secrets.yml` (R2 + public media + KEK)
 
 ## 1–2. Create buckets + attach custom domain
 
-Uses Wrangler OAuth to resolve the real zone id for `ghost-writer.studio` and creates
-both the private Capture bucket and the public media bucket:
+Idempotent (Wrangler OAuth resolves zone id):
 
 ```bash
 wrangler login   # once
 ./scripts/public-media/provision-public-bucket.sh
-# or end-to-end:
-./scripts/setup-production-media.sh
 ```
 
-Real defaults: `ghostwriter-capture`, `ghostwriter-public-media`,
-`media.ghost-writer.studio`. Flags: `--dry-run`, `--private-only`, `--public-only`.
-
-Public objects are then available at `https://media.ghost-writer.studio/<object-key>`.
+Flags: `--dry-run`, `--private-only`, `--public-only`.
 
 ## 3. Sync demo portrait fixtures
-
-From the repo root (requires Wrangler + network):
 
 ```bash
 ./scripts/public-media/sync-demo-character-visuals.sh
 ```
 
-Override the bucket name with `PUBLIC_R2_BUCKET_NAME` if needed.
+Uses `wrangler r2 object put --remote` (Wrangler 4 defaults to local without `--remote`).
 
 ## 4. Fly secrets (backend)
 
-Prefer the full setup script (R2 private + public media + KEK + demo seeds together):
+Preferred (GitHub Actions; values never printed in logs as plaintext beyond Fly’s secret store):
 
 ```bash
-cp apps/backend/fly.env.example apps/backend/.env.fly.local   # fill R2_* and public media
+gh secret set R2_ACCESS_KEY_ID
+gh secret set R2_SECRET_ACCESS_KEY
+gh workflow run ops-fly-r2-secrets.yml -f generate_kek=true
+```
+
+Local alternative:
+
+```bash
+cp apps/backend/fly.env.example apps/backend/.env.fly.local   # fill R2 S3 keys
 ./scripts/setup-fly-backend-secrets.sh --generate-kek --sync-public-media
 ```
 
-Or set only public media (reuse the same R2 account keys as the private bucket — **all**
-`R2_*` must already be on Fly, or the backend disables public media at boot):
-
-```bash
-fly secrets set \
-  GHOSTWRITER_PUBLIC_MEDIA_ORIGIN=https://media.ghost-writer.studio \
-  GHOSTWRITER_PUBLIC_R2_BUCKET_NAME=ghostwriter-public-media
-```
-
-Demo seed re-puts portrait objects to the public bucket and rewrites existing locator URLs to
-public HTTPS URLs on boot. See `docs/OPERATIONS.md`.
+Demo seed re-puts portrait objects and rewrites locator URLs to public HTTPS on boot when
+public media is configured.

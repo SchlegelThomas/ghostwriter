@@ -191,9 +191,11 @@ BYOK agents on `feat/capture-to-story-agents`:
   center workspace) is a projection over captures, runs, and proposals—not another prose owner.
 - Deterministic promotion creates or places one canonical scene and optional Canvas card under
   exact Capture/project/Canvas preconditions. Canvas still never owns manuscript order.
-- Private Capture attachments and applied book-cover PNGs use Cloudflare R2 through an
-  object-storage port and Fly-authorized short-lived object URLs. Binary bytes never enter Postgres
-  project JSON or editor documents. Hermetic E2E uses a memory fake.
+- Private Capture attachments and applied book-cover PNGs use Cloudflare R2
+  (`ghostwriter-capture`) through an object-storage port and Fly-authorized short-lived object
+  URLs. Applied Cast character portraits may use a separate **public** R2 bucket / CDN origin
+  (`media.ghost-writer.studio`) — see ADR 0017. Binary bytes never enter Postgres project JSON or
+  editor documents. Hermetic E2E uses a memory fake.
 - `packages/ai` provides a provider-neutral boundary with multi-provider BYOK adapters (OpenAI
   Responses kept; Anthropic/Google/Groq/xAI/Mistral/DeepSeek/OpenRouter via Vercel AI SDK packages
   in-process — not Vercel AI Gateway). A curated model catalog and
@@ -221,8 +223,9 @@ BYOK agents on `feat/capture-to-story-agents`:
   (see ADR 0011).
 
 Product and operational docs must preserve shipped-vs-local distinctions until each checkpoint is
-founder-accepted in a real browser. R2/KEK secrets are not assumed provisioned on production Fly
-until operations confirms them.
+founder-accepted in a real browser. Production Fly (2026-08-02) holds private+public R2 secrets,
+provider KEK, and demo BYOK seeds; confirm with `docs/OPERATIONS.md` before assuming a new
+environment is provisioned.
 
 The active branch implements Capture prose/Inbox/promotion plus the mixed-media boundary:
 `capture_attachments` metadata, transactional quotas, provider-neutral object storage, a private R2

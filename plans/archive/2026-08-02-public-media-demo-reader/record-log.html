@@ -14,6 +14,22 @@
     </header>
 
     <section>
+      <h2>2026-08-02 — Production ops complete; plan archived</h2>
+      <ul>
+        <li>Provisioned <code>ghostwriter-capture</code> + <code>ghostwriter-public-media</code>;
+          attached <code>media.ghost-writer.studio</code> (SSL active).</li>
+        <li>Synced demo portraits with Wrangler <code>--remote</code>; sample URL HTTP 200.</li>
+        <li>Fly secrets via GH Actions <code>ops-fly-r2-secrets.yml</code> using
+          <code>R2_ACCESS_KEY_ID</code> / <code>R2_SECRET_ACCESS_KEY</code> (Pages
+          <code>CLOUDFLARE_API_TOKEN</code> is not S3). KEK generated; demo BYOK seeded on boot.</li>
+        <li>Soft-fail incomplete public media config (#22). ADR 0017 recorded. Docs/OPERATIONS +
+          handoff updated.</li>
+        <li><strong>Optional follow-up:</strong> set <code>ELEVENLABS_API_KEY</code> for Reader Play;
+          founder browser verify Cast portraits on <code>ghost-writer.studio</code>.</li>
+      </ul>
+    </section>
+
+    <section>
       <h2>2026-08-02 — CP3 public character media</h2>
       <ul>
         <li>Core: <code>buildCharacterVisualPublicUrl</code>, locator display helpers, unit tests.</li>

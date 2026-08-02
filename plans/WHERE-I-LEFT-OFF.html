@@ -12,21 +12,36 @@
       <p class="eyebrow">Session handoff</p>
       <h1>Where we left off</h1>
       <p><strong>Last updated:</strong> 2026-08-02 · <strong>Active branch:</strong>
-        <code>main</code> (PR
-        <a href="https://github.com/SchlegelThomas/ghostwriter/pull/20">#20</a> merged)</p>
+        <code>main</code> (media ops PRs
+        <a href="https://github.com/SchlegelThomas/ghostwriter/pull/23">#23</a>–
+        <a href="https://github.com/SchlegelThomas/ghostwriter/pull/24">#24</a> merged;
+        docs wrap follows)</p>
     </header>
 
     <section>
-      <h2>Just shipped — PR #20</h2>
+      <h2>Done this session — production media + demo keys</h2>
       <ul>
-        <li>Next-actions coach, chat work plans + job strip, chat tabs/history, Cast open-draft,
-          header search layout, public character media, demo BYOK seed, Reader voice configure.</li>
-        <li><strong>Founder:</strong> review production (Cast portraits, demo keys, Reader Play);
-          archive active plans when accepted.</li>
+        <li>R2 private + public buckets, <code>media.ghost-writer.studio</code>, remote portrait sync.</li>
+        <li>Fly: <code>R2_*</code>, public media, provider KEK, demo BYOK seeds; boot seeds openai/anthropic/google.</li>
+        <li>Ops scripts + <code>ops-fly-r2-secrets.yml</code>; ADR 0017; plan
+          <code>2026-08-02-public-media-demo-reader</code> archived.</li>
       </ul>
-      <p>Plans still under <code>plans/active/</code> until archive:
-        proactive next actions · chat work plans · public media / demo / reader
-        · ADRs 0015 / 0016</p>
+    </section>
+
+    <section>
+      <h2>Founder verify (prod)</h2>
+      <ul>
+        <li>Cast portraits on demo Harry Potter project load from public media URLs.</li>
+        <li>Demo account agent/chat can call models with seeded BYOK keys.</li>
+        <li>Reader Play still needs <code>ELEVENLABS_API_KEY</code> on Fly if not set.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Still active under <code>plans/active/</code></h2>
+      <p>Archive when founder accepts the shipped UX: proactive next-actions · chat work plans
+        (ADRs 0015 / 0016) · older Capture / workspace epics as relevant. Start next session from
+        <code>main</code>; ask before picking up vs new work.</p>
     </section>
   </main>
 </body>
