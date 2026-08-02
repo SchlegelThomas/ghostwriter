@@ -79,6 +79,12 @@ export function parseR2CaptureObjectStorageConfig(
   });
 }
 
+function warnPublicMediaDisabled(reason: string): undefined {
+  // Incomplete public-media env must never brick boot (prod /api/me 502).
+  console.warn(`[config] public character media disabled: ${reason}`);
+  return undefined;
+}
+
 export function parsePublicMediaConfig(
   env: NodeJS.ProcessEnv,
   privateR2: R2CaptureObjectStorageConfig | undefined
@@ -89,32 +95,48 @@ export function parsePublicMediaConfig(
     }>
   | undefined {
   const originRaw = env.GHOSTWRITER_PUBLIC_MEDIA_ORIGIN;
+  const bucketOnly =
+    env.GHOSTWRITER_PUBLIC_R2_BUCKET_NAME ?? env.PUBLIC_R2_BUCKET_NAME;
+
   if (originRaw === undefined || originRaw.length === 0) {
-    const bucketOnly =
-      env.GHOSTWRITER_PUBLIC_R2_BUCKET_NAME ?? env.PUBLIC_R2_BUCKET_NAME;
     if (bucketOnly !== undefined && bucketOnly.length > 0) {
-      throw new Error(
+      return warnPublicMediaDisabled(
         "GHOSTWRITER_PUBLIC_MEDIA_ORIGIN is required when a public R2 bucket name is set."
       );
     }
     return undefined;
   }
 
-  const origin = parseOrigin(originRaw, "GHOSTWRITER_PUBLIC_MEDIA_ORIGIN");
-  const bucketRaw =
-    env.GHOSTWRITER_PUBLIC_R2_BUCKET_NAME ?? env.PUBLIC_R2_BUCKET_NAME;
+  let origin: string;
+  try {
+    origin = parseOrigin(originRaw, "GHOSTWRITER_PUBLIC_MEDIA_ORIGIN");
+  } catch (error) {
+    return warnPublicMediaDisabled(
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+
+  const bucketRaw = bucketOnly;
   if (bucketRaw === undefined || bucketRaw.length === 0) {
-    throw new Error(
+    return warnPublicMediaDisabled(
       "GHOSTWRITER_PUBLIC_R2_BUCKET_NAME is required when GHOSTWRITER_PUBLIC_MEDIA_ORIGIN is set."
     );
   }
   if (privateR2 === undefined) {
-    throw new Error(
-      "R2 object storage credentials are required when public character media is configured."
+    return warnPublicMediaDisabled(
+      "R2 object storage credentials (R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_BUCKET_NAME) are required when public character media is configured."
     );
   }
 
-  const bucketName = parseValidatedR2BucketName(bucketRaw);
+  let bucketName: string;
+  try {
+    bucketName = parseValidatedR2BucketName(bucketRaw);
+  } catch (error) {
+    return warnPublicMediaDisabled(
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+
   return Object.freeze({
     origin,
     r2: Object.freeze({

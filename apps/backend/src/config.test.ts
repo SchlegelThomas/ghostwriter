@@ -195,8 +195,8 @@ describe("backend public character media configuration", () => {
     expect(config.r2).toEqual(privateR2);
   });
 
-  it("requires a public bucket name when the origin is set", () => {
-    expect(() =>
+  it("disables public media when the bucket name is missing", () => {
+    expect(
       parsePublicMediaConfig(
         { GHOSTWRITER_PUBLIC_MEDIA_ORIGIN: "https://media.ghost-writer.studio" },
         {
@@ -207,16 +207,16 @@ describe("backend public character media configuration", () => {
           endpoint: `https://${VALID_R2_ACCOUNT_ID}.r2.cloudflarestorage.com`
         }
       )
-    ).toThrow("GHOSTWRITER_PUBLIC_R2_BUCKET_NAME is required");
+    ).toBeUndefined();
   });
 
-  it("requires private R2 credentials when public media is configured", () => {
-    expect(() =>
-      loadConfig({
-        ...baseEnv,
-        GHOSTWRITER_PUBLIC_MEDIA_ORIGIN: "https://media.ghost-writer.studio",
-        GHOSTWRITER_PUBLIC_R2_BUCKET_NAME: "ghostwriter-public-media"
-      })
-    ).toThrow("R2 object storage credentials are required");
+  it("boots without public media when R2 credentials are missing", () => {
+    const config = loadConfig({
+      ...baseEnv,
+      GHOSTWRITER_PUBLIC_MEDIA_ORIGIN: "https://media.ghost-writer.studio",
+      GHOSTWRITER_PUBLIC_R2_BUCKET_NAME: "ghostwriter-public-media"
+    });
+    expect(config.publicMedia).toBeUndefined();
+    expect(config.r2).toBeUndefined();
   });
 });
