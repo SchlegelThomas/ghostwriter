@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Public media / demo keys / Reader — record log</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Record log</p>
+      <h1>Public media, demo keys, Reader voice</h1>
+    </header>
+
+    <section>
+      <h2>2026-08-02 — Production ops complete; plan archived</h2>
+      <ul>
+        <li>Provisioned <code>ghostwriter-capture</code> + <code>ghostwriter-public-media</code>;
+          attached <code>media.ghost-writer.studio</code> (SSL active).</li>
+        <li>Synced demo portraits with Wrangler <code>--remote</code>; sample URL HTTP 200.</li>
+        <li>Fly secrets via GH Actions <code>ops-fly-r2-secrets.yml</code> using
+          <code>R2_ACCESS_KEY_ID</code> / <code>R2_SECRET_ACCESS_KEY</code> (Pages
+          <code>CLOUDFLARE_API_TOKEN</code> is not S3). KEK generated; demo BYOK seeded on boot.</li>
+        <li>Soft-fail incomplete public media config (#22). ADR 0017 recorded. Docs/OPERATIONS +
+          handoff updated.</li>
+        <li><strong>Optional follow-up:</strong> set <code>ELEVENLABS_API_KEY</code> for Reader Play;
+          founder browser verify Cast portraits on <code>ghost-writer.studio</code>.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-02 — CP3 public character media</h2>
+      <ul>
+        <li>Core: <code>buildCharacterVisualPublicUrl</code>, locator display helpers, unit tests.</li>
+        <li>Backend config: <code>GHOSTWRITER_PUBLIC_MEDIA_ORIGIN</code> +
+          <code>GHOSTWRITER_PUBLIC_R2_BUCKET_NAME</code>; second R2 client for public bucket.</li>
+        <li>Apply route + demo seed rewrite locators → public URLs when configured; Wrangler sync scripts.</li>
+        <li>Cast thumb: skip initial Image URI for locators until resolve succeeds.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-02 — Plan opened</h2>
+      <ul>
+        <li>Founder: public character images via Wrangler-friendly IAC; demo account same keys as local;
+          Reader voice banner needs configure quick link.</li>
+        <li>Locked: Capture stays private; character visuals may use public R2/custom domain;
+          Reader TTS remains server <code>ELEVENLABS_API_KEY</code> (ADR 0009).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-02 — CP1–CP3 landed in code</h2>
+      <ul>
+        <li>CP1: Reader banner link → Settings → Reader voice (Fly ElevenLabs copy).</li>
+        <li>CP2: <code>seedProviderKeysFromEnv</code> on demo boot from
+          <code>GHOSTWRITER_DEMO_SEED_*_KEY</code>.</li>
+        <li>CP3: public media origin/bucket config; seed rewrite + apply public URLs;
+          <code>scripts/public-media/</code> Wrangler sync; Cast thumb skips locator as src.</li>
+        <li><strong>Blocked on founder ops:</strong> bucket create, domain attach, sync script,
+          Fly secrets, backend restart.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
+

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Public media, demo keys, Reader voice</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan</p>
+      <h1>Public media, demo keys, Reader voice</h1>
+      <p class="meta"><strong>Status:</strong> done (archived 2026-08-02)<br>
+        <strong>Shipped via:</strong> PRs
+        <a href="https://github.com/SchlegelThomas/ghostwriter/pull/20">#20</a>–
+        <a href="https://github.com/SchlegelThomas/ghostwriter/pull/24">#24</a><br>
+        <strong>Owner:</strong> founder + agent</p>
+    </header>
+
+    <section>
+      <h2>Intent</h2>
+      <p>Production Cast portraits load without a private download hop; the demo account can
+        use the same BYOK keys as local; Reader voice failures offer a clear configure path.
+        Capture attachments stay private (ADR 0010).</p>
+      <p><strong>Out of scope:</strong> public Capture attachment bytes; client-side ElevenLabs keys;
+        Terraform (Wrangler CLI scripts are enough for v1).</p>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ul>
+        <li>Demo Cast portraits resolve to real public HTTPS image URLs and render in prod.</li>
+        <li>Wrangler-scripted provision + sync of public media is documented and runnable.</li>
+        <li>Applied character visuals can store public URLs when
+          <code>GHOSTWRITER_PUBLIC_MEDIA_ORIGIN</code> is set; UI uses them without
+          <code>/download</code>.</li>
+        <li>Prod/demo boot seeds OpenAI/Anthropic/Google keys into
+          <code>demo@ghostwriter.app</code> from <code>GHOSTWRITER_DEMO_SEED_*_KEY</code>
+          Fly secrets (same values as local when configured).</li>
+        <li>Reader “voice not configured” shows a quick link that opens Settings → Reader voice
+          with ops guidance for <code>ELEVENLABS_API_KEY</code>.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tasks</h2>
+      <ol>
+        <li><strong>CP1 — Reader voice quick link:</strong> Settings focus + banner CTA; copy for Fly secret.</li>
+        <li><strong>CP2 — Demo BYOK seed:</strong> Mirror hermetic E2E key seed for production demo account.</li>
+        <li><strong>CP3 — Public media IAC:</strong> Wrangler bucket/domain script; sync Harry Potter PNGs;
+          env origin; seed + apply write public URLs; UI skip locator resolve for public hosts.</li>
+        <li>Docs/ADR note: public character media vs private Capture; OPERATIONS Fly secrets list.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li>Unit: public URL helper; demo credential seed; Settings focus includes reader-voice.</li>
+        <li>Reader banner renders configure control when voice error is VOICE_UNAVAILABLE.</li>
+        <li>Manual: Fly secrets + sync script → Cast portraits load; Reader Play after ElevenLabs secret.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p>Update <code>docs/OPERATIONS.md</code> (public media + demo keys + ElevenLabs).
+        Short ADR or amendment: character visuals may be public CDN URLs; Capture remains private.
+        Living design: Mockups 2.0 Cast / Reader — behavior only, no mockup rewrite.</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li><strong>Locked:</strong> Character visuals (demo + apply) may be public; Capture attachments stay private.</li>
+        <li><strong>Locked:</strong> Reader TTS stays server-only ElevenLabs (ADR 0009); quick link is ops guidance, not BYOK in browser.</li>
+        <li><strong>Ops:</strong> Founder must set Fly secrets and run public-media sync once.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked> Plan drafted</li>
+        <li><input type="checkbox" checked> CP1 Reader quick link</li>
+        <li><input type="checkbox" checked> CP2 Demo BYOK seed</li>
+        <li><input type="checkbox" checked> CP3 Public media Wrangler + seed/apply/UI</li>
+        <li><input type="checkbox" checked> Docs/ADR + handoff</li>
+        <li><input type="checkbox" checked> Founder ops (Fly secrets + public media sync)</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

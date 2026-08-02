@@ -128,36 +128,42 @@ keeps `E2E_SEED_*`):
 Never commit or log these values. Boot logs provider ids only. If KEK encryption is unavailable or
 provider calls are disabled, seeding is skipped without failing startup.
 
-Prefer CLI OAuth (no Cloudflare API token). Wrangler OAuth creates buckets/domains and syncs
-objects; Fly still needs one-time R2 **S3** access keys from the dashboard (Wrangler cannot mint
-those for the Node backend):
+**Production (2026-08-02):** private bucket `ghostwriter-capture`, public bucket
+`ghostwriter-public-media` + custom domain `https://media.ghost-writer.studio`, demo portrait
+fixtures synced remote, Fly secrets set (`R2_*`, public media, `GHOSTWRITER_PROVIDER_KEK_V1`,
+demo BYOK seeds). Boot confirmed demo BYOK seed with encryption available. See ADR 0017.
+
+Prefer CLI OAuth for bucket/domain/sync (no Cloudflare API token for Wrangler). Fly’s Node
+backend needs R2 **S3** access keys (Wrangler OAuth cannot mint those):
 
 ```bash
 wrangler login && fly auth login
-# Enable R2 once if prompted: https://dash.cloudflare.com/<account>/r2/overview
-./scripts/setup-production-media.sh
-# After creating R2 API Tokens → put R2_ACCESS_KEY_ID + R2_SECRET_ACCESS_KEY in
-# apps/backend/.env.fly.local, then re-run setup-fly-backend-secrets (or the orchestrator).
+./scripts/public-media/provision-public-bucket.sh   # idempotent
+./scripts/public-media/sync-demo-character-visuals.sh   # uses --remote
+# Store S3 keys as GitHub secrets (not the Pages CLOUDFLARE_API_TOKEN):
+gh secret set R2_ACCESS_KEY_ID
+gh secret set R2_SECRET_ACCESS_KEY
+gh workflow run ops-fly-r2-secrets.yml -f generate_kek=true
 ```
 
-Or step-by-step: `scripts/public-media/provision-public-bucket.sh`, then
-`scripts/setup-fly-backend-secrets.sh --generate-kek --sync-public-media`. Scripts default to
-real production names (`ghostwriter-capture`, `ghostwriter-public-media`,
-`https://media.ghost-writer.studio`) and resolve the zone via Wrangler OAuth. Never print secret
-values. Public media must not be set without private `R2_*` credentials.
+Local alternative: `apps/backend/fly.env.example` → `.env.fly.local`, then
+`./scripts/setup-fly-backend-secrets.sh --generate-kek --sync-public-media`. Orchestrator:
+`./scripts/setup-production-media.sh`. Never print secret values. Public media must not be set
+without private `R2_*` credentials (incomplete config soft-fails at boot).
 
-### Capture media implemented locally; R2 provisioning pending
+### Capture media and private R2 (production provisioned)
 
-ADR 0010 and ADR 0011 accept the following boundaries for the active Capture-to-Story epic. They
-are not required by the shipped product until release. The private-object adapter, metadata
-migration, direct-upload client, memory fake, and refusal tests are implemented locally; no bucket,
-credentials, Fly secrets, or deployment were created in this branch:
+ADR 0010 / ADR 0011 boundaries still hold. Private-object adapter, metadata, direct upload,
+memory fake (hermetic E2E / CI), and Fly control routes are implemented. Production private R2
+bucket and S3 credentials are provisioned (see above); Capture prose/Inbox remain usable when R2
+is missing locally via the unavailable adapter.
 
 - Private Cloudflare R2 stores Capture attachment bytes and applied book-cover PNGs
   (`projects/{projectId}/books/{bookId}/cover.png`). Fly holds `R2_ACCOUNT_ID`,
-  `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME`, authorizes every object
-  operation, and issues short-lived single-object URLs. Hermetic E2E uses a memory object-store
-  fake (cover download returns a PNG data URI for display). Required CI uses the same memory fake.
+  `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME` (`ghostwriter-capture`),
+  authorizes every object operation, and issues short-lived single-object URLs. Hermetic E2E uses
+  a memory object-store fake (cover download returns a PNG data URI for display). Required CI uses
+  the same memory fake.
 - Writer provider keys (one envelope per account+provider) are encrypted in Lakebase under a
   versioned AES-GCM envelope. Root keys such as `GHOSTWRITER_PROVIDER_KEK_V1` live only as Fly
   secrets; they are distinct from an optional Ghostwriter-operated `OPENAI_API_KEY`. Migration
@@ -201,26 +207,21 @@ adapter: Capture prose/Inbox remain usable while media init/download returns
 
 ### Public character portrait media
 
-When configured, applied Cast character visuals and the Harry Potter demo portraits
-use a **separate public R2 bucket** with a custom HTTPS domain. Capture attachments
-and book covers stay on the private bucket.
+Applied Cast character visuals and the Harry Potter demo portraits use a **separate public R2
+bucket** with custom HTTPS domain `https://media.ghost-writer.studio` (ADR 0017). Capture
+attachments and book covers stay on the private bucket.
 
-Fly secrets (reuse the same R2 account credentials as the private bucket):
+Fly secrets (same R2 S3 account credentials as the private bucket):
 
-- `GHOSTWRITER_PUBLIC_MEDIA_ORIGIN` — HTTPS origin without trailing slash, e.g.
-  `https://media.ghost-writer.studio`
-- `GHOSTWRITER_PUBLIC_R2_BUCKET_NAME` — public bucket name, e.g.
-  `ghostwriter-public-media` (alias: `PUBLIC_R2_BUCKET_NAME`)
+- `GHOSTWRITER_PUBLIC_MEDIA_ORIGIN=https://media.ghost-writer.studio`
+- `GHOSTWRITER_PUBLIC_R2_BUCKET_NAME=ghostwriter-public-media`
 
-Private R2 credentials (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
-`R2_BUCKET_NAME`) must also be set. When the public origin is configured, the backend
-requires the public bucket name and uploads character visuals there; persisted URLs are
-direct HTTPS paths under the origin. Without public media config, character visuals keep
-the private `https://ghostwriter.character/...` locator URLs resolved via the download API.
+Private `R2_*` must also be set. Incomplete public-media config warns and disables public media at
+boot instead of crashing. Without public media config, character visuals keep
+`https://ghostwriter.character/...` locator URLs resolved via the download API.
 
-Provision the bucket and sync demo fixtures with Wrangler — see
-`scripts/public-media/README.md`. Demo seed re-puts portrait objects and rewrites
-existing locator URLs to public URLs on boot when public media is configured.
+Provision/sync: `scripts/public-media/README.md`. Demo seed re-puts portrait objects and rewrites
+locator URLs to public HTTPS on boot when configured.
 
 Validated locally on 2026-07-12 against a temporary migrated Lakebase branch: real Google consent,
 durable account/profile bootstrap, project creation and reload, and sign-out with zero remaining
@@ -374,7 +375,10 @@ Completed 2026-07-11:
 
 - Cloudflare Pages project created and Git-integrated Cloudflare builds disconnected. GitHub
   Actions is the sole deployment path.
-- `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` configured as GitHub repository secrets.
+- `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` configured as GitHub repository secrets
+  (Pages / Wrangler deploy — not R2 S3 credentials).
+- `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` GitHub secrets for Fly via
+  `.github/workflows/ops-fly-r2-secrets.yml` (production media + KEK, 2026-08-02).
 - `main` protected for all users: current `checks` CI status is required; force-pushes and
   branch deletion are disabled.
 
@@ -385,11 +389,19 @@ npm i -g wrangler
 wrangler login
 ```
 
-To rotate a Cloudflare credential:
+To rotate a Cloudflare Pages credential:
 
 ```bash
 gh secret set CLOUDFLARE_API_TOKEN
 gh secret set CLOUDFLARE_ACCOUNT_ID
+```
+
+To rotate R2 S3 credentials used by Fly:
+
+```bash
+gh secret set R2_ACCESS_KEY_ID
+gh secret set R2_SECRET_ACCESS_KEY
+gh workflow run ops-fly-r2-secrets.yml -f generate_kek=false
 ```
 
 ## Command cheat sheet
@@ -402,5 +414,6 @@ gh secret set CLOUDFLARE_ACCOUNT_ID
 | "run migrations" | `pnpm db:migrate` (needs `DATABASE_URL` or `PG*`) |
 | "branch the database" | `scripts/lakebase.sh create-branch <id> [ttl]` |
 | "ship it" / "open a PR" | `git push -u origin HEAD && gh pr create` |
+| "provision public media / R2" | `./scripts/public-media/provision-public-bucket.sh` then sync / `ops-fly-r2-secrets` |
 | "release desktop build" (later) | tag push → Actions → GitHub Release |
 | "push a mobile update" (later) | `eas update` |
