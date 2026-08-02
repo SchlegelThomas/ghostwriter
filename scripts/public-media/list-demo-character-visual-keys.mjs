@@ -15,10 +15,12 @@ const characters = [
   ["knowledge-hp-hagrid", "hp-hagrid.png"]
 ];
 
+const lines = [];
 for (const [knowledgeId, filename] of characters) {
   for (let index = 1; index <= PORTRAIT_COUNT; index += 1) {
     const visualId = `visual-seed-portrait-${index}`;
     const objectKey = `projects/${PROJECT_ID}/story-knowledge/${knowledgeId}/visuals/${visualId}.png`;
-    process.stdout.write(`${objectKey}\t${filename}\n`);
+    lines.push(`${objectKey}\t${filename}`);
   }
 }
+console.log(lines.join("\n"));
