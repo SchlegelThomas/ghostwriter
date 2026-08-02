@@ -128,6 +128,24 @@ keeps `E2E_SEED_*`):
 Never commit or log these values. Boot logs provider ids only. If KEK encryption is unavailable or
 provider calls are disabled, seeding is skipped without failing startup.
 
+Prefer CLI OAuth (no Cloudflare API token). Wrangler OAuth creates buckets/domains and syncs
+objects; Fly still needs one-time R2 **S3** access keys from the dashboard (Wrangler cannot mint
+those for the Node backend):
+
+```bash
+wrangler login && fly auth login
+# Enable R2 once if prompted: https://dash.cloudflare.com/<account>/r2/overview
+./scripts/setup-production-media.sh
+# After creating R2 API Tokens → put R2_ACCESS_KEY_ID + R2_SECRET_ACCESS_KEY in
+# apps/backend/.env.fly.local, then re-run setup-fly-backend-secrets (or the orchestrator).
+```
+
+Or step-by-step: `scripts/public-media/provision-public-bucket.sh`, then
+`scripts/setup-fly-backend-secrets.sh --generate-kek --sync-public-media`. Scripts default to
+real production names (`ghostwriter-capture`, `ghostwriter-public-media`,
+`https://media.ghost-writer.studio`) and resolve the zone via Wrangler OAuth. Never print secret
+values. Public media must not be set without private `R2_*` credentials.
+
 ### Capture media implemented locally; R2 provisioning pending
 
 ADR 0010 and ADR 0011 accept the following boundaries for the active Capture-to-Story epic. They

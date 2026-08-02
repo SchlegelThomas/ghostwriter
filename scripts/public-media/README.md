@@ -4,25 +4,26 @@ Character portrait PNGs for the Harry Potter demo and applied Cast visuals can b
 
 ## Prerequisites
 
-- [Wrangler](https://developers.cloudflare.com/workers/wrangler/) authenticated to the Ghostwriter Cloudflare account
-- DNS zone for `ghost-writer.studio` (or your chosen media hostname)
-- Existing private R2 credentials on Fly (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`)
+- [Wrangler](https://developers.cloudflare.com/workers/wrangler/) via **browser OAuth** (`wrangler login`) — no Cloudflare API token
+- R2 enabled on the Ghostwriter Cloudflare account (one dashboard toggle if not already)
+- DNS zone `ghost-writer.studio` on that account
+- For Fly: one-time R2 **S3** access keys (dashboard → R2 → API Tokens). Wrangler OAuth
+  can create buckets/domains/sync objects; the Fly Node backend still needs S3 keys.
 
-## 1. Create the public bucket
+## 1–2. Create buckets + attach custom domain
 
-```bash
-wrangler r2 bucket create ghostwriter-public-media
-```
-
-## 2. Attach a custom domain
-
-Replace `$ZONE_ID` with the Cloudflare zone id for `ghost-writer.studio`:
+Uses Wrangler OAuth to resolve the real zone id for `ghost-writer.studio` and creates
+both the private Capture bucket and the public media bucket:
 
 ```bash
-wrangler r2 bucket domain add ghostwriter-public-media \
-  --domain media.ghost-writer.studio \
-  --zone-id "$ZONE_ID"
+wrangler login   # once
+./scripts/public-media/provision-public-bucket.sh
+# or end-to-end:
+./scripts/setup-production-media.sh
 ```
+
+Real defaults: `ghostwriter-capture`, `ghostwriter-public-media`,
+`media.ghost-writer.studio`. Flags: `--dry-run`, `--private-only`, `--public-only`.
 
 Public objects are then available at `https://media.ghost-writer.studio/<object-key>`.
 
@@ -38,7 +39,15 @@ Override the bucket name with `PUBLIC_R2_BUCKET_NAME` if needed.
 
 ## 4. Fly secrets (backend)
 
-Set on the Ghostwriter Fly app (reuse the same R2 account keys as the private bucket):
+Prefer the full setup script (R2 private + public media + KEK + demo seeds together):
+
+```bash
+cp apps/backend/fly.env.example apps/backend/.env.fly.local   # fill R2_* and public media
+./scripts/setup-fly-backend-secrets.sh --generate-kek --sync-public-media
+```
+
+Or set only public media (reuse the same R2 account keys as the private bucket — **all**
+`R2_*` must already be on Fly, or the backend disables public media at boot):
 
 ```bash
 fly secrets set \
@@ -46,6 +55,5 @@ fly secrets set \
   GHOSTWRITER_PUBLIC_R2_BUCKET_NAME=ghostwriter-public-media
 ```
 
-Restart the backend. Demo seed re-puts portrait objects to the public bucket and rewrites existing locator URLs to public HTTPS URLs on boot.
-
-See `docs/OPERATIONS.md` for the full operations note.
+Demo seed re-puts portrait objects to the public bucket and rewrites existing locator URLs to
+public HTTPS URLs on boot. See `docs/OPERATIONS.md`.
