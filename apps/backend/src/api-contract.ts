@@ -1176,6 +1176,34 @@ export const catalogAgentRunRequestSchema = z
   })
   .strict();
 
+export const nextActionCoachRunRequestSchema = z
+  .object({
+    sceneId: id,
+    model: agentModelIdSchema.optional(),
+    trigger: z
+      .enum([
+        "scene-prose-saved",
+        "capture-saved",
+        "story-knowledge-created",
+        "structure-reordered",
+        "draft-acknowledged",
+        "manual-start"
+      ])
+      .optional()
+  })
+  .strict();
+
+export const storyKnowledgeCreateDraftRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    kind: z.enum(["character", "location", "world-rule", "thread", "custom"]),
+    summary: z.string().trim().min(1).max(2_000),
+    properties: z.string().trim().min(1).max(4_000).optional(),
+    sceneId: id.optional(),
+    firstAppearanceNote: z.string().trim().min(1).max(1_000).optional()
+  })
+  .strict();
+
 export const agentContextPreviewRequestSchema = z.object({
   captureId: id,
   model: agentModelIdSchema.optional(),

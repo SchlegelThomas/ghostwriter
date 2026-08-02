@@ -183,10 +183,10 @@ export function WorkspaceTopSearch({
 
 const styles = StyleSheet.create({
   root: {
-    maxWidth: 480,
-    minWidth: 240,
+    maxWidth: "100%",
+    minWidth: 0,
     position: "relative",
-    width: 440,
+    width: "100%",
     zIndex: 20
   },
   input: {

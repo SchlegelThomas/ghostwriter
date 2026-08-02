@@ -5,6 +5,9 @@ import {
   assertCharacterVisualPngDataUri,
   buildCharacterVisualLocatorUrl,
   buildCharacterVisualObjectKey,
+  buildCharacterVisualPublicUrl,
+  characterVisualDisplayNeedsResolve,
+  isCharacterVisualLocatorUrl,
   parseCharacterVisualLocatorUrl
 } from "./character-visual-images.js";
 
@@ -28,6 +31,46 @@ describe("character visual image locators", () => {
       knowledgeId,
       visualId
     });
+  });
+
+  it("builds public HTTPS URLs from the same object key path", () => {
+    const projectId = "project-bellwether-cycle";
+    const knowledgeId = "knowledge-mara-venn";
+    const visualId = "visual-portrait-1";
+    const origin = "https://media.ghost-writer.studio";
+
+    expect(
+      buildCharacterVisualPublicUrl(origin, projectId, knowledgeId, visualId)
+    ).toBe(
+      "https://media.ghost-writer.studio/projects/project-bellwether-cycle/story-knowledge/knowledge-mara-venn/visuals/visual-portrait-1.png"
+    );
+    expect(
+      buildCharacterVisualPublicUrl(`${origin}/`, projectId, knowledgeId, visualId)
+    ).toBe(
+      "https://media.ghost-writer.studio/projects/project-bellwether-cycle/story-knowledge/knowledge-mara-venn/visuals/visual-portrait-1.png"
+    );
+  });
+
+  it("classifies locator vs direct display URLs", () => {
+    const locator = buildCharacterVisualLocatorUrl(
+      "project-bellwether-cycle",
+      "knowledge-mara-venn",
+      "visual-portrait-1"
+    );
+    const publicUrl = buildCharacterVisualPublicUrl(
+      "https://media.ghost-writer.studio",
+      "project-bellwether-cycle",
+      "knowledge-mara-venn",
+      "visual-portrait-1"
+    );
+
+    expect(isCharacterVisualLocatorUrl(locator)).toBe(true);
+    expect(characterVisualDisplayNeedsResolve(locator)).toBe(true);
+    expect(isCharacterVisualLocatorUrl(publicUrl)).toBe(false);
+    expect(characterVisualDisplayNeedsResolve(publicUrl)).toBe(false);
+    expect(characterVisualDisplayNeedsResolve("data:image/png;base64,abc")).toBe(
+      false
+    );
   });
 
   it("rejects non-locator URLs", () => {

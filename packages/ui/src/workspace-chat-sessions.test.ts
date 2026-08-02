@@ -6,16 +6,22 @@ import {
   WORKSPACE_CHAT_SESSIONS_MAX,
   appendWorkspaceChatMessage,
   collectWorkspaceChatPriorTurns,
+  contentfulWorkspaceChatSessions,
   createWorkspaceChatSession,
   deleteWorkspaceChatSession,
+  dismissWorkspaceChatSession,
+  dismissedWorkspaceChatSessions,
   emptyWorkspaceChatSessionsState,
   forkWorkspaceChatSession,
   loadWorkspaceChatSessions,
   normalizeWorkspaceChatSessionsState,
+  openWorkspaceChatSessions,
   renameWorkspaceChatSession,
+  reopenWorkspaceChatSession,
   saveWorkspaceChatSessions,
   setActiveWorkspaceChatSession,
   trimSessionMessages,
+  workspaceChatSessionHasContent,
   workspaceChatSessionsStorageKey
 } from "./workspace-chat-sessions.js";
 
@@ -195,5 +201,121 @@ describe("workspace-chat-sessions", () => {
     expect(
       collectWorkspaceChatPriorTurns(messages, 2).map((turn) => turn.body)
     ).toEqual(["Two", "Beta"]);
+  });
+
+  it("treats legacy payloads without openSessionIds as all open tabs", () => {
+    let state = emptyWorkspaceChatSessionsState();
+    state = createWorkspaceChatSession(state);
+    const legacy = Object.freeze({
+      activeSessionId: state.activeSessionId,
+      sessions: state.sessions
+    });
+    const normalized = normalizeWorkspaceChatSessionsState(legacy);
+    expect(openWorkspaceChatSessions(normalized)).toHaveLength(2);
+    expect(dismissedWorkspaceChatSessions(normalized)).toHaveLength(0);
+  });
+
+  it("dismisses a tab into history and activates another open tab", () => {
+    let state = emptyWorkspaceChatSessionsState();
+    const firstId = state.activeSessionId;
+    state = createWorkspaceChatSession(state);
+    const secondId = state.activeSessionId;
+    state = dismissWorkspaceChatSession(state, secondId);
+    expect(openWorkspaceChatSessions(state).map((session) => session.id)).toEqual(
+      [firstId]
+    );
+    expect(state.activeSessionId).toBe(firstId);
+    expect(dismissedWorkspaceChatSessions(state).map((session) => session.id)).toEqual(
+      [secondId]
+    );
+  });
+
+  it("creates a fresh empty tab when the last open tab is dismissed", () => {
+    let state = emptyWorkspaceChatSessionsState();
+    const dismissedId = state.activeSessionId;
+    state = dismissWorkspaceChatSession(state, dismissedId);
+    expect(openWorkspaceChatSessions(state)).toHaveLength(1);
+    expect(state.activeSessionId).not.toBe(dismissedId);
+    expect(openWorkspaceChatSessions(state)[0]?.title).toBe(
+      DEFAULT_CHAT_SESSION_TITLE
+    );
+    expect(dismissedWorkspaceChatSessions(state).map((session) => session.id)).toEqual(
+      [dismissedId]
+    );
+  });
+
+  it("reopens a dismissed session as an active open tab", () => {
+    let state = emptyWorkspaceChatSessionsState();
+    state = createWorkspaceChatSession(state);
+    const dismissedId = state.activeSessionId;
+    state = dismissWorkspaceChatSession(state, dismissedId);
+    state = reopenWorkspaceChatSession(state, dismissedId);
+    expect(state.activeSessionId).toBe(dismissedId);
+    expect(openWorkspaceChatSessions(state).some((session) => session.id === dismissedId)).toBe(
+      true
+    );
+    expect(dismissedWorkspaceChatSessions(state)).toHaveLength(0);
+  });
+
+  it("persists open and dismissed session metadata", () => {
+    let state = emptyWorkspaceChatSessionsState("2026-08-01T12:00:00.000Z");
+    state = createWorkspaceChatSession(state);
+    const dismissedId = state.activeSessionId;
+    state = dismissWorkspaceChatSession(state, dismissedId);
+    saveWorkspaceChatSessions(ACCOUNT_ID, PROJECT_ID, state);
+    const loaded = loadWorkspaceChatSessions(ACCOUNT_ID, PROJECT_ID);
+    expect(dismissedWorkspaceChatSessions(loaded).map((session) => session.id)).toEqual(
+      [dismissedId]
+    );
+    expect(loaded.openSessionIds).toBeDefined();
+  });
+
+  it("detects sessions with user or assistant content", () => {
+    let state = emptyWorkspaceChatSessionsState();
+    expect(workspaceChatSessionHasContent(state.sessions[0]!)).toBe(false);
+    state = appendWorkspaceChatMessage(
+      state,
+      state.activeSessionId,
+      userMessage("u1", "Hello")
+    );
+    expect(workspaceChatSessionHasContent(state.sessions[0]!)).toBe(true);
+    state = appendWorkspaceChatMessage(
+      state,
+      state.activeSessionId,
+      Object.freeze({ id: "s1", role: "system", body: "Status only" })
+    );
+    expect(workspaceChatSessionHasContent(state.sessions[0]!)).toBe(true);
+    const emptyBody = emptyWorkspaceChatSessionsState();
+    const withEmptyUser = appendWorkspaceChatMessage(
+      emptyBody,
+      emptyBody.activeSessionId,
+      userMessage("u-empty", "   ")
+    );
+    expect(workspaceChatSessionHasContent(withEmptyUser.sessions[0]!)).toBe(
+      false
+    );
+  });
+
+  it("lists contentful sessions sorted by recency", () => {
+    let state = emptyWorkspaceChatSessionsState("2026-08-01T10:00:00.000Z");
+    const emptyId = state.activeSessionId;
+    state = createWorkspaceChatSession(state);
+    const newerId = state.activeSessionId;
+    state = appendWorkspaceChatMessage(
+      state,
+      emptyId,
+      userMessage("u-old", "Older chat")
+    );
+    state = appendWorkspaceChatMessage(
+      state,
+      newerId,
+      userMessage("u-new", "Newer")
+    );
+    state = renameWorkspaceChatSession(state, emptyId, "Bump older");
+    state = renameWorkspaceChatSession(state, newerId, "Bump newer");
+    const contentful = contentfulWorkspaceChatSessions(state);
+    expect(contentful).toHaveLength(2);
+    expect(contentful[0]?.id).toBe(newerId);
+    expect(contentful[1]?.id).toBe(emptyId);
   });
 });

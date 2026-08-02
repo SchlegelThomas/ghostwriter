@@ -21,6 +21,12 @@ import type { CatalogMemoV1 } from "./catalog-memo-v1.js";
 import { validateCatalogMemoV1 } from "./catalog-memo-v1.js";
 import type { PacingFindingsV1 } from "./pacing-findings-v1.js";
 import { validatePacingFindingsV1 } from "./pacing-findings-v1.js";
+import type { NextActionV1 } from "./next-action-v1.js";
+import { validateNextActionV1 } from "./next-action-v1.js";
+import type { WorkPlanV1 } from "./work-plan-v1.js";
+import { validateWorkPlanV1 } from "./work-plan-v1.js";
+import type { StoryKnowledgeCreateV1 } from "./story-knowledge-create-v1.js";
+import { validateStoryKnowledgeCreateV1 } from "./story-knowledge-create-v1.js";
 import {
   agentProposalListPreviewFromPayload,
   type AgentProposalListPreview
@@ -41,6 +47,9 @@ export type AgentProposalPayload =
   | PlanOutlineV1
   | CatalogMemoV1
   | PacingFindingsV1
+  | NextActionV1
+  | WorkPlanV1
+  | StoryKnowledgeCreateV1
   | CraftPartnerPayload;
 
 export const AGENT_FOUNDATION_LIST_MAX = 100;
@@ -611,6 +620,15 @@ export function validateAgentProposalPayload(
   }
   if (outputSchemaId === "pacing-findings-v1") {
     return validatePacingFindingsV1(payload);
+  }
+  if (outputSchemaId === "next-action-v1") {
+    return validateNextActionV1(payload);
+  }
+  if (outputSchemaId === "work-plan-v1") {
+    return validateWorkPlanV1(payload);
+  }
+  if (outputSchemaId === "story-knowledge-create-v1") {
+    return validateStoryKnowledgeCreateV1(payload);
   }
   return validateCraftPartnerPayload(outputSchemaId, payload);
 }

@@ -24,6 +24,15 @@ const app = createApp({
   auth: runtime.auth,
   allowedOrigins: config.auth.trustedOrigins,
   objectStorage: runtime.objectStorage,
+  ...(runtime.publicCharacterVisualStorage === undefined ||
+  runtime.publicMediaOrigin === undefined
+    ? {}
+    : {
+        characterVisualPublicMedia: {
+          origin: runtime.publicMediaOrigin,
+          objectStorage: runtime.publicCharacterVisualStorage
+        }
+      }),
   demoSeed: config.demoSeed
 });
 

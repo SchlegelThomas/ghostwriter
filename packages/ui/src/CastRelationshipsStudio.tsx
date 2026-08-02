@@ -21,6 +21,7 @@ import type {
   StoryKnowledgeId,
   StoryKnowledgeLinkKind
 } from "@ghostwriter/core";
+import { characterVisualDisplayNeedsResolve } from "@ghostwriter/core";
 import {
   buildKnowledgeConstellation,
   characterVisualEmptyStateCopy,
@@ -316,7 +317,9 @@ function CharacterVisualThumb({
   onOpen(uri: string): void;
   onDelete(): void;
 }>) {
-  const [uri, setUri] = useState(visual.url);
+  const [uri, setUri] = useState<string | undefined>(() =>
+    characterVisualDisplayNeedsResolve(visual.url) ? undefined : visual.url
+  );
   // Parent often passes an inline resolver; keep it out of effect deps so we
   // resolve once per visual id/url instead of re-downloading every render.
   const resolveDisplayUrlRef = useRef(resolveDisplayUrl);
@@ -350,19 +353,25 @@ function CharacterVisualThumb({
       <Pressable
         accessibilityLabel={`Enlarge ${visual.alt}`}
         accessibilityRole="button"
-        disabled={busy}
-        onPress={() => onOpen(uri)}
+        disabled={busy || uri === undefined}
+        onPress={() => {
+          if (uri !== undefined) onOpen(uri);
+        }}
         style={({ pressed }) => [
           styles.visualThumb,
           pressed && styles.pressed
         ]}
       >
-        <Image
-          accessibilityLabel={visual.alt}
-          resizeMode="cover"
-          source={{ uri }}
-          style={styles.visualThumbImage}
-        />
+        {uri === undefined ? (
+          <View style={styles.visualThumbImage} />
+        ) : (
+          <Image
+            accessibilityLabel={visual.alt}
+            resizeMode="cover"
+            source={{ uri }}
+            style={styles.visualThumbImage}
+          />
+        )}
       </Pressable>
       <Pressable
         accessibilityLabel={`Delete ${visual.alt}`}

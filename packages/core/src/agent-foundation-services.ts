@@ -57,6 +57,8 @@ import {
   type AccountId
 } from "./identity.js";
 import type { Clock, ProjectRepository } from "./project-repository.js";
+import type { ProjectCommandServices } from "./project-commands.js";
+import { validateStoryKnowledgeCreateV1 } from "./story-knowledge-create-v1.js";
 
 const ACTIVE_AGENT_RUN_STATUSES = Object.freeze([
   "queued",
@@ -168,6 +170,7 @@ export type AgentFoundationServiceDependencies = Readonly<{
   hashPort: AsyncHashPort;
   clock: Clock;
   apply?: AgentFoundationApplyDependencies;
+  projectCommands?: ProjectCommandServices;
 }>;
 
 async function requireOwnedProject(
@@ -661,15 +664,41 @@ export function createAgentFoundationServices(
       if (
         current.outputSchemaId !== "plan-outline-v1" &&
         current.outputSchemaId !== "catalog-memo-v1" &&
-        current.outputSchemaId !== "pacing-findings-v1"
+        current.outputSchemaId !== "pacing-findings-v1" &&
+        current.outputSchemaId !== "next-action-v1" &&
+        current.outputSchemaId !== "story-knowledge-create-v1"
       ) {
         throw new DomainValidationError(
           "INVALID_AGENT_POLICY",
-          "Only findings, memo, and plan-outline proposals can be acknowledged without apply."
+          "Only findings, memo, plan-outline, next-action, and story-knowledge-create proposals can be acknowledged without apply."
         );
       }
       if (current.status !== "ready") {
         throw new AgentProposalStateConflictError();
+      }
+      if (current.outputSchemaId === "story-knowledge-create-v1") {
+        if (dependencies.projectCommands === undefined) {
+          throw new DomainValidationError(
+            "INVALID_AGENT_POLICY",
+            "Story knowledge create is not configured."
+          );
+        }
+        const draft = validateStoryKnowledgeCreateV1(current.payload);
+        const project = await dependencies.projects.getProject(input.projectId);
+        if (project === undefined) {
+          throw new AgentProposalNotFoundError();
+        }
+        await dependencies.projectCommands.executeProjectCommand({
+          accountId: input.accountId,
+          projectId: input.projectId,
+          expectedVersion: project.version,
+          command: Object.freeze({
+            type: "storyKnowledge.create",
+            label: draft.name,
+            kind: draft.kind,
+            authority: "planned"
+          })
+        });
       }
       const now = dependencies.clock.now();
       return assertProposalAcknowledge(

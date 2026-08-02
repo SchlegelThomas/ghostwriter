@@ -421,6 +421,9 @@ const RETIRED_GHOSTWRITER_MODEL_ALIASES = Object.freeze(
 /** Default chat/structured model for capture reflection and similar workflows. */
 export const CAPTURE_REFLECTION_DEFAULT_MODEL = "gpt-4.1";
 
+/** Default cheap structured model for ambient next-action coach runs. */
+export const NEXT_ACTION_COACH_DEFAULT_MODEL = "claude-haiku-4-5" as const;
+
 /** Default catalog id for OpenAI Images generation. */
 export const DEFAULT_IMAGE_MODEL_ID = "gpt-image-1";
 

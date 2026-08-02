@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,12 +9,14 @@ import {
   TextInput,
   View
 } from "react-native";
-import { ArrowUp, CaretDown, CaretRight, Check, CopySimple, DotsThree, Microphone, Paperclip, Plus, X } from "phosphor-react-native";
+import { ArrowUp, CaretDown, CaretRight, Check, ClockCounterClockwise, CopySimple, DotsThree, Microphone, Paperclip, Plus, X } from "phosphor-react-native";
 import {
   CATALOG_MEMO_LENSES,
   type AgentModelId,
   type CatalogAgentId,
-  type CatalogMemoLens
+  type CatalogMemoLens,
+  type SceneId,
+  type WorkPlanV1
 } from "@ghostwriter/core";
 import { AgentChatMarkdown } from "./AgentChatMarkdown.js";
 import {
@@ -58,6 +61,19 @@ import {
   type WorkspaceChatComposerKeyEvent,
   type WorkspaceChatPendingAttachment
 } from "./workspace-chat-composer.js";
+import type { SceneSaveNextActionChip } from "./scene-save-next-action-invite.js";
+import { formatWorkspaceChatTranscript } from "./workspace-chat-transcript.js";
+import {
+  WorkPlanJobStrip,
+  type WorkPlanJobStripAction,
+  type WorkPlanJobStripJob
+} from "./WorkPlanJobStrip.js";
+import {
+  WORK_PLAN_ACTION_CHIPS,
+  WORK_PLAN_DISMISS_CHIP,
+  WORK_PLAN_SUBMIT_CHIP
+} from "./work-plan-submit.js";
+import brandMark from "./GhostwriterMark.png";
 
 const { colors, fonts } = ghostwriterTheme;
 
@@ -77,6 +93,14 @@ export type WorkspaceChatMessage = Readonly<{
   streaming?: boolean;
   statusLabel?: string;
   retryable?: boolean;
+  /** In-thread action chips (next-step coach, etc.) — not composer chrome. */
+  actionChips?: readonly SceneSaveNextActionChip[];
+  nextActionSceneId?: SceneId;
+  nextActionRevision?: number;
+  /** Attached multi-job plan the writer can Submit from this turn. */
+  workPlan?: WorkPlanV1;
+  /** System notes: tap opens this scene in Draft. */
+  openSceneOnPress?: SceneId;
 }>;
 
 export type WorkspaceChatSendInput = Readonly<{
@@ -94,6 +118,8 @@ export type WorkspaceChatSendInput = Readonly<{
 export type WorkspaceChatSessionTab = Readonly<{
   id: string;
   title: string;
+  /** When true, session is already an open tab — select instead of reopen. */
+  open?: boolean;
 }>;
 
 export type WorkspaceChatPanelProps = Readonly<{
@@ -122,20 +148,42 @@ export type WorkspaceChatPanelProps = Readonly<{
   onChatSessionSelect?(sessionId: string): void;
   onNewChatSession?(): void;
   onRenameChatSession?(sessionId: string, title: string): void;
+  onDismissChatSession?(sessionId: string): void;
+  onReopenChatSession?(sessionId: string): void;
+  chatHistorySessions?: readonly WorkspaceChatSessionTab[];
   onDeleteChatSession?(sessionId: string): void;
   chatStreaming?: boolean;
   onStop?(): void;
   onForkMessage?(messageId: string): void;
   onRegenerateMessage?(messageId: string): void;
   onRetryFailedTurn?(): void;
-  onOpenScene?(): void;
+  onOpenScene?(sceneId?: SceneId): void;
   canOpenScene?: boolean;
+  /** Scene id for manual next-steps coach (Agent selection chip). */
+  manualNextActionSceneId?: SceneId;
   /** Docked in the secondary shell — collapse control lives in the shell header. */
   variant?: "floating" | "docked";
   dictating?: boolean;
   onToggleDictation?(): void;
   dictationAvailable?: boolean;
   onBindDictateAppend?(append: (text: string) => void): void;
+  onMessageActionChip?(input: Readonly<{
+    messageId: string;
+    chipId: string;
+    sceneId?: SceneId;
+    revision?: number;
+    catalogAgentId?: CatalogAgentId;
+  }>): void;
+  /** Manual next-steps coach (cheap model) — Ghostwriter mark in composer. */
+  onManualNextActionCoach?(sceneId?: SceneId): void;
+  nextActionCoachBusy?: boolean;
+  /** Active work-plan job strip under session tabs. */
+  workPlanJobSummary?: string;
+  workPlanJobs?: readonly WorkPlanJobStripJob[];
+  workPlanJobActions?: readonly WorkPlanJobStripAction[];
+  onWorkPlanJobAction?(actionId: string): void;
+  onOpenWorkPlanJob?(jobId: string): void;
+  onDismissWorkPlanJobs?(): void;
 }>;
 
 type PickerKind = "mode" | "model" | null;
@@ -165,6 +213,9 @@ export function WorkspaceChatPanel({
   onChatSessionSelect,
   onNewChatSession,
   onRenameChatSession,
+  onDismissChatSession,
+  onReopenChatSession,
+  chatHistorySessions = [],
   onDeleteChatSession,
   chatStreaming = false,
   onStop,
@@ -173,11 +224,21 @@ export function WorkspaceChatPanel({
   onRetryFailedTurn,
   onOpenScene,
   canOpenScene = false,
+  manualNextActionSceneId,
   variant = "floating",
   dictating = false,
   onToggleDictation,
   dictationAvailable = false,
-  onBindDictateAppend
+  onBindDictateAppend,
+  onMessageActionChip,
+  onManualNextActionCoach,
+  nextActionCoachBusy = false,
+  workPlanJobSummary,
+  workPlanJobs = [],
+  workPlanJobActions = [],
+  onWorkPlanJobAction,
+  onOpenWorkPlanJob,
+  onDismissWorkPlanJobs
 }: WorkspaceChatPanelProps) {
   const [draft, setDraft] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<
@@ -197,7 +258,11 @@ export function WorkspaceChatPanel({
   const [activeCatalogPartner, setActiveCatalogPartner] = useState<
     ActiveWorkspaceCatalogPartner | null
   >(null);
-  const [sessionMenuId, setSessionMenuId] = useState<string | null>(null);
+  const [historyMenuOpen, setHistoryMenuOpen] = useState(false);
+  const [historyMenuSessionId, setHistoryMenuSessionId] = useState<string | null>(
+    null
+  );
+  const [historySearchQuery, setHistorySearchQuery] = useState("");
   const [turnMenuId, setTurnMenuId] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
@@ -335,6 +400,35 @@ export function WorkspaceChatPanel({
     mode
   );
   const modelChipLabel = `${agentModelLabelWithProvider(model, availableModels)} · ${workspaceAgentEffortLabel(effort)}`;
+  const activeSessionTitle = chatSessions.find(
+    (session) => session.id === activeChatSessionId
+  )?.title;
+  const formattedTranscript = formatWorkspaceChatTranscript({
+    messages,
+    sessionTitle: activeSessionTitle,
+    selectionSummary
+  });
+  const showSessionRow =
+    chatSessions.length > 0 &&
+    onChatSessionSelect !== undefined &&
+    activeChatSessionId !== undefined;
+  const showHistoryControl =
+    onChatSessionSelect !== undefined && onReopenChatSession !== undefined;
+  const filteredHistorySessions = useMemo(() => {
+    const query = historySearchQuery.trim().toLowerCase();
+    if (query.length === 0) return chatHistorySessions;
+    return chatHistorySessions.filter((session) =>
+      session.title.toLowerCase().includes(query)
+    );
+  }, [chatHistorySessions, historySearchQuery]);
+  const uniqueChatSessionCount = useMemo(
+    () =>
+      new Set([
+        ...chatHistorySessions.map((session) => session.id),
+        ...chatSessions.map((session) => session.id)
+      ]).size,
+    [chatHistorySessions, chatSessions]
+  );
 
   return (
     <View
@@ -357,10 +451,13 @@ export function WorkspaceChatPanel({
         </View>
       ) : null}
 
-      {chatSessions.length > 0 &&
-      onChatSessionSelect !== undefined &&
-      activeChatSessionId !== undefined ? (
-        <View style={styles.sessionRow}>
+      {showSessionRow ? (
+        <View
+          style={[
+            styles.sessionRow,
+            historyMenuOpen && styles.sessionRowMenuOpen
+          ]}
+        >
           <ScrollView
             contentContainerStyle={styles.sessionScrollContent}
             horizontal
@@ -370,98 +467,224 @@ export function WorkspaceChatPanel({
           >
             {chatSessions.map((session) => {
               const active = session.id === activeChatSessionId;
-              const menuOpen = sessionMenuId === session.id;
-              const canDelete =
-                onDeleteChatSession !== undefined && chatSessions.length > 1;
-              const canRename = onRenameChatSession !== undefined;
+              const canDismiss = onDismissChatSession !== undefined;
               return (
-                <View key={session.id} style={styles.sessionChipWrap}>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                    onPress={() => {
-                      setSessionMenuId(null);
-                      onChatSessionSelect(session.id);
-                    }}
-                    style={({ pressed }) => [
-                      styles.sessionChip,
-                      active && styles.sessionChipActive,
-                      pressed && styles.pressed
+                <View key={session.id} style={styles.sessionTabWrap}>
+                  <View
+                    style={[
+                      styles.sessionTab,
+                      active && styles.sessionTabActive
                     ]}
                   >
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.sessionChipText,
-                        active && styles.sessionChipTextActive
-                      ]}
-                    >
-                      {session.title}
-                    </Text>
-                  </Pressable>
-                  {canRename || canDelete ? (
                     <Pressable
-                      accessibilityLabel={`Session actions for ${session.title}`}
-                      accessibilityRole="button"
-                      onPress={() =>
-                        setSessionMenuId((current) =>
-                          current === session.id ? null : session.id
-                        )
+                      accessibilityRole="tab"
+                      accessibilityState={{ selected: active }}
+                      onLongPress={
+                        onRenameChatSession === undefined
+                          ? undefined
+                          : () => {
+                              setHistoryMenuOpen(false);
+                              promptRenameSession(session.title, (title) =>
+                                onRenameChatSession(session.id, title)
+                              );
+                            }
                       }
+                      onPress={() => {
+                        setHistoryMenuOpen(false);
+                        onChatSessionSelect(session.id);
+                      }}
                       style={({ pressed }) => [
-                        styles.sessionMenuButton,
+                        styles.sessionTabHit,
                         pressed && styles.pressed
                       ]}
                     >
-                      <DotsThree color={colors.muted} size={12} weight="bold" />
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          styles.sessionTabText,
+                          active && styles.sessionTabTextActive
+                        ]}
+                      >
+                        {session.title}
+                      </Text>
                     </Pressable>
-                  ) : null}
-                  {menuOpen ? (
-                    <View style={styles.sessionMenu}>
-                      {canRename ? (
-                        <Pressable
-                          accessibilityRole="menuitem"
-                          onPress={() => {
-                            setSessionMenuId(null);
-                            promptRenameSession(session.title, (title) =>
-                              onRenameChatSession?.(session.id, title)
-                            );
-                          }}
-                          style={({ pressed }) => [
-                            styles.sessionMenuItem,
-                            pressed && styles.pressed
-                          ]}
-                        >
-                          <Text style={styles.sessionMenuItemText}>Rename</Text>
-                        </Pressable>
-                      ) : null}
-                      {canDelete ? (
-                        <Pressable
-                          accessibilityRole="menuitem"
-                          onPress={() => {
-                            setSessionMenuId(null);
-                            onDeleteChatSession?.(session.id);
-                          }}
-                          style={({ pressed }) => [
-                            styles.sessionMenuItem,
-                            pressed && styles.pressed
-                          ]}
-                        >
-                          <Text style={styles.sessionMenuItemText}>Delete</Text>
-                        </Pressable>
-                      ) : null}
-                    </View>
-                  ) : null}
+                    {canDismiss ? (
+                      <Pressable
+                        accessibilityLabel={`Close ${session.title}`}
+                        accessibilityRole="button"
+                        onPress={() => {
+                          setHistoryMenuOpen(false);
+                          onDismissChatSession(session.id);
+                        }}
+                        style={({ pressed }) => [
+                          styles.sessionDismissButton,
+                          pressed && styles.pressed
+                        ]}
+                      >
+                        <X
+                          color={active ? colors.kicker : colors.muted}
+                          size={12}
+                          weight="bold"
+                        />
+                      </Pressable>
+                    ) : null}
+                  </View>
                 </View>
               );
             })}
           </ScrollView>
+          <CopyTranscriptButton text={formattedTranscript} />
+          {showHistoryControl ? (
+            <View style={styles.historyMenuWrap}>
+              <Pressable
+                accessibilityLabel="Chat history"
+                accessibilityRole="button"
+                onPress={() => {
+                  setHistoryMenuSessionId(null);
+                  setHistoryMenuOpen((current) => {
+                    if (current) setHistorySearchQuery("");
+                    return !current;
+                  });
+                }}
+                style={({ pressed }) => [
+                  styles.newSessionButton,
+                  pressed && styles.pressed
+                ]}
+              >
+                <ClockCounterClockwise
+                  color={colors.kicker}
+                  size={13}
+                  weight="regular"
+                />
+              </Pressable>
+              {historyMenuOpen ? (
+                <View style={styles.historyMenu}>
+                  <TextInput
+                    accessibilityLabel="Search chat history"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    onChangeText={setHistorySearchQuery}
+                    placeholder="Search chats…"
+                    placeholderTextColor={colors.muted}
+                    style={styles.historyMenuSearch}
+                    value={historySearchQuery}
+                  />
+                  {chatHistorySessions.length === 0 ? (
+                    <Text style={styles.historyMenuEmptyText}>
+                      No chats with content yet
+                    </Text>
+                  ) : filteredHistorySessions.length === 0 ? (
+                    <Text style={styles.historyMenuEmptyText}>No matches</Text>
+                  ) : (
+                    filteredHistorySessions.map((session) => {
+                      const actionsOpen = historyMenuSessionId === session.id;
+                      const canRename = onRenameChatSession !== undefined;
+                      const canDelete =
+                        onDeleteChatSession !== undefined &&
+                        uniqueChatSessionCount > 1;
+                      return (
+                        <View key={session.id}>
+                          <View style={styles.historyMenuRow}>
+                            <Pressable
+                              accessibilityRole="menuitem"
+                              onPress={() => {
+                                setHistoryMenuOpen(false);
+                                setHistoryMenuSessionId(null);
+                                setHistorySearchQuery("");
+                                if (session.open) {
+                                  onChatSessionSelect?.(session.id);
+                                } else {
+                                  onReopenChatSession(session.id);
+                                }
+                              }}
+                              style={({ pressed }) => [
+                                styles.historyMenuItem,
+                                pressed && styles.pressed
+                              ]}
+                            >
+                              <Text
+                                numberOfLines={1}
+                                style={styles.historyMenuItemText}
+                              >
+                                {session.title}
+                              </Text>
+                            </Pressable>
+                            {canRename || canDelete ? (
+                              <Pressable
+                                accessibilityLabel={`History actions for ${session.title}`}
+                                accessibilityRole="button"
+                                onPress={() =>
+                                  setHistoryMenuSessionId((current) =>
+                                    current === session.id ? null : session.id
+                                  )
+                                }
+                                style={({ pressed }) => [
+                                  styles.sessionMenuButton,
+                                  pressed && styles.pressed
+                                ]}
+                              >
+                                <DotsThree
+                                  color={colors.muted}
+                                  size={12}
+                                  weight="bold"
+                                />
+                              </Pressable>
+                            ) : null}
+                          </View>
+                          {actionsOpen ? (
+                            <View style={styles.historyMenuActions}>
+                              {canRename ? (
+                                <Pressable
+                                  accessibilityRole="menuitem"
+                                  onPress={() => {
+                                    setHistoryMenuSessionId(null);
+                                    promptRenameSession(session.title, (title) =>
+                                      onRenameChatSession?.(session.id, title)
+                                    );
+                                  }}
+                                  style={({ pressed }) => [
+                                    styles.sessionMenuItem,
+                                    pressed && styles.pressed
+                                  ]}
+                                >
+                                  <Text style={styles.sessionMenuItemText}>
+                                    Rename
+                                  </Text>
+                                </Pressable>
+                              ) : null}
+                              {canDelete ? (
+                                <Pressable
+                                  accessibilityRole="menuitem"
+                                  onPress={() => {
+                                    setHistoryMenuSessionId(null);
+                                    onDeleteChatSession?.(session.id);
+                                  }}
+                                  style={({ pressed }) => [
+                                    styles.sessionMenuItem,
+                                    pressed && styles.pressed
+                                  ]}
+                                >
+                                  <Text style={styles.sessionMenuItemText}>
+                                    Delete
+                                  </Text>
+                                </Pressable>
+                              ) : null}
+                            </View>
+                          ) : null}
+                        </View>
+                      );
+                    })
+                  )}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
           {onNewChatSession !== undefined ? (
             <Pressable
               accessibilityLabel="New chat"
               accessibilityRole="button"
               onPress={() => {
-                setSessionMenuId(null);
+                setHistoryMenuOpen(false);
                 onNewChatSession();
               }}
               style={({ pressed }) => [
@@ -469,10 +692,25 @@ export function WorkspaceChatPanel({
                 pressed && styles.pressed
               ]}
             >
-              <Plus color={colors.kicker} size={12} weight="bold" />
+              <Plus color={colors.kicker} size={13} weight="bold" />
             </Pressable>
           ) : null}
         </View>
+      ) : messages.length > 0 ? (
+        <View style={styles.sessionActionsRow}>
+          <CopyTranscriptButton text={formattedTranscript} />
+        </View>
+      ) : null}
+
+      {workPlanJobs.length > 0 ? (
+        <WorkPlanJobStrip
+          actions={workPlanJobActions}
+          jobs={workPlanJobs}
+          onAction={onWorkPlanJobAction}
+          onDismiss={onDismissWorkPlanJobs}
+          onOpenJob={onOpenWorkPlanJob}
+          summary={workPlanJobSummary ?? "Work plan"}
+        />
       ) : null}
 
       {selectionSummary !== undefined && selectionSummary.trim().length > 0 ? (
@@ -480,7 +718,7 @@ export function WorkspaceChatPanel({
           <Pressable
             accessibilityLabel="Open selected scene"
             accessibilityRole="button"
-            onPress={onOpenScene}
+            onPress={() => onOpenScene?.(manualNextActionSceneId)}
             style={({ pressed }) => [
               styles.selectionChip,
               styles.selectionChipPressable,
@@ -584,13 +822,32 @@ export function WorkspaceChatPanel({
                     return;
                   }
                   if (chip.id === "open-scene") {
-                    onOpenScene?.();
+                    onOpenScene?.(message.nextActionSceneId);
                     return;
                   }
                   if (chip.id === "retry") {
                     onRetryFailedTurn?.();
                   }
                 }}
+                onMessageActionChip={
+                  onMessageActionChip === undefined
+                    ? undefined
+                    : (chip) =>
+                        onMessageActionChip({
+                          messageId: message.id,
+                          chipId: chip.id,
+                          ...(message.nextActionSceneId === undefined
+                            ? {}
+                            : { sceneId: message.nextActionSceneId }),
+                          ...(message.nextActionRevision === undefined
+                            ? {}
+                            : { revision: message.nextActionRevision }),
+                          ...(chip.catalogAgentId === undefined
+                            ? {}
+                            : { catalogAgentId: chip.catalogAgentId })
+                        })
+                }
+                onOpenScene={onOpenScene}
                 onFork={
                   onForkMessage === undefined
                     ? undefined
@@ -901,6 +1158,34 @@ export function WorkspaceChatPanel({
           />
           <View style={styles.composerToolbar}>
             <View style={styles.pickerRow}>
+              {onManualNextActionCoach === undefined ? null : (
+                <Pressable
+                  accessibilityHint="Ask Ghostwriter for next-step suggestions on the open scene"
+                  accessibilityLabel="Suggest next steps"
+                  accessibilityRole="button"
+                  accessibilityState={{ busy: nextActionCoachBusy }}
+                  disabled={composerDisabled || nextActionCoachBusy}
+                  onPress={() => onManualNextActionCoach?.(manualNextActionSceneId)}
+                  style={({ pressed }) => [
+                    styles.nextActionMarkButton,
+                    pressed && styles.pressed,
+                    (composerDisabled || nextActionCoachBusy) && styles.disabled
+                  ]}
+                  {...({
+                    title: "Suggest next steps for this scene"
+                  } as Record<string, string>)}
+                >
+                  <View style={styles.nextActionMarkFrame}>
+                    <Image
+                      accessibilityElementsHidden
+                      importantForAccessibility="no-hide-descendants"
+                      resizeMode="contain"
+                      source={brandMark}
+                      style={styles.nextActionMarkImage}
+                    />
+                  </View>
+                </Pressable>
+              )}
               {typeof document !== "undefined" ? (
                 <Pressable
                   accessibilityLabel="Attach image or video"
@@ -955,10 +1240,12 @@ export function WorkspaceChatPanel({
                 }}
                 selected={openPicker === "mode"}
               />
+            </View>
+            <View style={styles.composerToolbarEnd}>
               <ComposerChip
                 accessibilityLabel="Agent model and effort"
                 disabled={composerDisabled || modelPickerOptions.length === 0}
-                label={modelChipLabel}
+                label={modelPickerOptions.length === 0 ? "Model" : modelChipLabel}
                 onPress={() => {
                   setOpenStageMenu(null);
                   setOpenPicker((current) =>
@@ -967,7 +1254,6 @@ export function WorkspaceChatPanel({
                 }}
                 selected={openPicker === "model"}
               />
-            </View>
             <Pressable
               accessibilityLabel={chatStreaming ? "Stop" : "Send"}
               accessibilityRole="button"
@@ -992,6 +1278,7 @@ export function WorkspaceChatPanel({
                 <ArrowUp color="#ffffff" size={13} weight="thin" />
               )}
             </Pressable>
+            </View>
           </View>
         </View>
       </View>
@@ -1050,6 +1337,8 @@ function ChatTurn({
   message,
   onEditResend,
   onFollowUpChip,
+  onMessageActionChip,
+  onOpenScene,
   onFork,
   onRegenerate,
   onToggleMenu,
@@ -1063,6 +1352,8 @@ function ChatTurn({
   message: WorkspaceChatMessage;
   onEditResend?(): void;
   onFollowUpChip?(chip: WorkspaceChatFollowUpChip): void;
+  onMessageActionChip?(chip: SceneSaveNextActionChip): void;
+  onOpenScene?(sceneId?: SceneId): void;
   onFork?(): void;
   onRegenerate?(): void;
   onToggleMenu?(): void;
@@ -1102,11 +1393,37 @@ function ChatTurn({
 
   if (message.role === "system") {
     const chips = systemFollowUpChips ?? NO_CHIPS;
+    const actionChips = resolveMessageActionChips(message);
+    const openSceneId = message.openSceneOnPress;
+    const canOpenFromNote =
+      openSceneId !== undefined && onOpenScene !== undefined;
+    const note = (
+      <Text
+        style={[styles.systemNote, canOpenFromNote && styles.systemNoteLink]}
+      >
+        {message.body}
+      </Text>
+    );
     return (
       <View style={styles.turnSystem}>
-        <Text style={styles.systemNote}>{message.body}</Text>
+        {canOpenFromNote ? (
+          <Pressable
+            accessibilityHint="Opens the scene draft"
+            accessibilityLabel={message.body}
+            accessibilityRole="link"
+            onPress={() => onOpenScene?.(openSceneId)}
+            style={({ pressed }) => [pressed && styles.pressed]}
+          >
+            {note}
+          </Pressable>
+        ) : (
+          note
+        )}
         {chips.length > 0 ? (
           <FollowUpChips chips={chips} onPress={onFollowUpChip} />
+        ) : null}
+        {actionChips.length > 0 ? (
+          <MessageActionChips chips={actionChips} onPress={onMessageActionChip} />
         ) : null}
       </View>
     );
@@ -1120,6 +1437,7 @@ function ChatTurn({
     traces: traces.map((trace) => ({ title: trace.title, ok: trace.ok }))
   });
   const chips = assistantFollowUpChips ?? NO_CHIPS;
+  const actionChips = resolveMessageActionChips(message);
 
   return (
     <View style={styles.turnAssistant}>
@@ -1153,11 +1471,72 @@ function ChatTurn({
       {!streaming && chips.length > 0 ? (
         <FollowUpChips chips={chips} onPress={onFollowUpChip} />
       ) : null}
+      {!streaming && actionChips.length > 0 ? (
+        <MessageActionChips chips={actionChips} onPress={onMessageActionChip} />
+      ) : null}
     </View>
   );
 }
 
 const NO_CHIPS: readonly WorkspaceChatFollowUpChip[] = Object.freeze([]);
+const NO_ACTION_CHIPS: readonly SceneSaveNextActionChip[] = Object.freeze([]);
+
+function resolveMessageActionChips(
+  message: WorkspaceChatMessage
+): readonly SceneSaveNextActionChip[] {
+  const base = message.actionChips ?? NO_ACTION_CHIPS;
+  if (message.workPlan === undefined) return base;
+  const hasSubmit = base.some((chip) => chip.id === "submit-work-plan");
+  if (hasSubmit) return base;
+  if (base.length === 0) return WORK_PLAN_ACTION_CHIPS;
+  const withoutDismiss = base.filter(
+    (chip) => chip.id !== "dismiss-next-action" && chip.id !== "dismiss-work-plan"
+  );
+  return Object.freeze([
+    ...withoutDismiss,
+    WORK_PLAN_SUBMIT_CHIP,
+    WORK_PLAN_DISMISS_CHIP
+  ]);
+}
+
+function MessageActionChips({
+  chips,
+  onPress
+}: Readonly<{
+  chips: readonly SceneSaveNextActionChip[];
+  onPress?(chip: SceneSaveNextActionChip): void;
+}>) {
+  if (chips.length === 0) return null;
+  return (
+    <View style={styles.followUpRow}>
+      {chips.map((chip) => (
+        <Pressable
+          accessibilityRole="button"
+          key={chip.id}
+          onPress={() => onPress?.(chip)}
+          style={({ pressed }) => [
+            styles.followUpChip,
+            (chip.id === "start-next-action-coach" ||
+              chip.id === "submit-work-plan") &&
+              styles.messageActionChipPrimary,
+            pressed && styles.pressed
+          ]}
+        >
+          <Text
+            style={[
+              styles.followUpChipText,
+              (chip.id === "start-next-action-coach" ||
+                chip.id === "submit-work-plan") &&
+                styles.messageActionChipPrimaryText
+            ]}
+          >
+            {chip.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
 
 function FollowUpChips({
   chips,
@@ -1331,6 +1710,54 @@ function clipboardWriteText(): ((text: string) => Promise<void>) | undefined {
     return undefined;
   }
   return (text) => clipboard.writeText(text);
+}
+
+function CopyTranscriptButton({ text }: Readonly<{ text: string }>) {
+  const [copied, setCopied] = useState(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined
+  );
+
+  useEffect(
+    () => () => {
+      if (resetTimer.current !== undefined) clearTimeout(resetTimer.current);
+    },
+    []
+  );
+
+  const write = clipboardWriteText();
+  if (write === undefined || text.trim().length === 0) return null;
+
+  const copy = async (): Promise<void> => {
+    try {
+      await write(text);
+    } catch {
+      return;
+    }
+    setCopied(true);
+    if (resetTimer.current !== undefined) clearTimeout(resetTimer.current);
+    resetTimer.current = setTimeout(() => setCopied(false), 1600);
+  };
+
+  return (
+    <Pressable
+      accessibilityLabel={
+        copied ? "Copied chat transcript" : "Copy chat transcript"
+      }
+      accessibilityRole="button"
+      onPress={() => void copy()}
+      style={({ pressed }) => [
+        styles.newSessionButton,
+        pressed && styles.pressed
+      ]}
+    >
+      {copied ? (
+        <Check color={colors.green} size={13} weight="bold" />
+      ) : (
+        <CopySimple color={colors.kicker} size={13} weight="regular" />
+      )}
+    </Pressable>
+  );
 }
 
 /** Copies a turn verbatim — markdown and all — where the platform allows it. */
@@ -1534,77 +1961,166 @@ const styles = StyleSheet.create({
   },
   selectionChip: {
     alignSelf: "flex-start",
-    backgroundColor: colors.wash,
+    backgroundColor: colors.panel,
     borderColor: colors.line,
-    borderRadius: 999,
+    borderRadius: 6,
     borderWidth: 1,
     flexShrink: 0,
     marginHorizontal: 10,
     marginTop: 8,
     maxWidth: "92%",
-    paddingHorizontal: 9,
-    paddingVertical: 4
+    paddingHorizontal: 8,
+    paddingVertical: 5
   },
   selectionChipPressable: {
     borderColor: colors.kicker
   },
   selectionChipText: {
-    color: colors.muted,
-    fontFamily: fonts.uiMedium,
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
     fontSize: 10
   },
   sessionRow: {
-    alignItems: "center",
+    alignItems: "flex-end",
+    backgroundColor: colors.wash,
     borderBottomColor: colors.line,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 1,
     flexDirection: "row",
     flexShrink: 0,
-    gap: 4,
+    gap: 2,
     paddingLeft: 8,
     paddingRight: 6,
-    paddingVertical: 6
+    paddingTop: 6
+  },
+  sessionRowMenuOpen: {
+    overflow: "visible",
+    zIndex: 40
   },
   sessionScroll: {
     flex: 1,
     minWidth: 0
   },
   sessionScrollContent: {
-    alignItems: "center",
-    gap: 4,
+    alignItems: "flex-end",
+    gap: 2,
     paddingRight: 4
   },
-  sessionChipWrap: {
-    flexDirection: "row",
+  sessionTabWrap: {
     position: "relative"
   },
-  sessionChip: {
-    backgroundColor: colors.wash,
-    borderColor: colors.line,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    maxWidth: 160,
-    paddingHorizontal: 10,
-    paddingVertical: 5
+  sessionTab: {
+    alignItems: "center",
+    backgroundColor: "transparent",
+    borderBottomWidth: 0,
+    borderColor: "transparent",
+    borderTopLeftRadius: 11,
+    borderTopRightRadius: 3,
+    borderWidth: 1,
+    flexDirection: "row",
+    marginBottom: -1,
+    maxWidth: 180,
+    minHeight: 30,
+    paddingLeft: 10,
+    paddingRight: 4
   },
-  sessionChipActive: {
-    backgroundColor: colors.accentSoft,
-    borderColor: colors.kicker
+  sessionTabActive: {
+    backgroundColor: colors.paper,
+    borderBottomColor: colors.paper,
+    borderColor: colors.brandRuleSoft,
+    // Soft page-leaf lift — asymmetric corners + quiet edge shadow.
+    elevation: 2,
+    shadowColor: "#1c1610",
+    shadowOffset: { width: 2, height: -1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    ...({
+      boxShadow:
+        "1px -1px 0 rgba(179, 169, 157, 0.4), 3px 0 10px rgba(28, 22, 16, 0.07)"
+    } as object)
   },
-  sessionChipText: {
+  sessionTabHit: {
+    flexShrink: 1,
+    maxWidth: 148,
+    paddingVertical: 7
+  },
+  sessionTabText: {
     color: colors.muted,
     fontFamily: fonts.uiMedium,
     fontSize: 11
   },
-  sessionChipTextActive: {
-    color: colors.kicker
+  sessionTabTextActive: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold
   },
   sessionMenuButton: {
     alignItems: "center",
-    borderRadius: 999,
+    borderRadius: 4,
     height: 22,
     justifyContent: "center",
-    marginLeft: -6,
-    width: 18
+    width: 20
+  },
+  sessionDismissButton: {
+    alignItems: "center",
+    borderRadius: 4,
+    height: 22,
+    justifyContent: "center",
+    width: 20
+  },
+  historyMenuWrap: {
+    position: "relative",
+    zIndex: 50
+  },
+  historyMenu: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    elevation: 8,
+    maxHeight: 260,
+    minWidth: 200,
+    position: "absolute",
+    right: 0,
+    shadowColor: "#1c1610",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    top: "100%",
+    zIndex: 100
+  },
+  historyMenuSearch: {
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+    color: colors.ink,
+    fontFamily: fonts.ui,
+    fontSize: 11,
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  historyMenuEmptyText: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 11,
+    paddingHorizontal: 10,
+    paddingVertical: 10
+  },
+  historyMenuRow: {
+    alignItems: "center",
+    flexDirection: "row"
+  },
+  historyMenuItem: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  historyMenuItemText: {
+    color: colors.ink,
+    fontFamily: fonts.ui,
+    fontSize: 11
+  },
+  historyMenuActions: {
+    borderTopColor: colors.line,
+    borderTopWidth: 1
   },
   sessionMenu: {
     backgroundColor: colors.panel,
@@ -1628,14 +2144,27 @@ const styles = StyleSheet.create({
   },
   newSessionButton: {
     alignItems: "center",
-    borderColor: colors.line,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
+    alignSelf: "center",
+    borderRadius: 6,
     height: 26,
     justifyContent: "center",
+    marginBottom: 2,
     width: 26
   },
+  sessionActionsRow: {
+    alignItems: "flex-end",
+    backgroundColor: colors.wash,
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    flexShrink: 0,
+    gap: 2,
+    justifyContent: "flex-end",
+    paddingHorizontal: 6,
+    paddingTop: 6
+  },
   messageArea: {
+    backgroundColor: colors.wash,
     flex: 1,
     flexGrow: 1,
     minHeight: 0,
@@ -1833,9 +2362,9 @@ const styles = StyleSheet.create({
   },
   messages: {
     flexGrow: 1,
-    gap: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 14
+    gap: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 12
   },
   messagesEmpty: {
     flexGrow: 1,
@@ -1880,32 +2409,43 @@ const styles = StyleSheet.create({
     fontSize: 11
   },
   turnAssistant: {
-    gap: 8
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10
   },
   turnUser: {
     alignItems: "flex-end",
-    gap: 2
+    gap: 4
   },
   userSaid: {
     backgroundColor: colors.accentSoft,
-    borderRadius: 12,
+    borderColor: colors.brandRuleSoft,
+    borderRadius: 10,
+    borderWidth: 1,
     maxWidth: "94%",
     paddingHorizontal: 11,
-    paddingVertical: 8
+    paddingVertical: 9
   },
   turnSystem: {
     backgroundColor: colors.amberSoft,
     borderColor: colors.amber,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 10,
-    paddingVertical: 7
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 8
   },
   systemNote: {
     color: colors.amber,
     fontFamily: fonts.ui,
     fontSize: 12,
     lineHeight: 17
+  },
+  systemNoteLink: {
+    textDecorationLine: "underline"
   },
   working: {
     gap: 5
@@ -1979,17 +2519,28 @@ const styles = StyleSheet.create({
     gap: 6
   },
   followUpChip: {
-    backgroundColor: colors.wash,
+    alignItems: "center",
+    backgroundColor: colors.panel,
     borderColor: colors.line,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 6,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 26,
     paddingHorizontal: 9,
     paddingVertical: 5
   },
   followUpChipText: {
-    color: colors.kicker,
-    fontFamily: fonts.uiMedium,
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
     fontSize: 10
+  },
+  messageActionChipPrimary: {
+    backgroundColor: colors.rail,
+    borderColor: colors.rail
+  },
+  messageActionChipPrimaryText: {
+    // High contrast on rail black — railText is too close to ink for chips.
+    color: "#ffffff"
   },
   copyButton: {
     alignItems: "center",
@@ -2095,17 +2646,26 @@ const styles = StyleSheet.create({
   composerToolbar: {
     alignItems: "center",
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
     justifyContent: "space-between",
-    minWidth: 0
+    minWidth: 0,
+    rowGap: 6
   },
   pickerRow: {
     alignItems: "center",
     flexDirection: "row",
+    flexGrow: 1,
     flexShrink: 1,
     flexWrap: "wrap",
     gap: 4,
     minWidth: 0
+  },
+  composerToolbarEnd: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexShrink: 0,
+    gap: 6
   },
   iconToolButton: {
     alignItems: "center",
@@ -2117,6 +2677,27 @@ const styles = StyleSheet.create({
   iconToolButtonActive: {
     backgroundColor: colors.accentSoft
   },
+  nextActionMarkButton: {
+    alignItems: "center",
+    backgroundColor: colors.rail,
+    borderRadius: 6,
+    height: 28,
+    justifyContent: "center",
+    width: 28
+  },
+  nextActionMarkFrame: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    borderRadius: 4,
+    height: 20,
+    justifyContent: "center",
+    overflow: "hidden",
+    width: 20
+  },
+  nextActionMarkImage: {
+    height: 18,
+    width: 18
+  },
   attachmentRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -2125,10 +2706,10 @@ const styles = StyleSheet.create({
   },
   attachmentChip: {
     alignItems: "center",
-    backgroundColor: colors.wash,
+    backgroundColor: colors.panel,
     borderColor: colors.line,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 6,
+    borderWidth: 1,
     flexDirection: "row",
     gap: 4,
     maxWidth: "100%",

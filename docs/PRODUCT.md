@@ -177,9 +177,18 @@ On the same branch, the workspace shell and Agent dock advanced:
 - Manuscript Explorer: header icons + right-click context menu; Canvas owns full center with a
   compact chapter chip strip (no canvas Quick Build).
 
-**Proposed next:** Founder browser verification of writing-agent harness, Agent dock QOL, and the
-writing-agent catalog (stage menus → entity Drafts → Acknowledge/Reject), then post-gate Playwright;
-confirm production deploy/migrate for provider credentials and proposal primary-target columns when ready.
+**Chat work plans (in progress on `feat/proactive-next-actions`):** When the Agent proposes a
+multi-step bundle, the turn can carry a typed `work-plan-v1`. Writers **Submit** (chip or short
+confirm like “submit” / “let’s do them all”) to run real jobs — not a narrated fake queue. A dock
+job strip tracks status. Cheap jobs (catalog coaches, continuity, story-knowledge drafts) run in
+parallel; heavy Scene Partner work opens Plans with a prefilled brief first, then deferred Dialogue
+Coach when both are in the plan. Story-knowledge jobs land as Cast drafts; **Add to Cast**
+acknowledges and creates the record. Ambient Auto suggestions never auto-submit a work plan
+(ADR 0016).
+
+**Proposed next:** Founder browser verification of Submit → job strip → Entity Drafts / Plans /
+Add to Cast; writing-agent harness; then post-gate Playwright; confirm production deploy/migrate
+for provider credentials and proposal primary-target columns when ready.
 
 ## Prior writing milestone — implemented locally 2026-07-12
 

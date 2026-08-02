@@ -19,6 +19,30 @@ export function buildCharacterVisualLocatorUrl(
   return `${CHARACTER_VISUAL_LOCATOR_ORIGIN}/projects/${encodeURIComponent(projectId)}/story-knowledge/${encodeURIComponent(knowledgeId)}/visuals/${encodeURIComponent(visualId)}`;
 }
 
+export function buildCharacterVisualPublicUrl(
+  origin: string,
+  projectId: string,
+  knowledgeId: string,
+  visualId: string
+): string {
+  const base = origin.endsWith("/") ? origin.slice(0, -1) : origin;
+  const objectKey = buildCharacterVisualObjectKey(projectId, knowledgeId, visualId);
+  const encodedPath = objectKey
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  return `${base}/${encodedPath}`;
+}
+
+export function isCharacterVisualLocatorUrl(url: string): boolean {
+  return parseCharacterVisualLocatorUrl(url) !== undefined;
+}
+
+/** True when the UI must resolve a private locator through the download API. */
+export function characterVisualDisplayNeedsResolve(url: string): boolean {
+  return isCharacterVisualLocatorUrl(url);
+}
+
 export function parseCharacterVisualLocatorUrl(
   url: string
 ):

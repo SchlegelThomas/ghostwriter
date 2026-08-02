@@ -147,7 +147,12 @@ export function EntityDraftsPanel({
                   <PanelButton
                     disabled={rowDisabled}
                     label={
-                      rowBusy ? "Working…" : entityDraftPrimaryActionLabel(primaryAction)
+                      rowBusy
+                        ? "Working…"
+                        : entityDraftPrimaryActionLabel(
+                            primaryAction,
+                            draft.outputSchemaId
+                          )
                     }
                     onPress={() => onAcknowledge(draft.id)}
                     primary
@@ -156,7 +161,12 @@ export function EntityDraftsPanel({
                   <PanelButton
                     disabled={rowDisabled}
                     label={
-                      rowBusy ? "Working…" : entityDraftPrimaryActionLabel(primaryAction)
+                      rowBusy
+                        ? "Working…"
+                        : entityDraftPrimaryActionLabel(
+                            primaryAction,
+                            draft.outputSchemaId
+                          )
                     }
                     onPress={() => onSelect(draft.id)}
                     primary={primaryAction !== "view"}

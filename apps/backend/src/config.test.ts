@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadConfig, pagesPreviewCookieDomain, parseR2CaptureObjectStorageConfig } from "./config.js";
+import { loadConfig, pagesPreviewCookieDomain, parsePublicMediaConfig, parseR2CaptureObjectStorageConfig } from "./config.js";
 import { R2_OBJECT_STORAGE_CONFIG_ERROR } from "./r2-config-validation.js";
 
 const VALID_R2_ACCOUNT_ID = "0123456789abcdef0123456789abcdef";
@@ -33,6 +33,7 @@ describe("backend auth configuration", () => {
     });
     expect(config.demoSeed).toEqual({ enabled: true });
     expect(config.r2).toBeUndefined();
+    expect(config.publicMedia).toBeUndefined();
   });
 
   it("disables demo seed when GHOSTWRITER_DEMO_SEED=0", () => {
@@ -154,5 +155,68 @@ describe("backend R2 object storage configuration", () => {
       const message = error instanceof Error ? error.message : String(error);
       expect(message).not.toContain("leaked-secret-value");
     }
+  });
+});
+
+describe("backend public character media configuration", () => {
+  it("omits public media when the origin is unset", () => {
+    expect(parsePublicMediaConfig({}, undefined)).toBeUndefined();
+    expect(loadConfig(baseEnv).publicMedia).toBeUndefined();
+  });
+
+  it("loads public media when origin and bucket are set with private R2 creds", () => {
+    const privateR2 = {
+      accountId: VALID_R2_ACCOUNT_ID,
+      accessKeyId: "access-key-id",
+      secretAccessKey: "secret-access-key",
+      bucketName: "private-capture",
+      endpoint: `https://${VALID_R2_ACCOUNT_ID}.r2.cloudflarestorage.com`
+    };
+    const config = loadConfig({
+      ...baseEnv,
+      R2_ACCOUNT_ID: VALID_R2_ACCOUNT_ID,
+      R2_ACCESS_KEY_ID: "access-key-id",
+      R2_SECRET_ACCESS_KEY: "secret-access-key",
+      R2_BUCKET_NAME: "private-capture",
+      GHOSTWRITER_PUBLIC_MEDIA_ORIGIN: "https://media.ghost-writer.studio",
+      GHOSTWRITER_PUBLIC_R2_BUCKET_NAME: "ghostwriter-public-media"
+    });
+
+    expect(config.publicMedia).toEqual({
+      origin: "https://media.ghost-writer.studio",
+      r2: {
+        accountId: VALID_R2_ACCOUNT_ID,
+        accessKeyId: "access-key-id",
+        secretAccessKey: "secret-access-key",
+        bucketName: "ghostwriter-public-media",
+        endpoint: `https://${VALID_R2_ACCOUNT_ID}.r2.cloudflarestorage.com`
+      }
+    });
+    expect(config.r2).toEqual(privateR2);
+  });
+
+  it("requires a public bucket name when the origin is set", () => {
+    expect(() =>
+      parsePublicMediaConfig(
+        { GHOSTWRITER_PUBLIC_MEDIA_ORIGIN: "https://media.ghost-writer.studio" },
+        {
+          accountId: VALID_R2_ACCOUNT_ID,
+          accessKeyId: "access-key-id",
+          secretAccessKey: "secret-access-key",
+          bucketName: "private-capture",
+          endpoint: `https://${VALID_R2_ACCOUNT_ID}.r2.cloudflarestorage.com`
+        }
+      )
+    ).toThrow("GHOSTWRITER_PUBLIC_R2_BUCKET_NAME is required");
+  });
+
+  it("requires private R2 credentials when public media is configured", () => {
+    expect(() =>
+      loadConfig({
+        ...baseEnv,
+        GHOSTWRITER_PUBLIC_MEDIA_ORIGIN: "https://media.ghost-writer.studio",
+        GHOSTWRITER_PUBLIC_R2_BUCKET_NAME: "ghostwriter-public-media"
+      })
+    ).toThrow("R2 object storage credentials are required");
   });
 });

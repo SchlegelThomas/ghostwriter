@@ -101,22 +101,48 @@ describe("workspace-agent-prefs", () => {
         effort: "turbo"
       })
     ).toEqual(DEFAULT_WORKSPACE_AGENT_PREFS);
+    expect(
+      normalizeWorkspaceAgentPrefs({
+        mode: "chat",
+        model: DEFAULT_WORKSPACE_AGENT_PREFS.model,
+        effort: "standard",
+        autoSuggestions: true
+      }).autoSuggestions
+    ).toBe(true);
   });
 
   it("persists and reads prefs per project", () => {
     writeWorkspaceAgentPrefs(PROJECT_ID, {
       mode: "plan",
       model: "o4-mini",
-      effort: "high"
+      effort: "high",
+      autoSuggestions: true
     });
     expect(readWorkspaceAgentPrefs(PROJECT_ID)).toEqual({
       mode: "plan",
       model: "o4-mini",
-      effort: "high"
+      effort: "high",
+      autoSuggestions: true
     });
     expect(readWorkspaceAgentPrefs("other-project")).toEqual(
       DEFAULT_WORKSPACE_AGENT_PREFS
     );
+  });
+
+  it("merges partial writes without dropping autoSuggestions", () => {
+    writeWorkspaceAgentPrefs(PROJECT_ID, {
+      mode: "chat",
+      model: DEFAULT_WORKSPACE_AGENT_PREFS.model,
+      effort: "standard",
+      autoSuggestions: true
+    });
+    writeWorkspaceAgentPrefs(PROJECT_ID, { mode: "agent" });
+    expect(readWorkspaceAgentPrefs(PROJECT_ID)).toEqual({
+      mode: "agent",
+      model: DEFAULT_WORKSPACE_AGENT_PREFS.model,
+      effort: "standard",
+      autoSuggestions: true
+    });
   });
 
   it("filters agent mode models to tool-capable chat entries", () => {

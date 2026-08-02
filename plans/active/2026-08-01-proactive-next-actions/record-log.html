@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Proactive next actions — record log</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Record log</p>
+      <h1>Proactive next actions</h1>
+      <p class="meta"><strong>Branch:</strong> <code>feat/proactive-next-actions</code></p>
+    </header>
+
+    <section>
+      <h2>2026-08-01 — Branch + outline opened</h2>
+      <ul>
+        <li>Cut <code>feat/proactive-next-actions</code> from updated <code>main</code>
+          (<code>3094d53</code> (PR #19 handoff merge).</li>
+        <li>Founder direction: iterate Drafts + agent integration so any meaningful change can
+          suggest next actions via a super cost-effective model (Haiku class), with escalate-to-bigger
+          model only when the coach asks and the writer engages.</li>
+        <li>Research synthesis (explore digs):
+          <ul>
+            <li>Entity Drafts = ADR 0014 proposals with primary target; Acknowledge/Reject for memos;
+              no second drafts store.</li>
+            <li>Catalog agents (Idea Midwife etc.) are <strong>manual</strong> dock runs only — no
+              save/schedule triggers; deterministic fallback when no key/model.</li>
+            <li>No prose entity detection in core today.</li>
+            <li>ADR 0011: quiet invitation never background-egresses or spends budget.</li>
+            <li>Closest design pattern: Mockups 5.0 Capture idle quiet invite; dock follow-up chips
+              are post-turn, not post-edit.</li>
+          </ul>
+        </li>
+        <li>Plan drafted with full surface matrix, three-tier model (local / cheap coach / escalate),
+          proposed CP0–CP7, and four founder decisions blocking implementation start.</li>
+        <li><strong>Awaiting founder:</strong> egress A vs B; landing surface confirm; first CP;
+          entity-detection approach.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — Decisions accepted; CP0 start</h2>
+      <ul>
+        <li><strong>Egress:</strong> A default (local + Start). Auto suggestions via toggleable
+          Ghostwriter mark at top of Agent pane (ambient cheap coach when on). Bigger models still
+          need separate confirm.</li>
+        <li><strong>Landing:</strong> entity Drafts + dock chips.</li>
+        <li><strong>First CP:</strong> scene prose save + idle.</li>
+        <li><strong>Entity detection:</strong> cheap-coach structured extraction with cast/SK roster
+          in context.</li>
+        <li><strong>Vector DB:</strong> founder asked whether to build now. Decision: <strong>defer</strong>.
+          New-character detection is “this scene vs known roster,” not whole-corpus retrieval.
+          Embeddings can be a later Continuity/RAG plan.</li>
+        <li>Plan status → active; begin CP0 contract + ADR.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — CP0 contract shipped</h2>
+      <ul>
+        <li><strong>Core:</strong> <code>next-action-v1.ts</code> typed payload + JSON schema +
+          <code>validateNextActionV1</code>; <code>next-action-invitation.ts</code> pure eligibility
+          helpers; registered schema id; acknowledge allow-list extended.</li>
+        <li><strong>UI:</strong> entity draft labels/acknowledge/body preview for
+          <code>next-action-v1</code>; <code>autoSuggestions</code> pref (default false).</li>
+        <li><strong>ADR:</strong> <code>docs/adr/0015-proactive-next-actions-and-ambient-coach.md</code>.</li>
+        <li><strong>Tests:</strong> <code>pnpm --filter @ghostwriter/core test</code>,
+          <code>pnpm --filter @ghostwriter/ui test</code> (prefs + entity-draft).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — CP1 scene save local guide + Agent toggle</h2>
+      <ul>
+        <li><strong>Agent pane:</strong> Ghostwriter mark toggle in
+          <code>WorkspaceSecondaryPanel</code> header (agent mode); reads/writes
+          <code>autoSuggestions</code> via existing workspace agent prefs (default off).</li>
+        <li><strong>Scene save invite:</strong> <code>DraftAcknowledgementEvent</code> extended with
+          <code>sceneId</code> + <code>workingVersion</code>; App schedules
+          <code>NEXT_ACTION_IDLE_THRESHOLD_MS</code> idle then surfaces local invite strip in
+          <code>WorkspaceChatPanel</code> via <code>shouldOfferSceneSaveInvitation</code> (no provider
+          call). Start/Dismiss + light chips; dismiss keyed per scene revision in session memory.</li>
+        <li><strong>Tests:</strong> <code>scene-save-next-action-invite.test.ts</code>,
+          prefs partial-merge test; <code>pnpm --filter @ghostwriter/ui exec tsc --noEmit</code>.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — Auto toggle visibility fix</h2>
+      <ul>
+        <li>Founder: full Ghostwriter lockup at ~22px was nearly invisible in Agent header.</li>
+        <li>First fix: bordered <strong>Auto</strong> chip with Sparkle — readable but lost brand vibes.</li>
+        <li>Second fix: crop <code>GhostwriterMark.png</code> (hand + ghost silhouette from lockup) into
+          the same Auto chip — readable label + brand mark; off/on still use line vs accentSoft.</li>
+        <li>Toggle moved right-aligned (before collapse). Agent chat turns restyled as solid bordered
+          cards on a wash background so history reads as distinct scrollable blocks (Cursor-like).</li>
+        <li>Session history: pill chips → tab strip (active tab fills paper, sits on wash bar;
+          rename/delete ⋯ lives inside the tab).</li>
+        <li>Active session tab: restrained page-leaf (asymmetric top radii + soft edge shadow);
+          no dog-ear illustration.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — Next-steps UX: Auto runs in-thread</h2>
+      <ul>
+        <li>Founder: 3s idle + Start/Dismiss strip felt bolted-on; Auto still required approval.</li>
+        <li><strong>Auto on:</strong> ~400ms debounce after save ack → Agent panel opens → assistant
+          turn with next-step chips (no Start gate). Strip above composer removed.</li>
+        <li><strong>Auto off:</strong> ~1s then soft in-chat invite (“Suggest next steps” / “Not now”).</li>
+        <li>Invitation helper: ambient never shows local Start invite; shorter manual idle.</li>
+        <li>Still stub suggestions until CP2 cheap-coach provider route.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — CP2 coach + spam guards + manual mark</h2>
+      <ul>
+        <li>Spam root cause: per-revision invites ignored open message / cooldown — every autosave
+          could post again. Fixed with open-message gate, 3-minute cooldown, 2.5s Auto debounce,
+          in-flight lock.</li>
+        <li>Cheap coach: <code>runNextActionCoach</code> +
+          <code>POST …/agent/next-action-runs</code> (Haiku default) → prose-aware
+          <code>next-action-v1</code> in chat + entity Draft.</li>
+        <li>Manual: black Ghostwriter mark in composer toolbar.</li>
+        <li>Composer layout: mode left / model+send right; mark beside attach.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-02 — Blocked next-steps status opens draft</h2>
+      <ul>
+        <li>When Ghostwriter mark is blocked by an open next-steps card, the amber system note
+          is tappable and opens that scene in Draft (<code>openSceneOnPress</code>).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — Writer-visible errors after Auto + mark</h2>
+      <ul>
+        <li><strong>API failure:</strong> hermetic backend was still an older process without
+          <code>next-action-runs</code> → HTTP 404 and generic
+          “Ghostwriter could not complete the request.” Restarted e2e backend; live Haiku coach
+          verified for “The first letter.”</li>
+        <li><strong>False “Open a scene…”:</strong> manual mark now resolves scene from Agent
+          selection chip → App <code>selectedSceneId</code> → last next-action message id.</li>
+        <li><strong>Open scene:</strong> follow-up chip passes message <code>nextActionSceneId</code>;
+          can-open also true when workspace selection is a scene.</li>
+        <li>Coach failure text now includes status + code.</li>
+        <li>Agent pane: copy-transcript control beside New chat (+) copies the active
+          session as plain text (role labels, optional session/context header).</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

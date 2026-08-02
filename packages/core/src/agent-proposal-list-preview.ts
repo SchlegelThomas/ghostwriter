@@ -61,6 +61,29 @@ function previewFromCatalogMemo(record: Record<string, unknown>): AgentProposalL
   });
 }
 
+function previewFromNextAction(record: Record<string, unknown>): AgentProposalListPreview {
+  return Object.freeze({
+    agentLabel: "Next actions",
+    summary: trimText(record.summary, PREVIEW_SUMMARY_MAX)
+  });
+}
+
+function previewFromWorkPlan(record: Record<string, unknown>): AgentProposalListPreview {
+  return Object.freeze({
+    agentLabel: "Work plan",
+    summary: trimText(record.summary, PREVIEW_SUMMARY_MAX)
+  });
+}
+
+function previewFromStoryKnowledgeCreate(
+  record: Record<string, unknown>
+): AgentProposalListPreview {
+  return Object.freeze({
+    title: trimText(record.name, PREVIEW_TITLE_MAX),
+    summary: trimText(record.summary, PREVIEW_SUMMARY_MAX)
+  });
+}
+
 function previewFromPacingFindings(record: Record<string, unknown>): AgentProposalListPreview {
   return Object.freeze({
     agentLabel: "Pacing Doctor",
@@ -148,6 +171,12 @@ export function agentProposalListPreviewFromPayload(
         return previewFromCatalogMemo(record);
       case "pacing-findings-v1":
         return previewFromPacingFindings(record);
+      case "next-action-v1":
+        return previewFromNextAction(record);
+      case "work-plan-v1":
+        return previewFromWorkPlan(record);
+      case "story-knowledge-create-v1":
+        return previewFromStoryKnowledgeCreate(record);
       case "plan-outline-v1":
         return previewFromPlanOutline(record);
       case "capture-reflection-v1":

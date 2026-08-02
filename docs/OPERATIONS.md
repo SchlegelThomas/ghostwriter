@@ -117,6 +117,17 @@ uses a server-only password derived from `BETTER_AUTH_SECRET` (no extra Fly secr
 normal session cookie. Hermetic E2E exposes the same route but sets the fake `ghostwriter-e2e`
 session cookie. Disable seed + route with `GHOSTWRITER_DEMO_SEED=0`. See ADR 0005 demo exception.
 
+Optional Fly secrets (or local env) seed BYOK provider keys for the demo account on boot — same
+keys you may use in `apps/backend/.env.e2e.local`, but with the `DEMO_SEED` prefix (hermetic E2E
+keeps `E2E_SEED_*`):
+
+- `GHOSTWRITER_DEMO_SEED_OPENAI_KEY`
+- `GHOSTWRITER_DEMO_SEED_ANTHROPIC_KEY`
+- `GHOSTWRITER_DEMO_SEED_GOOGLE_KEY`
+
+Never commit or log these values. Boot logs provider ids only. If KEK encryption is unavailable or
+provider calls are disabled, seeding is skipped without failing startup.
+
 ### Capture media implemented locally; R2 provisioning pending
 
 ADR 0010 and ADR 0011 accept the following boundaries for the active Capture-to-Story epic. They
@@ -169,6 +180,29 @@ Add each stable branch-preview origin explicitly when media upload is required t
 `https://*.ghostwriter-di2.pages.dev`. Missing R2 configuration selects a content-free unavailable
 adapter: Capture prose/Inbox remain usable while media init/download returns
 `ATTACHMENT_STORAGE_UNAVAILABLE`.
+
+### Public character portrait media
+
+When configured, applied Cast character visuals and the Harry Potter demo portraits
+use a **separate public R2 bucket** with a custom HTTPS domain. Capture attachments
+and book covers stay on the private bucket.
+
+Fly secrets (reuse the same R2 account credentials as the private bucket):
+
+- `GHOSTWRITER_PUBLIC_MEDIA_ORIGIN` — HTTPS origin without trailing slash, e.g.
+  `https://media.ghost-writer.studio`
+- `GHOSTWRITER_PUBLIC_R2_BUCKET_NAME` — public bucket name, e.g.
+  `ghostwriter-public-media` (alias: `PUBLIC_R2_BUCKET_NAME`)
+
+Private R2 credentials (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
+`R2_BUCKET_NAME`) must also be set. When the public origin is configured, the backend
+requires the public bucket name and uploads character visuals there; persisted URLs are
+direct HTTPS paths under the origin. Without public media config, character visuals keep
+the private `https://ghostwriter.character/...` locator URLs resolved via the download API.
+
+Provision the bucket and sync demo fixtures with Wrangler — see
+`scripts/public-media/README.md`. Demo seed re-puts portrait objects and rewrites
+existing locator URLs to public URLs on boot when public media is configured.
 
 Validated locally on 2026-07-12 against a temporary migrated Lakebase branch: real Google consent,
 durable account/profile bootstrap, project creation and reload, and sign-out with zero remaining

@@ -11,40 +11,27 @@
     <header>
       <p class="eyebrow">Session handoff</p>
       <h1>Where we left off</h1>
-      <p><strong>Last updated:</strong> 2026-08-01 · <strong>Merged:</strong> <a href="https://github.com/SchlegelThomas/ghostwriter/pull/18">PR #18</a></p>
+      <p><strong>Last updated:</strong> 2026-08-02 · <strong>Active branch:</strong>
+        <code>feat/proactive-next-actions</code> (PR in flight)</p>
     </header>
 
     <section>
-      <h2>Done recently</h2>
+      <h2>Shipping — proactive next actions + chat work plans + prod polish</h2>
       <ul>
-        <li><a href="https://github.com/SchlegelThomas/ghostwriter/pull/18">PR #18</a> merged: writing-agent harness + dock QOL + catalog / entity drafts / playbook steering.</li>
-        <li>Required CI <code>checks</code> green; <code>pnpm verify</code> 1036 passed before ship.</li>
-        <li>Lakebase PR <code>provision</code> and production backend deploy <strong>failed</strong> on
-          <code>must be owner of table agent_proposals</code> while applying migration <code>0021</code>
-          (same founder-ownership pattern as OPERATIONS).</li>
+        <li><strong>In this PR:</strong> Auto/manual next-steps coach; chat work plans (Submit →
+          job strip → Entity Drafts / Cast); dismissable chat tabs + searchable history;
+          collapsible job strip + working quips; Open Cast draft → Context; header search no
+          longer overlays trail; public character media + demo BYOK seed + Reader voice
+          configure link; Wrangler public-media scripts + demo-key Fly helper.</li>
+        <li><strong>Founder after merge:</strong> Confirm prod Cast portraits, demo keys, and
+          Reader Play; archive plans when accepted.</li>
       </ul>
-    </section>
-
-    <section>
-      <h2>Blocked — production migrate (owner)</h2>
-      <p>Apply <code>0021</code>/<code>0022</code> to <code>production</code> as table owner, then re-run backend deploy:</p>
-      <pre>databricks auth login --profile ghostwriter-owner
-export DATABRICKS_PROFILE=ghostwriter-owner
-export LAKEBASE_PROJECT_ID=ghostwriter
-export LAKEBASE_USER=tas9117@gmail.com
-export LAKEBASE_ENDPOINT_ID=primary
-./scripts/lakebase.sh migrate production
-gh run rerun 30722035089 --failed</pre>
-      <p>Long-term: transfer application table ownership to the SP so CI/deploy ALTER no longer needs the owner profile.</p>
-    </section>
-
-    <section>
-      <h2>Proposed next</h2>
-      <ul>
-        <li>Unblock production migrate/deploy (above).</li>
-        <li>Founder browser verify catalog Drafts / Playbooks / Pacing / dock; archive harness + QOL + catalog plans.</li>
-        <li>Post-gate Playwright only after that verify.</li>
-      </ul>
+      <p>Plans:
+        <a href="active/2026-08-01-proactive-next-actions/plan.html">proactive next actions</a>
+        · <a href="active/2026-08-01-chat-work-plans/plan.html">chat work plans</a>
+        · <a href="active/2026-08-02-public-media-demo-reader/plan.html">public media / demo / reader</a>
+        · ADRs <a href="../docs/adr/0015-proactive-next-actions-and-ambient-coach.md">0015</a>,
+        <a href="../docs/adr/0016-chat-work-plans-and-job-bundles.md">0016</a></p>
     </section>
   </main>
 </body>

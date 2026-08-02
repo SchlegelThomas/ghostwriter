@@ -31,6 +31,13 @@ export type BackendConfig = Readonly<{
   /** Founder demo Harry Potter seed + obscure sign-in. Default on; set `GHOSTWRITER_DEMO_SEED=0` to disable. */
   demoSeed: Readonly<{ enabled: boolean }>;
   r2: R2CaptureObjectStorageConfig | undefined;
+  /** Public HTTPS origin + R2 bucket for character portrait objects. Requires private R2 creds. */
+  publicMedia:
+    | Readonly<{
+        origin: string;
+        r2: R2CaptureObjectStorageConfig;
+      }>
+    | undefined;
   provider: Readonly<{
     kek: ProviderKekRuntimeConfig | undefined;
     callsDisabled: boolean;
@@ -69,6 +76,54 @@ export function parseR2CaptureObjectStorageConfig(
     secretAccessKey,
     bucketName,
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`
+  });
+}
+
+export function parsePublicMediaConfig(
+  env: NodeJS.ProcessEnv,
+  privateR2: R2CaptureObjectStorageConfig | undefined
+):
+  | Readonly<{
+      origin: string;
+      r2: R2CaptureObjectStorageConfig;
+    }>
+  | undefined {
+  const originRaw = env.GHOSTWRITER_PUBLIC_MEDIA_ORIGIN;
+  if (originRaw === undefined || originRaw.length === 0) {
+    const bucketOnly =
+      env.GHOSTWRITER_PUBLIC_R2_BUCKET_NAME ?? env.PUBLIC_R2_BUCKET_NAME;
+    if (bucketOnly !== undefined && bucketOnly.length > 0) {
+      throw new Error(
+        "GHOSTWRITER_PUBLIC_MEDIA_ORIGIN is required when a public R2 bucket name is set."
+      );
+    }
+    return undefined;
+  }
+
+  const origin = parseOrigin(originRaw, "GHOSTWRITER_PUBLIC_MEDIA_ORIGIN");
+  const bucketRaw =
+    env.GHOSTWRITER_PUBLIC_R2_BUCKET_NAME ?? env.PUBLIC_R2_BUCKET_NAME;
+  if (bucketRaw === undefined || bucketRaw.length === 0) {
+    throw new Error(
+      "GHOSTWRITER_PUBLIC_R2_BUCKET_NAME is required when GHOSTWRITER_PUBLIC_MEDIA_ORIGIN is set."
+    );
+  }
+  if (privateR2 === undefined) {
+    throw new Error(
+      "R2 object storage credentials are required when public character media is configured."
+    );
+  }
+
+  const bucketName = parseValidatedR2BucketName(bucketRaw);
+  return Object.freeze({
+    origin,
+    r2: Object.freeze({
+      accountId: privateR2.accountId,
+      accessKeyId: privateR2.accessKeyId,
+      secretAccessKey: privateR2.secretAccessKey,
+      bucketName,
+      endpoint: privateR2.endpoint
+    })
   });
 }
 
@@ -160,6 +215,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
     enabled: env.GHOSTWRITER_DEMO_SEED !== "0"
   });
   const r2 = parseR2CaptureObjectStorageConfig(env);
+  const publicMedia = parsePublicMediaConfig(env, r2);
   const provider = Object.freeze({
     kek: parseProviderKekConfig(env),
     callsDisabled: parseProviderCallsDisabled(env)
@@ -177,6 +233,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
       auth,
       demoSeed,
       r2,
+      publicMedia,
       provider,
       database: {
         mode: "lakebase",
@@ -207,6 +264,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
     auth,
     demoSeed,
     r2,
+    publicMedia,
     provider,
     database: { mode: "url", connectionString, ssl: env.DATABASE_SSL === "require" }
   };

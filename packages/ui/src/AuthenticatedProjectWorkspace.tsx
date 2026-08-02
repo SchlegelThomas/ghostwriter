@@ -104,6 +104,10 @@ import {
   type WorkspaceChatSendInput,
   type WorkspaceChatSessionTab
 } from "./WorkspaceChatPanel.js";
+import type {
+  WorkPlanJobStripAction,
+  WorkPlanJobStripJob
+} from "./WorkPlanJobStrip.js";
 import {
   buildAgentToolkitSelection,
   type AgentToolkitId,
@@ -275,6 +279,37 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   onChatModeChange?(mode: WorkspaceAgentMode): void;
   onChatModelChange?(model: AgentModelId): void;
   onChatEffortChange?(effort: WorkspaceAgentEffort): void;
+  autoSuggestionsEnabled?: boolean;
+  onAutoSuggestionsChange?(enabled: boolean): void;
+  /** Bump to open the Agent secondary panel (e.g. after Auto next-steps). */
+  requestOpenAgentPanel?: number;
+  /** Bump after Open scene — ensure Draft is visible (collapse agent on narrow). */
+  requestFocusDraftScene?: number;
+  onMessageActionChip?(input: Readonly<{
+    messageId: string;
+    chipId: string;
+    sceneId?: SceneId;
+    revision?: number;
+    catalogAgentId?: CatalogAgentId;
+  }>): void;
+  onManualNextActionCoach?(sceneId?: SceneId): void;
+  nextActionCoachBusy?: boolean;
+  workPlanJobSummary?: string;
+  workPlanJobs?: readonly WorkPlanJobStripJob[];
+  workPlanJobActions?: readonly WorkPlanJobStripAction[];
+  onWorkPlanJobAction?(actionId: string): void;
+  onOpenWorkPlanJob?(jobId: string): void;
+  onDismissWorkPlanJobs?(): void;
+  /** Bump to select project home (Title Page Drafts). */
+  requestReviewProjectDrafts?: number;
+  /** Bump to open scene Drafts in Context Dock (Agent-focused; Context stays closed). */
+  requestReviewSceneDrafts?: number;
+  requestReviewSceneDraftsSceneId?: SceneId;
+  /** Bump to reveal a specific entity draft (Context or Title Page Drafts). */
+  requestOpenEntityDraft?: number;
+  requestOpenEntityDraftProposalId?: string;
+  requestOpenEntityDraftScope?: "scene" | "project";
+  requestOpenEntityDraftSceneId?: SceneId;
   chatProviderConfigured?: boolean;
   chatAvailableModels?: readonly WorkspaceAvailableModel[];
   imageAvailableModels?: readonly WorkspaceAvailableModel[];
@@ -287,13 +322,16 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   onChatSessionSelect?(sessionId: string): void;
   onNewChatSession?(): void;
   onRenameChatSession?(sessionId: string, title: string): void;
+  onDismissChatSession?(sessionId: string): void;
+  onReopenChatSession?(sessionId: string): void;
+  chatHistorySessions?: readonly WorkspaceChatSessionTab[];
   onDeleteChatSession?(sessionId: string): void;
   chatStreaming?: boolean;
   onChatStop?(): void;
   onForkChatMessage?(messageId: string): void;
   onRegenerateChatMessage?(messageId: string): void;
   onRetryChatTurn?(): void;
-  onOpenChatScene?(): void;
+  onOpenChatScene?(sceneId?: SceneId): void;
   canOpenChatScene?: boolean;
   chatDictating?: boolean;
   onChatToggleDictation?(): void;
@@ -511,6 +549,26 @@ export function AuthenticatedProjectWorkspace({
   onChatModeChange,
   onChatModelChange,
   onChatEffortChange,
+  autoSuggestionsEnabled = DEFAULT_WORKSPACE_AGENT_PREFS.autoSuggestions,
+  onAutoSuggestionsChange,
+  requestOpenAgentPanel,
+  requestFocusDraftScene,
+  onMessageActionChip,
+  onManualNextActionCoach,
+  nextActionCoachBusy = false,
+  workPlanJobSummary,
+  workPlanJobs,
+  workPlanJobActions,
+  onWorkPlanJobAction,
+  onOpenWorkPlanJob,
+  onDismissWorkPlanJobs,
+  requestReviewProjectDrafts,
+  requestReviewSceneDrafts,
+  requestReviewSceneDraftsSceneId,
+  requestOpenEntityDraft,
+  requestOpenEntityDraftProposalId,
+  requestOpenEntityDraftScope,
+  requestOpenEntityDraftSceneId,
   chatProviderConfigured = true,
   chatAvailableModels = [],
   imageAvailableModels = [],
@@ -523,6 +581,9 @@ export function AuthenticatedProjectWorkspace({
   onChatSessionSelect,
   onNewChatSession,
   onRenameChatSession,
+  onDismissChatSession,
+  onReopenChatSession,
+  chatHistorySessions = [],
   onDeleteChatSession,
   chatStreaming = false,
   onChatStop,
@@ -799,12 +860,115 @@ export function AuthenticatedProjectWorkspace({
     if (!wide) setCollapsedPanel("inspector");
   }
 
+  useEffect(() => {
+    if (requestOpenAgentPanel === undefined || requestOpenAgentPanel < 1) {
+      return;
+    }
+    openAgentSecondary();
+  }, [requestOpenAgentPanel]);
+
+  useEffect(() => {
+    if (requestFocusDraftScene === undefined || requestFocusDraftScene < 1) {
+      return;
+    }
+    setFocusHalo(false);
+    setContextDockOpen(false);
+    if (!wide) {
+      setSecondaryOpen(false);
+      setCollapsedPanel("none");
+    }
+  }, [requestFocusDraftScene, wide]);
+
   function openInspectorSecondary(): void {
     setSecondaryOpen(true);
     setSecondaryMode("inspector");
     if (draftDeskActive) setContextDockOpen(true);
     if (!wide) setCollapsedPanel("inspector");
   }
+
+  // Work-plan review: navigate the center pane only. Agent secondary stays open —
+  // do not steal the right rail for Inspector/Context.
+  useEffect(() => {
+    if (
+      requestReviewProjectDrafts === undefined ||
+      requestReviewProjectDrafts < 1
+    ) {
+      return;
+    }
+    closeInboxForNavigation("manuscript-selection");
+    setRailDestination("write");
+    setPrimarySideView("explorer");
+    if (mode !== "draft") {
+      void onModeChange("draft");
+    }
+    chooseSelection({ kind: "project" });
+    setContextDockOpen(false);
+    openAgentSecondary();
+  }, [requestReviewProjectDrafts]);
+
+  useEffect(() => {
+    if (
+      requestReviewSceneDrafts === undefined ||
+      requestReviewSceneDrafts < 1
+    ) {
+      return;
+    }
+    const sceneId = requestReviewSceneDraftsSceneId;
+    if (sceneId === undefined) return;
+    closeInboxForNavigation("manuscript-selection");
+    setRailDestination("write");
+    setPrimarySideView("explorer");
+    if (mode !== "draft") {
+      void onModeChange("draft");
+    }
+    const next = sceneSelection(project, sceneId);
+    if (next !== undefined) {
+      chooseSelection(next);
+    } else {
+      onSelectedSceneIdChange(sceneId);
+    }
+    setFocusHalo(false);
+    // Keep Context closed — scene draft review happens from the Agent job strip.
+    setContextDockOpen(false);
+    openAgentSecondary();
+  }, [requestReviewSceneDrafts, requestReviewSceneDraftsSceneId]);
+
+  // Work-plan job strip "Open * draft" — navigate and reveal Entity Drafts in Context
+  // or Title Page Drafts; do not reuse requestReviewSceneDrafts (that keeps Context closed).
+  useEffect(() => {
+    if (requestOpenEntityDraft === undefined || requestOpenEntityDraft < 1) {
+      return;
+    }
+    const scope = requestOpenEntityDraftScope;
+    if (scope === undefined) return;
+    closeInboxForNavigation("manuscript-selection");
+    setRailDestination("write");
+    setPrimarySideView("explorer");
+    if (mode !== "draft") {
+      void onModeChange("draft");
+    }
+    if (scope === "project") {
+      chooseSelection({ kind: "project" });
+      setContextDockOpen(false);
+      openAgentSecondary();
+      return;
+    }
+    const sceneId = requestOpenEntityDraftSceneId;
+    if (sceneId === undefined) return;
+    const next = sceneSelection(project, sceneId);
+    if (next !== undefined) {
+      chooseSelection(next);
+    } else {
+      onSelectedSceneIdChange(sceneId);
+    }
+    setFocusHalo(false);
+    openInspectorSecondary();
+  }, [
+    requestOpenEntityDraft,
+    requestOpenEntityDraftProposalId,
+    requestOpenEntityDraftScope,
+    requestOpenEntityDraftSceneId
+  ]);
 
   function handleContextDockOpenChange(open: boolean): void {
     setContextDockOpen(open);
@@ -2692,7 +2856,10 @@ export function AuthenticatedProjectWorkspace({
                   activeChatSessionId={activeChatSessionId}
                   availableModels={chatAvailableModels}
                   busy={busy}
-                  canOpenScene={canOpenChatScene}
+                  canOpenScene={
+                    canOpenChatScene || selection.kind === "scene"
+                  }
+                  chatHistorySessions={chatHistorySessions}
                   chatSessions={chatSessions}
                   chatStreaming={chatStreaming}
                   dictating={chatDictating}
@@ -2708,12 +2875,27 @@ export function AuthenticatedProjectWorkspace({
                     if (!wide) setCollapsedPanel("none");
                   }}
                   onDeleteChatSession={onDeleteChatSession}
+                  onDismissChatSession={onDismissChatSession}
                   onEffortChange={(next) => onChatEffortChange?.(next)}
                   onForkMessage={onForkChatMessage}
                   onModeChange={(next) => onChatModeChange?.(next)}
                   onModelChange={(next) => onChatModelChange?.(next)}
                   onNewChatSession={onNewChatSession}
-                  onOpenScene={onOpenChatScene}
+                  onReopenChatSession={onReopenChatSession}
+                  manualNextActionSceneId={
+                    selection.kind === "scene" ? selection.sceneId : undefined
+                  }
+                  onOpenScene={(sceneId) => {
+                    if (sceneId !== undefined) {
+                      onOpenChatScene?.(sceneId);
+                      return;
+                    }
+                    if (selection.kind === "scene") {
+                      onOpenChatScene?.(selection.sceneId);
+                      return;
+                    }
+                    onOpenChatScene?.();
+                  }}
                   onOpenSettings={onOpenSettings}
                   onRegenerateMessage={onRegenerateChatMessage}
                   onRenameChatSession={onRenameChatSession}
@@ -2733,15 +2915,36 @@ export function AuthenticatedProjectWorkspace({
                       ? undefined
                       : handleCatalogAgentRun
                   }
+                  onMessageActionChip={onMessageActionChip}
+                  onManualNextActionCoach={
+                    onManualNextActionCoach === undefined
+                      ? undefined
+                      : (sceneId) =>
+                          onManualNextActionCoach(
+                            sceneId ??
+                              (selection.kind === "scene"
+                                ? selection.sceneId
+                                : undefined)
+                          )
+                  }
+                  nextActionCoachBusy={nextActionCoachBusy}
+                  onDismissWorkPlanJobs={onDismissWorkPlanJobs}
+                  onOpenWorkPlanJob={onOpenWorkPlanJob}
+                  onWorkPlanJobAction={onWorkPlanJobAction}
                   open
                   providerConfigured={chatProviderConfigured}
                   selectionSummary={manuscriptSelectionSummary(selection)}
                   variant="docked"
+                  workPlanJobActions={workPlanJobActions}
+                  workPlanJobSummary={workPlanJobSummary}
+                  workPlanJobs={workPlanJobs}
                 />
               }
+              autoSuggestionsEnabled={autoSuggestionsEnabled}
               inspector={draftDeskActive ? draftContextDock : inspector}
               inspectorLabel={draftDeskActive ? "Context" : "Inspector"}
               mode={secondaryMode}
+              onAutoSuggestionsChange={onAutoSuggestionsChange}
               onCollapse={() => {
                 setSecondaryOpen(false);
                 if (!wide) setCollapsedPanel("none");
@@ -2927,22 +3130,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     minWidth: 0,
+    overflow: "hidden",
     zIndex: 1
   },
+  // In-flow center column — never absolute-overlay the story trail.
   topbarCenter: {
     alignItems: "center",
-    bottom: 0,
+    flexBasis: 360,
+    flexGrow: 0,
+    flexShrink: 1,
     justifyContent: "center",
-    left: 0,
-    pointerEvents: "box-none",
-    position: "absolute",
-    right: 0,
-    top: 0,
+    maxWidth: 480,
+    minWidth: 160,
     zIndex: 2
   },
   topbarCenterNarrow: {
     flexBasis: "100%",
-    position: "relative",
+    maxWidth: "100%",
+    minWidth: 0,
     width: "100%"
   },
   topbarRight: {
@@ -2968,6 +3173,7 @@ const styles = StyleSheet.create({
   topbarTrail: {
     flex: 1,
     minWidth: 0,
+    overflow: "hidden",
     paddingHorizontal: 2
   },
   topbarTitle: {
