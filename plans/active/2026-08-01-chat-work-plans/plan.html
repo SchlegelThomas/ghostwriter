@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chat work plans — submit &amp; execute</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan</p>
+      <h1>Chat work plans — submit &amp; execute</h1>
+      <p class="meta"><strong>Status:</strong> active<br>
+        <strong>Branch:</strong> <code>feat/proactive-next-actions</code>
+        (continues; cut <code>feat/chat-work-plans</code> if this PR splits)<br>
+        <strong>Owner:</strong> founder + parent agent<br>
+        <strong>Skill:</strong> <code>ghostwriter-feature-delivery</code><br>
+        <strong>ADR:</strong> <a href="../../../docs/adr/0016-chat-work-plans-and-job-bundles.md">0016</a></p>
+    </header>
+
+    <section>
+      <h2>Founder decisions (accepted 2026-08-01)</h2>
+      <ol>
+        <li><strong>Landing:</strong> both Entity Drafts <em>and</em> an Agent-pane job-bundle strip.</li>
+        <li><strong>Execution:</strong> parallel for cheap/read jobs; sequential for heavy prose
+          (e.g. Scene Partner brief → then Dialogue Coach).</li>
+        <li><strong>Scene Partner:</strong> open Plans with a <strong>prefilled brief</strong>
+          (capture seeded from the job brief).</li>
+        <li><strong>Story knowledge:</strong> propose-only SK draft; writer <strong>Acknowledge</strong>
+          creates Cast entry.</li>
+        <li><strong>Spend:</strong> Submit spends BYOK immediately (no per-job confirm). Future
+          product limits are out of scope for this plan.</li>
+        <li><strong>Entry:</strong> structured plan turns <em>and</em> free-form chat (“do all 4” /
+          “submit”).</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Intent</h2>
+      <p>When the Agent dock proposes a multi-step plan (catalog agents, Scene Partner brief,
+        story-knowledge capture, cast/continuity checks), the writer can <strong>Submit</strong>
+        and Ghostwriter actually runs the work — not narrate a fake queue. Results land as ADR
+        0011/0014 proposals (Entity Drafts) while a dock strip tracks the bundle. Propose ≠ apply
+        for manuscript; SK Acknowledge is the explicit create gate.</p>
+      <p><strong>Out of scope:</strong> autonomous background swarms while away; silent manuscript
+        writes; per-job spend confirm UI; durable server-side worker queue; Playwright until founder
+        verifies the complete outcome.</p>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ul>
+        <li>Writer can Submit a <code>work-plan-v1</code> from an Agent turn (chip or free-form
+          “submit”) and see a dock job strip with per-job status.</li>
+        <li>Catalog jobs (e.g. Dialogue Coach, Continuity Reader) actually call
+          <code>catalog-runs</code> and refresh Entity Drafts.</li>
+        <li>Scene Partner jobs create a Plans capture from the brief and deep-link Scene Partner.</li>
+        <li>Story-knowledge jobs create a ready <code>story-knowledge-create-v1</code> draft;
+          Acknowledge creates the Cast record.</li>
+        <li>Heavy prose jobs run sequentially after parallel cheap jobs (policy C).</li>
+        <li>Chat can emit a work plan via tool; “submit” without a plan refuses clearly.</li>
+        <li>Refusal when scene/target missing for a job that requires it.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Product model</h2>
+      <h3>Job kinds</h3>
+      <table>
+        <thead>
+          <tr><th>Kind</th><th>Class</th><th>Execution</th><th>Result</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>run-catalog-agent</code></td>
+            <td>cheap (default)</td>
+            <td>Parallel within wave</td>
+            <td>Entity Draft (memo / findings)</td>
+          </tr>
+          <tr>
+            <td><code>create-story-knowledge</code></td>
+            <td>cheap</td>
+            <td>Parallel</td>
+            <td>SK create draft → Acknowledge → Cast</td>
+          </tr>
+          <tr>
+            <td><code>open-scene-partner</code></td>
+            <td>heavy</td>
+            <td>Sequential wave after cheap</td>
+            <td>Plans capture + Scene Partner deep-link</td>
+          </tr>
+          <tr>
+            <td><code>cast-reference-check</code></td>
+            <td>cheap</td>
+            <td>Parallel → Continuity Reader or Character Coach · Cast when id known</td>
+            <td>Entity Draft</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3>Waves</h3>
+      <ol>
+        <li>Wave A — all cheap jobs in parallel.</li>
+        <li>Wave B — heavy jobs one-at-a-time (Scene Partner, then any sequential catalog the plan
+          marks heavy, e.g. Dialogue Coach after partner when both present).</li>
+      </ol>
+      <p>Dialogue Coach alone is cheap/parallel. When the same plan also contains
+        <code>open-scene-partner</code>, Dialogue Coach is deferred to wave B after partner opens
+        (policy C).</p>
+    </section>
+
+    <section>
+      <h2>Checkpoints</h2>
+      <ol>
+        <li><strong>CP0 — Contract:</strong> <code>work-plan-v1</code>, execution wave policy,
+          <code>story-knowledge-create-v1</code>, ADR 0016, unit tests.</li>
+        <li><strong>CP1 — Submit + strip + real jobs:</strong> dock job strip; client orchestrator;
+          catalog + SK draft + Scene Partner brief path; Submit chip on plan turns.</li>
+        <li><strong>CP2 — Free-form chat:</strong> <code>propose_work_plan</code> chat tool; user
+          “submit” binds to latest plan; honest refusals.</li>
+        <li><strong>CP3 — Docs + coherence:</strong> PRODUCT/API/capabilities; browser walkthrough;
+          handoff.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tasks</h2>
+      <ol>
+        <li>CP0 schemas + wave planner + ADR.</li>
+        <li>SK create draft services + acknowledge→create Cast.</li>
+        <li>Client work-plan orchestrator + API helpers.</li>
+        <li>Agent dock job strip UI.</li>
+        <li>Message Submit chips + attach workPlan on assistant turns.</li>
+        <li>Workspace chat tool <code>propose_work_plan</code> + submit intent.</li>
+        <li>Scene Partner: createCapture + seed brief + deep-link (+ optional brief field).</li>
+        <li>Capabilities/MCP note (propose/submit; no silent apply).</li>
+        <li>Docs + record + WHERE-I-LEFT-OFF.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li>Core: validate work-plan / SK-create schemas; wave ordering unit tests.</li>
+        <li>Core/backend: SK draft create + acknowledge creates story knowledge.</li>
+        <li>UI: transcript/job-strip pure helpers if extracted.</li>
+        <li>Browser: Submit four-job plan → strip progresses → drafts appear → SK Acknowledge →
+          Cast row; Scene Partner opens with brief. Refusal without scene.</li>
+        <li><code>pnpm verify</code> before handoff. Playwright only after founder verifies.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <p><strong>ADR 0016</strong> — chat work plans, job bundles, wave policy, SK acknowledge-create.</p>
+      <p>Update <code>docs/PRODUCT.md</code>, <code>docs/API.md</code>, capabilities registry.</p>
+      <p><strong>Living design:</strong>
+        <a href="../../designs/Ghostwriter Mockups 4.0.html">Mockups 4.0</a> (agents have jobs;
+        propose→compare→apply),
+        <a href="../../designs/Ghostwriter Mockups 5.0.html">Mockups 5.0</a> (submit typed proposal;
+        human apply). Design says propose-not-apply; this plan adds <em>execute proposals into
+        drafts</em>, not silent canon writes. Preserve living design files.</p>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li>No durable server job queue in v1 — client orchestrates; refresh may lose in-flight strip
+          (acceptable; re-submit). Log if writers need durability next.</li>
+        <li>Scene Partner still requires Plans capture partnerability — we create a capture from brief.</li>
+        <li>Spend-on-submit may surprise; founder accepted for now.</li>
+        <li>Free-form NL parsing is brittle — prefer tool emission + explicit Submit.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked> Plan accepted (founder answers locked)</li>
+        <li><input type="checkbox" checked> CP0 contract + ADR</li>
+        <li><input type="checkbox" checked> CP1 Submit + strip + real jobs</li>
+        <li><input type="checkbox" checked> CP2 Free-form chat tool + submit intent</li>
+        <li><input type="checkbox"> Docs, capabilities, handoff (partial — PRODUCT/API polish)</li>
+        <li><input type="checkbox"> Founder browser verification</li>
+        <li><input type="checkbox"> Playwright (post-gate only)</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

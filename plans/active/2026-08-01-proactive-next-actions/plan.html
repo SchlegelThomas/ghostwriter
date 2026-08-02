@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Proactive next actions</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Ghostwriter delivery plan</p>
+      <h1>Proactive next actions</h1>
+      <p class="meta"><strong>Status:</strong> active<br>
+        <strong>Branch:</strong> <code>feat/proactive-next-actions</code><br>
+        <strong>Owner:</strong> founder + parent agent<br>
+        <strong>Skill:</strong> <code>ghostwriter-feature-delivery</code></p>
+    </header>
+
+    <section>
+      <h2>Founder decisions (accepted 2026-08-01)</h2>
+      <ol>
+        <li><strong>Egress:</strong> Default is local guide + explicit Start (A). Writers can also
+          enable <strong>auto suggestions</strong> with a toggleable Ghostwriter mark at the top of
+          the Agent pane (ambient cheap-coach after save/idle). Toggle off = back to Start-only.
+          Bigger models still require a separate confirm.</li>
+        <li><strong>Landing:</strong> Entity Drafts + dock chips — not a new global Suggestions inbox.</li>
+        <li><strong>First vertical checkpoint:</strong> Scene prose save + idle.</li>
+        <li><strong>Entity detection:</strong> Cheap-coach structured extraction (not local
+          proper-noun heuristics as the primary path). Extraction compares scene prose against the
+          project cast/SK list the coach is given — <strong>no vector DB required for this epic</strong>
+          (see Risks).</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Intent</h2>
+      <p>After meaningful writer work, Ghostwriter should <strong>quietly suggest the next useful
+        move</strong> — create missing story knowledge, sharpen craft, or engage the right catalog
+        agent — without becoming a nagging second inbox or silently spending BYOK budget.</p>
+      <p>Today, catalog agents (Idea Midwife, Pacing Doctor, …) and entity Drafts only appear after
+        the writer <em>manually</em> starts a run. Capture’s designed quiet invite (“Help find its
+        place?”) is the only living-design proactive pattern, and it must stay local until the
+        writer confirms egress (ADR 0011). This plan generalizes that pattern across the workspace
+        and adds an optional <strong>cheap coach tier</strong> (Haiku / Flash / GPT-4.1 mini class)
+        that can observe a change and propose next actions — escalating to a stronger model only
+        when the coach asks and the writer opts in.</p>
+      <p><strong>Out of scope for v1 of this epic:</strong> autonomous multi-agent swarms; silent
+        manuscript or story-knowledge writes; scheduled background agents while the writer is away;
+        marketplace skills; collaboration suggestion queues; import-pipeline audits; Playwright
+        until founder verifies the complete outcome.</p>
+    </section>
+
+    <section>
+      <h2>Product model</h2>
+      <h3>Three tiers</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Tier</th>
+            <th>When</th>
+            <th>Cost</th>
+            <th>Examples</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Local guide</strong></td>
+            <td>After acknowledged state change + idle</td>
+            <td>Zero provider spend</td>
+            <td>Quiet invite chips; Quick Build “add scene”; “link cast to scene”; dock nudge naming one catalog job</td>
+          </tr>
+          <tr>
+            <td><strong>Cheap coach</strong></td>
+            <td>Writer starts (or ambient opt-in) with receipt</td>
+            <td>Haiku / Flash / 4.1-mini class, tight caps</td>
+            <td>New-character candidates; “next craft question”; which stage agent fits; thin-premise Midwife prompt</td>
+          </tr>
+          <tr>
+            <td><strong>Escalate</strong></td>
+            <td>Coach proposal asks; writer confirms bigger model + scope</td>
+            <td>Sonnet / 4.1 / Pro class</td>
+            <td>Scene Partner integrate; Continuity across many scenes; Pitch / Query; Developmental letter</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3>Invariants</h3>
+      <ul>
+        <li>Propose ≠ apply. Suggestions open workflows or create ADR 0011/0014 proposals; never mute canon.</li>
+        <li>No spend on keystroke or while Saving; wait for acknowledged save + idle; never steal caret when an agent finishes.</li>
+        <li>Dismissible without nag; durable dismiss per invitation kind where Capture already does.</li>
+        <li>Entity-attached preferred (scene / Cast / Title Page / project Drafts) over a second inbox.</li>
+        <li>Selection refusals stay honest when context is missing.</li>
+        <li>Cheap coach default model from curated catalog (e.g. <code>claude-haiku-4-5</code>,
+          <code>gemini-2.5-flash</code>, GPT mini-class) — writer-overridable; never credentials in prompts.</li>
+        <li><strong>Auto-suggestions toggle</strong> in the Agent pane header (Ghostwriter mark):
+          off by default; when on, ambient cheap coach may run after acknowledged save + idle with
+          receipt + hard caps; when off, only local chips + Start. Persist per writer/workspace prefs
+          (same family as dock mode/model prefs).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Key interaction → next-action matrix</h2>
+      <p>Inventory of major writer surfaces. <em>Proposed</em> columns are product intent for this
+        epic, not shipped behavior. Existing hooks noted where relevant.</p>
+
+      <h3>Create &amp; orient</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Surface / change</th>
+            <th>Local guide</th>
+            <th>Cheap coach</th>
+            <th>Escalate (writer confirm)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Empty project created / first open</td>
+            <td>Capture a spark · add first scene · open Title Page</td>
+            <td>One premise question (Idea Midwife style)</td>
+            <td>Idea Midwife / Genre Compass full memo</td>
+          </tr>
+          <tr>
+            <td>Title Page cover notes saved</td>
+            <td>Run Cover · open Genre Compass chip</td>
+            <td>Tone/genre fit note</td>
+            <td>Cover image job; Pitch Pack</td>
+          </tr>
+          <tr>
+            <td>AI key validated first time</td>
+            <td>Try Idea Midwife or Capture quiet invite</td>
+            <td>—</td>
+            <td>First catalog run of writer’s choice</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Manuscript structure</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Surface / change</th>
+            <th>Local guide</th>
+            <th>Cheap coach</th>
+            <th>Escalate</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Empty chapter created</td>
+            <td>Quick Build: add scene (Mockups 2.0)</td>
+            <td>—</td>
+            <td>Outline Expander once chapter has intent</td>
+          </tr>
+          <tr>
+            <td>Chapter/scene rename or summary edit</td>
+            <td>Fill sketch / summary if blank</td>
+            <td>Summary quality nudge</td>
+            <td>Sketch Partner craft fields</td>
+          </tr>
+          <tr>
+            <td>Chapter/scene reorder (Explorer)</td>
+            <td>“Draft order changed — open Pacing?” chip</td>
+            <td>Local spine-drift note (titles only)</td>
+            <td>Pacing Doctor / Promise Keeper</td>
+          </tr>
+          <tr>
+            <td>Scene created from Canvas / Capture promote</td>
+            <td>Open Draft · fill sketch · link cast</td>
+            <td>Missing craft fields checklist</td>
+            <td>Sketch Partner / Scene Partner</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Write studio (highest leverage)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Surface / change</th>
+            <th>Local guide</th>
+            <th>Cheap coach</th>
+            <th>Escalate</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Scene prose save + idle (primary CP)</td>
+            <td>Continue · Dialogue · Scene/Sequel chips; open Assist</td>
+            <td>Detect new name candidates vs cast; suggest create SK / link cast; one craft next-question</td>
+            <td>Dialogue Coach · Scene/Sequel Coach · Continuity Reader · Scene Partner variants</td>
+          </tr>
+          <tr>
+            <td>Sketch / Sheet / Place fields edited</td>
+            <td>Return to prose · link cast/backdrop</td>
+            <td>Missing desire/pressure/voice checklist</td>
+            <td>Character Coach · Worldkeeper craft apply</td>
+          </tr>
+          <tr>
+            <td>Cast linked / unlinked on scene</td>
+            <td>Open Cast dossier · Character Coach · Cast chip</td>
+            <td>—</td>
+            <td>Character Coach · Cast memo</td>
+          </tr>
+          <tr>
+            <td>Checkpoint / named variant created</td>
+            <td>Compare · restore-as-new reminder</td>
+            <td>—</td>
+            <td>Scene Partner diff / Continuity on restored branch</td>
+          </tr>
+          <tr>
+            <td>Writing Assist Apply / Dismiss</td>
+            <td>After Apply: return to prose; after Dismiss: quieter dock Partner chip</td>
+            <td>—</td>
+            <td>BYOK Scene Partner when writer wants real variants</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Cast &amp; story knowledge</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Surface / change</th>
+            <th>Local guide</th>
+            <th>Cheap coach</th>
+            <th>Escalate</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>New character / SK created</td>
+            <td>Link to active scene · fill desire/pressure/voice</td>
+            <td>One sharpening question for the sheet</td>
+            <td>Character Coach · Cast; Worldkeeper for places/rules</td>
+          </tr>
+          <tr>
+            <td>Character sheet or visuals updated</td>
+            <td>Link to scenes with presence gaps</td>
+            <td>Consistency note vs aliases</td>
+            <td>Series Bible / Character Coach</td>
+          </tr>
+          <tr>
+            <td>Knowledge↔scene or knowledge↔knowledge link</td>
+            <td>Open linked scene Draft</td>
+            <td>—</td>
+            <td>Continuity Reader on linked scene</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Canvas (Map)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Surface / change</th>
+            <th>Local guide</th>
+            <th>Cheap coach</th>
+            <th>Escalate</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Unlinked card placed</td>
+            <td>Open Draft · attach to chapter</td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>Typed link confirmed</td>
+            <td>Character Coach on endpoints chip</td>
+            <td>—</td>
+            <td>Continuity / Architect beat check</td>
+          </tr>
+          <tr>
+            <td>Spine drift (board ≠ manuscript order)</td>
+            <td>Honest: board ≠ Draft order; open Explorer</td>
+            <td>—</td>
+            <td>Pacing Doctor (never auto-reorder prose)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Capture, Plans, Drafts, dock</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Surface / change</th>
+            <th>Local guide</th>
+            <th>Cheap coach</th>
+            <th>Escalate</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Capture saved + idle</td>
+            <td><strong>Shipped design:</strong> “Help find its place?” (no egress)</td>
+            <td>—</td>
+            <td>Scene Partner chat / craft partners</td>
+          </tr>
+          <tr>
+            <td>Proposal Ready in Plans</td>
+            <td>Compare · Apply · open Draft after integrate</td>
+            <td>—</td>
+            <td>Follow-on Sketch Partner / place on Canvas</td>
+          </tr>
+          <tr>
+            <td>Entity Draft Acknowledge</td>
+            <td>Open cited scene · suggest adjacent stage agent</td>
+            <td>Pick one follow-on agent from memo sections</td>
+            <td>That catalog agent run</td>
+          </tr>
+          <tr>
+            <td>Entity Draft Reject</td>
+            <td>Softer alternative agent chip (once)</td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>Agent dock turn complete</td>
+            <td>Existing follow-up chips (Save to Plans / Open scene / Retry)</td>
+            <td>—</td>
+            <td>Catalog job named by coach</td>
+          </tr>
+          <tr>
+            <td>MCP proposal lands</td>
+            <td>Same human compare path as UI proposals</td>
+            <td>—</td>
+            <td>Same as UI-initiated runs</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Later / not yet shipped</h3>
+      <ul>
+        <li><strong>Import:</strong> after import lands — Genre Compass · structure audit · Continuity (escalate).</li>
+        <li><strong>Collaboration:</strong> after editor suggestion batches — author review queue · Continuity.</li>
+        <li><strong>Reader finish chapter:</strong> local “open next Draft scene”; light Pacing note only.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Domain / design audit (pre-code)</h2>
+      <ul>
+        <li><strong>Canonical objects:</strong> reuse <code>AgentProposal</code> + <code>primaryTarget</code>
+          (ADR 0014) for coach outputs that need Acknowledge/Reject; local chips may be ephemeral UI
+          state with durable dismiss keys — decide per checkpoint whether a proposal row is required.</li>
+        <li><strong>New domain candidate:</strong> <code>next-action-v1</code> (or extend
+          <code>catalog-memo-v1</code>) typed payload: trigger event, suggestion kinds
+          (create-story-knowledge, run-catalog-agent, open-surface, escalate-model), evidence quotes,
+          confidence, recommended model tier.</li>
+        <li><strong>Triggers:</strong> today all catalog/Capture runs are manual HTTP. Need a
+          <em>post-change invitation</em> path that never calls providers until confirm (or ambient
+          opt-in). Do not piggyback on prose autosave version domain.</li>
+        <li><strong>Entity detection:</strong> none in core today. Accepted: cheap coach structured
+          extraction with cast/SK roster in the prompt context. Vector/embedding retrieval deferred
+          (not required to compare one scene to a roster).</li>
+        <li><strong>Authority:</strong> ADR 0011 / 0013 / 0014 — model never applies; receipts before
+          egress; MCP remains read + propose.</li>
+        <li><strong>Living design:</strong> Mockups 5.0 quiet invite; Mockups 4.0 job-bound agents /
+          Scene Partner “Next move”; Mockups 2.0 ack toasts with safe next action + Quick Build.
+          Preserve user-authored design files; additive UX only with founder direction.</li>
+        <li><strong>Conflicts:</strong> founder Capture note rejected Scene Partner interstitial —
+          Partner opens chat immediately. Quiet invite remains Capture→integration and (proposed)
+          generalized local guide, not a second interstitial for every dock open.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Acceptance criteria</h2>
+      <ul>
+        <li>Plan accepted with founder decisions on egress posture, landing surface, first CP, and
+          entity-detection approach.</li>
+        <li>Each vertical checkpoint ships a writer-visible next-action path with clear refusal /
+          dismiss states and zero silent canon mutation.</li>
+        <li>Local guide invitations never call a provider.</li>
+        <li>Cheap coach runs use a Haiku/Flash/mini-class default, hard caps, context receipt, and
+          land as entity Drafts or dock chips per decision — never auto-apply.</li>
+        <li>Escalate path prompts the writer to engage a stronger model on an explicit scope; no
+          automatic upgrade.</li>
+        <li>Matrix surfaces above are either implemented, explicitly deferred with reason, or marked
+          non-goals for this epic.</li>
+        <li>Docs/ADR updated; <code>pnpm verify</code> green; founder browser-verifies before any
+          Playwright.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Proposed checkpoints (after plan accept)</h2>
+      <ol>
+        <li><strong>CP0 — Contract:</strong> domain types for invitation + <code>next-action-v1</code>
+          proposal; trigger events; dismiss keys; auto-suggestions preference; ADR extending 0011
+          for ambient toggle + cheap coach caps.</li>
+        <li><strong>CP1 — Scene save local guide + Agent-pane toggle chrome:</strong> after scene
+          prose acknowledgement + idle, dismissible Start chips (no egress); Ghostwriter mark toggle
+          in Agent pane header (persisted, off by default) — ambient path wired in CP2.</li>
+        <li><strong>CP2 — Cheap coach (Start + ambient when toggle on):</strong> Haiku-class
+          structured extraction → scene-targeted next-action proposal in entity Drafts; escalate CTA
+          for bigger models; rate limits + receipt when ambient.</li>
+        <li><strong>CP3 — Capture quiet invite parity:</strong> shared invitation chrome; Start →
+          Scene Partner without new interstitial debt.</li>
+        <li><strong>CP4 — Cast / SK create guide:</strong> after new character, local chips + optional
+          cheap coach sharpening question.</li>
+        <li><strong>CP5 — Structure / Canvas spine:</strong> reorder and spine-drift local chips →
+          optional Pacing Doctor escalate.</li>
+        <li><strong>CP6 — Draft acknowledge follow-on:</strong> after memo Acknowledge, suggest one
+          adjacent catalog agent (local chip; run only on Start unless ambient on).</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tasks</h2>
+      <ol>
+        <li>Branch from main; open this plan and record log (done).</li>
+        <li>Founder review: matrix + four decisions above.</li>
+        <li>Update living-design impact notes if additive chrome is accepted (do not rewrite Mockups files).</li>
+        <li>Implement checkpoints CP0→… with feature-delivery vertical slices; parent owns E2E acceptance.</li>
+        <li>Update PRODUCT / ARCHITECTURE / API + ADR as decisions land.</li>
+        <li>Founder browser verify complete outcome; then Playwright gate.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Tests and verification</h2>
+      <ul>
+        <li>Core: invitation eligibility (save ack + idle + dismiss), payload validation, no provider
+          call on local tier, escalate requires explicit confirm.</li>
+        <li>Storage/API: proposal target + schema for next-action payloads; authorization; budget caps.</li>
+        <li>UI: chips/Drafts dismiss and Start paths; caret not stolen; narrow posture.</li>
+        <li>Browser walkthrough per checkpoint; <code>pnpm verify</code> before handoff.</li>
+        <li>Playwright only after founder verifies the complete epic outcome.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Documentation and ADR impact</h2>
+      <ul>
+        <li><code>docs/PRODUCT.md</code> — proactive next-action coaching narrative once shipped.</li>
+        <li><code>docs/ARCHITECTURE.md</code> + <code>docs/API.md</code> — invitation + cheap-coach routes.</li>
+        <li><strong>ADR likely required</strong> if ambient opt-in (B) is chosen, or if next-action
+          becomes a first-class proposal schema — extends 0011/0014 rather than a second store.</li>
+        <li><strong>Living design source:</strong>
+          <a href="../../designs/Ghostwriter%20Mockups%205.0.html">Mockups 5.0</a> (quiet invite /
+          BYOK / Inbox),
+          <a href="../../designs/Ghostwriter%20Mockups%204.0.html">Mockups 4.0</a> (agents / craft),
+          <a href="../../designs/Ghostwriter%20Mockups%202.0.html">Mockups 2.0</a> (safe next action /
+          Quick Build). Implementation impact recorded in the record log before product code.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Risks and decisions</h2>
+      <ul>
+        <li><strong>ADR 0011:</strong> quiet invite stays free; ambient spend only when the writer
+          has toggled auto suggestions on (explicit opt-in). ADR will document that the toggle is
+          the confirmation surface for cheap-tier egress posture.</li>
+        <li><strong>Nag risk:</strong> too many chips train dismiss-all. Cap concurrent invitations;
+          prefer one high-signal suggestion.</li>
+        <li><strong>False-positive characters:</strong> extraction will invent names; require
+          writer confirm before <code>storyKnowledge.create</code>.</li>
+        <li><strong>Cost surprise:</strong> even Haiku on large scenes needs truncation + caps +
+          clear receipt; ambient needs debounce/rate limit.</li>
+        <li><strong>Vector DB:</strong> deferred. Roster-in-prompt is enough for “new character in
+          this scene?” Embeddings become useful later for whole-book Continuity / semantic retrieval
+          — separate plan, not a blocker here.</li>
+        <li><strong>Version domains:</strong> invitations must not share a coarse version with prose
+          autosave / Canvas gestures.</li>
+        <li><strong>Prior epic debt:</strong> production migrate owner block and founder verify of
+          catalog Drafts remain separate; this epic does not unblock Lakebase ownership.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Todos</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked> Branch created from main (<code>feat/proactive-next-actions</code>)</li>
+        <li><input type="checkbox" checked> Plan + interaction matrix drafted</li>
+        <li><input type="checkbox" checked> Founder accepts plan + four decisions (A default + Agent-pane auto toggle; Drafts landing; scene-save CP1; cheap-coach extraction; vector DB deferred)</li>
+        <li><input type="checkbox" checked> CP0 contract + ADR</li>
+        <li><input type="checkbox" checked> CP1 scene save local guide + Agent-pane toggle chrome</li>
+        <li><input type="checkbox"> CP2 cheap coach (Start + ambient when toggle on)</li>
+        <li><input type="checkbox"> Later CPs per accepted scope</li>
+        <li><input type="checkbox"> Docs/ADR updated; verify; founder browser gate</li>
+        <li><input type="checkbox"> Handoff updated and plan archived when done</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

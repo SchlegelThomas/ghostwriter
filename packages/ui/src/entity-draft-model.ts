@@ -34,6 +34,8 @@ const ENTITY_DRAFT_KIND_LABELS: Readonly<Record<string, string>> = {
   "plan-outline-v1": "Plan outline",
   "catalog-memo-v1": "Memo",
   "pacing-findings-v1": "Pacing",
+  "next-action-v1": "Next actions",
+  "story-knowledge-create-v1": "Story knowledge",
   "sketch-fields-v1": "Sketch Partner",
   "character-sheet-v1": "Character Coach",
   "backdrop-fields-v1": "Worldkeeper"
@@ -44,6 +46,8 @@ const ENTITY_DRAFT_SCHEMA_LABELS: Readonly<Record<string, string>> = {
   "plan-outline-v1": "Plan outline",
   "catalog-memo-v1": "Catalog memo",
   "pacing-findings-v1": "Pacing Doctor",
+  "next-action-v1": "Next actions",
+  "story-knowledge-create-v1": "Cast draft",
   "sketch-fields-v1": "Sketch Partner",
   "character-sheet-v1": "Character Coach",
   "backdrop-fields-v1": "Worldkeeper"
@@ -186,7 +190,9 @@ export function entityDraftPrimaryAction(
   if (
     draft.outputSchemaId === "plan-outline-v1" ||
     draft.outputSchemaId === "catalog-memo-v1" ||
-    draft.outputSchemaId === "pacing-findings-v1"
+    draft.outputSchemaId === "pacing-findings-v1" ||
+    draft.outputSchemaId === "next-action-v1" ||
+    draft.outputSchemaId === "story-knowledge-create-v1"
   ) {
     return "acknowledge";
   }
@@ -197,8 +203,15 @@ export function entityDraftPrimaryAction(
 }
 
 export function entityDraftPrimaryActionLabel(
-  action: EntityDraftPrimaryAction
+  action: EntityDraftPrimaryAction,
+  outputSchemaId?: string
 ): string {
+  if (
+    action === "acknowledge" &&
+    outputSchemaId === "story-knowledge-create-v1"
+  ) {
+    return "Add to Cast";
+  }
   switch (action) {
     case "acknowledge":
       return "Acknowledge";
@@ -302,6 +315,44 @@ export function formatEntityDraftDetailBody(
       .filter((part) => part.length > 0)
       .join("\n\n");
   }
+  if (outputSchemaId === "next-action-v1") {
+    const summary =
+      typeof record.summary === "string" ? record.summary.trim() : "";
+    const suggestions = Array.isArray(record.suggestions)
+      ? record.suggestions.flatMap((suggestion) => {
+          if (suggestion === null || typeof suggestion !== "object") return [];
+          const item = suggestion as Record<string, unknown>;
+          const title =
+            typeof item.title === "string" ? item.title.trim() : "";
+          if (title.length === 0) return [];
+          return [`· ${title}`];
+        })
+      : [];
+    return [summary, ...suggestions].filter((part) => part.length > 0).join("\n\n");
+  }
+  if (outputSchemaId === "story-knowledge-create-v1") {
+    const name = typeof record.name === "string" ? record.name.trim() : "";
+    const kind = typeof record.kind === "string" ? record.kind.trim() : "";
+    const summary =
+      typeof record.summary === "string" ? record.summary.trim() : "";
+    const properties =
+      typeof record.properties === "string" ? record.properties.trim() : "";
+    const firstAppearance =
+      typeof record.firstAppearanceNote === "string"
+        ? record.firstAppearanceNote.trim()
+        : "";
+    return [
+      name.length === 0 ? undefined : `Name: ${name}`,
+      kind.length === 0 ? undefined : `Kind: ${kind}`,
+      summary,
+      properties.length === 0 ? undefined : `Properties:\n${properties}`,
+      firstAppearance.length === 0
+        ? undefined
+        : `First appearance:\n${firstAppearance}`
+    ]
+      .filter((part): part is string => part !== undefined && part.length > 0)
+      .join("\n\n");
+  }
   return Object.entries(record)
     .filter(([key]) => key !== "schemaId")
     .map(([key, value]) => `${key}: ${String(value ?? "")}`)
@@ -327,6 +378,12 @@ export function entityDraftDetailTitle(
     outputSchemaId === "pacing-findings-v1"
   ) {
     return typeof record.title === "string" ? record.title : undefined;
+  }
+  if (outputSchemaId === "next-action-v1") {
+    return typeof record.summary === "string" ? record.summary : undefined;
+  }
+  if (outputSchemaId === "story-knowledge-create-v1") {
+    return typeof record.name === "string" ? record.name : undefined;
   }
   return undefined;
 }

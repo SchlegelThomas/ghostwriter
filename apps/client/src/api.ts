@@ -17,10 +17,14 @@ import type {
   CaptureAttachmentRefusalCode,
   CaptureAttachmentState,
   ChapterId,
+  NextActionTrigger,
+  NextActionV1,
+  StoryKnowledgeCreateKind,
   ProjectCommand,
   ProjectNavigator,
   Scene,
   StoryProjectSummary,
+  WorkPlanV1,
   WriterProfile
 } from "@ghostwriter/core";
 import type {
@@ -879,6 +883,7 @@ export type WorkspaceChatResponse = Readonly<{
   model?: AgentModelId;
   effort?: WorkspaceChatEffort;
   toolTraces?: readonly WorkspaceChatToolTrace[];
+  workPlan?: WorkPlanV1;
   code?: string;
 }>;
 
@@ -1707,6 +1712,47 @@ export async function runCatalogAgent(input: Readonly<{
         ? {}
         : { storyKnowledgeId: input.storyKnowledgeId }),
       ...(input.bookId === undefined ? {} : { bookId: input.bookId })
+    })
+  );
+  return response.proposal;
+}
+
+export async function runNextActionCoach(input: Readonly<{
+  projectId: string;
+  sceneId: string;
+  model?: string;
+  trigger?: NextActionTrigger;
+}>): Promise<Readonly<{ proposal: AgentProposalResponse; payload: NextActionV1 }>> {
+  return requestJson(
+    agentProjectPath(input.projectId, "next-action-runs"),
+    jsonRequest("POST", {
+      sceneId: input.sceneId,
+      ...(input.model === undefined ? {} : { model: input.model }),
+      ...(input.trigger === undefined ? {} : { trigger: input.trigger })
+    })
+  );
+}
+
+export async function createStoryKnowledgeDraft(input: Readonly<{
+  projectId: string;
+  name: string;
+  kind: StoryKnowledgeCreateKind;
+  summary: string;
+  properties?: string;
+  sceneId?: string;
+  firstAppearanceNote?: string;
+}>): Promise<AgentProposalResponse> {
+  const response = await requestJson<Readonly<{ proposal: AgentProposalResponse }>>(
+    agentProjectPath(input.projectId, "story-knowledge-drafts"),
+    jsonRequest("POST", {
+      name: input.name,
+      kind: input.kind,
+      summary: input.summary,
+      ...(input.properties === undefined ? {} : { properties: input.properties }),
+      ...(input.sceneId === undefined ? {} : { sceneId: input.sceneId }),
+      ...(input.firstAppearanceNote === undefined
+        ? {}
+        : { firstAppearanceNote: input.firstAppearanceNote })
     })
   );
   return response.proposal;

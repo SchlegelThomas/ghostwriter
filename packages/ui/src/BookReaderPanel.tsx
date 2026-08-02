@@ -39,6 +39,8 @@ export type BookReaderPanelProps = Readonly<{
   onVoicePackChange?(pack: ReaderVoicePack): void;
   onSpeak?(text: string, voicePack: ReaderVoicePack): void | Promise<void>;
   onStopSpeak?(): void;
+  /** Opens Settings → Reader voice when synthesis is unavailable. */
+  onConfigureVoice?(): void;
 }>;
 
 const VOICE_PACKS: readonly ReaderVoicePack[] = [
@@ -240,6 +242,36 @@ function VoiceControls({
   );
 }
 
+function VoiceErrorBanner({
+  voiceError,
+  onConfigureVoice
+}: Readonly<{
+  voiceError?: string;
+  onConfigureVoice?(): void;
+}>) {
+  if (voiceError === undefined) return null;
+  return (
+    <View accessibilityRole="alert" style={styles.voiceErrorBanner}>
+      <Text style={styles.voiceError}>{voiceError}</Text>
+      {onConfigureVoice === undefined ? null : (
+        <Pressable
+          accessibilityLabel="Configure Reader voice"
+          accessibilityRole="link"
+          onPress={onConfigureVoice}
+          style={({ pressed }) => [
+            styles.voiceConfigureLink,
+            pressed && styles.pressed
+          ]}
+        >
+          <Text style={styles.voiceConfigureLinkText}>
+            Configure Reader voice
+          </Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 function WideReader({
   projection,
   onExit,
@@ -247,6 +279,7 @@ function WideReader({
   voicePack,
   speaking,
   onVoicePackChange,
+  onConfigureVoice,
   onSpeak,
   onStopSpeak
 }: Readonly<{
@@ -258,6 +291,7 @@ function WideReader({
   onVoicePackChange?(pack: ReaderVoicePack): void;
   onSpeak?(text: string, voicePack: ReaderVoicePack): void | Promise<void>;
   onStopSpeak?(): void;
+  onConfigureVoice?(): void;
 }>) {
   const pages = useMemo(
     () => paginateBookReaderProjection(projection),
@@ -364,11 +398,10 @@ function WideReader({
         speechText={speechText}
         voicePack={voicePack}
       />
-      {voiceError === undefined ? null : (
-        <Text accessibilityRole="alert" style={styles.voiceError}>
-          {voiceError}
-        </Text>
-      )}
+      <VoiceErrorBanner
+        onConfigureVoice={onConfigureVoice}
+        voiceError={voiceError}
+      />
 
       <View style={styles.spreadRegion}>
         <Text style={styles.runningHeader}>
@@ -440,7 +473,8 @@ function NarrowReader({
   speaking,
   onVoicePackChange,
   onSpeak,
-  onStopSpeak
+  onStopSpeak,
+  onConfigureVoice
 }: Readonly<{
   projection: BookReaderProjection;
   onExit(): void;
@@ -450,6 +484,7 @@ function NarrowReader({
   onVoicePackChange?(pack: ReaderVoicePack): void;
   onSpeak?(text: string, voicePack: ReaderVoicePack): void | Promise<void>;
   onStopSpeak?(): void;
+  onConfigureVoice?(): void;
 }>) {
   const scrollRef = useRef<ScrollView>(null);
   const landmarkOffsets = useRef(new Map<string, number>());
@@ -490,11 +525,10 @@ function NarrowReader({
         speechText={speechText}
         voicePack={voicePack}
       />
-      {voiceError === undefined ? null : (
-        <Text accessibilityRole="alert" style={styles.voiceError}>
-          {voiceError}
-        </Text>
-      )}
+      <VoiceErrorBanner
+        onConfigureVoice={onConfigureVoice}
+        voiceError={voiceError}
+      />
 
       <ScrollView
         horizontal
@@ -602,7 +636,8 @@ export function BookReaderPanel({
   onExit,
   onVoicePackChange,
   onSpeak,
-  onStopSpeak
+  onStopSpeak,
+  onConfigureVoice
 }: BookReaderPanelProps) {
   const { width } = useWindowDimensions();
   const narrow = width < 760;
@@ -630,6 +665,7 @@ export function BookReaderPanel({
 
   return narrow ? (
     <NarrowReader
+      onConfigureVoice={onConfigureVoice}
       onExit={onExit}
       onSpeak={onSpeak}
       onStopSpeak={onStopSpeak}
@@ -641,6 +677,7 @@ export function BookReaderPanel({
     />
   ) : (
     <WideReader
+      onConfigureVoice={onConfigureVoice}
       onExit={onExit}
       onSpeak={onSpeak}
       onStopSpeak={onStopSpeak}
@@ -746,13 +783,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10
   },
-  voiceError: {
+  voiceErrorBanner: {
+    alignItems: "flex-start",
     backgroundColor: colors.redSoft,
-    color: colors.red,
-    fontFamily: fonts.uiSemibold,
-    fontSize: 9,
+    gap: 6,
     paddingHorizontal: 16,
     paddingVertical: 8
+  },
+  voiceError: {
+    color: colors.red,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 9
+  },
+  voiceConfigureLink: {
+    borderRadius: 4,
+    paddingVertical: 2
+  },
+  voiceConfigureLinkText: {
+    color: colors.red,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 10,
+    textDecorationLine: "underline"
+  },
+  pressed: {
+    opacity: 0.72
   },
   voiceLabel: {
     color: colors.muted,

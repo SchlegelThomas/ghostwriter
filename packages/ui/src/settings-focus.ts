@@ -2,7 +2,8 @@ export const SETTINGS_FOCUSES = Object.freeze([
   "providers",
   "models",
   "defaults",
-  "playbooks"
+  "playbooks",
+  "reader-voice"
 ] as const);
 
 export type SettingsFocus = (typeof SETTINGS_FOCUSES)[number];

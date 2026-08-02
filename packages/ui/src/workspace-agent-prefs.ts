@@ -31,12 +31,14 @@ export type WorkspaceAgentPrefs = Readonly<{
   mode: WorkspaceAgentMode;
   model: AgentModelId;
   effort: WorkspaceAgentEffort;
+  autoSuggestions: boolean;
 }>;
 
 export const DEFAULT_WORKSPACE_AGENT_PREFS: WorkspaceAgentPrefs = Object.freeze({
   mode: "chat",
   model: CAPTURE_REFLECTION_DEFAULT_MODEL,
-  effort: "standard"
+  effort: "standard",
+  autoSuggestions: false
 });
 
 export function workspaceAgentPrefsStorageKey(projectId: string): string {
@@ -77,7 +79,11 @@ export function normalizeWorkspaceAgentPrefs(
       : DEFAULT_WORKSPACE_AGENT_PREFS.model,
     effort: isWorkspaceAgentEffort(record.effort)
       ? record.effort
-      : DEFAULT_WORKSPACE_AGENT_PREFS.effort
+      : DEFAULT_WORKSPACE_AGENT_PREFS.effort,
+    autoSuggestions:
+      typeof record.autoSuggestions === "boolean"
+        ? record.autoSuggestions
+        : DEFAULT_WORKSPACE_AGENT_PREFS.autoSuggestions
   });
 }
 
@@ -100,10 +106,13 @@ export function readWorkspaceAgentPrefs(
 
 export function writeWorkspaceAgentPrefs(
   projectId: string,
-  prefs: WorkspaceAgentPrefs
+  prefs: Partial<WorkspaceAgentPrefs>
 ): void {
   if (typeof globalThis.localStorage === "undefined") return;
-  const normalized = normalizeWorkspaceAgentPrefs(prefs);
+  const normalized = normalizeWorkspaceAgentPrefs({
+    ...readWorkspaceAgentPrefs(projectId),
+    ...prefs
+  });
   globalThis.localStorage.setItem(
     workspaceAgentPrefsStorageKey(projectId),
     JSON.stringify(normalized)

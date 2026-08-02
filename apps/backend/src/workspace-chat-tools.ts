@@ -6,13 +6,17 @@ import {
   SceneNotFoundError,
   sceneId,
   sliceCaptureProviderText,
+  validateWorkPlanV1,
+  WORK_PLAN_JOB_KINDS,
+  WORK_PLAN_STORY_KNOWLEDGE_KINDS,
   type AccountId,
   type CaptureServices,
   type CaptureSummary,
   type GhostwriterServices,
   type ProjectId,
   type ProjectNavigator,
-  type SceneWritingServices
+  type SceneWritingServices,
+  type WorkPlanV1
 } from "@ghostwriter/core";
 import { z } from "zod";
 
@@ -30,7 +34,31 @@ export type WorkspaceChatToolTrace = Readonly<{
 const TOOL_DISPLAY_TITLES: Readonly<Record<string, string>> = Object.freeze({
   project_navigator_read: "Read manuscript hierarchy",
   scene_workspace_read: "Read scene",
-  capture_list: "List captures"
+  capture_list: "List captures",
+  propose_work_plan: "Propose work plan"
+});
+
+const proposeWorkPlanInputSchema = z.object({
+  schemaId: z.literal("work-plan-v1"),
+  summary: z.string().trim().min(1).max(2_000),
+  sceneId: z.string().trim().min(1).max(200).optional(),
+  jobs: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1).max(64),
+        kind: z.enum(WORK_PLAN_JOB_KINDS),
+        title: z.string().trim().min(1).max(120),
+        instruction: z.string().trim().min(1).max(4_000),
+        catalogAgentId: z.string().trim().min(1).max(100).optional(),
+        storyKnowledgeKind: z.enum(WORK_PLAN_STORY_KNOWLEDGE_KINDS).optional(),
+        proposedName: z.string().trim().min(1).max(120).optional(),
+        storyKnowledgeId: z.string().trim().min(1).max(200).optional(),
+        sceneId: z.string().trim().min(1).max(200).optional(),
+        heavy: z.boolean().optional()
+      })
+    )
+    .min(1)
+    .max(8)
 });
 
 type SceneReadBudget = {
@@ -232,6 +260,22 @@ export function summarizeWorkspaceChatToolTrace(
         summary: formatCount(count, "capture")
       });
     }
+    case "propose_work_plan": {
+      const payload =
+        typeof output === "object" && output !== null
+          ? (output as { workPlan?: { jobs?: readonly unknown[]; summary?: string } })
+          : {};
+      const jobCount = payload.workPlan?.jobs?.length ?? 0;
+      return Object.freeze({
+        toolName: trace.toolName,
+        title,
+        ok: true,
+        summary:
+          jobCount > 0
+            ? `Work plan · ${formatCount(jobCount, "job")}`
+            : "Work plan attached"
+      });
+    }
     default:
       return Object.freeze({
         toolName: trace.toolName,
@@ -240,6 +284,34 @@ export function summarizeWorkspaceChatToolTrace(
         summary: "Completed"
       });
   }
+}
+
+/** Latest successful propose_work_plan output from a tool-loop turn. */
+export function extractProposedWorkPlanFromToolTraces(
+  traces: readonly ToolTraceStep[]
+): WorkPlanV1 | undefined {
+  for (let index = traces.length - 1; index >= 0; index -= 1) {
+    const trace = traces[index];
+    if (trace === undefined || trace.toolName !== "propose_work_plan" || !trace.ok) {
+      continue;
+    }
+    const output = trace.output;
+    if (
+      typeof output !== "object" ||
+      output === null ||
+      !("ok" in output) ||
+      (output as { ok: unknown }).ok !== true ||
+      !("workPlan" in output)
+    ) {
+      continue;
+    }
+    try {
+      return validateWorkPlanV1((output as { workPlan: unknown }).workPlan);
+    } catch {
+      continue;
+    }
+  }
+  return undefined;
 }
 
 export function mapWorkspaceChatToolTraces(
@@ -385,6 +457,30 @@ export function createWorkspaceChatTools(
             error instanceof ProjectAccessDeniedError
           ) {
             return toolError("Captures not accessible for this project.");
+          }
+          throw error;
+        }
+      }
+    }),
+    Object.freeze({
+      name: "propose_work_plan",
+      description:
+        "Attach a structured work-plan-v1 the writer can Submit. Use when proposing multiple concrete jobs (catalog agents, story-knowledge drafts, Scene Partner brief, cast/continuity checks). Does not execute jobs.",
+      inputSchema: proposeWorkPlanInputSchema,
+      execute: async (input: unknown) => {
+        const parsed = proposeWorkPlanInputSchema.safeParse(input);
+        if (!parsed.success) {
+          return toolError("Work plan arguments are invalid.");
+        }
+        try {
+          const workPlan = validateWorkPlanV1(parsed.data);
+          return Object.freeze({
+            ok: true as const,
+            workPlan
+          });
+        } catch (error) {
+          if (error instanceof DomainValidationError) {
+            return toolError(error.message);
           }
           throw error;
         }

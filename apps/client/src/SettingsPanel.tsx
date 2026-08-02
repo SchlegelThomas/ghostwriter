@@ -17,7 +17,8 @@ const SETTINGS_TABS: readonly Readonly<{
   Object.freeze({ id: "providers", label: "Providers" }),
   Object.freeze({ id: "models", label: "Models" }),
   Object.freeze({ id: "defaults", label: "Defaults" }),
-  Object.freeze({ id: "playbooks", label: "Playbooks" })
+  Object.freeze({ id: "playbooks", label: "Playbooks" }),
+  Object.freeze({ id: "reader-voice", label: "Reader voice" })
 ]);
 
 export type SettingsPanelProps = Readonly<{
@@ -159,6 +160,34 @@ export function SettingsPanel({
             <CatalogPlaybooksPanel projectId={projectId} />
           </View>
         ) : null}
+        {activeTab === "reader-voice" ? (
+          <View
+            accessibilityLabel="Reader voice settings"
+            style={styles.readerVoicePanel}
+          >
+            <Text style={styles.readerVoiceTitle}>Bound Reader voice</Text>
+            <Text style={styles.readerVoiceBody}>
+              Play in Reader uses ElevenLabs on the Ghostwriter server. The API
+              key never lives in the browser. If you see “Reader voice is not
+              configured on this server,” set this Fly secret on the backend app
+              and redeploy:
+            </Text>
+            <Text selectable style={styles.readerVoiceCode}>
+              ELEVENLABS_API_KEY
+            </Text>
+            <Text style={styles.readerVoiceBody}>
+              Optional voice-pack overrides:
+              ELEVENLABS_VOICE_DEFAULT, ELEVENLABS_VOICE_NARRATIVE,
+              ELEVENLABS_VOICE_NOIR, ELEVENLABS_VOICE_SOFT.
+            </Text>
+            <Text style={styles.readerVoiceHint}>
+              Example:{" "}
+              <Text selectable style={styles.readerVoiceCodeInline}>
+                fly secrets set ELEVENLABS_API_KEY=… --app ghostwriter-backend
+              </Text>
+            </Text>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -246,5 +275,43 @@ const styles = StyleSheet.create({
   tabPanelFill: {
     flex: 1,
     minHeight: 0
+  },
+  readerVoicePanel: {
+    gap: 12,
+    maxWidth: 560,
+    paddingTop: 4
+  },
+  readerVoiceTitle: {
+    color: colors.ink,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 16
+  },
+  readerVoiceBody: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 14,
+    lineHeight: 21
+  },
+  readerVoiceCode: {
+    backgroundColor: colors.wash,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    color: colors.ink,
+    fontFamily: fonts.uiMedium,
+    fontSize: 13,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  readerVoiceCodeInline: {
+    color: colors.ink,
+    fontFamily: fonts.uiMedium,
+    fontSize: 13
+  },
+  readerVoiceHint: {
+    color: colors.muted,
+    fontFamily: fonts.ui,
+    fontSize: 13,
+    lineHeight: 20
   }
 });

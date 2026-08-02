@@ -137,6 +137,8 @@ export type DraftAcknowledgementEvent = Readonly<{
   kind: "save" | "checkpoint" | "variant" | "restore";
   title: string;
   detail: string;
+  sceneId?: string;
+  workingVersion?: number;
 }>;
 
 export type DraftProblemEvent = Readonly<{
@@ -898,7 +900,9 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
                 acknowledgementCallbackRef.current?.({
                   kind: "save",
                   title: "Draft saved",
-                  detail: `${sceneTitle} · Draft version ${acknowledgement.workingVersion}`
+                  detail: `${sceneTitle} · Draft version ${acknowledgement.workingVersion}`,
+                  sceneId,
+                  workingVersion: acknowledgement.workingVersion
                 });
               }
             },
@@ -1678,7 +1682,9 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
               onAcknowledgement?.({
                 kind: "save",
                 title,
-                detail
+                detail,
+                sceneId,
+                workingVersion: head?.workingVersion
               })
             }
             onAssistOpenChange={(open) => {

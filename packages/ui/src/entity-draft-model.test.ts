@@ -164,6 +164,20 @@ describe("entityDraftPrimaryAction", () => {
         createdAt: "2026-08-01T12:00:00.000Z"
       })
     ).toBe("acknowledge");
+    expect(
+      entityDraftPrimaryAction({
+        id: "p-next",
+        outputSchemaId: "next-action-v1",
+        createdAt: "2026-08-01T12:00:00.000Z"
+      })
+    ).toBe("acknowledge");
+    expect(
+      entityDraftPrimaryAction({
+        id: "p-sk",
+        outputSchemaId: "story-knowledge-create-v1",
+        createdAt: "2026-08-01T12:00:00.000Z"
+      })
+    ).toBe("acknowledge");
   });
 
   it("opens capture-bound drafts in Plans", () => {
@@ -179,6 +193,33 @@ describe("entityDraftPrimaryAction", () => {
 });
 
 describe("formatEntityDraftDetailBody", () => {
+  it("formats story-knowledge create drafts for review", () => {
+    const body = formatEntityDraftDetailBody("story-knowledge-create-v1", {
+      schemaId: "story-knowledge-create-v1",
+      name: "Jonah",
+      kind: "character",
+      summary: "A ferry passenger scanning the fog.",
+      firstAppearanceNote: "Named in the arrival scene."
+    });
+    expect(body).toContain("Name: Jonah");
+    expect(body).toContain("Kind: character");
+    expect(body).toContain("A ferry passenger scanning the fog.");
+    expect(body).toContain("First appearance:");
+  });
+
+  it("formats next-action summary and suggestion titles", () => {
+    const body = formatEntityDraftDetailBody("next-action-v1", {
+      summary: "Two new names appear in this scene.",
+      suggestions: [
+        { kind: "create-story-knowledge", title: "Add Mara to Cast", rationale: "Named twice." },
+        { kind: "continue-writing", title: "Keep drafting", rationale: "Strong turn." }
+      ]
+    });
+    expect(body).toContain("Two new names appear in this scene.");
+    expect(body).toContain("· Add Mara to Cast");
+    expect(body).toContain("· Keep drafting");
+  });
+
   it("formats pacing turns and prescriptions for review", () => {
     const body = formatEntityDraftDetailBody("pacing-findings-v1", {
       summary: "The middle arrives late.",
@@ -202,6 +243,7 @@ describe("entityDraftKindLabel", () => {
   it("maps schema ids to short kind chips", () => {
     expect(entityDraftKindLabel("catalog-memo-v1")).toBe("Memo");
     expect(entityDraftKindLabel("pacing-findings-v1")).toBe("Pacing");
+    expect(entityDraftKindLabel("next-action-v1")).toBe("Next actions");
     expect(entityDraftKindLabel("capture-reflection-v1")).toBe("Scene Partner");
   });
 });
@@ -323,5 +365,9 @@ describe("entityDraftPrimaryActionLabel", () => {
   it("returns writer-facing action labels", () => {
     expect(entityDraftPrimaryActionLabel("view")).toBe("View");
     expect(entityDraftPrimaryActionLabel("open-in-plans")).toBe("Open in Plans");
+    expect(entityDraftPrimaryActionLabel("acknowledge")).toBe("Acknowledge");
+    expect(
+      entityDraftPrimaryActionLabel("acknowledge", "story-knowledge-create-v1")
+    ).toBe("Add to Cast");
   });
 });

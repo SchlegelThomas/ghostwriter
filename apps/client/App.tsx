@@ -17,14 +17,21 @@ import type {
   SceneId,
   StoryKnowledgeId,
   StoryProjectSummary,
+  WorkPlanV1,
   WriterPublishingDetails
 } from "@ghostwriter/core";
 import {
   GHOSTWRITER_CAPABILITIES,
+  NEXT_ACTION_COACH_DEFAULT_MODEL,
+  nextActionScheduleDelayMs,
   parseBookCoverLocatorUrl,
   parseCharacterVisualLocatorUrl,
+  sceneId as toSceneId,
+  shouldAllowManualNextActionCoach,
+  shouldOfferSceneSaveInvitation,
   storyKnowledgeId as toStoryKnowledgeId
 } from "@ghostwriter/core";
+import { blockId, validateSceneDocumentV1 } from "@ghostwriter/editor";
 import {
   AccountGateScreen,
   AuthenticatedProjectWorkspace,
@@ -73,13 +80,17 @@ import {
   collectWorkspaceChatPriorTurns,
   createWorkspaceChatSession,
   deleteWorkspaceChatSession,
+  dismissWorkspaceChatSession,
+  contentfulWorkspaceChatSessions,
   emptyWorkspaceChatSessionsState,
   findLastUserMessage,
   forkWorkspaceChatSession,
   loadWorkspaceChatSessions,
   removeLastAssistantTurn,
   renameWorkspaceChatSession,
+  reopenWorkspaceChatSession,
   replaceWorkspaceChatMessages,
+  openWorkspaceChatSessions,
   saveWorkspaceChatSessions,
   setActiveWorkspaceChatSession,
   truncateMessagesBeforeUserMessage,
@@ -93,7 +104,18 @@ import {
   type EntityDraftTarget,
   entityDraftDetailTitle,
   entityDraftPrimaryAction,
-  formatEntityDraftDetailBody
+  formatEntityDraftDetailBody,
+  SCENE_SAVE_NEXT_ACTION_INVITE_CHIPS,
+  SCENE_SAVE_NEXT_ACTION_INVITE_PROMPT,
+  chipsFromNextActionV1,
+  formatNextActionCoachMessage,
+  sceneSaveNextActionDismissKey,
+  isWorkPlanSubmitIntent,
+  latestWorkPlanFromMessages,
+  resolveWorkPlanScenes,
+  workPlanFromNextActionV1,
+  type WorkPlanJobStripAction,
+  type WorkPlanJobStripJob
 } from "@ghostwriter/ui";
 import { useFonts } from "expo-font";
 import { useEffect, useMemo, useReducer, useRef, useState, useCallback } from "react";
@@ -118,6 +140,8 @@ import {
   signInDemoSeed,
   createSceneFromCanvas,
   createProject,
+  createCapture,
+  createStoryKnowledgeDraft,
   executeCanvasCommand,
   executeProjectCommand,
   getBookCoverDownload,
@@ -142,8 +166,10 @@ import {
   persistPlanOutline,
   releaseSceneLease,
   runCatalogAgent,
+  runNextActionCoach,
   restoreCanvasRevision,
   saveCanvasPreference,
+  saveCaptureDocument,
   sendWorkspaceChat,
   sendWorkspaceChatStream,
   signOut,
@@ -155,6 +181,7 @@ import {
   rejectAgentProposal,
   acknowledgeAgentProposal,
   type AgentProposalSummaryResponse,
+  type AgentProposalResponse,
   type BookCoverImageJobOption,
   type BookCoverImageJobStatus,
   type CharacterVisualJobOption,
@@ -170,6 +197,7 @@ import {
 } from "./src/api.js";
 import { useDictationSpeechRecognition } from "./src/useDictationSpeechRecognition.js";
 import { getSpeechRecognitionConstructor } from "./src/speech-recognition-dictation.js";
+import { executeWorkPlan } from "./src/work-plan-orchestrator.js";
 import {
   canvasFailureDisposition,
   preferredCanvasSceneId
@@ -312,6 +340,26 @@ function mapProposalSummaryToEntityDraft(
   });
 }
 
+function entityDraftSummaryFromProposalDetail(
+  proposal: AgentProposalResponse
+): EntityDraftSummary {
+  const title = entityDraftDetailTitle(
+    proposal.outputSchemaId,
+    proposal.payload
+  );
+  return Object.freeze({
+    id: proposal.id,
+    outputSchemaId: proposal.outputSchemaId,
+    createdAt: proposal.createdAt,
+    ...(proposal.baseCaptureId === undefined
+      ? {}
+      : { baseCaptureId: proposal.baseCaptureId }),
+    ...(title === undefined
+      ? {}
+      : { preview: Object.freeze({ title }) })
+  });
+}
+
 function buildEntityDraftPlansDeepLink(
   draft: EntityDraftSummary
 ): PlansAgentDeepLink {
@@ -433,6 +481,50 @@ export default function App() {
   const [chatEffort, setChatEffort] = useState<WorkspaceAgentEffort>(
     DEFAULT_WORKSPACE_AGENT_PREFS.effort
   );
+  const [autoSuggestionsEnabled, setAutoSuggestionsEnabled] = useState(
+    DEFAULT_WORKSPACE_AGENT_PREFS.autoSuggestions
+  );
+  const [requestOpenAgentPanel, setRequestOpenAgentPanel] = useState(0);
+  const [requestFocusDraftScene, setRequestFocusDraftScene] = useState(0);
+  const autoSuggestionsEnabledRef = useRef(autoSuggestionsEnabled);
+  autoSuggestionsEnabledRef.current = autoSuggestionsEnabled;
+  const nextActionIdleTimerRef = useRef<
+    ReturnType<typeof setTimeout> | undefined
+  >(undefined);
+  const nextActionDismissedRevisionsRef = useRef(new Set<string>());
+  const nextActionPendingSaveRef = useRef<
+    Readonly<{ sceneId: SceneId; revision: number }> | undefined
+  >(undefined);
+  const nextActionLastPostedAtRef = useRef<number | undefined>(undefined);
+  const nextActionInFlightRef = useRef(false);
+  const [nextActionCoachBusy, setNextActionCoachBusy] = useState(false);
+  const [workPlanJobSummary, setWorkPlanJobSummary] = useState("");
+  const [workPlanJobs, setWorkPlanJobs] = useState<
+    readonly WorkPlanJobStripJob[]
+  >([]);
+  const [workPlanJobActions, setWorkPlanJobActions] = useState<
+    readonly WorkPlanJobStripAction[]
+  >([]);
+  const [requestReviewProjectDrafts, setRequestReviewProjectDrafts] =
+    useState(0);
+  const [requestReviewSceneDrafts, setRequestReviewSceneDrafts] = useState(0);
+  const [requestReviewSceneDraftsSceneId, setRequestReviewSceneDraftsSceneId] =
+    useState<SceneId | undefined>();
+  const [requestOpenEntityDraft, setRequestOpenEntityDraft] = useState(0);
+  const [requestOpenEntityDraftProposalId, setRequestOpenEntityDraftProposalId] =
+    useState<string | undefined>();
+  const [requestOpenEntityDraftScope, setRequestOpenEntityDraftScope] = useState<
+    "scene" | "project" | undefined
+  >();
+  const [requestOpenEntityDraftSceneId, setRequestOpenEntityDraftSceneId] =
+    useState<SceneId | undefined>();
+  const [pendingEntityDraftProposalId, setPendingEntityDraftProposalId] =
+    useState<string | undefined>();
+  const workPlanSubmitInFlightRef = useRef(false);
+  const workPlanLastCaptureIdRef = useRef<string | undefined>(undefined);
+  const workPlanLastSceneIdRef = useRef<SceneId | undefined>(undefined);
+  /** Undismissed next-steps turn in the active chat (timer-safe). */
+  const nextActionOpenRef = useRef(false);
   const [chatProviderConfigured, setChatProviderConfigured] = useState(false);
   const [chatAvailableModels, setChatAvailableModels] = useState<
     readonly WorkspaceAvailableModel[]
@@ -456,11 +548,23 @@ export default function App() {
   });
   const chatSessionTabs = useMemo(
     () =>
-      chatSessionsState.sessions.map((session) =>
+      openWorkspaceChatSessions(chatSessionsState).map((session) =>
         Object.freeze({ id: session.id, title: session.title })
       ),
-    [chatSessionsState.sessions]
+    [chatSessionsState]
   );
+  const chatHistoryTabs = useMemo(() => {
+    const openIds = new Set(
+      openWorkspaceChatSessions(chatSessionsState).map((session) => session.id)
+    );
+    return contentfulWorkspaceChatSessions(chatSessionsState).map((session) =>
+      Object.freeze({
+        id: session.id,
+        title: session.title,
+        open: openIds.has(session.id)
+      })
+    );
+  }, [chatSessionsState]);
   const imageAvailableModels = useMemo(
     () => filterWorkspaceImageModels(chatAvailableModels),
     [chatAvailableModels]
@@ -978,6 +1082,7 @@ export default function App() {
       setChatMode(DEFAULT_WORKSPACE_AGENT_PREFS.mode);
       setChatModel(DEFAULT_WORKSPACE_AGENT_PREFS.model);
       setChatEffort(DEFAULT_WORKSPACE_AGENT_PREFS.effort);
+      setAutoSuggestionsEnabled(DEFAULT_WORKSPACE_AGENT_PREFS.autoSuggestions);
       setChatSessionsState(emptyWorkspaceChatSessionsState());
       return;
     }
@@ -991,7 +1096,25 @@ export default function App() {
     setChatMode(activeSession?.mode ?? projectPrefs.mode);
     setChatModel(activeSession?.model ?? projectPrefs.model);
     setChatEffort(activeSession?.effort ?? projectPrefs.effort);
+    setAutoSuggestionsEnabled(projectPrefs.autoSuggestions);
+    nextActionDismissedRevisionsRef.current.clear();
   }, [selectedProject?.id, writer?.account.id]);
+
+  useEffect(() => {
+    return () => {
+      if (nextActionIdleTimerRef.current !== undefined) {
+        clearTimeout(nextActionIdleTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (nextActionIdleTimerRef.current !== undefined) {
+      clearTimeout(nextActionIdleTimerRef.current);
+      nextActionIdleTimerRef.current = undefined;
+    }
+    nextActionPendingSaveRef.current = undefined;
+  }, [selectedSceneId]);
 
   useEffect(() => {
     if (selectedProject === undefined) {
@@ -1024,7 +1147,8 @@ export default function App() {
             writeWorkspaceAgentPrefs(selectedProject.id, {
               mode: chatMode,
               model: resolved,
-              effort: chatEffort
+              effort: chatEffort,
+              autoSuggestions: autoSuggestionsEnabled
             });
           }
           return resolved;
@@ -1084,12 +1208,14 @@ export default function App() {
     mode?: WorkspaceAgentMode;
     model?: AgentModelId;
     effort?: WorkspaceAgentEffort;
+    autoSuggestions?: boolean;
   }>): void {
     if (selectedProject === undefined) return;
     writeWorkspaceAgentPrefs(selectedProject.id, {
       mode: next.mode ?? chatMode,
       model: next.model ?? chatModel,
-      effort: next.effort ?? chatEffort
+      effort: next.effort ?? chatEffort,
+      autoSuggestions: next.autoSuggestions ?? autoSuggestionsEnabled
     });
     setChatSessionsState((current) => {
       const updated = updateActiveWorkspaceChatSessionPrefs(current, {
@@ -1134,6 +1260,40 @@ export default function App() {
     setChatSessionsState((current) => {
       const next = renameWorkspaceChatSession(current, sessionId, title);
       persistChatSessions(next);
+      return next;
+    });
+  }
+
+  function handleDismissChatSession(sessionId: string): void {
+    setChatSessionsState((current) => {
+      const next = dismissWorkspaceChatSession(current, sessionId);
+      persistChatSessions(next);
+      const session = next.sessions.find(
+        (entry) => entry.id === next.activeSessionId
+      );
+      const projectPrefs =
+        selectedProject === undefined
+          ? DEFAULT_WORKSPACE_AGENT_PREFS
+          : readWorkspaceAgentPrefs(selectedProject.id);
+      setChatMode(session?.mode ?? projectPrefs.mode);
+      setChatModel(session?.model ?? projectPrefs.model);
+      setChatEffort(session?.effort ?? projectPrefs.effort);
+      return next;
+    });
+  }
+
+  function handleReopenChatSession(sessionId: string): void {
+    setChatSessionsState((current) => {
+      const next = reopenWorkspaceChatSession(current, sessionId);
+      persistChatSessions(next);
+      const session = next.sessions.find((entry) => entry.id === sessionId);
+      const projectPrefs =
+        selectedProject === undefined
+          ? DEFAULT_WORKSPACE_AGENT_PREFS
+          : readWorkspaceAgentPrefs(selectedProject.id);
+      setChatMode(session?.mode ?? projectPrefs.mode);
+      setChatModel(session?.model ?? projectPrefs.model);
+      setChatEffort(session?.effort ?? projectPrefs.effort);
       return next;
     });
   }
@@ -2345,12 +2505,224 @@ export default function App() {
     );
   }
 
-  async function handleChatSend(input: WorkspaceChatSendInput): Promise<void> {
-    chatAbortRef.current?.abort();
-    const abortController = new AbortController();
-    chatAbortRef.current = abortController;
-    setChatStreaming(true);
+  function captureDocumentFromBrief(brief: string) {
+    const prose = brief.trim().length > 0 ? brief.trim() : "Scene Partner brief";
+    return validateSceneDocumentV1({
+      schemaVersion: 1,
+      document: {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            attrs: { id: blockId(`wp-brief-${Date.now().toString(36)}`) },
+            content: [{ type: "text", text: prose }]
+          }
+        ]
+      }
+    });
+  }
 
+  function handleWorkPlanJobAction(actionId: string): void {
+    if (actionId === "review-plans") {
+      if (workPlanLastCaptureIdRef.current !== undefined) {
+        setInboxSelectedCaptureId(workPlanLastCaptureIdRef.current);
+        setPlansAgentDeepLink({
+          captureId: workPlanLastCaptureIdRef.current,
+          workflowStep: "scene-partner"
+        });
+      }
+      void openInboxWorkspace();
+      return;
+    }
+    if (actionId === "review-project-drafts") {
+      setRequestReviewProjectDrafts((current) => current + 1);
+      return;
+    }
+    if (actionId === "review-scene-drafts") {
+      const sceneId = workPlanLastSceneIdRef.current ?? selectedSceneId;
+      if (sceneId === undefined) {
+        appendChatStatusMessage("Open a scene to review its Drafts.");
+        return;
+      }
+      setRequestReviewSceneDraftsSceneId(sceneId);
+      setRequestReviewSceneDrafts((current) => current + 1);
+    }
+  }
+
+  function handleOpenWorkPlanJob(jobId: string): void {
+    const job = workPlanJobs.find((entry) => entry.id === jobId);
+    const result = job?.result;
+    if (result === undefined) return;
+    if (result.kind === "plans") {
+      const captureId = result.captureId ?? workPlanLastCaptureIdRef.current;
+      if (captureId !== undefined) {
+        setInboxSelectedCaptureId(captureId);
+        setPlansAgentDeepLink({
+          captureId,
+          workflowStep: "scene-partner"
+        });
+      }
+      void openInboxWorkspace();
+      return;
+    }
+    if (result.kind === "project-draft") {
+      setRequestOpenEntityDraftScope("project");
+      setRequestOpenEntityDraftSceneId(undefined);
+      setRequestOpenEntityDraftProposalId(result.proposalId);
+      setRequestOpenEntityDraft((current) => current + 1);
+      return;
+    }
+    if (result.kind === "scene-draft") {
+      const sceneId =
+        workPlanLastSceneIdRef.current ?? selectedSceneId;
+      if (sceneId !== undefined) {
+        setRequestOpenEntityDraftScope("scene");
+        setRequestOpenEntityDraftSceneId(sceneId);
+        setRequestOpenEntityDraftProposalId(result.proposalId);
+        setRequestOpenEntityDraft((current) => current + 1);
+      }
+    }
+  }
+
+  async function handleSubmitWorkPlan(plan: WorkPlanV1): Promise<void> {
+    if (selectedProject === undefined) {
+      appendChatStatusMessage("Open a project before submitting a work plan.");
+      return;
+    }
+    if (workPlanSubmitInFlightRef.current) {
+      appendChatStatusMessage("A work plan is already running.");
+      return;
+    }
+    const resolvedPlan = resolveWorkPlanScenes(
+      plan,
+      projectScenes(selectedProject).map((scene) =>
+        Object.freeze({ id: scene.id, title: scene.title })
+      ),
+      selectedSceneId
+    );
+    workPlanSubmitInFlightRef.current = true;
+    workPlanLastCaptureIdRef.current = undefined;
+    workPlanLastSceneIdRef.current =
+      resolvedPlan.sceneId !== undefined
+        ? toSceneId(resolvedPlan.sceneId)
+        : selectedSceneId;
+    setWorkPlanJobActions([]);
+    setWorkPlanJobSummary(resolvedPlan.summary);
+    setWorkPlanJobs(
+      resolvedPlan.jobs.map((job) =>
+        Object.freeze({
+          id: job.id,
+          title: job.title,
+          status: "queued" as const,
+          logLines: Object.freeze(["Queued"])
+        })
+      )
+    );
+    setRequestOpenAgentPanel((current) => current + 1);
+    let openedPlans = false;
+    try {
+      await executeWorkPlan({
+        projectId: selectedProject.id,
+        plan: resolvedPlan,
+        onJobUpdate: (jobId, update) => {
+          if (update.result?.kind === "plans") openedPlans = true;
+          setWorkPlanJobs((current) =>
+            current.map((job) => {
+              if (job.id !== jobId) return job;
+              const priorLogs = job.logLines ?? [];
+              const logLines =
+                update.logLine === undefined
+                  ? priorLogs
+                  : Object.freeze([
+                      ...priorLogs.filter((line) => line !== update.logLine),
+                      update.logLine
+                    ]);
+              return Object.freeze({
+                ...job,
+                status: update.status,
+                ...(update.detail === undefined ? {} : { detail: update.detail }),
+                logLines,
+                ...(update.result === undefined
+                  ? {}
+                  : { result: update.result })
+              });
+            })
+          );
+        },
+        runCatalogAgent: async (input) => ({
+          proposal: await runCatalogAgent({
+            projectId: input.projectId,
+            agentId: input.agentId,
+            model: chatModel,
+            effort: chatEffort,
+            ...(input.sceneId === undefined ? {} : { sceneId: input.sceneId }),
+            ...(input.storyKnowledgeId === undefined
+              ? {}
+              : { storyKnowledgeId: input.storyKnowledgeId })
+          })
+        }),
+        createStoryKnowledgeDraft: async (input) => ({
+          proposal: await createStoryKnowledgeDraft(input)
+        }),
+        openScenePartner: async (brief, sceneId) => {
+          const head = await createCapture({ projectId: selectedProject.id });
+          await saveCaptureDocument({
+            projectId: selectedProject.id,
+            captureId: head.captureId,
+            expectedWorkingVersion: head.workingVersion,
+            document: captureDocumentFromBrief(brief)
+          });
+          workPlanLastCaptureIdRef.current = head.captureId;
+          setInboxSelectedCaptureId(head.captureId);
+          setPlansAgentDeepLink({
+            captureId: head.captureId,
+            workflowStep: "scene-partner",
+            ...(sceneId === undefined ? {} : { craftSceneId: sceneId })
+          });
+          bumpInboxRefresh();
+          return { captureId: head.captureId };
+        }
+      });
+      await loadEntityDrafts();
+      setWorkPlanJobActions(
+        openedPlans
+          ? Object.freeze([
+              Object.freeze({ id: "review-plans", label: "Open Plans" })
+            ])
+          : []
+      );
+      // Progress/finish live on the job strip — do not mirror into chat.
+    } catch (cause) {
+      const detail =
+        cause instanceof GhostwriterApiError
+          ? cause.message
+          : cause instanceof Error
+            ? cause.message
+            : "Work plan could not finish.";
+      setWorkPlanJobSummary((current) =>
+        current.trim().length > 0 ? `${current} · Failed` : "Work plan failed"
+      );
+      setWorkPlanJobs((current) =>
+        current.map((job) =>
+          job.status === "running" || job.status === "queued"
+            ? Object.freeze({
+                ...job,
+                status: "error" as const,
+                detail,
+                logLines: Object.freeze([
+                  ...(job.logLines ?? []),
+                  `Failed · ${detail}`
+                ])
+              })
+            : job
+        )
+      );
+    } finally {
+      workPlanSubmitInFlightRef.current = false;
+    }
+  }
+
+  async function handleChatSend(input: WorkspaceChatSendInput): Promise<void> {
     let messagesForTurn = [...(input.baseMessages ?? chatMessages)];
     if (input.resendFromMessageId !== undefined) {
       messagesForTurn = [
@@ -2361,6 +2733,36 @@ export default function App() {
       ];
       replaceActiveChatMessages(() => messagesForTurn);
     }
+
+    if (isWorkPlanSubmitIntent(input.message)) {
+      const userMessageId =
+        input.existingUserMessageId ?? `chat-user-${Date.now()}`;
+      if (input.existingUserMessageId === undefined) {
+        appendActiveChatMessage({
+          id: userMessageId,
+          role: "user",
+          body: input.message
+        });
+        messagesForTurn = [
+          ...messagesForTurn,
+          { id: userMessageId, role: "user", body: input.message }
+        ];
+      }
+      const plan = latestWorkPlanFromMessages(messagesForTurn);
+      if (plan === undefined) {
+        appendChatStatusMessage(
+          "No work plan to submit. Ask for a multi-step plan first."
+        );
+        return;
+      }
+      await handleSubmitWorkPlan(plan);
+      return;
+    }
+
+    chatAbortRef.current?.abort();
+    const abortController = new AbortController();
+    chatAbortRef.current = abortController;
+    setChatStreaming(true);
 
     const priorTurns =
       input.priorTurns ??
@@ -2486,6 +2888,7 @@ export default function App() {
         ...(result.toolTraces === undefined || result.toolTraces.length === 0
           ? {}
           : { toolTraces: result.toolTraces }),
+        ...(result.workPlan === undefined ? {} : { workPlan: result.workPlan }),
         statusLabel: undefined
       });
     } catch (cause) {
@@ -2513,6 +2916,9 @@ export default function App() {
             ...(result.toolTraces === undefined || result.toolTraces.length === 0
               ? {}
               : { toolTraces: result.toolTraces }),
+            ...(result.workPlan === undefined
+              ? {}
+              : { workPlan: result.workPlan }),
             statusLabel: undefined
           });
           return;
@@ -2609,9 +3015,20 @@ export default function App() {
     });
   }
 
-  function handleOpenChatScene(): void {
-    if (selectedSceneId === undefined) return;
-    void selectWorkspaceScene(selectedSceneId);
+  async function handleOpenChatScene(sceneId?: SceneId | string): Promise<void> {
+    const targetSceneId =
+      sceneId !== undefined ? toSceneId(sceneId) : selectedSceneId;
+    if (targetSceneId === undefined) return;
+    if (inboxOpen) closeInboxWorkspace();
+    // selectWorkspaceScene early-returns when already selected — still must
+    // enter Draft so "Open scene" is never a silent no-op.
+    await selectWorkspaceScene(targetSceneId);
+    const targetMode = workflowLens === "plan-draft" ? "split" : "draft";
+    if (workspaceMode !== targetMode) {
+      await changeWorkspaceMode(targetMode);
+    }
+    setWriteComposition("page");
+    setRequestFocusDraftScene((current) => current + 1);
   }
 
   function appendChatStatusMessage(body: string): void {
@@ -2749,6 +3166,37 @@ export default function App() {
     void loadEntityDrafts();
   }, [loadEntityDrafts]);
 
+  useEffect(() => {
+    if (requestOpenEntityDraft < 1) return;
+    const proposalId = requestOpenEntityDraftProposalId;
+    const scope = requestOpenEntityDraftScope;
+    if (proposalId === undefined || scope === undefined) return;
+    const targetReady =
+      scope === "project"
+        ? entityDraftTarget?.targetKind === "project"
+        : entityDraftTarget?.targetKind === "scene" &&
+          entityDraftTarget.targetId === requestOpenEntityDraftSceneId;
+    if (!targetReady) return;
+    setPendingEntityDraftProposalId(proposalId);
+  }, [
+    requestOpenEntityDraft,
+    requestOpenEntityDraftProposalId,
+    requestOpenEntityDraftScope,
+    requestOpenEntityDraftSceneId,
+    entityDraftTarget
+  ]);
+
+  useEffect(() => {
+    if (pendingEntityDraftProposalId === undefined) return;
+    if (entityDraftsLoading) return;
+    void handleSelectEntityDraft(pendingEntityDraftProposalId);
+    setPendingEntityDraftProposalId(undefined);
+  }, [
+    pendingEntityDraftProposalId,
+    entityDrafts,
+    entityDraftsLoading
+  ]);
+
   async function handleRejectEntityDraft(proposalId: string): Promise<void> {
     if (selectedProject === undefined) return;
     setEntityDraftMutatingProposalId(proposalId);
@@ -2800,8 +3248,26 @@ export default function App() {
   }
 
   async function handleSelectEntityDraft(proposalId: string): Promise<void> {
-    const draft = entityDrafts.find((candidate) => candidate.id === proposalId);
-    if (draft === undefined || selectedProject === undefined) return;
+    if (selectedProject === undefined) return;
+
+    let draft = entityDrafts.find((candidate) => candidate.id === proposalId);
+    if (draft === undefined) {
+      try {
+        const proposal = await getAgentProposal({
+          projectId: selectedProject.id,
+          proposalId
+        });
+        draft = entityDraftSummaryFromProposalDetail(proposal);
+        setEntityDrafts((current) =>
+          current.some((entry) => entry.id === proposalId)
+            ? current
+            : Object.freeze([...current, draft!])
+        );
+      } catch {
+        appendChatStatusMessage("Could not open that draft.");
+        return;
+      }
+    }
 
     if (entityDraftPrimaryAction(draft) === "open-in-plans") {
       if (draft.baseCaptureId !== undefined) {
@@ -3213,11 +3679,378 @@ export default function App() {
     }
   }
 
+  function clearSceneSaveNextActionInviteTimer(): void {
+    if (nextActionIdleTimerRef.current !== undefined) {
+      clearTimeout(nextActionIdleTimerRef.current);
+      nextActionIdleTimerRef.current = undefined;
+    }
+  }
+
+  function sceneTitleForNextAction(sceneId: SceneId): string | undefined {
+    if (selectedProject === undefined) return undefined;
+    return projectScenes(selectedProject).find((scene) => scene.id === sceneId)
+      ?.title;
+  }
+
+  function activeChatHasOpenNextActionMessage(): boolean {
+    return (
+      nextActionOpenRef.current ||
+      nextActionInFlightRef.current ||
+      activeWorkspaceChatMessages(chatSessionsState).some(
+        (message) =>
+          message.nextActionSceneId !== undefined &&
+          message.actionChips !== undefined &&
+          message.actionChips.length > 0
+      )
+    );
+  }
+
+  function msSinceLastNextActionSuggestion(now = Date.now()): number | undefined {
+    const last = nextActionLastPostedAtRef.current;
+    if (last === undefined) return undefined;
+    return now - last;
+  }
+
+  function appendSceneNextActionInviteMessage(
+    sceneId: SceneId,
+    revision: number
+  ): void {
+    setRequestOpenAgentPanel((current) => current + 1);
+    nextActionLastPostedAtRef.current = Date.now();
+    nextActionOpenRef.current = true;
+    appendActiveChatMessage({
+      id: `next-action-invite-${sceneId}-${revision}`,
+      role: "assistant",
+      body: SCENE_SAVE_NEXT_ACTION_INVITE_PROMPT,
+      nextActionSceneId: sceneId,
+      nextActionRevision: revision,
+      actionChips: SCENE_SAVE_NEXT_ACTION_INVITE_CHIPS
+    });
+  }
+
+  async function runAndAppendNextActionCoach(input: Readonly<{
+    sceneId: SceneId;
+    revision?: number;
+    trigger: "scene-prose-saved" | "manual-start";
+    statusLabel: string;
+  }>): Promise<void> {
+    if (selectedProject === undefined) return;
+    if (nextActionInFlightRef.current) return;
+    nextActionInFlightRef.current = true;
+    setNextActionCoachBusy(true);
+    setRequestOpenAgentPanel((current) => current + 1);
+    const workingId = `next-action-working-${input.sceneId}-${Date.now()}`;
+    appendActiveChatMessage({
+      id: workingId,
+      role: "assistant",
+      body: "Looking at this scene for next steps…",
+      statusLabel: input.statusLabel,
+      streaming: true,
+      nextActionSceneId: input.sceneId,
+      ...(input.revision === undefined
+        ? {}
+        : { nextActionRevision: input.revision })
+    });
+    try {
+      const result = await runNextActionCoach({
+        projectId: selectedProject.id,
+        sceneId: input.sceneId,
+        model: NEXT_ACTION_COACH_DEFAULT_MODEL,
+        trigger: input.trigger
+      });
+      nextActionLastPostedAtRef.current = Date.now();
+      nextActionOpenRef.current = true;
+      const attachedPlan = workPlanFromNextActionV1(
+        result.payload,
+        input.sceneId
+      );
+      replaceActiveChatMessages((messages) =>
+        messages.map((message) =>
+          message.id === workingId
+            ? {
+                id: `next-action-result-${input.sceneId}-${Date.now()}`,
+                role: "assistant" as const,
+                body: formatNextActionCoachMessage(
+                  result.payload,
+                  sceneTitleForNextAction(input.sceneId)
+                ),
+                nextActionSceneId: input.sceneId,
+                ...(input.revision === undefined
+                  ? {}
+                  : { nextActionRevision: input.revision }),
+                actionChips: chipsFromNextActionV1(result.payload),
+                ...(attachedPlan === undefined
+                  ? {}
+                  : { workPlan: attachedPlan }),
+                statusLabel: input.statusLabel
+              }
+            : message
+        )
+      );
+      void loadEntityDrafts();
+    } catch (cause) {
+      replaceActiveChatMessages((messages) =>
+        messages.map((message) =>
+          message.id === workingId
+            ? {
+                ...message,
+                streaming: false,
+                body:
+                  cause instanceof GhostwriterApiError
+                    ? `Could not suggest next steps: ${cause.message} (${cause.status}${cause.code ? ` · ${cause.code}` : ""})`
+                    : cause instanceof Error
+                      ? `Could not suggest next steps: ${cause.message}`
+                      : "Could not suggest next steps right now.",
+                actionChips: undefined,
+                statusLabel: input.statusLabel
+              }
+            : message
+        )
+      );
+    } finally {
+      nextActionInFlightRef.current = false;
+      setNextActionCoachBusy(false);
+    }
+  }
+
+  function evaluateSceneSaveNextActionInvite(
+    sceneId: SceneId,
+    revision: number
+  ): void {
+    const dismissKey = sceneSaveNextActionDismissKey(sceneId, revision);
+    const autoOn = autoSuggestionsEnabledRef.current;
+    const delayMs = nextActionScheduleDelayMs(autoOn);
+    const result = shouldOfferSceneSaveInvitation({
+      autoSuggestionsEnabled: autoOn,
+      dismissedForRevision:
+        nextActionDismissedRevisionsRef.current.has(dismissKey),
+      hasOpenNextActionMessage: activeChatHasOpenNextActionMessage(),
+      hasReadyNextActionProposal: false,
+      saveAcknowledged: true,
+      idleElapsedMs: delayMs,
+      ...(msSinceLastNextActionSuggestion() === undefined
+        ? {}
+        : { msSinceLastSuggestion: msSinceLastNextActionSuggestion() })
+    });
+    if (result.mayRunAmbientCoach) {
+      void runAndAppendNextActionCoach({
+        sceneId,
+        revision,
+        trigger: "scene-prose-saved",
+        statusLabel: "Auto suggestions"
+      });
+      return;
+    }
+    if (result.showLocalInvite) {
+      appendSceneNextActionInviteMessage(sceneId, revision);
+    }
+  }
+
+  function scheduleSceneSaveNextActionInvite(
+    sceneId: SceneId,
+    revision: number
+  ): void {
+    // Reset debounce on each save ack so bursts collapse to one evaluation.
+    clearSceneSaveNextActionInviteTimer();
+    nextActionPendingSaveRef.current = { sceneId, revision };
+    const delayMs = nextActionScheduleDelayMs(
+      autoSuggestionsEnabledRef.current
+    );
+    nextActionIdleTimerRef.current = setTimeout(() => {
+      nextActionIdleTimerRef.current = undefined;
+      const pending = nextActionPendingSaveRef.current;
+      if (pending === undefined) return;
+      if (pending.sceneId !== sceneId || pending.revision !== revision) return;
+      evaluateSceneSaveNextActionInvite(sceneId, revision);
+    }, delayMs);
+  }
+
+  function dismissNextActionFor(
+    sceneId: SceneId | undefined,
+    revision: number | undefined,
+    messageId: string
+  ): void {
+    if (sceneId !== undefined && revision !== undefined) {
+      nextActionDismissedRevisionsRef.current.add(
+        sceneSaveNextActionDismissKey(sceneId, revision)
+      );
+    }
+    // Cooldown starts from dismiss too so Auto cannot immediately re-fire.
+    nextActionLastPostedAtRef.current = Date.now();
+    nextActionOpenRef.current = false;
+    replaceActiveChatMessages((messages) =>
+      messages.map((message) =>
+        message.id === messageId
+          ? { ...message, actionChips: undefined, nextActionSceneId: undefined }
+          : message
+      )
+    );
+  }
+
+  function resolveManualNextActionSceneId(
+    sceneIdArg?: SceneId | string
+  ): SceneId | undefined {
+    if (sceneIdArg !== undefined) return toSceneId(sceneIdArg);
+    if (selectedSceneId !== undefined) return selectedSceneId;
+    for (let index = chatMessages.length - 1; index >= 0; index -= 1) {
+      const message = chatMessages[index];
+      if (message?.nextActionSceneId !== undefined) {
+        return message.nextActionSceneId;
+      }
+    }
+    return undefined;
+  }
+
+  function handleManualNextActionCoach(sceneIdArg?: SceneId | string): void {
+    const sceneId = resolveManualNextActionSceneId(sceneIdArg);
+    if (sceneId === undefined) {
+      appendChatStatusMessage("Open a scene before asking for next steps.");
+      return;
+    }
+    const gate = shouldAllowManualNextActionCoach({
+      hasOpenNextActionMessage: activeChatHasOpenNextActionMessage(),
+      ...(msSinceLastNextActionSuggestion() === undefined
+        ? {}
+        : { msSinceLastSuggestion: msSinceLastNextActionSuggestion() })
+    });
+    if (!gate.allowed) {
+      if (gate.blockedReason === "open-message") {
+        const draftSceneId =
+          resolveManualNextActionSceneId(sceneIdArg) ?? sceneId;
+        appendActiveChatMessage({
+          id: `chat-system-${Date.now()}`,
+          role: "system",
+          body: "Dismiss the current next-steps suggestions first — tap to open the scene draft.",
+          openSceneOnPress: draftSceneId
+        });
+        return;
+      }
+      appendChatStatusMessage(
+        "Next-step suggestions just ran — try again in a few minutes."
+      );
+      return;
+    }
+    void runAndAppendNextActionCoach({
+      sceneId,
+      trigger: "manual-start",
+      statusLabel: "Next steps"
+    });
+  }
+
+  function handleMessageActionChip(input: Readonly<{
+    messageId: string;
+    chipId: string;
+    sceneId?: SceneId;
+    revision?: number;
+    catalogAgentId?: CatalogAgentId;
+  }>): void {
+    if (
+      input.chipId === "review-plans" ||
+      input.chipId === "review-project-drafts" ||
+      input.chipId === "review-scene-drafts"
+    ) {
+      handleWorkPlanJobAction(input.chipId);
+      return;
+    }
+    if (input.chipId === "submit-work-plan") {
+      const message = chatMessages.find(
+        (entry) => entry.id === input.messageId
+      );
+      const plan =
+        message?.workPlan ?? latestWorkPlanFromMessages(chatMessages);
+      if (plan === undefined) {
+        appendChatStatusMessage(
+          "No work plan to submit. Ask for a multi-step plan first."
+        );
+        return;
+      }
+      replaceActiveChatMessages((messages) =>
+        messages.map((entry) =>
+          entry.id === input.messageId
+            ? {
+                ...entry,
+                workPlan: undefined,
+                actionChips: entry.actionChips?.filter(
+                  (chip) =>
+                    chip.id !== "submit-work-plan" &&
+                    chip.id !== "dismiss-work-plan"
+                )
+              }
+            : entry
+        )
+      );
+      void handleSubmitWorkPlan(plan);
+      return;
+    }
+    if (input.chipId === "dismiss-work-plan") {
+      replaceActiveChatMessages((messages) =>
+        messages.map((entry) =>
+          entry.id === input.messageId
+            ? {
+                ...entry,
+                workPlan: undefined,
+                actionChips: entry.actionChips?.filter(
+                  (chip) =>
+                    chip.id !== "submit-work-plan" &&
+                    chip.id !== "dismiss-work-plan"
+                )
+              }
+            : entry
+        )
+      );
+      return;
+    }
+    if (input.chipId === "dismiss-next-action") {
+      dismissNextActionFor(input.sceneId, input.revision, input.messageId);
+      return;
+    }
+    if (input.chipId === "start-next-action-coach") {
+      if (input.sceneId !== undefined) {
+        dismissNextActionFor(input.sceneId, input.revision, input.messageId);
+        void runAndAppendNextActionCoach({
+          sceneId: input.sceneId,
+          ...(input.revision === undefined ? {} : { revision: input.revision }),
+          trigger: "manual-start",
+          statusLabel: "Next steps"
+        });
+      }
+      return;
+    }
+    if (input.chipId === "dialogue-coach" && input.catalogAgentId !== undefined) {
+      dismissNextActionFor(input.sceneId, input.revision, input.messageId);
+      const sceneIdForCoach = input.sceneId ?? selectedSceneId;
+      void handleCatalogAgentRun(input.catalogAgentId, {
+        ...(sceneIdForCoach === undefined ? {} : { sceneId: sceneIdForCoach })
+      });
+      return;
+    }
+    if (input.chipId === "continue-writing") {
+      dismissNextActionFor(input.sceneId, input.revision, input.messageId);
+      void handleOpenChatScene(input.sceneId);
+      return;
+    }
+    if (input.chipId === "create-story-knowledge") {
+      dismissNextActionFor(input.sceneId, input.revision, input.messageId);
+      appendChatStatusMessage(
+        "Open Cast to add the suggested story knowledge record."
+      );
+    }
+  }
+
   function handleDraftAcknowledgement(
     event: DraftAcknowledgementEvent
   ): void {
     const now = Date.now();
     if (event.kind === "save") {
+      if (
+        event.sceneId !== undefined &&
+        event.workingVersion !== undefined
+      ) {
+        scheduleSceneSaveNextActionInvite(
+          toSceneId(event.sceneId),
+          event.workingVersion
+        );
+      }
       if (
         !shouldShowDraftAcknowledgement(
           lastDraftAcknowledgementAtRef.current,
@@ -3304,6 +4137,10 @@ export default function App() {
         <BookReaderPanel
           busy={readerLoading}
           error={readerError}
+          onConfigureVoice={() => {
+            exitReader();
+            openSettings("reader-voice");
+          }}
           onExit={exitReader}
           onSpeak={speakReaderPassage}
           onStopSpeak={stopReaderSpeech}
@@ -3379,11 +4216,41 @@ export default function App() {
         chatMode={chatMode}
         chatModel={chatModel}
         chatEffort={chatEffort}
+        autoSuggestionsEnabled={autoSuggestionsEnabled}
+        onAutoSuggestionsChange={(enabled) => {
+          setAutoSuggestionsEnabled(enabled);
+          persistChatPrefs({ autoSuggestions: enabled });
+        }}
+        requestOpenAgentPanel={requestOpenAgentPanel}
+        requestFocusDraftScene={requestFocusDraftScene}
+        onMessageActionChip={handleMessageActionChip}
+        onManualNextActionCoach={handleManualNextActionCoach}
+        nextActionCoachBusy={nextActionCoachBusy}
+        workPlanJobSummary={workPlanJobSummary}
+        workPlanJobs={workPlanJobs}
+        workPlanJobActions={workPlanJobActions}
+        onWorkPlanJobAction={handleWorkPlanJobAction}
+        onOpenWorkPlanJob={handleOpenWorkPlanJob}
+        onDismissWorkPlanJobs={() => {
+          setWorkPlanJobs([]);
+          setWorkPlanJobSummary("");
+          setWorkPlanJobActions([]);
+        }}
+        requestReviewProjectDrafts={requestReviewProjectDrafts}
+        requestReviewSceneDrafts={requestReviewSceneDrafts}
+        requestReviewSceneDraftsSceneId={requestReviewSceneDraftsSceneId}
+        requestOpenEntityDraft={requestOpenEntityDraft}
+        requestOpenEntityDraftProposalId={requestOpenEntityDraftProposalId}
+        requestOpenEntityDraftScope={requestOpenEntityDraftScope}
+        requestOpenEntityDraftSceneId={requestOpenEntityDraftSceneId}
         chatSessions={chatSessionTabs}
+        chatHistorySessions={chatHistoryTabs}
         activeChatSessionId={chatSessionsState.activeSessionId}
         onChatSessionSelect={handleChatSessionSelect}
         onNewChatSession={handleNewChatSession}
         onRenameChatSession={handleRenameChatSession}
+        onDismissChatSession={handleDismissChatSession}
+        onReopenChatSession={handleReopenChatSession}
         onDeleteChatSession={handleDeleteChatSession}
         chatStreaming={chatStreaming}
         onChatStop={handleChatStop}

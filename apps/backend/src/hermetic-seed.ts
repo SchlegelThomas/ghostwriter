@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   accountId,
+  buildCharacterVisualPublicUrl,
   createCaptureServices,
   createInitialSceneDocumentState,
   createProjectMembership,
@@ -12,10 +13,13 @@ import {
   HARRY_POTTER_FIXTURE,
   HARRY_POTTER_FIXTURE_PROJECT_ID,
   HARRY_POTTER_SEED_CAPTURES,
+  parseCharacterVisualLocatorUrl,
   type AccountId,
   type CaptureDocumentRepository,
   type CaptureObjectStoragePort,
+  type CharacterVisual,
   type Clock,
+  type GhostwriterServices,
   type IdGenerator,
   type ProjectRepository,
   type SceneDocumentRepository
@@ -32,6 +36,12 @@ export type HermeticSeedDependencies = Readonly<{
   clock: Clock;
   /** When provided, seed character portrait PNGs into object storage. */
   objectStorage?: CaptureObjectStoragePort;
+  /** Public bucket for demo character portraits when configured. */
+  publicObjectStorage?: CaptureObjectStoragePort;
+  /** HTTPS origin for persisted public character visual URLs. */
+  publicMediaOrigin?: string;
+  /** Required to rewrite existing demo portrait locators to public URLs. */
+  services?: GhostwriterServices;
 }>;
 
 const VISUAL_FIXTURES_DIR = join(
@@ -83,7 +93,8 @@ export async function seedHermeticHarryPotter(
     await dependencies.sceneDocuments.initialize(initial);
   }
 
-  await putHarryPotterCharacterVisualObjects(dependencies.objectStorage);
+  await putHarryPotterCharacterVisualObjects(dependencies);
+  await rewriteHarryPotterVisualUrlsToPublic(dependencies);
 
   const captures = createCaptureServices({
     projects: dependencies.projects,
@@ -121,8 +132,10 @@ export async function seedHermeticHarryPotter(
 }
 
 async function putHarryPotterCharacterVisualObjects(
-  objectStorage: CaptureObjectStoragePort | undefined
+  dependencies: HermeticSeedDependencies
 ): Promise<void> {
+  const objectStorage =
+    dependencies.publicObjectStorage ?? dependencies.objectStorage;
   if (objectStorage === undefined) return;
   try {
     for (const seed of HARRY_POTTER_CHARACTER_VISUAL_SEEDS) {
@@ -144,6 +157,71 @@ async function putHarryPotterCharacterVisualObjects(
   }
 }
 
+function rewriteVisualUrlToPublic(
+  visual: CharacterVisual,
+  publicMediaOrigin: string
+): CharacterVisual {
+  const locator = parseCharacterVisualLocatorUrl(visual.url);
+  if (locator === undefined) {
+    return visual;
+  }
+  return Object.freeze({
+    ...visual,
+    url: buildCharacterVisualPublicUrl(
+      publicMediaOrigin,
+      locator.projectId,
+      locator.knowledgeId,
+      locator.visualId
+    )
+  });
+}
+
+async function rewriteHarryPotterVisualUrlsToPublic(
+  dependencies: HermeticSeedDependencies
+): Promise<void> {
+  const publicMediaOrigin = dependencies.publicMediaOrigin;
+  if (publicMediaOrigin === undefined || dependencies.services === undefined) {
+    return;
+  }
+
+  const owner = accountId(dependencies.accountId);
+  let navigator = await dependencies.services.getProjectNavigator(
+    owner,
+    HARRY_POTTER_FIXTURE_PROJECT_ID
+  );
+  if (navigator === undefined) {
+    return;
+  }
+
+  for (const knowledge of navigator.storyKnowledge) {
+    const visuals = knowledge.visuals;
+    if (visuals === undefined || visuals.length === 0) {
+      continue;
+    }
+
+    const updatedVisuals = visuals.map((visual) =>
+      rewriteVisualUrlToPublic(visual, publicMediaOrigin)
+    );
+    const changed = updatedVisuals.some(
+      (visual, index) => visual.url !== visuals[index]?.url
+    );
+    if (!changed) {
+      continue;
+    }
+
+    navigator = await dependencies.services.executeProjectCommand({
+      accountId: owner,
+      projectId: HARRY_POTTER_FIXTURE_PROJECT_ID,
+      expectedVersion: navigator.version,
+      command: {
+        type: "storyKnowledge.update",
+        storyKnowledgeId: knowledge.id,
+        visuals: updatedVisuals
+      }
+    });
+  }
+}
+
 /**
  * Idempotent Harry Potter demo seed for production/dev backends.
  * If the fixture project already exists, skips structure/prose/captures and
@@ -160,7 +238,8 @@ export async function ensureDemoHarryPotterSeed(
     return;
   }
 
-  await putHarryPotterCharacterVisualObjects(dependencies.objectStorage);
+  await putHarryPotterCharacterVisualObjects(dependencies);
+  await rewriteHarryPotterVisualUrlsToPublic(dependencies);
 
   const owner = accountId(dependencies.accountId);
   const membership = await dependencies.projects.getProjectMembership(

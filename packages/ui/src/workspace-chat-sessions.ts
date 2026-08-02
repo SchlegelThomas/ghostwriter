@@ -1,5 +1,5 @@
-import type { AgentModelId } from "@ghostwriter/core";
-import { isAgentModelId } from "@ghostwriter/core";
+import type { AgentModelId, WorkPlanV1 } from "@ghostwriter/core";
+import { isAgentModelId, isWorkPlanV1, sceneId as toSceneId } from "@ghostwriter/core";
 import type { WorkspaceChatMessage } from "./WorkspaceChatPanel.js";
 import {
   DEFAULT_WORKSPACE_AGENT_PREFS,
@@ -34,6 +34,8 @@ export type WorkspaceChatSession = Readonly<{
 export type WorkspaceChatSessionsState = Readonly<{
   activeSessionId: string;
   sessions: readonly WorkspaceChatSession[];
+  /** Tab-visible session ids; legacy payloads omit this and treat all sessions as open. */
+  openSessionIds?: readonly string[];
 }>;
 
 function accountScope(accountId: string | undefined): string {
@@ -68,6 +70,10 @@ function isWorkspaceAgentEffort(value: unknown): value is WorkspaceAgentEffort {
 
 function isStoredAgentModelId(value: unknown): value is AgentModelId {
   return typeof value === "string" && isAgentModelId(value);
+}
+
+function normalizeWorkPlan(value: unknown): WorkPlanV1 | undefined {
+  return isWorkPlanV1(value) ? value : undefined;
 }
 
 function normalizeToolTrace(value: unknown): WorkspaceChatMessage["toolTraces"] {
@@ -113,6 +119,7 @@ export function normalizeWorkspaceChatMessage(
     return null;
   }
   const toolTraces = normalizeToolTrace(record.toolTraces);
+  const workPlan = normalizeWorkPlan(record.workPlan);
   return Object.freeze({
     id: record.id,
     role: record.role,
@@ -122,7 +129,12 @@ export function normalizeWorkspaceChatMessage(
       ? { statusLabel: record.statusLabel }
       : {}),
     ...(toolTraces === undefined ? {} : { toolTraces }),
-    ...(record.retryable === true ? { retryable: true } : {})
+    ...(workPlan === undefined ? {} : { workPlan }),
+    ...(record.retryable === true ? { retryable: true } : {}),
+    ...(typeof record.openSceneOnPress === "string" &&
+    record.openSceneOnPress.trim().length > 0
+      ? { openSceneOnPress: toSceneId(record.openSceneOnPress) }
+      : {})
   });
 }
 
@@ -193,8 +205,82 @@ export function emptyWorkspaceChatSessionsState(
   const session = createEmptyChatSession(now);
   return Object.freeze({
     activeSessionId: session.id,
-    sessions: Object.freeze([session])
+    sessions: Object.freeze([session]),
+    openSessionIds: Object.freeze([session.id])
   });
+}
+
+function resolveOpenSessionIds(
+  state: WorkspaceChatSessionsState
+): readonly string[] {
+  const validIds = new Set(state.sessions.map((session) => session.id));
+  if (state.openSessionIds !== undefined && state.openSessionIds.length > 0) {
+    const filtered = state.openSessionIds.filter((id) => validIds.has(id));
+    if (filtered.length > 0) {
+      return Object.freeze(filtered);
+    }
+  }
+  return Object.freeze(state.sessions.map((session) => session.id));
+}
+
+function ensureOpenTabs(state: WorkspaceChatSessionsState): WorkspaceChatSessionsState {
+  let openSessionIds = [...resolveOpenSessionIds(state)];
+  let sessions = state.sessions;
+  let activeSessionId = state.activeSessionId;
+
+  if (openSessionIds.length === 0) {
+    const now = new Date().toISOString();
+    const session = createEmptyChatSession(now);
+    sessions = Object.freeze([session, ...sessions]);
+    openSessionIds = [session.id];
+    activeSessionId = session.id;
+  } else if (!openSessionIds.includes(activeSessionId)) {
+    activeSessionId = openSessionIds[0]!;
+  }
+
+  return Object.freeze({
+    activeSessionId,
+    sessions,
+    openSessionIds: Object.freeze(openSessionIds)
+  });
+}
+
+export function openWorkspaceChatSessions(
+  state: WorkspaceChatSessionsState
+): readonly WorkspaceChatSession[] {
+  const openIds = new Set(resolveOpenSessionIds(state));
+  return Object.freeze(state.sessions.filter((session) => openIds.has(session.id)));
+}
+
+export function dismissedWorkspaceChatSessions(
+  state: WorkspaceChatSessionsState
+): readonly WorkspaceChatSession[] {
+  const openIds = new Set(resolveOpenSessionIds(state));
+  return Object.freeze(
+    sortSessionsByRecency(
+      state.sessions.filter((session) => !openIds.has(session.id))
+    )
+  );
+}
+
+export function workspaceChatSessionHasContent(
+  session: WorkspaceChatSession
+): boolean {
+  return session.messages.some(
+    (message) =>
+      (message.role === "user" || message.role === "assistant") &&
+      message.body.trim().length > 0
+  );
+}
+
+export function contentfulWorkspaceChatSessions(
+  state: WorkspaceChatSessionsState
+): readonly WorkspaceChatSession[] {
+  return Object.freeze(
+    sortSessionsByRecency(
+      state.sessions.filter((session) => workspaceChatSessionHasContent(session))
+    )
+  );
 }
 
 function sortSessionsByRecency(
@@ -210,33 +296,64 @@ function sortSessionsByRecency(
 function enforceSessionCountCap(
   state: WorkspaceChatSessionsState
 ): WorkspaceChatSessionsState {
-  if (state.sessions.length <= WORKSPACE_CHAT_SESSIONS_MAX) {
-    return state;
+  const normalized = ensureOpenTabs(state);
+  if (normalized.sessions.length <= WORKSPACE_CHAT_SESSIONS_MAX) {
+    return normalized;
   }
-  const sortedOldestFirst = [...state.sessions].sort(
-    (left, right) =>
-      Date.parse(left.updatedAt) - Date.parse(right.updatedAt) ||
-      left.title.localeCompare(right.title)
-  );
-  let sessions = [...state.sessions];
-  for (const candidate of sortedOldestFirst) {
+  const openIds = new Set(resolveOpenSessionIds(normalized));
+  let sessions = [...normalized.sessions];
+  const dismissedOldestFirst = [...sessions]
+    .filter((session) => !openIds.has(session.id))
+    .sort(
+      (left, right) =>
+        Date.parse(left.updatedAt) - Date.parse(right.updatedAt) ||
+        left.title.localeCompare(right.title)
+    );
+  for (const candidate of dismissedOldestFirst) {
     if (sessions.length <= WORKSPACE_CHAT_SESSIONS_MAX) break;
-    if (sessions.length <= 1) break;
-    if (candidate.id === state.activeSessionId && sessions.length > 1) {
-      continue;
-    }
     sessions = sessions.filter((session) => session.id !== candidate.id);
   }
+  if (sessions.length > WORKSPACE_CHAT_SESSIONS_MAX) {
+    const sortedOldestFirst = [...sessions].sort(
+      (left, right) =>
+        Date.parse(left.updatedAt) - Date.parse(right.updatedAt) ||
+        left.title.localeCompare(right.title)
+    );
+    for (const candidate of sortedOldestFirst) {
+      if (sessions.length <= WORKSPACE_CHAT_SESSIONS_MAX) break;
+      if (sessions.length <= 1) break;
+      if (candidate.id === normalized.activeSessionId && sessions.length > 1) {
+        continue;
+      }
+      const remainingOpen = sessions.filter(
+        (session) => openIds.has(session.id) && session.id !== candidate.id
+      );
+      if (openIds.has(candidate.id) && remainingOpen.length === 0) {
+        continue;
+      }
+      sessions = sessions.filter((session) => session.id !== candidate.id);
+      if (openIds.has(candidate.id)) {
+        openIds.delete(candidate.id);
+      }
+    }
+  }
+  const validIds = new Set(sessions.map((session) => session.id));
+  const openSessionIds = Object.freeze(
+    [...resolveOpenSessionIds(normalized)].filter((id) => validIds.has(id))
+  );
   const activeStillExists = sessions.some(
-    (session) => session.id === state.activeSessionId
+    (session) => session.id === normalized.activeSessionId
   );
   const activeSessionId = activeStillExists
-    ? state.activeSessionId
-    : sessions[0]!.id;
-  return Object.freeze({
-    activeSessionId,
-    sessions: Object.freeze(sessions)
-  });
+    ? normalized.activeSessionId
+    : openSessionIds[0] ?? sessions[0]!.id;
+  return ensureOpenTabs(
+    Object.freeze({
+      activeSessionId,
+      sessions: Object.freeze(sessions),
+      openSessionIds
+    })
+  );
 }
 
 export function trimSessionMessages(
@@ -283,7 +400,10 @@ function mapSession(
   return enforceSessionCountCap(
     Object.freeze({
       activeSessionId: state.activeSessionId,
-      sessions: Object.freeze(sessions)
+      sessions: Object.freeze(sessions),
+      ...(state.openSessionIds === undefined
+        ? {}
+        : { openSessionIds: state.openSessionIds })
     })
   );
 }
@@ -307,11 +427,30 @@ export function normalizeWorkspaceChatSessionsState(
     sessions.some((session) => session.id === record.activeSessionId)
       ? record.activeSessionId
       : sortSessionsByRecency(sessions)[0]!.id;
+  const rawOpenSessionIds = Array.isArray(record.openSessionIds)
+    ? record.openSessionIds.filter(
+        (entry): entry is string =>
+          typeof entry === "string" && entry.trim().length > 0
+      )
+    : undefined;
+  const openSessionIds =
+    rawOpenSessionIds === undefined || rawOpenSessionIds.length === 0
+      ? undefined
+      : Object.freeze(
+          rawOpenSessionIds.filter((id) =>
+            sessions.some((session) => session.id === id)
+          )
+        );
   return enforceSessionCountCap(
-    Object.freeze({
-      activeSessionId,
-      sessions: Object.freeze(sessions)
-    })
+    ensureOpenTabs(
+      Object.freeze({
+        activeSessionId,
+        sessions: Object.freeze(sessions),
+        ...(openSessionIds === undefined || openSessionIds.length === 0
+          ? {}
+          : { openSessionIds })
+      })
+    )
   );
 }
 
@@ -362,9 +501,14 @@ export function createWorkspaceChatSession(
     ...(prefs.effort === undefined ? {} : { effort: prefs.effort })
   });
   const sessions = Object.freeze([session, ...state.sessions]);
-  let next = Object.freeze({
+  const openSessionIds = Object.freeze([
+    session.id,
+    ...resolveOpenSessionIds(state)
+  ]);
+  let next: WorkspaceChatSessionsState = Object.freeze({
     activeSessionId: session.id,
-    sessions
+    sessions,
+    openSessionIds
   });
   next = enforceSessionCountCap(next);
   return next;
@@ -395,8 +539,64 @@ export function setActiveWorkspaceChatSession(
   }
   return Object.freeze({
     activeSessionId: sessionId,
-    sessions: state.sessions
+    sessions: state.sessions,
+    ...(state.openSessionIds === undefined
+      ? {}
+      : { openSessionIds: state.openSessionIds })
   });
+}
+
+export function dismissWorkspaceChatSession(
+  state: WorkspaceChatSessionsState,
+  sessionId: string
+): WorkspaceChatSessionsState {
+  if (!state.sessions.some((session) => session.id === sessionId)) {
+    return state;
+  }
+  let openSessionIds: readonly string[] = Object.freeze(
+    resolveOpenSessionIds(state).filter((id) => id !== sessionId)
+  );
+  let sessions = state.sessions;
+  let activeSessionId = state.activeSessionId;
+
+  if (openSessionIds.length === 0) {
+    const now = new Date().toISOString();
+    const session = createEmptyChatSession(now);
+    sessions = Object.freeze([session, ...sessions]);
+    openSessionIds = Object.freeze([session.id]);
+    activeSessionId = session.id;
+  } else if (activeSessionId === sessionId) {
+    activeSessionId = openSessionIds[0]!;
+  }
+
+  return enforceSessionCountCap(
+    Object.freeze({
+      activeSessionId,
+      sessions,
+      openSessionIds: Object.freeze(openSessionIds)
+    })
+  );
+}
+
+export function reopenWorkspaceChatSession(
+  state: WorkspaceChatSessionsState,
+  sessionId: string
+): WorkspaceChatSessionsState {
+  if (!state.sessions.some((session) => session.id === sessionId)) {
+    return state;
+  }
+  const openIds = new Set(resolveOpenSessionIds(state));
+  if (openIds.has(sessionId)) {
+    return setActiveWorkspaceChatSession(state, sessionId);
+  }
+  const openSessionIds = Object.freeze([sessionId, ...openIds]);
+  return enforceSessionCountCap(
+    Object.freeze({
+      activeSessionId: sessionId,
+      sessions: state.sessions,
+      openSessionIds
+    })
+  );
 }
 
 export function deleteWorkspaceChatSession(
@@ -410,14 +610,20 @@ export function deleteWorkspaceChatSession(
   const sessions = Object.freeze(
     state.sessions.filter((session) => session.id !== sessionId)
   );
+  const openSessionIds = Object.freeze(
+    resolveOpenSessionIds(state).filter((id) => id !== sessionId)
+  );
   const activeSessionId =
     state.activeSessionId === sessionId
-      ? sessions[0]!.id
+      ? openSessionIds[0] ?? sessions[0]!.id
       : state.activeSessionId;
-  return Object.freeze({
-    activeSessionId,
-    sessions
-  });
+  return enforceSessionCountCap(
+    Object.freeze({
+      activeSessionId,
+      sessions,
+      openSessionIds
+    })
+  );
 }
 
 function applyAutoTitle(
@@ -602,9 +808,10 @@ export function forkWorkspaceChatSession(
         ? {}
         : { effort: source.effort })
   });
-  let next = Object.freeze({
+  let next: WorkspaceChatSessionsState = Object.freeze({
     activeSessionId: session.id,
-    sessions: Object.freeze([session, ...state.sessions])
+    sessions: Object.freeze([session, ...state.sessions]),
+    openSessionIds: Object.freeze([session.id, ...resolveOpenSessionIds(state)])
   });
   next = enforceSessionCountCap(next);
   return next;

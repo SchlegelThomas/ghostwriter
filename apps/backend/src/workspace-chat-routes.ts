@@ -17,7 +17,8 @@ import {
   type CaptureServices,
   type GhostwriterServices,
   type ProjectNavigator,
-  type SceneWritingServices
+  type SceneWritingServices,
+  type WorkPlanV1
 } from "@ghostwriter/core";
 import type { Context, Hono } from "hono";
 import { z } from "zod";
@@ -32,6 +33,7 @@ import { providerAgentErrorStatusAndBody } from "./provider-agent-api.js";
 import { discoverModelsForAccount } from "./model-discovery.js";
 import {
   createWorkspaceChatTools,
+  extractProposedWorkPlanFromToolTraces,
   mapWorkspaceChatToolTraces,
   summarizeWorkspaceChatToolTrace,
   type WorkspaceChatToolTrace
@@ -169,6 +171,7 @@ const TOOL_READ_INSTRUCTIONS = [
   "- project_navigator_read — manuscript hierarchy (books → scenes)",
   "- scene_workspace_read — one scene's working prose by sceneId",
   "- capture_list — inbox capture summaries",
+  "When proposing a multi-step bundle the writer can Submit, call propose_work_plan with a work-plan-v1 object (catalog agents, story-knowledge drafts, Scene Partner brief, cast/continuity checks). Do not invent fake job queues — attachment is enough; the writer Submits.",
   "Use scene reads iteratively for whole-book questions; do not dump or assume unseen scenes.",
   "When citing prose, name the scene title.",
   "Propose only. Never claim manuscript canon was written, saved, or changed.",
@@ -456,6 +459,7 @@ function chatSuccessResponse(input: Readonly<{
   model: AgentModelId;
   effort: WorkspaceChatEffort;
   toolTraces?: readonly WorkspaceChatToolTrace[];
+  workPlan?: WorkPlanV1;
   code?: string;
 }>) {
   return Object.freeze({
@@ -466,6 +470,7 @@ function chatSuccessResponse(input: Readonly<{
     ...(input.toolTraces === undefined || input.toolTraces.length === 0
       ? {}
       : { toolTraces: input.toolTraces }),
+    ...(input.workPlan === undefined ? {} : { workPlan: input.workPlan }),
     ...(input.code === undefined ? {} : { code: input.code })
   });
 }
@@ -688,13 +693,17 @@ export function registerWorkspaceChatRoutes(
           });
 
           if (toolCompletion.ok) {
+            const workPlan = extractProposedWorkPlanFromToolTraces(
+              toolCompletion.toolTraces
+            );
             return context.json(
               chatSuccessResponse({
                 reply: toolCompletion.text.trim(),
                 mode,
                 model,
                 effort,
-                toolTraces: mapWorkspaceChatToolTraces(toolCompletion.toolTraces)
+                toolTraces: mapWorkspaceChatToolTraces(toolCompletion.toolTraces),
+                ...(workPlan === undefined ? {} : { workPlan })
               })
             );
           }
@@ -1017,7 +1026,10 @@ export function registerWorkspaceChatRoutes(
                       code: providerCompletionError(event.diagnostic.code).body.code
                     });
                     break;
-                  case "done":
+                  case "done": {
+                    const workPlan = extractProposedWorkPlanFromToolTraces(
+                      event.result.toolTraces
+                    );
                     writeSse(controller, "done", {
                       reply: event.result.text.trim(),
                       mode,
@@ -1029,9 +1041,11 @@ export function registerWorkspaceChatRoutes(
                             toolTraces: mapWorkspaceChatToolTraces(
                               event.result.toolTraces
                             )
-                          })
+                          }),
+                      ...(workPlan === undefined ? {} : { workPlan })
                     });
                     break;
+                  }
                   default:
                     break;
                 }

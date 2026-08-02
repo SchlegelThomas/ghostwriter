@@ -5,6 +5,7 @@ import {
   assertCharacterVisualPngDataUri,
   buildCharacterVisualLocatorUrl,
   buildCharacterVisualObjectKey,
+  buildCharacterVisualPublicUrl,
   DomainValidationError,
   parseCharacterVisualLocatorUrl,
   projectId,
@@ -42,10 +43,17 @@ type CharacterVisualEnvironment = {
   };
 };
 
+export type CharacterVisualPublicMediaConfig = Readonly<{
+  origin: string;
+  objectStorage: CaptureObjectStoragePort;
+}>;
+
 export type CharacterVisualRouteDependencies = Readonly<{
   agentProvider: AgentProviderRuntime;
   services: GhostwriterServices;
   objectStorage: CaptureObjectStoragePort;
+  /** When set, applied character visuals are stored in the public bucket with HTTPS URLs. */
+  publicMedia?: CharacterVisualPublicMediaConfig;
   generateImage?: ScenePartnerImageGenerator;
   now?: () => Date;
 }>;
@@ -123,7 +131,7 @@ export function registerCharacterVisualRoutes(
   app: Hono<CharacterVisualEnvironment>,
   dependencies: CharacterVisualRouteDependencies
 ): void {
-  const { agentProvider, services, objectStorage } = dependencies;
+  const { agentProvider, services, objectStorage, publicMedia } = dependencies;
   const usingInjectedGenerator = dependencies.generateImage !== undefined;
   const generateImage = dependencies.generateImage ?? generateOpenAiImage;
   const now = dependencies.now ?? (() => new Date());
@@ -334,14 +342,23 @@ export function registerCharacterVisualRoutes(
           scopedKnowledgeId,
           visualId
         );
-        const locator = buildCharacterVisualLocatorUrl(
-          scopedProjectId,
-          scopedKnowledgeId,
-          visualId
-        );
+        const storage = publicMedia?.objectStorage ?? objectStorage;
+        const persistedUrl =
+          publicMedia === undefined
+            ? buildCharacterVisualLocatorUrl(
+                scopedProjectId,
+                scopedKnowledgeId,
+                visualId
+              )
+            : buildCharacterVisualPublicUrl(
+                publicMedia.origin,
+                scopedProjectId,
+                scopedKnowledgeId,
+                visualId
+              );
 
         try {
-          await objectStorage.putObject({
+          await storage.putObject({
             objectKey,
             contentType: "image/png",
             bytes
@@ -361,7 +378,7 @@ export function registerCharacterVisualRoutes(
 
         const visual: CharacterVisual = Object.freeze({
           id: visualId,
-          url: locator,
+          url: persistedUrl,
           alt: parsed.data.alt,
           ...(parsed.data.caption === undefined
             ? {}
@@ -446,9 +463,18 @@ export function registerCharacterVisualRoutes(
             404
           );
         }
+
+        const expiresAt = new Date(now().getTime() + DOWNLOAD_TTL_MS).toISOString();
         const locator = parseCharacterVisualLocatorUrl(visual.url);
+        if (locator === undefined) {
+          return context.json({
+            download: {
+              url: visual.url,
+              expiresAt
+            }
+          });
+        }
         if (
-          locator === undefined ||
           locator.projectId !== scopedProjectId ||
           locator.knowledgeId !== scopedKnowledgeId ||
           locator.visualId !== visualId
@@ -467,7 +493,6 @@ export function registerCharacterVisualRoutes(
           scopedKnowledgeId,
           visualId
         );
-        const expiresAt = new Date(now().getTime() + DOWNLOAD_TTL_MS).toISOString();
 
         if (objectStorage.getObjectBytes !== undefined) {
           try {

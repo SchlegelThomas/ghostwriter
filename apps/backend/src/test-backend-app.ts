@@ -32,6 +32,7 @@ import {
 } from "@ghostwriter/storage/pglite";
 import { user } from "@ghostwriter/storage";
 import { createApp } from "./app.js";
+import type { CharacterVisualPublicMediaConfig } from "./character-visual-routes.js";
 import type { AuthGateway, AuthenticatedSession } from "./auth.js";
 import {
   createTestAgentProviderRuntime,
@@ -90,6 +91,7 @@ export async function createSeededBackendApp(
     listModelsFactory?: import("./agent-provider-runtime.js").ModelListFactory;
     scenePartnerGenerateImage?: ScenePartnerImageGenerator;
     demoSeed?: Readonly<{ enabled: boolean }>;
+    characterVisualPublicMedia?: CharacterVisualPublicMediaConfig;
     workspaceChatCreateToolLoopProvider?: typeof createToolLoopProvider;
   }>
 ) {
@@ -210,6 +212,9 @@ export async function createSeededBackendApp(
       allowedOrigins: [TEST_BACKEND_ORIGIN],
       objectStorage,
       ...(options?.demoSeed === undefined ? {} : { demoSeed: options.demoSeed }),
+      ...(options?.characterVisualPublicMedia === undefined
+        ? {}
+        : { characterVisualPublicMedia: options.characterVisualPublicMedia }),
       ...(options?.scenePartnerGenerateImage === undefined
         ? {}
         : { scenePartnerGenerateImage: options.scenePartnerGenerateImage }),

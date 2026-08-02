@@ -16,7 +16,8 @@ import {
 } from "@ghostwriter/core";
 import {
   WORKSPACE_CHAT_SCENE_READ_MAX_CALLS,
-  createWorkspaceChatTools
+  createWorkspaceChatTools,
+  extractProposedWorkPlanFromToolTraces
 } from "./workspace-chat-tools.js";
 
 const ACCOUNT = accountId("account-test");
@@ -124,5 +125,59 @@ describe("createWorkspaceChatTools", () => {
       ok: false,
       error: "Scene not found or not accessible."
     });
+  });
+
+  it("validates and returns a work plan from propose_work_plan", async () => {
+    const { services, writing, captures } = setup();
+    const tools = createWorkspaceChatTools({
+      accountId: ACCOUNT,
+      projectId: PROJECT,
+      services,
+      writing,
+      captures,
+      navigator: BELLWETHER_FIXTURE_NAVIGATOR
+    });
+    const propose = tools.find((tool) => tool.name === "propose_work_plan");
+    expect(propose).toBeDefined();
+    const result = await propose!.execute({
+      schemaId: "work-plan-v1",
+      summary: "Two jobs for this scene.",
+      sceneId: SCENE_ID,
+      jobs: [
+        {
+          id: "job-1",
+          kind: "run-catalog-agent",
+          title: "Dialogue Coach",
+          instruction: "Tighten dialogue.",
+          catalogAgentId: "dialogue-coach"
+        },
+        {
+          id: "job-2",
+          kind: "create-story-knowledge",
+          title: "Add Mara",
+          instruction: "New character.",
+          proposedName: "Mara",
+          storyKnowledgeKind: "character"
+        }
+      ]
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      workPlan: {
+        schemaId: "work-plan-v1",
+        summary: "Two jobs for this scene.",
+        jobs: [{ id: "job-1" }, { id: "job-2" }]
+      }
+    });
+    const extracted = extractProposedWorkPlanFromToolTraces([
+      {
+        toolName: "propose_work_plan",
+        title: "Propose work plan",
+        input: {},
+        output: result,
+        ok: true
+      }
+    ]);
+    expect(extracted?.jobs).toHaveLength(2);
   });
 });

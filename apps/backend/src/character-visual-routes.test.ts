@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   BELLWETHER_FIXTURE_PROJECT_ID,
   buildCharacterVisualObjectKey,
+  buildCharacterVisualPublicUrl,
+  createMemoryCaptureObjectStorage,
   type CaptureObjectStoragePort
 } from "@ghostwriter/core";
 import {
@@ -44,14 +46,25 @@ async function openSeededApp(
   options?: Readonly<{
     scenePartnerGenerateImage?: ScenePartnerImageGenerator;
     objectStorage?: CaptureObjectStoragePort;
+    publicObjectStorage?: CaptureObjectStoragePort;
+    publicMediaOrigin?: string;
   }>
 ) {
+  const objectStorage = options?.objectStorage ?? createMemoryCaptureObjectStorage();
+  const publicObjectStorage =
+    options?.publicObjectStorage ?? createMemoryCaptureObjectStorage();
   return createSeededBackendApp(undefined, {
     kekConfig: createTestProviderKekRuntimeConfig(),
     scenePartnerGenerateImage: options?.scenePartnerGenerateImage ?? fakeImage,
-    ...(options?.objectStorage === undefined
+    objectStorage,
+    ...(options?.publicMediaOrigin === undefined
       ? {}
-      : { objectStorage: options.objectStorage })
+      : {
+          characterVisualPublicMedia: {
+            origin: options.publicMediaOrigin,
+            objectStorage: publicObjectStorage
+          }
+        })
   });
 }
 
@@ -134,6 +147,50 @@ describe("character visual routes", () => {
       (candidate: { id: string }) => candidate.id === KNOWLEDGE_ID
     );
     expect(knowledge?.visuals?.[0]?.id).toBe(body.visual.id);
+  });
+
+  it("applies a PNG to public storage with an HTTPS URL when public media is configured", async () => {
+    const publicObjectStorage = createMemoryCaptureObjectStorage();
+    const origin = "https://media.ghost-writer.studio";
+    const { app } = await openSeededApp({
+      publicObjectStorage,
+      publicMediaOrigin: origin
+    });
+
+    const response = await app.request(
+      `/api/projects/${PROJECT}/story-knowledge/${KNOWLEDGE_ID}/visuals/apply`,
+      {
+        method: "POST",
+        headers: originHeaders("POST"),
+        body: JSON.stringify({
+          previewDataUri: TINY_PNG_DATA_URI,
+          alt: "Public Mara portrait",
+          source: "upload"
+        })
+      }
+    );
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.visual.url).toBe(
+      buildCharacterVisualPublicUrl(origin, PROJECT, KNOWLEDGE_ID, body.visual.id)
+    );
+    expect(body.visual.url).not.toContain("ghostwriter.character");
+    expect(
+      publicObjectStorage.hasObject(
+        buildCharacterVisualObjectKey(PROJECT, KNOWLEDGE_ID, body.visual.id)
+      )
+    ).toBe(true);
+
+    const download = await app.request(
+      `/api/projects/${PROJECT}/story-knowledge/${KNOWLEDGE_ID}/visuals/${body.visual.id}/download`,
+      {
+        method: "GET",
+        headers: originHeaders("GET")
+      }
+    );
+    expect(download.status).toBe(200);
+    const downloadBody = await download.json();
+    expect(downloadBody.download.url).toBe(body.visual.url);
   });
 
   it("downloads via hermetic data URI from getObjectBytes", async () => {

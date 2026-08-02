@@ -111,9 +111,12 @@ import {
 } from "./scene-partner-routes.js";
 import { registerBookCoverImageRoutes } from "./book-cover-image-routes.js";
 import { registerCharacterVisualRoutes } from "./character-visual-routes.js";
+import type { CharacterVisualPublicMediaConfig } from "./character-visual-routes.js";
 import { registerMcpGrantRoutes } from "./mcp-grant-routes.js";
 import { registerWorkspaceChatRoutes } from "./workspace-chat-routes.js";
 import { registerCatalogAgentRoutes } from "./catalog-agent-routes.js";
+import { registerNextActionCoachRoutes } from "./next-action-coach-routes.js";
+import { registerStoryKnowledgeCreateRoutes } from "./story-knowledge-create-routes.js";
 import { registerCatalogPlaybookRoutes } from "./catalog-playbook-routes.js";
 import type { createToolLoopProvider } from "@ghostwriter/ai";
 import {
@@ -136,6 +139,8 @@ export type BackendDependencies = Readonly<{
   agentProvider: AgentProviderRuntime;
   /** Same port used by capture attachments; required for cover apply/download. */
   objectStorage: CaptureObjectStoragePort;
+  /** Public HTTPS bucket for applied character visuals when configured. */
+  characterVisualPublicMedia?: CharacterVisualPublicMediaConfig;
   /** Optional Scene Partner / cover image generator (hermetic/tests inject fakes). */
   scenePartnerGenerateImage?: ScenePartnerImageGenerator;
   /** Optional test seam for workspace chat tool-loop provider creation. */
@@ -1421,6 +1426,8 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
   registerProviderAgentRoutes(app, { agentProvider: dependencies.agentProvider });
   registerAgentRunRoutes(app, { agentProvider: dependencies.agentProvider });
   registerCatalogAgentRoutes(app, { agentProvider: dependencies.agentProvider });
+  registerNextActionCoachRoutes(app, { agentProvider: dependencies.agentProvider });
+  registerStoryKnowledgeCreateRoutes(app, { agentProvider: dependencies.agentProvider });
   registerCatalogPlaybookRoutes(app, { agentProvider: dependencies.agentProvider });
   registerScenePartnerRoutes(app, {
     agentProvider: dependencies.agentProvider,
@@ -1441,6 +1448,9 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
     agentProvider: dependencies.agentProvider,
     services: dependencies.services,
     objectStorage: dependencies.objectStorage,
+    ...(dependencies.characterVisualPublicMedia === undefined
+      ? {}
+      : { publicMedia: dependencies.characterVisualPublicMedia }),
     ...(dependencies.scenePartnerGenerateImage === undefined
       ? {}
       : { generateImage: dependencies.scenePartnerGenerateImage })

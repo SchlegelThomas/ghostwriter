@@ -15,9 +15,11 @@ import {
   createCraftPartnerServices,
   createCraftProposalApplyServices,
   createMcpGrantServices,
+  createNextActionCoachServices,
   createPlanModeOutlineServices,
   createProjectCommandServices,
   createProviderCredentialServices,
+  createStoryKnowledgeCreateServices,
   encryptedMaterialFromEnvelope,
   OPENAI_PROVIDER_ID,
   providerForAgentModel,
@@ -39,6 +41,7 @@ import {
   type CraftPartnerStructuredCompletionProvider,
   type IdGenerator,
   type McpGrantServices,
+  type NextActionCoachServices,
   type PlanModeOutlineServices,
   type ProjectRepository,
   type ProviderCredentialRepository,
@@ -46,7 +49,8 @@ import {
   type ProviderCredentialStatus,
   type ProviderCredentialValidationState,
   type ProviderId,
-  type SceneDocumentRepository
+  type SceneDocumentRepository,
+  type StoryKnowledgeCreateDraftServices
 } from "@ghostwriter/core";
 import {
   createPostgresAccountAiCollaborationProfileRepository,
@@ -108,6 +112,8 @@ export type AgentProviderRuntime = Readonly<{
   planModeOutline: PlanModeOutlineServices;
   craftPartners: CraftPartnerServices;
   catalogAgents: CatalogAgentServices;
+  nextActionCoach: NextActionCoachServices;
+  storyKnowledgeCreate: StoryKnowledgeCreateDraftServices;
   catalogPlaybookOverrides: CatalogPlaybookOverrideServices;
   mcpGrants: McpGrantServices;
   policy: AgentProviderPolicy;
@@ -291,6 +297,11 @@ export function createAgentProviderRuntime(
   const receipts = createPostgresContextReceiptRepository(input.db);
   const runs = createPostgresAgentRunRepository(input.db);
   const proposals = createPostgresAgentProposalRepository(input.db);
+  const projectCommands = createProjectCommandServices({
+    projects: input.projects,
+    ids: input.ids,
+    clock: input.clock
+  });
   const foundation = createAgentFoundationServices({
     projects: input.projects,
     captureDocuments: input.captureDocuments,
@@ -300,6 +311,7 @@ export function createAgentProviderRuntime(
     completion: createPostgresAgentRunReflectionCompletionUnitOfWork(input.db),
     hashPort,
     clock: input.clock,
+    projectCommands,
     ...(input.capturePromotions !== undefined && input.sceneDocuments !== undefined
       ? {
           apply: {
@@ -341,11 +353,7 @@ export function createAgentProviderRuntime(
     captureDocuments: input.captureDocuments,
     proposals,
     receipts,
-    projectCommands: createProjectCommandServices({
-      projects: input.projects,
-      ids: input.ids,
-      clock: input.clock
-    }),
+    projectCommands,
     clock: input.clock
   });
   const craftPartners = createCraftPartnerServices({
@@ -367,6 +375,30 @@ export function createAgentProviderRuntime(
     foundation,
     guidance: agentGuidance,
     playbookOverrides: catalogPlaybookOverrides,
+    hashPort,
+    ids: input.ids,
+    clock: input.clock
+  });
+  if (input.sceneDocuments === undefined) {
+    throw new Error("Agent provider runtime requires sceneDocuments for next-action coach.");
+  }
+  const nextActionCoach = createNextActionCoachServices({
+    projects: input.projects,
+    sceneDocuments: input.sceneDocuments,
+    receipts,
+    runs,
+    completion: createPostgresAgentRunReflectionCompletionUnitOfWork(input.db),
+    foundation,
+    hashPort,
+    ids: input.ids,
+    clock: input.clock
+  });
+  const storyKnowledgeCreate = createStoryKnowledgeCreateServices({
+    projects: input.projects,
+    receipts,
+    runs,
+    completion: createPostgresAgentRunReflectionCompletionUnitOfWork(input.db),
+    foundation,
     hashPort,
     ids: input.ids,
     clock: input.clock
@@ -511,6 +543,8 @@ export function createAgentProviderRuntime(
     planModeOutline,
     craftPartners,
     catalogAgents,
+    nextActionCoach,
+    storyKnowledgeCreate,
     mcpGrants,
     policy: Object.freeze({
       callsDisabled,

@@ -705,6 +705,34 @@ export const CATALOG_AGENT_RUN_CREATE_CAPABILITY = Object.freeze({
   })
 }) satisfies GhostwriterCapability;
 
+export const NEXT_ACTION_COACH_RUN_CREATE_CAPABILITY = Object.freeze({
+  id: "agent.nextActionRun.create",
+  title: "Create a next-action coach proposal",
+  access: "propose",
+  scope: "project",
+  coreUseCase: "runNextActionCoach",
+  bindings: Object.freeze({
+    ui: "WorkspaceChatPanel",
+    web: "POST /api/projects/{projectId}/agent/next-action-runs",
+    mcpException:
+      "Next-action coach runs are first-party until scoped scene context grants are designed."
+  })
+}) satisfies GhostwriterCapability;
+
+export const STORY_KNOWLEDGE_CREATE_DRAFT_CAPABILITY = Object.freeze({
+  id: "agent.storyKnowledgeDraft.create",
+  title: "Create a story-knowledge cast draft proposal",
+  access: "propose",
+  scope: "project",
+  coreUseCase: "createStoryKnowledgeDraft",
+  bindings: Object.freeze({
+    ui: "WorkspaceChatPanel + EntityDraftsPanel",
+    web: "POST /api/projects/{projectId}/agent/story-knowledge-drafts",
+    mcpException:
+      "Story-knowledge drafts are first-party until scoped cast context grants are designed."
+  })
+}) satisfies GhostwriterCapability;
+
 export const AGENT_RUN_READ_CAPABILITY = Object.freeze({
   id: "agent.run.read",
   title: "Read agent run summaries and detail for a project",
@@ -796,6 +824,8 @@ export const GHOSTWRITER_CAPABILITIES: readonly GhostwriterCapability[] = Object
   AGENT_CONTEXT_PREVIEW_CAPABILITY,
   AGENT_RUN_CREATE_CAPABILITY,
   CATALOG_AGENT_RUN_CREATE_CAPABILITY,
+  NEXT_ACTION_COACH_RUN_CREATE_CAPABILITY,
+  STORY_KNOWLEDGE_CREATE_DRAFT_CAPABILITY,
   AGENT_RUN_READ_CAPABILITY,
   AGENT_RUN_CANCEL_CAPABILITY,
   AGENT_PROPOSAL_READ_CAPABILITY,

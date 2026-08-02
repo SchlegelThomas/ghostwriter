@@ -11,7 +11,8 @@ import {
   createIdentityServices,
   createMemoryCaptureObjectStorage,
   createSceneWritingServices,
-  type DomainIdKind
+  type DomainIdKind,
+  type ProviderId
 } from "@ghostwriter/core";
 import {
   createPostgresCanvasRepository,
@@ -33,8 +34,11 @@ import {
   createFakeStructuredCompletionProvider,
   createProviderAdapter
 } from "@ghostwriter/ai";
-import type { ProviderId } from "@ghostwriter/core";
 import { createApp } from "./app.js";
+import {
+  E2E_PROVIDER_KEY_SEED_SPECS,
+  seedProviderKeysFromEnv
+} from "./demo-provider-key-seed.js";
 import type { AuthGateway, AuthenticatedSession } from "./auth.js";
 import { createTestAgentProviderRuntime } from "./agent-provider-runtime.js";
 import { createTestProviderKekRuntimeConfig } from "./provider-kek-config.js";
@@ -308,43 +312,21 @@ const agentProvider = createTestAgentProviderRuntime({
 });
 
 /** Optional local-only BYOK seeds for the hermetic writer. Never log values. */
-const seededProviderKeys: ReadonlyArray<Readonly<{
-  providerId: ProviderId;
-  envName: string;
-  plaintext: string | undefined;
-}>> = [
-  {
-    providerId: "openai",
-    envName: "GHOSTWRITER_E2E_SEED_OPENAI_KEY",
-    plaintext: process.env.GHOSTWRITER_E2E_SEED_OPENAI_KEY?.trim()
-  },
-  {
-    providerId: "anthropic",
-    envName: "GHOSTWRITER_E2E_SEED_ANTHROPIC_KEY",
-    plaintext: process.env.GHOSTWRITER_E2E_SEED_ANTHROPIC_KEY?.trim()
-  },
-  {
-    providerId: "google",
-    envName: "GHOSTWRITER_E2E_SEED_GOOGLE_KEY",
-    plaintext: process.env.GHOSTWRITER_E2E_SEED_GOOGLE_KEY?.trim()
-  }
-];
-
-const seededProviderIds: ProviderId[] = [];
-for (const seed of seededProviderKeys) {
-  if (seed.plaintext === undefined || seed.plaintext.length === 0) {
-    continue;
-  }
-  await agentProvider.providerCredentials.setCredential({
-    accountId: accountId(account.id),
-    providerId: seed.providerId,
-    plaintext: seed.plaintext
-  });
-  seededProviderIds.push(seed.providerId);
-  console.log(
-    `Hermetic seed: ${seed.providerId} key loaded for E2E writer (from env).`
-  );
-}
+const seededProviderIds = await seedProviderKeysFromEnv({
+  accountId: accountId(account.id),
+  specs: E2E_PROVIDER_KEY_SEED_SPECS,
+  setCredential: agentProvider.providerCredentials.setCredential.bind(
+    agentProvider.providerCredentials
+  ),
+  logPrefix: "Hermetic seed",
+  seedingEnabled:
+    !agentProvider.policy.callsDisabled && agentProvider.policy.encryptionAvailable,
+  seedingDisabledReason: agentProvider.policy.callsDisabled
+    ? "Hermetic seed: skipping BYOK key seed (provider calls disabled)."
+    : !agentProvider.policy.encryptionAvailable
+      ? "Hermetic seed: skipping BYOK key seed (encryption unavailable)."
+      : undefined
+});
 
 const app = createApp({
   services,

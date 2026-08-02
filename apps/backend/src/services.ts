@@ -37,6 +37,10 @@ import { createBetterAuthGateway, type AuthGateway } from "./auth.js";
 import type { BackendConfig } from "./config.js";
 import { createAgentProviderRuntime, type AgentProviderRuntime } from "./agent-provider-runtime.js";
 import { DEMO_SEED_ACCOUNT } from "./demo-identity.js";
+import {
+  DEMO_PROVIDER_KEY_SEED_SPECS,
+  seedProviderKeysFromEnv
+} from "./demo-provider-key-seed.js";
 import { ensureDemoHarryPotterSeed } from "./hermetic-seed.js";
 import { createCaptureObjectStorageFromConfig } from "./r2-capture-object-storage.js";
 
@@ -52,6 +56,8 @@ export type BackendRuntime = Readonly<{
   agentProvider: AgentProviderRuntime;
   auth: AuthGateway;
   objectStorage: CaptureObjectStoragePort;
+  publicCharacterVisualStorage: CaptureObjectStoragePort | undefined;
+  publicMediaOrigin: string | undefined;
   /**
    * Ensures the demo credential account and Harry Potter fixture exist.
    * Portrait bytes are uploaded only when R2 is configured and the project is newly created.
@@ -74,6 +80,11 @@ export function createBackendRuntime(config: BackendConfig): BackendRuntime {
   const captureDocuments = createPostgresCaptureDocumentRepository(db);
   const captureAttachmentsRepository = createPostgresCaptureAttachmentRepository(db);
   const objectStorage = createCaptureObjectStorageFromConfig(config.r2);
+  const publicCharacterVisualStorage =
+    config.publicMedia === undefined
+      ? undefined
+      : createCaptureObjectStorageFromConfig(config.publicMedia.r2);
+  const publicMediaOrigin = config.publicMedia?.origin;
   const canvases = createPostgresCanvasRepository(db);
   const profiles = createPostgresWriterProfileRepository(db);
   const clock = { now: () => new Date().toISOString() };
@@ -150,6 +161,8 @@ export function createBackendRuntime(config: BackendConfig): BackendRuntime {
     agentProvider,
     auth,
     objectStorage,
+    publicCharacterVisualStorage,
+    publicMediaOrigin,
     async ensureDemoSeed(): Promise<void> {
       await auth.ensureDemoCredentialAccount();
       await ensureDemoHarryPotterSeed({
@@ -159,8 +172,35 @@ export function createBackendRuntime(config: BackendConfig): BackendRuntime {
         accountId: accountId(DEMO_SEED_ACCOUNT.id),
         ids,
         clock,
-        objectStorage
+        objectStorage,
+        ...(publicCharacterVisualStorage === undefined
+          ? {}
+          : { publicObjectStorage: publicCharacterVisualStorage }),
+        ...(publicMediaOrigin === undefined ? {} : { publicMediaOrigin }),
+        services
       });
+      const seedingEnabled =
+        !agentProvider.policy.callsDisabled && agentProvider.policy.encryptionAvailable;
+      const seedingDisabledReason = agentProvider.policy.callsDisabled
+        ? "Demo seed: skipping BYOK key seed (provider calls disabled)."
+        : !agentProvider.policy.encryptionAvailable
+          ? "Demo seed: skipping BYOK key seed (encryption unavailable)."
+          : undefined;
+      const seededProviderIds = await seedProviderKeysFromEnv({
+        accountId: accountId(DEMO_SEED_ACCOUNT.id),
+        specs: DEMO_PROVIDER_KEY_SEED_SPECS,
+        setCredential: agentProvider.providerCredentials.setCredential.bind(
+          agentProvider.providerCredentials
+        ),
+        logPrefix: "Demo seed",
+        seedingEnabled,
+        seedingDisabledReason
+      });
+      if (seededProviderIds.length > 0) {
+        console.log(
+          `Demo seed: BYOK keys seeded for demo account: ${seededProviderIds.join(", ")}`
+        );
+      }
     },
     close
   };

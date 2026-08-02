@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chat work plans — record log</title>
+  <link rel="stylesheet" href="../../plan.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Record log</p>
+      <h1>Chat work plans — submit &amp; execute</h1>
+      <p class="meta"><strong>Branch:</strong> <code>feat/proactive-next-actions</code></p>
+    </header>
+
+    <section>
+      <h2>2026-08-01 — Problem from transcript + decisions</h2>
+      <ul>
+        <li>Writer transcript showed Agent narrating “Submitted… four jobs queued in parallel”
+          with no real catalog runs, SK drafts, or Plans handoff — fake execution.</li>
+        <li>Founder locked: both Entity Drafts + dock job strip; wave policy C (cheap parallel,
+          heavy sequential; Dialogue Coach after Scene Partner when both present); Scene Partner
+          prefilled brief; SK draft + Acknowledge create; spend on Submit; free-form chat too.</li>
+        <li>Plan + ADR 0016 drafted; CP0 started.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-02 — Dismissable chat tabs + history</h2>
+      <ul>
+        <li>Open tabs show an X; dismiss archives the session (not hard-delete). Closing the
+          last open tab spins up a fresh empty “New chat” so the strip never empties.</li>
+        <li><code>ClockCounterClockwise</code> history control beside copy / + reopens closed
+          chats; rename/delete live in history row overflow; long-press an open tab to rename.</li>
+        <li>State: optional <code>openSessionIds</code>; legacy saves treat all sessions as open.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-02 — Collapsible strip + working quips</h2>
+      <ul>
+        <li>Job strip: caret collapses the body upward; X still dismisses entirely.
+          Auto-expands when a new run starts.</li>
+        <li>In-progress status uses typewriter craft quips (~50) + pulsing ellipsis
+          instead of static “Calling model…”.</li>
+        <li><strong>Streaming gap:</strong> catalog / SK draft jobs still use structured
+          <code>generateObject</code> (no token SSE / train-of-thought today). True streamed
+          progress under each job needs a follow-up API — strip quips bridge the wait.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-02 — Drop work-plan status spam from chat</h2>
+      <ul>
+        <li>Founder: job strip replaces “Submitting / Running / Finished” system turns —
+          remove those chat mirrors; keep strip as the only progress surface.</li>
+        <li>Hard submit failures update the strip summary/jobs instead of a chat status.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-02 — Agent stays open; job strip is the review surface</h2>
+      <ul>
+        <li>Founder: Project/Scene Drafts links stole the right rail (Inspector/Context),
+          buried scene Drafts under Move-scene chrome, and duplicated finish chips.</li>
+        <li><strong>Agent stays open</strong> on review — middle pane navigates (Title Page or
+          scene); Context is not forced open.</li>
+        <li>Job strip: pulsing “Working · N of M”; tap a job to expand live log + preview;
+          per-job Open jumps to Plans / Project Drafts / scene without collapsing Agent.</li>
+        <li>Footer reduced to optional Open Plans; chat no longer repeats three review chips.</li>
+        <li>Browser screenshots: Agent open vs Context replacing Agent; Drafts only after
+          scrolling past Move-scene list.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-02 — Review UX after Submit</h2>
+      <ul>
+        <li>Fixed black-on-black <strong>Submit work plan</strong> chip (primary text was only
+          applied to Start coach).</li>
+        <li>Clear <code>workPlan</code> on submit so chips do not reappear mid-run.</li>
+        <li>Resolve scene titles → ids before execute (fixes “Scene not found” when the model
+          emits titles).</li>
+        <li>Job strip: live “Working · N of M” progress; green done status; footer quick links
+          Open Plans / Project Drafts / Scene Drafts; finish turn repeats those chips.</li>
+        <li>Scene Partner no longer auto-jumps to Plans mid-batch.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — CP0–CP2 implemented (parent stitch)</h2>
+      <ul>
+        <li>CP0: <code>work-plan-v1</code>, wave planner (policy C),
+          <code>story-knowledge-create-v1</code>, ADR 0016.</li>
+        <li>SK drafts: create route + Acknowledge → <code>storyKnowledge.create</code>
+          (“Add to Cast”).</li>
+        <li>Submit: chips + free-form intents; dock <code>WorkPlanJobStrip</code>; client
+          <code>executeWorkPlan</code>; Scene Partner capture+deep-link; catalog/SK jobs.</li>
+        <li>Chat tool <code>propose_work_plan</code> attaches plan to JSON/SSE replies.</li>
+        <li>Hermetic backend restarted for new routes/tools.</li>
+        <li><strong>Parent still owns:</strong> founder browser walkthrough; PRODUCT polish done;
+          API.md capability note if missing; no Playwright until user verifies.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Feature checklist — CP0/CP1 notes</h2>
+      <ul>
+        <li><strong>Writer-visible:</strong> Submit a multi-job plan → strip updates → drafts/Plans.</li>
+        <li><strong>Refusal:</strong> no plan attached; missing scene for scene-bound jobs.</li>
+        <li><strong>Non-goals:</strong> server worker queue; silent manuscript apply; spend caps UI.</li>
+        <li><strong>Shared domains serial:</strong> proposal/run writes; storyKnowledge.create on ack.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-01 — CP1 remainder + CP2 start (writer-visible Submit)</h2>
+      <ul>
+        <li>Pure helpers: <code>work-plan-submit.ts</code> (submit intent, latest plan, next-action → plan).</li>
+        <li>Chat messages carry optional <code>workPlan</code>; Submit / Dismiss chips when attached.</li>
+        <li>Agent dock <code>WorkPlanJobStrip</code> wired through workspace → App state.</li>
+        <li>Client <code>executeWorkPlan</code> orchestrator (wave A parallel, wave B sequential).</li>
+        <li>App Submit path: catalog / SK draft / Scene Partner capture+deep-link; free-form submit intent.</li>
+        <li>Chat tool <code>propose_work_plan</code>; JSON + SSE responses may include <code>workPlan</code>.</li>
+        <li>Next-action coach turns attach a derived work plan when suggestions map to jobs.</li>
+      </ul>
+    </section>
+    <section>
+      <h2>2026-08-02 — Open Cast draft from job strip</h2>
+      <ul>
+        <li>Root cause: strip <code>Open * draft</code> reused
+          <code>requestReviewSceneDrafts</code>, which keeps Context closed; scene Entity Drafts
+          live in Context. <code>handleSelectEntityDraft</code> also no-op’d when the proposal
+          was not yet in the loaded summary list.</li>
+        <li>Fix: dedicated <code>requestOpenEntityDraft</code> navigates to scene + opens Context
+          (or Title Page for project drafts); pending proposal id defers expand until list load
+          or fetches via <code>getAgentProposal</code>.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2026-08-02 — Chat history lists all contentful sessions</h2>
+      <ul>
+        <li>Clock history dropdown now lists every session with user/assistant content (not just
+          dismissed tabs), sorted by recency with a title search field.</li>
+        <li>Selecting an open tab switches; selecting a closed tab reopens it. Empty “New chat”
+          sessions are omitted. Raised z-index so the menu is not clipped.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
