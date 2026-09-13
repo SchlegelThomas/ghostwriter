@@ -1,6 +1,6 @@
 # Checkpoint working notes
 
-Planning only. CP1a connected Canvas/Draft spine not started. Fill this frame before delegating implementation.
+Planning only. Canvas audit complete; CP0a scope/discovery/selection and CP0b geometry/history/recovery precede CP1a connected Canvas/Draft spine. All implementation remains unstarted pending Thomas’s approval. Fill this frame before delegating implementation.
 
 # Feature checkpoint template
 

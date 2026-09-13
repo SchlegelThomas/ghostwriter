@@ -81,3 +81,30 @@ Writers may revise prose, revise intent, or defer a difference. Each approved ch
 precise effect and preserves history; no automatic downstream rewrite. Canvas restore remains
 spatial. Assignment/context/MCP projections share this model with the existing human-apply ceiling.
 No new store, automatic whole-book score, or hidden synchronization authority is introduced.
+
+## Canvas foundation review — proposed clarifications (2026-09-12)
+
+The thorough pre-approval audit adds CP0a/CP0b before narrative work. Current scoped visibility
+is graph-derived, so objects created inside a chapter can disappear. Introduce explicit board
+scope membership independent of narrative links; scope placement geometry alone is insufficient.
+Define migration/reference guards and preserve all existing objects and placements. Invalid,
+archived or removed chapter/scene scopes need an inspectable recovery path, not invisible content.
+
+Separate inspected Canvas object from active writing scene. This modifies ADR0007's single
+shared-selection wording: stable canonical IDs still join the surfaces, while browsing is not
+an implicit command to flush/replace Draft. Explicit open acquires the appropriate scene context.
+Define per-scope return camera/selection/lens/focus persistence rather than assuming the current
+single viewport preference stores the navigation stack.
+
+Unify scope-aware move/resize into one completed-gesture command and expected-board-version
+boundary. Inspector/ordered geometry must use the same resolution as spatial rendering. Preserve
+other scopes, and roll back optimistic geometry on refusal. Repair repeated Undo (current snapshot
+selection alternates states). Specify action traversal and redo policy before implementation;
+retain append-only audit history and distinct exact-version snapshot restore. Reconcile ADR0007's
+inverse/meaningful-checkpoint language with the chosen implementation; do not silently switch to
+event sourcing or conflate board restore with prose/intent restore.
+
+Bound history and graph/context reads after profiling a realistic many-scene/link/scope fixture.
+No performance budget is claimed as measured until CP0b records it. Canvas/spine/history MCP reads
+and typed proposals require explicit grants/bindings; current registry exceptions are not parity.
+These decisions remain proposed with the epic; the audit is not authorization to implement.
