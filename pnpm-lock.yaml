@@ -186,6 +186,10 @@ importers:
       '@ghostwriter/editor':
         specifier: workspace:*
         version: link:../editor
+    devDependencies:
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
 
   packages/editor:
     dependencies:
