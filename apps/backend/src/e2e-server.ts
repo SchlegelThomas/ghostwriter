@@ -41,6 +41,8 @@ import {
   createProviderAdapter
 } from "@ghostwriter/ai";
 import { createApp } from "./app.js";
+import { buildStoryCheckHermeticCandidatesOutput } from "./story-check-hermetic-candidates.js";
+import { buildStoryStructureHermeticCandidatesOutput } from "./story-structure-hermetic-candidates.js";
 import {
   E2E_PROVIDER_KEY_SEED_SPECS,
   seedProviderKeysFromEnv
@@ -307,6 +309,39 @@ const hermeticFakeProvider = createFakeStructuredCompletionProvider((input) => {
           pressure: "The safest route conflicts with the promise she made before departure.",
           voiceNotes: "Precise, restrained, and unexpectedly dry under pressure."
         }
+      }
+    };
+  }
+  if (schemaName === "story_check_findings_candidates_v1") {
+    return {
+      output: buildStoryCheckHermeticCandidatesOutput(input.inputText)
+    };
+  }
+  if (schemaName === "story_structure_proposal_candidates_v1") {
+    return {
+      output: buildStoryStructureHermeticCandidatesOutput(input.inputText)
+    };
+  }
+  if (schemaName === "scene_draft_v1") {
+    const marker = "=== SELECTED SOURCE SCENE IDS (exact) ===\n";
+    const sourceLine = input.inputText.split(marker)[1]?.split("\n", 1)[0];
+    let sourceSceneIds: string[] = [];
+    if (sourceLine !== undefined) {
+      try {
+        const parsed: unknown = JSON.parse(sourceLine);
+        if (Array.isArray(parsed) && parsed.every((value) => typeof value === "string")) {
+          sourceSceneIds = parsed;
+        }
+      } catch {
+        sourceSceneIds = [];
+      }
+    }
+    return {
+      output: {
+        schemaId: "scene-draft-v1",
+        prose:
+          "The harbor bell sounded once. Mara held the page to the window and read the warning again.",
+        sourceSceneIds
       }
     };
   }

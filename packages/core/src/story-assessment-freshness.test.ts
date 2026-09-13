@@ -1,14 +1,21 @@
+import { validateSceneDocumentV1 } from "@ghostwriter/editor";
 import { describe, expect, it } from "vitest";
 import {
   bookId,
   chapterId,
+  defineProjectRecords,
+  partId,
   projectId,
+  revisionId,
   sceneId,
   storyKnowledgeId,
+  type ProjectRecords,
   type Scene,
   type StoryKnowledge
 } from "./domain.js";
+import { accountId } from "./identity.js";
 import {
+  buildCurrentStoryAssessmentRevisionVector,
   createStoryAssessmentRevisionVector,
   evaluateStoryAssessmentFreshness,
   storyKnowledgeRevisionToken,
@@ -16,7 +23,8 @@ import {
   storyManuscriptSliceRevisionToken,
   storySceneIntentRevisionToken
 } from "./story-assessment-freshness.js";
-import type { StoryContextProjection } from "./story-context.js";
+import { createSceneDocumentHead, sceneContentHash } from "./scene-documents.js";
+import { storyContextFromProjectRecords, type StoryContextProjection } from "./story-context.js";
 
 const hashPort = {
   async digestSha256Hex(canonicalUtf8: string): Promise<string> {
@@ -312,4 +320,471 @@ it("invalidates only assessments that consumed a changed chapter objective", asy
   });
   expect(evaluateStoryAssessmentFreshness(createStoryAssessmentRevisionVector([]), live))
     .toEqual({ status: "fresh" });
+});
+
+const part = partId("part-freshness");
+const owner = accountId("owner-freshness");
+const proseHash = sceneContentHash("f".repeat(64));
+const NOW = "2026-09-12T12:00:00.000Z";
+
+function projectRecords(
+  options: Readonly<{
+    sceneSummary?: string;
+    sceneArchived?: boolean;
+    bookArchived?: boolean;
+    projectArchived?: boolean;
+    chapterSummary?: string;
+    knowledgeArchived?: boolean;
+    extraKnowledge?: StoryKnowledge;
+  }> = {}
+): ProjectRecords {
+  return defineProjectRecords({
+    project: {
+      id: project,
+      title: "Freshness project",
+      bookIds: [book],
+      createdAt: NOW,
+      version: 3,
+      ...(options.projectArchived ? { archivedAt: "2026-09-13T12:00:00.000Z" } : {})
+    },
+    books: [
+      {
+        id: book,
+        projectId: project,
+        title: "Book",
+        status: "drafting",
+        manuscript: {
+          parts: [
+            {
+              id: part,
+              title: "Part",
+              chapters: [
+                {
+                  id: chapter,
+                  title: "Chapter",
+                  summary: options.chapterSummary ?? "Hide the letter.",
+                  sceneIds: [scene]
+                }
+              ]
+            }
+          ],
+          unassignedSceneIds: []
+        },
+        createdAt: NOW,
+        ...(options.bookArchived ? { archivedAt: "2026-09-13T12:00:00.000Z" } : {})
+      }
+    ],
+    scenes: [
+      intentScene({
+        summary: options.sceneSummary,
+        ...(options.sceneArchived ? { archivedAt: "2026-09-13T12:00:00.000Z" } : {})
+      })
+    ],
+    storyKnowledge: [
+      thread({
+        ...(options.knowledgeArchived ? { archivedAt: "2026-09-13T12:00:00.000Z" } : {})
+      }),
+      ...(options.extraKnowledge === undefined ? [] : [options.extraKnowledge])
+    ],
+    editions: []
+  });
+}
+
+function sceneHead(
+  workingVersion: number,
+  contentHash = proseHash
+) {
+  return createSceneDocumentHead({
+    sceneId: scene,
+    projectId: project,
+    workingVersion,
+    document: validateSceneDocumentV1({
+      schemaVersion: 1,
+      document: {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            attrs: { id: "block-one" },
+            content: [{ type: "text", text: "Scene prose." }]
+          }
+        ]
+      }
+    }),
+    contentHash,
+    checkpointRevisionId: revisionId("revision-freshness"),
+    updatedByAccountId: owner,
+    createdAt: NOW,
+    updatedAt: NOW
+  });
+}
+
+describe("buildCurrentStoryAssessmentRevisionVector", () => {
+  it("rebuilds an unchanged vector that stays fresh", async () => {
+    const records = projectRecords();
+    const assessed = createStoryAssessmentRevisionVector([
+      {
+        kind: "scene-prose",
+        sceneId: scene,
+        workingVersion: 2,
+        contentHash: proseHash
+      },
+      {
+        kind: "scene-intent",
+        sceneId: scene,
+        revisionToken: await storySceneIntentRevisionToken(records.scenes[0]!, hashPort)
+      },
+      {
+        kind: "chapter-objective",
+        chapterId: chapter,
+        revisionToken: await storyChapterObjectiveRevisionToken(
+          { id: chapter, summary: "Hide the letter." },
+          hashPort
+        )
+      },
+      {
+        kind: "story-knowledge",
+        storyKnowledgeId: knowledge,
+        revisionToken: await storyKnowledgeRevisionToken(records.storyKnowledge[0]!, hashPort)
+      },
+      {
+        kind: "manuscript-slice",
+        scope: { kind: "chapter", chapterId: chapter },
+        revisionToken: await storyManuscriptSliceRevisionToken(
+          storyContextFromProjectRecords(records, {
+            scope: { kind: "chapter", chapterId: chapter }
+          }),
+          hashPort
+        )
+      }
+    ]);
+    const current = await buildCurrentStoryAssessmentRevisionVector({
+      assessed,
+      records,
+      sceneDocumentHeads: new Map([[scene, sceneHead(2)]]),
+      hashPort
+    });
+    expect(evaluateStoryAssessmentFreshness(assessed, current)).toEqual({ status: "fresh" });
+  });
+
+  it("preserves assessed dependency order in the rebuilt vector", async () => {
+    const records = projectRecords();
+    const assessed = createStoryAssessmentRevisionVector([
+      {
+        kind: "story-knowledge",
+        storyKnowledgeId: knowledge,
+        revisionToken: await storyKnowledgeRevisionToken(records.storyKnowledge[0]!, hashPort)
+      },
+      {
+        kind: "scene-intent",
+        sceneId: scene,
+        revisionToken: await storySceneIntentRevisionToken(records.scenes[0]!, hashPort)
+      },
+      {
+        kind: "chapter-objective",
+        chapterId: chapter,
+        revisionToken: await storyChapterObjectiveRevisionToken(
+          { id: chapter, summary: "Hide the letter." },
+          hashPort
+        )
+      }
+    ]);
+    const current = await buildCurrentStoryAssessmentRevisionVector({
+      assessed,
+      records,
+      sceneDocumentHeads: new Map(),
+      hashPort
+    });
+    expect(current.dependencies.map((dependency) => dependency.kind)).toEqual([
+      "story-knowledge",
+      "scene-intent",
+      "chapter-objective"
+    ]);
+  });
+
+  it("detects prose, intent, objective, and knowledge drift via rebuild", async () => {
+    const beforeRecords = projectRecords();
+    const assessed = createStoryAssessmentRevisionVector([
+      {
+        kind: "scene-prose",
+        sceneId: scene,
+        workingVersion: 2,
+        contentHash: proseHash
+      },
+      {
+        kind: "scene-intent",
+        sceneId: scene,
+        revisionToken: await storySceneIntentRevisionToken(beforeRecords.scenes[0]!, hashPort)
+      },
+      {
+        kind: "chapter-objective",
+        chapterId: chapter,
+        revisionToken: await storyChapterObjectiveRevisionToken(
+          { id: chapter, summary: "Hide the letter." },
+          hashPort
+        )
+      },
+      {
+        kind: "story-knowledge",
+        storyKnowledgeId: knowledge,
+        revisionToken: await storyKnowledgeRevisionToken(beforeRecords.storyKnowledge[0]!, hashPort)
+      }
+    ]);
+    const afterRecords = projectRecords({
+      sceneSummary: "Mara already burned the letter.",
+      chapterSummary: "Expose the letter.",
+      knowledgeArchived: true
+    });
+    const current = await buildCurrentStoryAssessmentRevisionVector({
+      assessed,
+      records: afterRecords,
+      sceneDocumentHeads: new Map([
+        [scene, sceneHead(3, sceneContentHash("e".repeat(64)))]
+      ]),
+      hashPort
+    });
+    expect(evaluateStoryAssessmentFreshness(assessed, current)).toEqual({
+      status: "needs-recheck",
+      reasons: [
+        { dependencyKey: `scene-prose:${scene}`, reason: "scene-prose-changed" },
+        { dependencyKey: `scene-intent:${scene}`, reason: "scene-intent-changed" },
+        {
+          dependencyKey: `chapter-objective:${chapter}`,
+          reason: "chapter-objective-changed"
+        },
+        {
+          dependencyKey: `story-knowledge:${knowledge}`,
+          reason: "story-knowledge-changed"
+        }
+      ]
+    });
+  });
+
+  it("omits missing or archived dependencies and flags manuscript-slice drift", async () => {
+    const records = projectRecords();
+    const assessed = createStoryAssessmentRevisionVector([
+      {
+        kind: "scene-prose",
+        sceneId: scene,
+        workingVersion: 2,
+        contentHash: proseHash
+      },
+      {
+        kind: "manuscript-slice",
+        scope: { kind: "project" },
+        revisionToken: await storyManuscriptSliceRevisionToken(
+          storyContextFromProjectRecords(records),
+          hashPort
+        )
+      }
+    ]);
+    const archivedSceneRecords = projectRecords({ sceneArchived: true });
+    expect(
+      evaluateStoryAssessmentFreshness(
+        assessed,
+        await buildCurrentStoryAssessmentRevisionVector({
+          assessed,
+          records: archivedSceneRecords,
+          sceneDocumentHeads: new Map([[scene, sceneHead(2)]]),
+          hashPort
+        })
+      )
+    ).toEqual({
+      status: "needs-recheck",
+      reasons: [
+        { dependencyKey: `scene-prose:${scene}`, reason: "dependency-missing" },
+        {
+          dependencyKey: "manuscript-slice:project",
+          reason: "manuscript-slice-changed"
+        }
+      ]
+    });
+
+    const missingHeadRecords = projectRecords();
+    expect(
+      evaluateStoryAssessmentFreshness(
+        assessed,
+        await buildCurrentStoryAssessmentRevisionVector({
+          assessed,
+          records: missingHeadRecords,
+          sceneDocumentHeads: new Map(),
+          hashPort
+        })
+      )
+    ).toEqual({
+      status: "needs-recheck",
+      reasons: [
+        { dependencyKey: `scene-prose:${scene}`, reason: "dependency-missing" }
+      ]
+    });
+
+    const secondScene = sceneId("scene-freshness-second");
+    function orderedRecords(sceneIds: readonly ReturnType<typeof sceneId>[]) {
+      return defineProjectRecords({
+        project: {
+          id: project,
+          title: "Freshness project",
+          bookIds: [book],
+          createdAt: NOW,
+          version: 3
+        },
+        books: [
+          {
+            id: book,
+            projectId: project,
+            title: "Book",
+            status: "drafting",
+            manuscript: {
+              parts: [
+                {
+                  id: part,
+                  title: "Part",
+                  chapters: [
+                    {
+                      id: chapter,
+                      title: "Chapter",
+                      summary: "Hide the letter.",
+                      sceneIds
+                    }
+                  ]
+                }
+              ],
+              unassignedSceneIds: []
+            },
+            createdAt: NOW
+          }
+        ],
+        scenes: [
+          intentScene(),
+          intentScene({ id: secondScene, title: "Second scene" })
+        ],
+        storyKnowledge: [thread()],
+        editions: []
+      });
+    }
+    const beforeOrder = orderedRecords([scene, secondScene]);
+    const afterOrder = orderedRecords([secondScene, scene]);
+    const sliceAssessed = createStoryAssessmentRevisionVector([
+      {
+        kind: "manuscript-slice",
+        scope: { kind: "chapter", chapterId: chapter },
+        revisionToken: await storyManuscriptSliceRevisionToken(
+          storyContextFromProjectRecords(beforeOrder, {
+            scope: { kind: "chapter", chapterId: chapter }
+          }),
+          hashPort
+        )
+      }
+    ]);
+    expect(
+      evaluateStoryAssessmentFreshness(
+        sliceAssessed,
+        await buildCurrentStoryAssessmentRevisionVector({
+          assessed: sliceAssessed,
+          records: afterOrder,
+          sceneDocumentHeads: new Map(),
+          hashPort
+        })
+      )
+    ).toEqual({
+      status: "needs-recheck",
+      reasons: [
+        {
+          dependencyKey: `manuscript-slice:chapter:${chapter}`,
+          reason: "manuscript-slice-changed"
+        }
+      ]
+    });
+
+    const projectArchivedRecords = projectRecords({ projectArchived: true });
+    expect(
+      evaluateStoryAssessmentFreshness(
+        assessed,
+        await buildCurrentStoryAssessmentRevisionVector({
+          assessed,
+          records: projectArchivedRecords,
+          sceneDocumentHeads: new Map([[scene, sceneHead(2)]]),
+          hashPort
+        })
+      )
+    ).toEqual({
+      status: "needs-recheck",
+      reasons: [
+        {
+          dependencyKey: "manuscript-slice:project",
+          reason: "dependency-missing"
+        }
+      ]
+    });
+  });
+
+  it("ignores unrelated project additions when rebuilding consumed dependencies", async () => {
+    const records = projectRecords();
+    const assessed = createStoryAssessmentRevisionVector([
+      {
+        kind: "scene-intent",
+        sceneId: scene,
+        revisionToken: await storySceneIntentRevisionToken(records.scenes[0]!, hashPort)
+      }
+    ]);
+    const expanded = projectRecords({
+      extraKnowledge: {
+        id: storyKnowledgeId("knowledge-unrelated"),
+        projectId: project,
+        label: "Unrelated lore",
+        kind: "location",
+        authority: "planned",
+        linkedSceneIds: [],
+        linkedKnowledge: []
+      }
+    });
+    const current = await buildCurrentStoryAssessmentRevisionVector({
+      assessed,
+      records: expanded,
+      sceneDocumentHeads: new Map(),
+      hashPort
+    });
+    expect(evaluateStoryAssessmentFreshness(assessed, current)).toEqual({ status: "fresh" });
+    expect(current.dependencies).toHaveLength(1);
+  });
+
+  it("drops archived book and unknown manuscript-slice scopes", async () => {
+    const unknownChapter = chapterId("chapter-missing");
+    const assessed = createStoryAssessmentRevisionVector([
+      {
+        kind: "chapter-objective",
+        chapterId: chapter,
+        revisionToken: await storyChapterObjectiveRevisionToken(
+          { id: chapter, summary: "Hide the letter." },
+          hashPort
+        )
+      },
+      {
+        kind: "manuscript-slice",
+        scope: { kind: "chapter", chapterId: unknownChapter },
+        revisionToken: "placeholder-token-for-unknown-scope"
+      }
+    ]);
+    const bookArchivedRecords = projectRecords({ bookArchived: true });
+    const current = await buildCurrentStoryAssessmentRevisionVector({
+      assessed,
+      records: bookArchivedRecords,
+      sceneDocumentHeads: new Map(),
+      hashPort
+    });
+    expect(current.dependencies).toEqual([]);
+    expect(evaluateStoryAssessmentFreshness(assessed, current)).toEqual({
+      status: "needs-recheck",
+      reasons: [
+        {
+          dependencyKey: `chapter-objective:${chapter}`,
+          reason: "dependency-missing"
+        },
+        {
+          dependencyKey: `manuscript-slice:chapter:${unknownChapter}`,
+          reason: "dependency-missing"
+        }
+      ]
+    });
+  });
 });

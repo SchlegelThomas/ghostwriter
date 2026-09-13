@@ -42,6 +42,7 @@ import {
   finalizeCaptureShellActivityOnClose,
   scheduleCaptureFocusRestore,
   drillBack,
+  drillBreadcrumbs,
   drillIntoChapter,
   drillIntoScene,
   drillToScope,
@@ -140,6 +141,7 @@ import {
   projectScenes,
   sceneDocumentPlainText
 } from "./src/draft-desk.js";
+import { resolveEvidenceFocusAfterOpenScene } from "./src/evidence-focus-navigation.js";
 import {
   StoryCanvasPanel,
   type CanvasPanelMessage
@@ -203,6 +205,7 @@ import {
   type CurrentWriter,
   type WorkspaceChatAttachment
 } from "./src/api.js";
+import { CAPTURE_HANDOFF_CANVAS_GEOMETRY_BOUNDS } from "./src/capture-handoff.js";
 import { useStoryWorkWorkspace } from "./src/use-story-work-workspace.js";
 import { useDictationSpeechRecognition } from "./src/useDictationSpeechRecognition.js";
 import { getSpeechRecognitionConstructor } from "./src/speech-recognition-dictation.js";
@@ -476,6 +479,10 @@ export default function App() {
   >("saved");
   const [canvasMessage, setCanvasMessage] = useState<CanvasPanelMessage>();
   const [draftMountVersion, setDraftMountVersion] = useState(0);
+  const [evidenceFocusBlockRequest, setEvidenceFocusBlockRequest] = useState<
+    Readonly<{ id: number; sceneId: SceneId; blockId: string }> | undefined
+  >();
+  const evidenceFocusBlockSeqRef = useRef(0);
   const [includeArchived, setIncludeArchived] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -502,7 +509,7 @@ export default function App() {
   );
   const blockDirtyStoryContextNavigation = useCallback((): boolean => {
     if (storyWorkDirtyRef.current) {
-      setError("Save or discard the character review edits before leaving.");
+      setError("Save or discard the story work review edits before leaving.");
       return true;
     }
     if (!hasDirtyStoryContextSurface(storyContextDirtySurfacesRef.current)) {
@@ -647,6 +654,7 @@ export default function App() {
   const readerReturnStateRef = useRef<ReaderReturnState | undefined>(undefined);
   const draftPanelRef = useRef<DraftPanelHandle>(null);
   const selectedProjectRef = useRef<ProjectNavigator | undefined>(undefined);
+  const selectedSceneIdRef = useRef<SceneId | undefined>(undefined);
   const toastSequenceRef = useRef(0);
   const toastActionsRef = useRef(
     new Map<string, () => void | Promise<void>>()
@@ -3336,20 +3344,21 @@ export default function App() {
     });
   }
 
-  async function handleOpenChatScene(sceneId?: SceneId | string): Promise<void> {
+  async function handleOpenChatScene(sceneId?: SceneId | string): Promise<boolean> {
     const targetSceneId =
       sceneId !== undefined ? toSceneId(sceneId) : selectedSceneId;
-    if (targetSceneId === undefined) return;
+    if (targetSceneId === undefined) return false;
     if (inboxOpen) closeInboxWorkspace();
     // selectWorkspaceScene early-returns when already selected — still must
     // enter Draft so "Open scene" is never a silent no-op.
-    if (!(await selectWorkspaceScene(targetSceneId))) return;
+    if (!(await selectWorkspaceScene(targetSceneId))) return false;
     const targetMode = workflowLens === "plan-draft" ? "split" : "draft";
     if (workspaceMode !== targetMode) {
-      if (!(await changeWorkspaceMode(targetMode))) return;
+      if (!(await changeWorkspaceMode(targetMode))) return false;
     }
     setWriteComposition("page");
     setRequestFocusDraftScene((current) => current + 1);
+    return true;
   }
 
   function appendChatStatusMessage(body: string): void {
@@ -4385,6 +4394,19 @@ export default function App() {
     );
   }
 
+  selectedSceneIdRef.current = selectedSceneId;
+  const storyWorkSceneCanvasDescriptor = selectedProject === undefined
+    ? undefined
+    : (() => {
+      const trail = drillBreadcrumbs(drillStack, selectedProject);
+      const current = trail[trail.length - 1];
+      if (current === undefined) return undefined;
+      const bounds = CAPTURE_HANDOFF_CANVAS_GEOMETRY_BOUNDS;
+      return Object.freeze({
+        label: current.label,
+        description: `${bounds.defaultWidth}×${bounds.defaultHeight} placement in the current board view.`
+      });
+    })();
   const storyWork = useStoryWorkWorkspace({
     project: selectedProject,
     accountId: writer?.account.id,
@@ -4397,6 +4419,77 @@ export default function App() {
       setSelectedProject(project);
       selectedProjectRef.current = project;
       invalidateMetadataUndo();
+    },
+    sceneCanvasDescriptor: storyWorkSceneCanvasDescriptor,
+    storyWorkSceneApply: {
+      prepareUpdateTarget: async (targetSceneId) => {
+        if (selectedSceneIdRef.current !== targetSceneId) {
+          throw new Error("Open the destination scene in Draft before applying this reviewed revision.");
+        }
+        const panel = draftPanelRef.current;
+        if (panel === null) {
+          throw new Error("Open the destination scene in Draft with its editing lease before applying a reviewed revision.");
+        }
+        return panel.prepareStoryWorkApply();
+      },
+      finishUpdate: async () => {
+        await draftPanelRef.current?.finishStoryWorkApply();
+      },
+      prepareCreateCanvasPlacement: async () => {
+        if (selectedProjectRef.current === undefined) {
+          throw new Error("Open a project before placing a scene on Canvas.");
+        }
+        const expectedCanvasVersion = await ensureCanvasVersionForHandoff();
+        if (expectedCanvasVersion === undefined) {
+          throw new Error("Canvas is unavailable for placement right now.");
+        }
+        const bounds = CAPTURE_HANDOFF_CANVAS_GEOMETRY_BOUNDS;
+        const scope = canvasScopeRefFromDrillScope(currentDrillScope(drillStackRef.current));
+        return Object.freeze({
+          expectedCanvasVersion,
+          scope,
+          x: bounds.defaultX,
+          y: bounds.defaultY,
+          width: bounds.defaultWidth,
+          height: bounds.defaultHeight,
+          z: bounds.defaultZ
+        });
+      },
+      refreshCanvas: async () => {
+        const project = selectedProjectRef.current;
+        if (project === undefined) return;
+        await loadCanvas(project.id);
+      },
+      openScene: (sceneId) => {
+        void handleOpenChatScene(sceneId);
+      }
+    },
+    storyWorkNavigation: {
+      openScene: async ({ sceneId, blockId }) => {
+        const targetSceneId = toSceneId(sceneId);
+        const navigationOpened = await handleOpenChatScene(sceneId);
+        const resolved = resolveEvidenceFocusAfterOpenScene({
+          blockId,
+          navigationOpened,
+          projectOpen: selectedProjectRef.current !== undefined,
+          targetSceneId,
+          nextRequestId: evidenceFocusBlockSeqRef.current + 1,
+        });
+        if (resolved.kind === "clear") {
+          setEvidenceFocusBlockRequest(undefined);
+          return;
+        }
+        if (resolved.kind === "noop") {
+          return;
+        }
+        evidenceFocusBlockSeqRef.current = resolved.request.id;
+        setEvidenceFocusBlockRequest(resolved.request);
+      },
+      openStoryIntent: ({ sceneId, storyKnowledgeId }) => {
+        if (sceneId === undefined) return;
+        void storyKnowledgeId;
+        void openStoryContextScene(sceneId, "split");
+      }
     }
   });
   storyWorkDirtyRef.current = storyWork.dirty || storyWork.pending;
@@ -4896,6 +4989,14 @@ export default function App() {
                     ? {}
                     : { characterSheet: knowledge.characterSheet })
                 }))}
+              focusBlockRequest={
+                evidenceFocusBlockRequest?.sceneId === scene.id
+                  ? {
+                      id: evidenceFocusBlockRequest.id,
+                      blockId: evidenceFocusBlockRequest.blockId,
+                    }
+                  : undefined
+              }
               sceneId={scene.id}
               scenePosition={context.positionLabel}
               sceneSketch={scene.sketch}

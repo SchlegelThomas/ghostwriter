@@ -242,10 +242,21 @@ Novel writing and multi-book storytelling lead the product. Screenplay-specific 
 writers' rooms, publishing integrations, studios, licensing, audience discovery, commerce,
 and a marketplace remain later expansions. Each receives its own accepted plan before build.
 
-## Story-agent epic — Canvas foundations in progress (2026-09-12)
+## Story-agent epic — character, scene, check and structure loops locally (2026-09-13)
 
 Canvas inspection can select a different scene while the active Draft stays open; Open Draft/Split
 is explicit navigation. Search includes unplaced manuscript scenes. Scoped creation stays visible
 in its chapter, and the reading spine can show the chapter or whole story. Phone Canvas uses the
 ordered view and a scrollable inspector sheet. Consecutive Undo walks back through writer actions.
-The broader story-spine and agent-development workflow remains in progress under the active epic.
+Story work preserves character, scene, check and outline briefs through generation and immutable
+review. Scenes apply explicitly (create with optional Canvas, named variant, or leased revision).
+Continuity checks cite validated evidence, stay advisory, and stale without silent rerun. **Outline**
+develops typed book structure on one active book: review chapter objectives and scene placeholders,
+select a dependency-complete operation subset, preview manuscript and assessment impact, then apply
+once. Structure apply creates empty scene documents only — no agent prose — and may place at most one
+new scene card on Canvas while all selected placeholders join the manuscript spine. Stale project or
+board versions apply nothing; a second structure batch is blocked after canon moves on. Durable
+results survive reload with the same acknowledgment. This is local hermetic workflow acceptance,
+not live-model quality or a production release. Multi-step coordination (CP5), MCP parity (CP6),
+character/dialogue completeness checks beyond continuity, and the full original-story walkthrough
+(CP7) remain in progress under the active epic.

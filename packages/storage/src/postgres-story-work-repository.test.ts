@@ -4,6 +4,7 @@ import {
   BELLWETHER_FIXTURE,
   BELLWETHER_FIXTURE_PROJECT_ID,
   accountId,
+  agentProposalId,
   agentRunId,
   completeStoryWorkAttempt,
   contextReceiptId,
@@ -13,6 +14,9 @@ import {
   createStoryWorkAttempt,
   finishStoryWorkAttemptWithoutArtifact,
   instructionContentHash,
+  recordAppliedStoryWorkAssignmentFromUnitOfWork,
+  recordReviewedStoryWorkAssignment,
+  sceneContentHash,
   startStoryWorkAttempt,
   storyKnowledgeId,
   storyWorkAssignmentId,
@@ -221,6 +225,56 @@ describe("postgres story work repositories", () => {
     ]);
   });
 
+  it("applies migration 0028 over the committed assignment shape with paired nullable fields", async () => {
+    const { client, close } = createPgliteDatabase();
+    closers.push(close);
+    await client.exec(`
+      create table story_work_assignments (
+        id text primary key,
+        sources jsonb not null,
+        destination jsonb not null,
+        steps jsonb not null,
+        results jsonb not null,
+        generated_artifact jsonb,
+        current_artifact jsonb,
+        constraint story_work_assignments_json_shape_check check (
+          jsonb_typeof(sources) = 'array'
+          and jsonb_typeof(destination) = 'object'
+          and jsonb_typeof(steps) = 'array'
+          and jsonb_typeof(results) = 'array'
+          and (generated_artifact is null or jsonb_typeof(generated_artifact) = 'object')
+          and (current_artifact is null or jsonb_typeof(current_artifact) = 'object')
+        )
+      );
+    `);
+    const migration = await readFile(
+      new URL("../drizzle/0028_condemned_rogue.sql", import.meta.url),
+      "utf8"
+    );
+    await client.exec(migration.replaceAll("--> statement-breakpoint", ""));
+    const columns = await client.query<{ column_name: string }>(`
+      select column_name
+      from information_schema.columns
+      where table_name = 'story_work_assignments'
+        and column_name in ('apply_idempotency_key', 'apply_request_fingerprint')
+      order by column_name
+    `);
+    expect(columns.rows).toEqual([
+      { column_name: "apply_idempotency_key" },
+      { column_name: "apply_request_fingerprint" }
+    ]);
+    await client.exec(`
+      insert into story_work_assignments (
+        id, sources, destination, steps, results
+      ) values ('legacy', '[]', '{}', '[]', '[]');
+    `);
+    await expect(client.exec(`
+      insert into story_work_assignments (
+        id, sources, destination, steps, results, apply_idempotency_key
+      ) values ('invalid', '[]', '{}', '[]', '[]', 'apply-only');
+    `)).rejects.toThrow();
+  });
+
   it("persists scoped assignments with exact idempotency replay and CAS fencing", async () => {
     const { assignments } = await setup();
     const original = assignment();
@@ -338,6 +392,148 @@ describe("postgres story work repositories", () => {
       status: "failed",
       latestAttemptId: RUN_ID
     });
+  });
+
+  it("round-trips apply replay identity and prevents later CAS replacement", async () => {
+    const { assignments } = await setup();
+    const pointer = {
+      proposalId: agentProposalId("proposal-postgres-applied"),
+      artifactVersion: 1,
+      contentHash: instructionContentHash("8".repeat(64))
+    };
+    const review = assignment({
+      version: 4,
+      status: "awaiting-review",
+      latestAttemptId: RUN_ID,
+      generatedArtifact: pointer,
+      currentArtifact: pointer,
+      updatedAt: "2026-09-12T18:04:00.000Z"
+    });
+    expect(await assignments.create({
+      assignment: review,
+      requestFingerprint: REQUEST_FINGERPRINT
+    })).toMatchObject({ ok: true });
+    const applied = recordAppliedStoryWorkAssignmentFromUnitOfWork({
+      assignment: review,
+      expectedVersion: 4,
+      artifact: pointer,
+      results: [{
+        kind: "story-knowledge",
+        storyKnowledgeId: storyKnowledgeId("knowledge-story-work-reserved"),
+        projectVersion: BELLWETHER_FIXTURE.project.version + 1
+      }],
+      applyRequest: {
+        idempotencyKey: "apply-postgres-once",
+        requestFingerprint: instructionContentHash("9".repeat(64))
+      },
+      updatedAt: "2026-09-12T18:05:00.000Z"
+    });
+    await expect(assignments.compareAndSet({
+      accountId: OWNER,
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+      assignmentId: ASSIGNMENT_ID,
+      expectedVersion: 4,
+      next: applied
+    })).resolves.toMatchObject({
+      ok: true,
+      assignment: {
+        applyIdempotencyKey: "apply-postgres-once",
+        applyRequestFingerprint: instructionContentHash("9".repeat(64))
+      }
+    });
+    const rewritten = createStoryWorkAssignment({
+      ...applied,
+      version: 6,
+      applyIdempotencyKey: "apply-postgres-rewritten",
+      updatedAt: "2026-09-12T18:06:00.000Z"
+    });
+    await expect(assignments.compareAndSet({
+      accountId: OWNER,
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+      assignmentId: ASSIGNMENT_ID,
+      expectedVersion: 5,
+      next: rewritten
+    })).resolves.toEqual({ ok: false, reason: "version-conflict" });
+  });
+
+  it("roundtrips check source, assess destination, reviewed status, and story-check result", async () => {
+    const { assignments } = await setup();
+    const sceneTarget = BELLWETHER_FIXTURE.scenes[0]!.id;
+    const checkId = storyWorkAssignmentId("assignment-check-postgres");
+    const pointer = {
+      proposalId: agentProposalId("proposal-check-postgres"),
+      artifactVersion: 1,
+      contentHash: instructionContentHash("c".repeat(64))
+    };
+    const check = createStoryWorkAssignment({
+      id: checkId,
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+      initiatorAccountId: OWNER,
+      version: 2,
+      taskKind: "check",
+      brief: "Check continuity for the scene.",
+      constraints: "Stay within supplied context.",
+      doneWhen: "Findings are ready for review.",
+      sources: [
+        {
+          kind: "scene",
+          sceneId: sceneTarget,
+          projectVersion: BELLWETHER_FIXTURE.project.version,
+          workingVersion: 2,
+          contentHash: sceneContentHash("d".repeat(64))
+        }
+      ],
+      destination: {
+        kind: "scene",
+        sceneId: sceneTarget,
+        operation: "assess"
+      },
+      provider: "openai",
+      model: "gpt-4.1",
+      status: "awaiting-review",
+      steps: [{ id: "check", title: "Check", dependencies: [] }],
+      generatedArtifact: pointer,
+      currentArtifact: pointer,
+      results: [],
+      idempotencyKey: "assignment-check-postgres-key",
+      createdAt: NOW,
+      updatedAt: "2026-09-12T18:04:00.000Z"
+    });
+    expect(
+      await assignments.create({
+        assignment: check,
+        requestFingerprint: REQUEST_FINGERPRINT
+      })
+    ).toMatchObject({ ok: true });
+    const reviewed = recordReviewedStoryWorkAssignment({
+      assignment: check,
+      expectedVersion: 2,
+      artifact: pointer,
+      result: {
+        kind: "story-check",
+        proposalId: pointer.proposalId,
+        artifactVersion: pointer.artifactVersion,
+        contentHash: pointer.contentHash,
+        sceneId: sceneTarget
+      },
+      updatedAt: "2026-09-12T18:05:00.000Z"
+    });
+    await expect(
+      assignments.compareAndSet({
+        accountId: OWNER,
+        projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+        assignmentId: checkId,
+        expectedVersion: 2,
+        next: reviewed
+      })
+    ).resolves.toMatchObject({ ok: true });
+    await expect(
+      assignments.get({
+        accountId: OWNER,
+        projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+        assignmentId: checkId
+      })
+    ).resolves.toEqual(reviewed);
   });
 
   it("persists attempt identity, scoped lookup, exact replay, and completion CAS", async () => {

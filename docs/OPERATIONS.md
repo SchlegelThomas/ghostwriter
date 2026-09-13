@@ -459,3 +459,20 @@ metadata. Attempt source mode distinguishes submitted snapshots from explicitly 
 Generation, review and apply use transactional UOWs; provider network calls remain outside database
 transactions. The migration has been checked from empty and prior local schemas; production follows
 the existing migration/deployment workflow and has not been run for this epic.
+
+Migration `0028_condemned_rogue.sql` adds paired nullable apply-request identity fields to
+assignments. Legacy rows retain null values; the database rejects half-populated pairs. This
+supports exact scene-apply replay across a lost response without creating another scene or revision.
+Local migration, reload and immutable-CAS tests pass. The first-party scene apply workflow is
+implemented locally; this migration has not been run against production.
+
+Grounded continuity checks reuse migrations 0027/0028 and the existing JSON proposal/receipt
+columns; no CP3 migration is added. Outline/structure work (CP4) likewise adds no migration beyond
+`0028`: trusted `story-structure-proposal-v1` artifacts live in existing proposal/assignment JSON,
+while canonical effects use project metadata, scene-document genesis initialization and optional
+Canvas stores inside the same transactional patterns as scene apply. The hermetic backend returns
+`story_check_findings_candidates_v1` and structure proposal candidates only when
+`GHOSTWRITER_E2E=1` and still reports Providers: hermetic fake. Live-provider acceptance remains
+separately gated. Provider calls stay outside database transactions; generation begin/completion,
+immutable review, structure preview (read-only), and atomic apply/replay use the same rollback
+patterns as character, scene and check story work.

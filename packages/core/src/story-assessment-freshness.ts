@@ -1,7 +1,22 @@
 import { canonicalJsonStringify } from "./agent-canonical-json.js";
 import type { AsyncHashPort } from "./agent-domain.js";
-import { DomainValidationError, type ChapterId, type ManuscriptChapter, type Scene, type SceneId, type StoryKnowledge, type StoryKnowledgeId } from "./domain.js";
-import type { StoryContextProjection, StoryContextScope } from "./story-context.js";
+import {
+  DomainValidationError,
+  type Book,
+  type ChapterId,
+  type ManuscriptChapter,
+  type ProjectRecords,
+  type Scene,
+  type SceneId,
+  type StoryKnowledge,
+  type StoryKnowledgeId
+} from "./domain.js";
+import type { SceneDocumentHead } from "./scene-documents.js";
+import {
+  storyContextFromProjectRecords,
+  type StoryContextProjection,
+  type StoryContextScope
+} from "./story-context.js";
 
 export const STORY_ASSESSMENT_MAX_DEPENDENCIES = 2_000;
 
@@ -186,6 +201,182 @@ function dependencyMatches(
  * Compares only resources the assessment actually consumed. Additional live
  * resources and unrelated project metadata do not make an assessment stale.
  */
+export type BuildCurrentStoryAssessmentRevisionVectorInput = Readonly<{
+  assessed: StoryAssessmentRevisionVector;
+  records: ProjectRecords;
+  sceneDocumentHeads: ReadonlyMap<SceneId, SceneDocumentHead>;
+  hashPort: AsyncHashPort;
+}>;
+
+function findScene(records: ProjectRecords, sceneId: SceneId): Scene | undefined {
+  return records.scenes.find((candidate) => candidate.id === sceneId);
+}
+
+function isActiveScene(records: ProjectRecords, scene: Scene): boolean {
+  return scene.projectId === records.project.id && scene.archivedAt === undefined;
+}
+
+function locateChapter(
+  records: ProjectRecords,
+  chapterId: ChapterId
+): Readonly<{ chapter: ManuscriptChapter; book: Book }> | undefined {
+  for (const book of records.books) {
+    if (book.projectId !== records.project.id) continue;
+    for (const part of book.manuscript.parts) {
+      for (const chapter of part.chapters) {
+        if (chapter.id === chapterId) {
+          return Object.freeze({ chapter, book });
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+function isProjectScopeActive(records: ProjectRecords): boolean {
+  return records.project.archivedAt === undefined;
+}
+
+function isBookScopeActive(book: Pick<Book, "archivedAt">): boolean {
+  return book.archivedAt === undefined;
+}
+
+function isChapterObjectiveScopeActive(
+  records: ProjectRecords,
+  chapterId: ChapterId
+): boolean {
+  if (!isProjectScopeActive(records)) return false;
+  const located = locateChapter(records, chapterId);
+  return located !== undefined && isBookScopeActive(located.book);
+}
+
+function isManuscriptSliceScopeAvailable(
+  records: ProjectRecords,
+  scope: StoryContextScope
+): boolean {
+  if (!isProjectScopeActive(records)) return false;
+  if (scope.kind === "project") return true;
+  if (scope.kind === "chapter") {
+    const located = locateChapter(records, scope.chapterId);
+    return located !== undefined && isBookScopeActive(located.book);
+  }
+  const scene = findScene(records, scope.sceneId);
+  if (scene === undefined || !isActiveScene(records, scene)) return false;
+  const book = records.books.find((candidate) => candidate.id === scene.bookId);
+  return (
+    book !== undefined &&
+    book.projectId === records.project.id &&
+    isBookScopeActive(book)
+  );
+}
+
+/**
+ * Rebuilds dependency values for an existing assessment vector from trusted
+ * project records and scene heads. Omits dependencies that are missing or no
+ * longer in an active scope so freshness evaluation can report them explicitly.
+ */
+export async function buildCurrentStoryAssessmentRevisionVector(
+  input: BuildCurrentStoryAssessmentRevisionVectorInput
+): Promise<StoryAssessmentRevisionVector> {
+  const { assessed, records, sceneDocumentHeads, hashPort } = input;
+  const dependencies: StoryAssessmentDependency[] = [];
+
+  for (const dependency of assessed.dependencies) {
+    switch (dependency.kind) {
+      case "scene-prose": {
+        const head = sceneDocumentHeads.get(dependency.sceneId);
+        const scene = findScene(records, dependency.sceneId);
+        if (
+          head === undefined ||
+          scene === undefined ||
+          !isActiveScene(records, scene) ||
+          head.projectId !== records.project.id ||
+          head.sceneId !== dependency.sceneId
+        ) {
+          break;
+        }
+        dependencies.push(
+          Object.freeze({
+            kind: "scene-prose",
+            sceneId: dependency.sceneId,
+            workingVersion: head.workingVersion,
+            contentHash: head.contentHash
+          })
+        );
+        break;
+      }
+      case "scene-intent": {
+        const scene = findScene(records, dependency.sceneId);
+        if (scene === undefined || !isActiveScene(records, scene)) break;
+        dependencies.push(
+          Object.freeze({
+            kind: "scene-intent",
+            sceneId: dependency.sceneId,
+            revisionToken: await storySceneIntentRevisionToken(scene, hashPort)
+          })
+        );
+        break;
+      }
+      case "chapter-objective": {
+        if (!isChapterObjectiveScopeActive(records, dependency.chapterId)) break;
+        const located = locateChapter(records, dependency.chapterId);
+        if (located === undefined) break;
+        dependencies.push(
+          Object.freeze({
+            kind: "chapter-objective",
+            chapterId: dependency.chapterId,
+            revisionToken: await storyChapterObjectiveRevisionToken(
+              located.chapter,
+              hashPort
+            )
+          })
+        );
+        break;
+      }
+      case "story-knowledge": {
+        const knowledge = records.storyKnowledge.find(
+          (candidate) => candidate.id === dependency.storyKnowledgeId
+        );
+        if (
+          knowledge === undefined ||
+          knowledge.projectId !== records.project.id
+        ) {
+          break;
+        }
+        dependencies.push(
+          Object.freeze({
+            kind: "story-knowledge",
+            storyKnowledgeId: dependency.storyKnowledgeId,
+            revisionToken: await storyKnowledgeRevisionToken(knowledge, hashPort)
+          })
+        );
+        break;
+      }
+      case "manuscript-slice": {
+        if (!isManuscriptSliceScopeAvailable(records, dependency.scope)) break;
+        let context: StoryContextProjection;
+        try {
+          context = storyContextFromProjectRecords(records, {
+            scope: dependency.scope
+          });
+        } catch {
+          break;
+        }
+        dependencies.push(
+          Object.freeze({
+            kind: "manuscript-slice",
+            scope: dependency.scope,
+            revisionToken: await storyManuscriptSliceRevisionToken(context, hashPort)
+          })
+        );
+        break;
+      }
+    }
+  }
+
+  return createStoryAssessmentRevisionVector(dependencies);
+}
+
 export function evaluateStoryAssessmentFreshness(
   assessed: StoryAssessmentRevisionVector,
   current: StoryAssessmentRevisionVector

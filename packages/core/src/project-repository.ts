@@ -73,6 +73,8 @@ export type DomainIdKind =
   | "contextReceipt"
   | "agentRun"
   | "agentProposal"
+  | "storyCheckFinding"
+  | "storyStructureOperation"
   | "mcpGrant";
 
 export interface IdGenerator {

@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
 import type { AgentModelId } from "./agent-context-receipt.js";
 import { instructionContentHash } from "./agent-domain.js";
-import { agentRunId, projectId, storyKnowledgeId } from "./domain.js";
+import {
+  agentProposalId,
+  agentRunId,
+  projectId,
+  sceneId,
+  storyKnowledgeId
+} from "./domain.js";
+import { sceneContentHash } from "./scene-documents.js";
 import { accountId } from "./identity.js";
 import { createMemoryStoryWorkAssignmentRepository } from "./memory-story-work-assignment-repository.js";
 import {
   createStoryWorkAssignment,
+  recordAppliedStoryWorkAssignmentFromUnitOfWork,
+  recordReviewedStoryWorkAssignment,
   startStoryWorkAttempt,
   storyWorkAssignmentId,
   type StoryWorkAssignment
@@ -193,6 +202,132 @@ describe("memory story work assignment repository", () => {
       activeAttemptId: agentRunId("run-current"),
       latestAttemptId: agentRunId("run-current")
     });
+  });
+
+  it("persists apply replay identity once and refuses rewriting it", async () => {
+    const repository = createMemoryStoryWorkAssignmentRepository();
+    const pointer = {
+      proposalId: agentProposalId("proposal-applied"),
+      artifactVersion: 1,
+      contentHash: fingerprint("e")
+    };
+    const review = createStoryWorkAssignment({
+      ...assignment(),
+      version: 4,
+      status: "awaiting-review",
+      latestAttemptId: agentRunId("run-applied"),
+      generatedArtifact: pointer,
+      currentArtifact: pointer,
+      updatedAt: "2026-09-12T12:04:00.000Z"
+    });
+    await repository.create({ assignment: review, requestFingerprint: fingerprint("f") });
+    const applied = recordAppliedStoryWorkAssignmentFromUnitOfWork({
+      assignment: review,
+      expectedVersion: 4,
+      artifact: pointer,
+      results: [{
+        kind: "story-knowledge",
+        storyKnowledgeId: storyKnowledgeId("knowledge-1"),
+        projectVersion: 2
+      }],
+      applyRequest: {
+        idempotencyKey: "apply-once",
+        requestFingerprint: fingerprint("9")
+      },
+      updatedAt: "2026-09-12T12:05:00.000Z"
+    });
+    await expect(repository.compareAndSet({
+      accountId: OWNER,
+      projectId: PROJECT,
+      assignmentId: review.id,
+      expectedVersion: 4,
+      next: applied
+    })).resolves.toMatchObject({
+      ok: true,
+      assignment: {
+        applyIdempotencyKey: "apply-once",
+        applyRequestFingerprint: fingerprint("9")
+      }
+    });
+    const rewritten = createStoryWorkAssignment({
+      ...applied,
+      version: 6,
+      applyIdempotencyKey: "apply-rewritten",
+      updatedAt: "2026-09-12T12:06:00.000Z"
+    });
+    await expect(repository.compareAndSet({
+      accountId: OWNER,
+      projectId: PROJECT,
+      assignmentId: review.id,
+      expectedVersion: 5,
+      next: rewritten
+    })).resolves.toEqual({ ok: false, reason: "version-conflict" });
+  });
+
+  it("roundtrips check source, assess destination, reviewed status, and story-check result", async () => {
+    const repository = createMemoryStoryWorkAssignmentRepository();
+    const sceneTarget = sceneId("scene-check-memory");
+    const pointer = {
+      proposalId: agentProposalId("proposal-check-memory"),
+      artifactVersion: 1,
+      contentHash: fingerprint("c")
+    };
+    const check = createStoryWorkAssignment({
+      ...assignment(99),
+      id: storyWorkAssignmentId("assignment-check-memory"),
+      taskKind: "check",
+      brief: "Check continuity.",
+      constraints: "Ground every claim.",
+      doneWhen: "Findings are reviewable.",
+      sources: [
+        {
+          kind: "scene",
+          sceneId: sceneTarget,
+          projectVersion: 1,
+          workingVersion: 2,
+          contentHash: sceneContentHash("c".repeat(64))
+        }
+      ],
+      destination: {
+        kind: "scene",
+        sceneId: sceneTarget,
+        operation: "assess"
+      },
+      status: "awaiting-review",
+      version: 2,
+      generatedArtifact: pointer,
+      currentArtifact: pointer,
+      updatedAt: "2026-09-12T12:04:00.000Z"
+    });
+    await repository.create({
+      assignment: check,
+      requestFingerprint: fingerprint("d")
+    });
+    const reviewed = recordReviewedStoryWorkAssignment({
+      assignment: check,
+      expectedVersion: 2,
+      artifact: pointer,
+      result: {
+        kind: "story-check",
+        proposalId: pointer.proposalId,
+        artifactVersion: pointer.artifactVersion,
+        contentHash: pointer.contentHash,
+        sceneId: sceneTarget
+      },
+      updatedAt: "2026-09-12T12:05:00.000Z"
+    });
+    await expect(
+      repository.compareAndSet({
+        accountId: OWNER,
+        projectId: PROJECT,
+        assignmentId: check.id,
+        expectedVersion: 2,
+        next: reviewed
+      })
+    ).resolves.toMatchObject({ ok: true });
+    await expect(
+      repository.get({ accountId: OWNER, projectId: PROJECT, assignmentId: check.id })
+    ).resolves.toEqual(reviewed);
   });
 
   it("keeps project listings bounded and ordered without cross-project rows", async () => {

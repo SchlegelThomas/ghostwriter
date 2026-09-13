@@ -55,6 +55,8 @@ export const AGENT_OUTPUT_SCHEMA_IDS = Object.freeze([
   "story-knowledge-create-v1",
   "character-create-v2",
   "scene-draft-v1",
+  "story-check-findings-v1",
+  "story-structure-proposal-v1",
   "sketch-fields-v1",
   "character-sheet-v1",
   "backdrop-fields-v1"
@@ -89,6 +91,9 @@ export const STORY_KNOWLEDGE_CREATE_DRAFT_WORKFLOW_ID =
   "story-knowledge.create-draft" as const;
 export const CHARACTER_STORY_WORK_WORKFLOW_ID = "story-work.character" as const;
 export const SCENE_STORY_WORK_WORKFLOW_ID = "story-work.scene" as const;
+export const STORY_CHECK_CONTINUITY_WORKFLOW_ID =
+  "story-work.check-continuity" as const;
+export const STORY_WORK_STRUCTURE_WORKFLOW_ID = "story-work.structure" as const;
 
 export type CaptureReflectionWorkflowId = typeof CAPTURE_REFLECTION_WORKFLOW_ID;
 export type PlanModeOutlineWorkflowId = typeof PLAN_MODE_OUTLINE_WORKFLOW_ID;
@@ -99,6 +104,9 @@ export type StoryKnowledgeCreateDraftWorkflowId =
 export type CharacterStoryWorkWorkflowId =
   typeof CHARACTER_STORY_WORK_WORKFLOW_ID;
 export type SceneStoryWorkWorkflowId = typeof SCENE_STORY_WORK_WORKFLOW_ID;
+export type StoryCheckContinuityWorkflowId =
+  typeof STORY_CHECK_CONTINUITY_WORKFLOW_ID;
+export type StoryWorkStructureWorkflowId = typeof STORY_WORK_STRUCTURE_WORKFLOW_ID;
 export type SketchPartnerWorkflowId = typeof SKETCH_PARTNER_WORKFLOW_ID;
 export type CharacterCoachWorkflowId = typeof CHARACTER_COACH_WORKFLOW_ID;
 export type WorldkeeperWorkflowId = typeof WORLDKEEPER_WORKFLOW_ID;
@@ -111,6 +119,8 @@ export const AGENT_WORKFLOW_IDS = Object.freeze([
   STORY_KNOWLEDGE_CREATE_DRAFT_WORKFLOW_ID,
   CHARACTER_STORY_WORK_WORKFLOW_ID,
   SCENE_STORY_WORK_WORKFLOW_ID,
+  STORY_CHECK_CONTINUITY_WORKFLOW_ID,
+  STORY_WORK_STRUCTURE_WORKFLOW_ID,
   SKETCH_PARTNER_WORKFLOW_ID,
   CHARACTER_COACH_WORKFLOW_ID,
   WORLDKEEPER_WORKFLOW_ID

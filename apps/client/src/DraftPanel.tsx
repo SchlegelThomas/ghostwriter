@@ -1,7 +1,9 @@
 import {
   SceneEditor,
+  type SceneEditorFocusBlockRequest,
   type SceneEditorInsertRequest
 } from "@ghostwriter/editor/react";
+import { hashSceneDocument } from "@ghostwriter/editor";
 import type {
   SceneBlockV1,
   SceneDocumentComparison,
@@ -72,6 +74,12 @@ import {
   type SceneSaveQueue,
   type SceneSaveQueueSnapshot
 } from "./scene-save-queue.js";
+import {
+  DraftStoryWorkBoundaryError,
+  isCurrentStoryWorkLease,
+  prepareDraftStoryWorkBoundary,
+  refreshDraftStoryWorkBoundary
+} from "./draft-story-work-boundary.js";
 import { sceneDocumentWordCount } from "./draft-desk.js";
 
 const { colors, fonts } = ghostwriterTheme;
@@ -80,6 +88,13 @@ const AUTOSAVE_DEBOUNCE_MS = 900;
 
 export type DraftPanelHandle = Readonly<{
   flushAndRelease(): Promise<void>;
+  prepareStoryWorkApply(): Promise<Readonly<{
+    projectId: string;
+    sceneId: string;
+    expectedWorkingVersion: number;
+    expectedContentHash: string;
+  }>>;
+  finishStoryWorkApply(): Promise<void>;
 }>;
 
 export type DraftPanelProps = Readonly<{
@@ -129,6 +144,7 @@ export type DraftPanelProps = Readonly<{
   onProblem?(problem: DraftProblemEvent): void;
   onProblemResolved?(id: string): void;
   onOpenCastStudio?(storyKnowledgeId: string): void;
+  focusBlockRequest?: SceneEditorFocusBlockRequest;
 }>;
 
 export type DraftActivity = "idle" | "saving" | "problem";
@@ -163,8 +179,11 @@ const REVISION_REASON_LABELS: Readonly<
   Record<SceneRevisionMetadataResponse["reason"], string>
 > = {
   genesis: "Original Draft",
+  "capture-promotion": "Scene from Capture",
+  "named-variant": "Named variant",
   checkpoint: "Checkpoint",
   "idle-checkpoint": "Automatic checkpoint",
+  "agent-apply": "Reviewed agent revision",
   restore: "Restored Draft",
   "schema-migration": "Updated Draft format"
 };
@@ -660,13 +679,15 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
       onActivityChange,
       onProblem,
       onProblemResolved,
-      onOpenCastStudio
+      onOpenCastStudio,
+      focusBlockRequest
     },
     ref
   ) {
     const [document, setDocument] = useState<SceneDocumentV1>();
     const [head, setHead] = useState<SceneHeadResponse>();
     const [lease, setLease] = useState<SceneLeaseResponse>();
+    const leaseRef = useRef<SceneLeaseResponse | undefined>(undefined);
     const [leasePhase, setLeasePhase] = useState<LeasePhase>("loading");
     const [saveSnapshot, setSaveSnapshot] =
       useState<SceneSaveQueueSnapshot>();
@@ -690,6 +711,7 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
       useState<SceneEditorInsertRequest>();
     const insertSeqRef = useRef(0);
     const queueRef = useRef<SceneSaveQueue | undefined>(undefined);
+    const storyWorkQueueRef = useRef<SceneSaveQueue | undefined>(undefined);
     const recoveryRef = useRef<SceneRecoveryCoordinator | undefined>(
       undefined
     );
@@ -702,6 +724,7 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
     const renewingRef = useRef(false);
     const releasePromiseRef = useRef<Promise<void> | undefined>(undefined);
     const transitionRef = useRef<Promise<void>>(Promise.resolve());
+    leaseRef.current = lease;
     acknowledgementCallbackRef.current = onAcknowledgement;
     activityCallbackRef.current = onActivityChange;
     problemCallbackRef.current = onProblem;
@@ -763,6 +786,7 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
     const enterLeaseReadOnly = useCallback(
       (message: string): void => {
         queueRef.current?.pause();
+        leaseRef.current = undefined;
         setLease(undefined);
         setLeasePhase("readonly");
         setProblem({ kind: "lease", message });
@@ -779,6 +803,7 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
       queue?.pause();
       await releaseBestEffort();
       if (activeRef.current) {
+        leaseRef.current = undefined;
         setLease(undefined);
         setLeasePhase("readonly");
         setProblem({
@@ -789,7 +814,6 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
       }
     }, [releaseBestEffort]);
 
-    useImperativeHandle(ref, () => ({ flushAndRelease }), [flushAndRelease]);
 
     useEffect(() => {
       let active = true;
@@ -798,6 +822,7 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
       activeRef.current = true;
       setDocument(undefined);
       setHead(undefined);
+      leaseRef.current = undefined;
       setLease(undefined);
       setLeasePhase("loading");
       setSaveSnapshot(undefined);
@@ -824,6 +849,7 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
           cause instanceof GhostwriterApiError &&
           cause.code === "REVISION_CONFLICT"
         ) {
+          leaseRef.current = undefined;
           setLease(undefined);
           setLeasePhase("readonly");
           setProblem({
@@ -963,6 +989,7 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
               await releaseBestEffort();
               return;
             }
+            leaseRef.current = acquired;
             setLease(acquired);
             setLeasePhase("held");
             queue.resume();
@@ -1016,6 +1043,7 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
         void renewSceneLease({ projectId, sceneId })
           .then((renewed) => {
             if (!renewalActive || !activeRef.current) return;
+            leaseRef.current = renewed;
             setLease(renewed);
           })
           .catch((cause: unknown) => {
@@ -1067,6 +1095,85 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
         return snapshot;
       }, []);
 
+    const prepareStoryWorkApply = useCallback(async () => {
+      const queue = queueRef.current;
+      if (recoveryOffer !== undefined) {
+        throw new Error(
+          "Recover or discard local Draft recovery before applying reviewed scene work."
+        );
+      }
+      if (!activeRef.current || readOnly || leasePhase !== "held" || actionBusy ||
+          queue === undefined || storyWorkQueueRef.current !== undefined) {
+        throw new Error("Open this scene in Draft with its editing lease before applying a reviewed revision.");
+      }
+      storyWorkQueueRef.current = queue;
+      setActionBusy(true);
+      try {
+        const prepared = await prepareDraftStoryWorkBoundary({
+          queue,
+          recovery: recoveryRef.current,
+          unresolvedRecovery: false,
+          currentLease: () => leaseRef.current,
+          isCurrent: () => activeRef.current && queueRef.current === queue,
+          hashDocument: hashSceneDocument
+        });
+        return { projectId, sceneId, ...prepared };
+      } catch (cause) {
+        storyWorkQueueRef.current = undefined;
+        if (activeRef.current && queueRef.current === queue) {
+          if (
+            cause instanceof DraftStoryWorkBoundaryError &&
+            cause.code === "lease-unavailable"
+          ) {
+            enterLeaseReadOnly(
+              "The editing lease expired before story work could be applied. Reacquire it before retrying."
+            );
+          }
+          setActionBusy(false);
+        }
+        throw cause;
+      }
+    }, [actionBusy, enterLeaseReadOnly, leasePhase, projectId, readOnly, recoveryOffer, sceneId]);
+
+    const finishStoryWorkApply = useCallback(async () => {
+      const queue = storyWorkQueueRef.current;
+      if (queue === undefined) return;
+      if (!activeRef.current || queueRef.current !== queue) { storyWorkQueueRef.current = undefined; return; }
+      try {
+        const workspace = await refreshDraftStoryWorkBoundary({
+          queue,
+          recovery: recoveryRef.current,
+          isCurrent: () => activeRef.current && queueRef.current === queue,
+          loadWorkspace: () => getSceneWorkspace({ projectId, sceneId })
+        });
+        setDocument(workspace.head.document);
+        setHead(workspace.head);
+        setRecoveryOffer(undefined);
+        setComparison(undefined);
+        setConfirmingRestore(false);
+        if (isCurrentStoryWorkLease(workspace.lease)) {
+          leaseRef.current = workspace.lease;
+          setLease(workspace.lease); setLeasePhase("held"); setProblem(undefined);
+          queue.resume();
+        } else {
+          enterLeaseReadOnly("The story-work request finished. Reacquire this Draft's editing lease before writing.");
+        }
+        await refreshHistory(workspace.head.checkpointRevisionId);
+      } catch (cause) {
+        if (activeRef.current && queueRef.current === queue) {
+          queue.pause();
+          setProblem({ kind: "revision", message: "The story-work request finished, but Draft could not refresh. Review the saved scene before writing again." });
+        }
+        throw cause;
+      } finally {
+        if (storyWorkQueueRef.current === queue) storyWorkQueueRef.current = undefined;
+        if (activeRef.current && queueRef.current === queue) setActionBusy(false);
+      }
+    }, [enterLeaseReadOnly, projectId, refreshHistory, sceneId]);
+
+    useImperativeHandle(ref, () => ({ flushAndRelease, prepareStoryWorkApply, finishStoryWorkApply }),
+      [flushAndRelease, prepareStoryWorkApply, finishStoryWorkApply]);
+
     const handleHistoryActionFailure = useCallback(
       async (cause: unknown, fallback: string): Promise<void> => {
         const queue = queueRef.current;
@@ -1093,6 +1200,7 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
           cause.code === "REVISION_CONFLICT"
         ) {
           queue?.pause();
+          leaseRef.current = undefined;
           setLease(undefined);
           setLeasePhase("readonly");
           setHistoryError(
@@ -1407,6 +1515,7 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
         if (!activeRef.current) return;
         queue.installAcknowledgement(workspace.head, true);
         setHead(workspace.head);
+        leaseRef.current = undefined;
         setLease(undefined);
         setLeasePhase("readonly");
         setProblem({
@@ -1447,6 +1556,7 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
           queue.pause();
           queue.installAcknowledgement(workspace.head, true);
           setHead(workspace.head);
+          leaseRef.current = undefined;
           setLease(undefined);
           setLeasePhase("readonly");
           setProblem({
@@ -1472,6 +1582,7 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
           await releaseBestEffort();
           return;
         }
+        leaseRef.current = acquired;
         setLease(acquired);
         setLeasePhase("held");
         setProblem(undefined);
@@ -1817,6 +1928,7 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
                 ariaLabel={`Draft for ${sceneTitle}`}
                 defaultFormattingToolbarOpen={false}
                 editable={editorIsEditable}
+                focusBlockRequest={focusBlockRequest}
                 insertTextRequest={insertTextRequest}
                 onChange={(nextDocument) => {
                   setDocument(nextDocument);

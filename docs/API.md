@@ -530,14 +530,18 @@ while updating the project camera. Client queue/hydration acceptance is tracked 
 
 ### Story-work assignments (ADR 0018, implementation in progress)
 
-The character workflow uses `/api/projects/:projectId/story-work/assignments` with the authenticated
-project owner. Assignment definitions preserve the original brief, constraints, done condition,
-selected source IDs/revisions, provider/model and server-reserved Cast destination. The separate
-assignment version fences workflow changes; canonical project metadata and scene prose keep their
-own versions.
+Character and scene workflows use `/api/projects/:projectId/story-work/assignments` with the
+authenticated project owner. Assignment definitions preserve the original brief, constraints,
+done condition, selected source IDs/revisions, provider/model and server-reserved destination.
+The separate assignment version fences workflow changes; canonical project metadata, scene prose
+and Canvas keep their own versions.
 
-- `POST /assignments` accepts `idempotencyKey`, `expectedProjectVersion`, `brief`, `constraints`,
-  `doneWhen`, `sceneIds` (zero to 32), and `model`; returns `{assignment,created}`.
+- `POST /assignments` accepts `taskKind` (`character`, `scene`, `revise`, `outline`, or `check`),
+  `idempotencyKey`, `expectedProjectVersion`, `brief`, `constraints`, `doneWhen`, `sceneIds` (zero
+  to 32), and `model`; `revise` additionally requires its distinct `targetSceneId`; `outline`
+  requires `targetBookId` on one active book and does not accept Capture sources; check kinds use
+  the discriminated check submission schema. Scene work may include one active `captureId`. It
+  returns `{assignment,created}`.
 - `GET /assignments?limit=100` returns bounded assignments. `GET /assignments/:id` returns the
   assignment and available current proposal, latest/active attempt, linked run and context receipt.
 - `POST /assignments/:id/attempts` accepts `expectedAssignmentVersion`, `kind` (`initial` or
@@ -547,12 +551,45 @@ own versions.
 - `POST /assignments/:id/review/open`, `PATCH /assignments/:id/review`, and
   `POST /assignments/:id/review/reject` use `expectedAssignmentVersion` and the exact `artifact`
   (`proposalId`, `artifactVersion`, `contentHash`). PATCH additionally accepts the complete
-  `character-create-v2` payload. Edits produce an immutable replacement proposal and preserve the
-  original generated artifact's lineage.
-- `POST /assignments/:id/apply` requires `expectedAssignmentVersion`, `proposalId`,
-  `expectedArtifactVersion`, `expectedProposalContentHash`, and `expectedProjectVersion`.
-  It returns `{replayed,assignment,proposal,result}` only after the atomic write. Exact repeated
-  application creates no duplicate. Changed consumed prose or story context refuses application.
+  `character-create-v2`, `scene-draft-v1`, or `story-structure-proposal-v1` payload. Edits produce
+  an immutable replacement proposal and preserve the original generated artifact's lineage.
+  Structure review edits may change semantic fields only; canonical IDs, operation IDs and expected
+  baseline remain server-owned.
+- `POST /assignments/:id/apply` always binds the exact assignment/proposal/artifact tuple.
+  Character apply additionally requires `expectedProjectVersion`. Scene apply requires an
+  `idempotencyKey` and one strict mode: `create-scene` with project/manuscript and optional complete
+  Canvas placement preconditions; `named-variant` with exact scene head plus variant name; or
+  `apply-revision` with the exact scene head. Update requests never accept a lease holder—the
+  backend derives it from the authenticated session. It returns
+  `{replayed,assignment,proposal,result}` only after the atomic write. Exact repeated application
+  creates no duplicate; changed semantics reuse refuses. Changed consumed prose/story context,
+  project/Canvas versions, scene head, lease or variant name applies nothing.
+- `taskKind: check` currently supports specialist `continuity` with an explicit
+  `applied-scene` target or exact `proposal-draft` source assignment/artifact. Check attempts use
+  the same durable start/replay route but persist trusted `story-check-findings-v1` artifacts:
+  provider candidates cannot choose finding IDs, coverage, dependency vectors or review authority.
+  Assignment detail includes read-only `checkFreshness`. `PATCH
+  /assignments/:id/review/findings/:findingId` resolves one exact finding as open, dismissed or
+  deferred; `POST /assignments/:id/review/complete` records noncanonical review completion only
+  while sources remain fresh. Checks have no apply route.
+- `taskKind: outline` uses trusted `story-structure-proposal-v1` with server-allocated operation and
+  entity IDs. Provider candidates cannot choose IDs, apply subsets, or authority.
+- `POST /assignments/:id/review/preview` (outline only) accepts `expectedAssignmentVersion`,
+  `expectedProjectVersion`, the exact structure artifact, and a non-empty unique
+  `selectedOperationIds` list. It returns a pure preview: resolved operation order, manuscript
+  before/after, created/updated scene IDs, empty genesis descriptors, narrative-anchor impact,
+  known check staleness, and optional Canvas effects. Invalid partial selection returns explicit
+  `missingRequired` operation IDs without silently widening the writer's selection. Preview performs
+  no writes and does not rerun providers.
+- Outline apply uses the same `POST /assignments/:id/apply` route with
+  `applyStructureStoryWorkRequestSchema`: exact proposal/artifact preconditions,
+  `expectedProjectVersion`, dependency-complete `selectedOperationIds`, `idempotencyKey`, and
+  optional one new-scene Canvas placement preconditions. One transaction updates project metadata
+  once, initializes empty genesis documents for new scenes, optionally places one Canvas card, and
+  records a durable result of kind `story-structure` (`resolvedOperationIds`, `createdSceneIds`,
+  `bookId`, `projectVersion`, optional `canvasPlacedSceneId`/`canvasObjectId`). Exact replay returns
+  the stored result without a second version increment. Stale project, Canvas, artifact or incomplete
+  selection applies nothing. Structure apply never writes scene prose.
 
 These are first-party human review/apply routes. They do not grant external MCP clients direct
 canonical-write authority. MCP bindings remain the later CP6 checkpoint.

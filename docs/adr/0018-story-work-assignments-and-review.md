@@ -221,3 +221,57 @@ the head once. Its caller must compose this mutation with proposal and assignmen
 outer transaction, validate context and destination freshness, and return stored results on exact
 replay. Named variants remain separate and leave working prose unchanged. These repository and
 schema prerequisites alone do not expose scene application to a writer or MCP client.
+
+
+Scene application records a paired request key and semantic fingerprint on the assignment
+(migration 0028). The fingerprint includes exact review preconditions and explicit apply mode,
+placement or variant choices; it excludes server time and allocated IDs. A replay must match the
+stored request and returns the recorded scene/revision/variant references before checking freshness
+or allocating anything new. This prevents a lost response from producing duplicate canonical work.
+Legacy character assignments remain compatible. The atomic UOW and first-party scene workflow are
+implemented locally; production migration/deployment and complete-epic acceptance remain later.
+
+### Grounded continuity checks
+
+Checks use `story-check-findings-v1`, not catalog memos or Canvas fixture lenses. Applied scene heads
+and exact `scene-draft-v1` proposal artifacts are distinct target modes. Proposal artifacts have
+their own receipt resource and bind the full immutable proposal pointer hash; a reserved New scene
+target may be assessed before it becomes canonical.
+
+The provider emits bounded candidate findings only. Core attaches trusted finding IDs, target,
+selected-scope coverage, truncation truth, revision vector and explicit downstream scene links.
+Scene/knowledge IDs must be receipt-backed, quotes must occur in provider-visible text, and block
+anchors are derived from the exact acknowledged document. Invalid evidence fails generation rather
+than becoming an ungrounded ready finding. There is no aggregate coherence score.
+
+Finding resolutions create immutable replacement proposals. A fully resolved, still-fresh check
+may become `reviewed`; it never becomes `applied` and has no canonical apply route. Current
+freshness is rebuilt from only the dependencies the check consumed. Missing or changed prose,
+intent, chapter objective, story knowledge, manuscript structure or proposal artifact yields Needs
+recheck without changing assignment status or invoking a provider. A proposal finding opens its
+source proposal with a prefilled revision request; an applied-scene finding prefills a separate
+revise assignment. Neither action auto-submits or rewrites prose.
+
+### Outline and book structure (CP4, locally verified 2026-09-13)
+
+Outline assignments (`taskKind: outline`) target one existing active book. Provider output is
+bounded candidate structure with local keys only; the trusted server lowers
+`story-structure-proposal-v1`, allocates immutable part/chapter/scene/operation IDs after validation,
+and records explicit operation dependencies. Human review may edit semantic fields (titles,
+objectives, scene intent) but never canonical IDs, operation IDs or expected baseline versions.
+
+Preview recomputes dependency closure for an exact writer-selected operation set, lowers through
+the existing project-command kernel without writes, and returns manuscript order, empty genesis
+descriptors, narrative-anchor impact and known check staleness without invoking a provider. Invalid
+partial selection refuses with explicit required operations; preview does not silently widen
+selection.
+
+Apply is one atomic unit of work across assignment/proposal, project CAS, optional Canvas placement,
+and empty genesis initialization for each new scene. Existing scene prose is never mutated.
+Structure batches advance project metadata once. Exact apply replay returns the stored
+`story-structure` result reference (`resolvedOperationIds`, `createdSceneIds`, `bookId`,
+`projectVersion`, optional Canvas scene/object IDs) before freshness checks or reallocation.
+Conflicts roll back every effect. Memory and Postgres implementations share the same contract.
+
+First-party HTTP/UI bindings and hermetic provider fixtures are implemented locally; scoped MCP
+parity for structure remains CP6. Multi-step coordination remains CP5.

@@ -839,32 +839,199 @@ export const AGENT_PROPOSAL_APPLY_CAPABILITY = Object.freeze({
   })
 }) satisfies GhostwriterCapability;
 
+const STORY_WORK_CP6_PROPOSE_EXCEPTION =
+  "Scoped proposal creation remains pending CP6 of ADR 0018; first-party invocation only in this checkpoint.";
+const STORY_WORK_CP6_READ_EXCEPTION =
+  "Scoped assignment status and context access remain pending CP6 of ADR 0018; no external binding is claimed.";
+const STORY_WORK_HUMAN_REVIEW_EXCEPTION =
+  "Human review and rejection remain first-party authority under ADR 0018.";
+const STORY_WORK_HUMAN_APPLY_EXCEPTION =
+  "Canonical story application requires explicit first-party human approval under ADR 0018.";
+const STORY_WORK_CHECK_ADVISORY_REVIEW_EXCEPTION =
+  "Advisory findings review, resolution, and completion remain first-party authority under ADR 0018; check story work has no canonical apply workflow.";
+
 /** Durable story-work bindings; scoped external proposal access is completed in CP6. */
 export const STORY_WORK_CAPABILITIES: readonly GhostwriterCapability[] = Object.freeze([
-  {
-    id: "story-work.assignment.read", title: "Resume story assignments and their exact results",
-    access: "read", scope: "project", coreUseCase: "StoryWorkAssignmentRepository.get/list",
-    bindings: { ui: "StoryWorkPanel", web: "GET /api/projects/{projectId}/story-work/assignments",
-      mcpException: "Scoped assignment status and context access remain pending CP6 of ADR 0018; no external binding is claimed." }
-  },
-  {
-    id: "story-work.character.propose", title: "Develop or revise a character from a retained brief",
-    access: "propose", scope: "project", coreUseCase: "createCharacterStoryWorkGenerationServices",
-    bindings: { ui: "StoryWorkPanel + CharacterStoryWorkReview", web: "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/attempts",
-      mcpException: "Scoped proposal creation remains pending CP6 of ADR 0018; first-party invocation only in this checkpoint." }
-  },
-  {
-    id: "story-work.character.review", title: "Review, edit or reject an exact character artifact",
-    access: "apply", scope: "project", coreUseCase: "executeCharacterStoryWorkReview",
-    bindings: { ui: "CharacterStoryWorkReview", web: "/api/projects/{projectId}/story-work/assignments/{assignmentId}/review",
-      mcpException: "Human review and rejection remain first-party authority under ADR 0018." }
-  },
-  {
-    id: "story-work.character.apply", title: "Add the reviewed character to Cast once",
-    access: "apply", scope: "project", coreUseCase: "validateCharacterStoryWorkApply",
-    bindings: { ui: "CharacterStoryWorkReview", web: "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/apply",
-      mcpException: "Canonical story application requires explicit first-party human approval under ADR 0018." }
-  }
+  Object.freeze({
+    id: "story-work.assignment.read",
+    title: "Resume story assignments and their exact results",
+    access: "read",
+    scope: "project",
+    coreUseCase: "StoryWorkAssignmentRepository.get/list",
+    bindings: Object.freeze({
+      ui: "StoryWorkPanel",
+      web:
+        "GET /api/projects/{projectId}/story-work/assignments + GET /api/projects/{projectId}/story-work/assignments/{assignmentId}",
+      mcpException: STORY_WORK_CP6_READ_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.character.propose",
+    title: "Develop or revise a character from a retained brief",
+    access: "propose",
+    scope: "project",
+    coreUseCase: "createCharacterStoryWorkGenerationServices",
+    bindings: Object.freeze({
+      ui: "StoryWorkPanel + CharacterStoryWorkReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments (taskKind character) + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/attempts",
+      mcpException: STORY_WORK_CP6_PROPOSE_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.character.review",
+    title: "Review, edit or reject an exact character artifact",
+    access: "apply",
+    scope: "project",
+    coreUseCase: "executeCharacterStoryWorkReview",
+    bindings: Object.freeze({
+      ui: "CharacterStoryWorkReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/open + PATCH /api/projects/{projectId}/story-work/assignments/{assignmentId}/review + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/reject",
+      mcpException: STORY_WORK_HUMAN_REVIEW_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.character.apply",
+    title: "Add the reviewed character to Cast once",
+    access: "apply",
+    scope: "project",
+    coreUseCase: "validateCharacterStoryWorkApply",
+    bindings: Object.freeze({
+      ui: "CharacterStoryWorkReview",
+      web: "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/apply",
+      mcpException: STORY_WORK_HUMAN_APPLY_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.scene.propose",
+    title: "Draft a new scene or revise an existing scene from a retained brief",
+    access: "propose",
+    scope: "project",
+    coreUseCase: "createSceneStoryWorkGenerationServices",
+    bindings: Object.freeze({
+      ui: "StoryWorkPanel + SceneStoryWorkReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments (taskKind scene|revise) + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/attempts",
+      mcpException: STORY_WORK_CP6_PROPOSE_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.scene.review",
+    title: "Review, edit or reject an exact scene-draft artifact",
+    access: "apply",
+    scope: "project",
+    coreUseCase: "executeSceneStoryWorkReview",
+    bindings: Object.freeze({
+      ui: "SceneStoryWorkReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/open + PATCH /api/projects/{projectId}/story-work/assignments/{assignmentId}/review + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/reject",
+      mcpException: STORY_WORK_HUMAN_REVIEW_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.scene.apply",
+    title: "Apply reviewed scene work to canonical manuscript, variant, or revision history",
+    access: "apply",
+    scope: "project",
+    coreUseCase: "validateSceneStoryWorkApply",
+    bindings: Object.freeze({
+      ui: "SceneStoryWorkReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/apply (mode create-scene|named-variant|apply-revision)",
+      mcpException: STORY_WORK_HUMAN_APPLY_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.structure.propose",
+    title: "Propose typed book structure from a retained outline brief",
+    access: "propose",
+    scope: "project",
+    coreUseCase: "createStoryStructureGenerationServices",
+    bindings: Object.freeze({
+      ui: "StoryWorkPanel + StoryStructureReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments (taskKind outline) + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/attempts",
+      mcpException: STORY_WORK_CP6_PROPOSE_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.structure.review",
+    title: "Review, edit or reject an exact typed structure proposal",
+    access: "apply",
+    scope: "project",
+    coreUseCase: "executeStoryStructureStoryWorkReview",
+    bindings: Object.freeze({
+      ui: "StoryStructureReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/open + PATCH /api/projects/{projectId}/story-work/assignments/{assignmentId}/review + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/reject",
+      mcpException: STORY_WORK_HUMAN_REVIEW_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.structure.preview",
+    title: "Preview a dependency-complete structure subset without mutation",
+    access: "read",
+    scope: "project",
+    coreUseCase: "previewStoryStructureProposal",
+    bindings: Object.freeze({
+      ui: "StoryStructureReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/preview",
+      mcpException: STORY_WORK_CP6_READ_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.structure.apply",
+    title: "Atomically apply reviewed structure and optional Canvas placement",
+    access: "apply",
+    scope: "project",
+    coreUseCase: "validateStructureStoryWorkApply",
+    bindings: Object.freeze({
+      ui: "StoryStructureReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/apply (outline structure subset)",
+      mcpException: STORY_WORK_HUMAN_APPLY_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.check.propose",
+    title: "Run a continuity check from a retained brief and selected evidence",
+    access: "propose",
+    scope: "project",
+    coreUseCase: "createStoryCheckGenerationServices",
+    bindings: Object.freeze({
+      ui: "StoryWorkPanel + StoryCheckReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments (taskKind check) + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/attempts",
+      mcpException: STORY_WORK_CP6_PROPOSE_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.check.freshness.read",
+    title: "Read stored continuity-check evidence freshness for an assignment",
+    access: "read",
+    scope: "project",
+    coreUseCase: "evaluateStoredStoryCheckPayloadFreshness",
+    bindings: Object.freeze({
+      ui: "StoryCheckReview",
+      web: "GET /api/projects/{projectId}/story-work/assignments/{assignmentId} (checkFreshness)",
+      mcpException: STORY_WORK_CP6_READ_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.check.review",
+    title: "Open, resolve, or complete noncanonical advisory check findings",
+    access: "apply",
+    scope: "project",
+    coreUseCase: "executeStoryCheckReview",
+    bindings: Object.freeze({
+      ui: "StoryCheckReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/open + PATCH /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/findings/{findingId} + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/complete",
+      mcpException: STORY_WORK_CHECK_ADVISORY_REVIEW_EXCEPTION
+    })
+  })
 ]);
 
 export const GHOSTWRITER_CAPABILITIES: readonly GhostwriterCapability[] = Object.freeze([

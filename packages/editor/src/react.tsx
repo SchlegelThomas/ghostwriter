@@ -22,6 +22,10 @@ import {
   generateBlockId,
   validateSceneDocumentV1,
 } from "./document.js";
+import {
+  applyBlockFocusInEditorView,
+  findTopLevelBlockTextSelection,
+} from "./focus-block.js";
 import { clampEditorSelection } from "./selection.js";
 import {
   SCENE_DOCUMENT_SCHEMA_VERSION,
@@ -34,6 +38,12 @@ export { clampEditorSelection } from "./selection.js";
 export type SceneEditorInsertRequest = Readonly<{
   id: number;
   text: string;
+}>;
+
+/** Request token — bump `id` to focus a top-level block by stable block id. */
+export type SceneEditorFocusBlockRequest = Readonly<{
+  id: number | string;
+  blockId: string;
 }>;
 
 export const SCENE_EDITOR_CLASS_NAMES = {
@@ -66,6 +76,8 @@ export interface SceneEditorProps {
   readonly selectionStorageKey?: string;
   /** Dictation / assist insert at the current selection (id must change each request). */
   readonly insertTextRequest?: SceneEditorInsertRequest;
+  /** Evidence / navigation focus for a top-level block (id must change each request). Selection and scroll only — works while read-only. */
+  readonly focusBlockRequest?: SceneEditorFocusBlockRequest;
   /** When false (default), formatting controls stay collapsed behind Aa. */
   readonly defaultFormattingToolbarOpen?: boolean;
 }
@@ -292,6 +304,7 @@ export function SceneEditor({
   style,
   selectionStorageKey,
   insertTextRequest,
+  focusBlockRequest,
   defaultFormattingToolbarOpen = false,
 }: SceneEditorProps) {
   const [formattingOpen, setFormattingOpen] = useState(
@@ -515,6 +528,64 @@ export function SceneEditor({
     editor.chain().focus().insertContent(insertTextRequest.text).run();
   }, [editor, insertTextRequest, isEditable]);
 
+  const lastFocusBlockRequestIdRef = useRef<number | string | undefined>(
+    undefined,
+  );
+  const [appliedFocusBlockId, setAppliedFocusBlockId] = useState<
+    string | undefined
+  >(undefined);
+  useEffect(() => {
+    if (focusBlockRequest === undefined) {
+      setAppliedFocusBlockId(undefined);
+    }
+  }, [focusBlockRequest]);
+  useEffect(() => {
+    if (
+      editor === null ||
+      editor.isDestroyed ||
+      focusBlockRequest === undefined ||
+      focusBlockRequest.blockId.length === 0 ||
+      focusBlockRequest.id === lastFocusBlockRequestIdRef.current
+    ) {
+      return;
+    }
+
+    const selection = findTopLevelBlockTextSelection(
+      editor.state.doc,
+      focusBlockRequest.blockId,
+    );
+    if (selection === undefined) {
+      return;
+    }
+
+    lastFocusBlockRequestIdRef.current = focusBlockRequest.id;
+    hasRestoredSelectionRef.current = true;
+    focusOnNextRestoreRef.current = false;
+    suppressSelectionWriteRef.current = true;
+    applyBlockFocusInEditorView(
+      editor.view,
+      editor.state,
+      selection,
+      focusBlockRequest.blockId,
+    );
+    editor.commands.scrollIntoView();
+    setAppliedFocusBlockId(focusBlockRequest.blockId);
+    const finish = () => {
+      suppressSelectionWriteRef.current = false;
+      if (!editor.isDestroyed) {
+        writeStoredSelection(
+          selectionStorageKeyRef.current,
+          editor.state.selection,
+        );
+      }
+    };
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(finish);
+    } else {
+      queueMicrotask(finish);
+    }
+  }, [canonicalValue, editor, focusBlockRequest]);
+
   if (ariaLabel.trim().length === 0) {
     throw new Error("SceneEditor requires a non-empty ariaLabel.");
   }
@@ -539,6 +610,9 @@ export function SceneEditor({
     <div
       className={joinClassNames(SCENE_EDITOR_CLASS_NAMES.root, className)}
       data-ghostwriter-editor="ready"
+      {...(appliedFocusBlockId === undefined
+        ? {}
+        : { "data-ghostwriter-focused-block-id": appliedFocusBlockId })}
       style={{ ...ROOT_STYLE, ...style }}
     >
       <div

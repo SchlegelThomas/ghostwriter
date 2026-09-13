@@ -6,6 +6,19 @@ import type {
   CharacterStoryWorkApplyResult,
   CharacterStoryWorkGenerationResult,
   CharacterStoryWorkReviewResult,
+  SceneDraftV1,
+  SceneStoryWorkApplyResult,
+  SceneStoryWorkGenerationResult,
+  SceneStoryWorkReviewResult,
+  StoryCheckFindingResolution,
+  StoryCheckGenerationResult,
+  StoryCheckReviewResult,
+  StoryCheckStoredPayloadFreshness,
+  StoryStructureGenerationResult,
+  StoryStructurePreview,
+  StoryStructureProposalV1,
+  StoryStructureStoryWorkReviewResult,
+  StructureStoryWorkApplyResult,
   StoryWorkAssignment,
   StoryWorkAttempt,
   StoryWorkArtifactPointer,
@@ -88,8 +101,11 @@ export type SceneHeadMetadataResponse = Readonly<
 
 export type SceneRevisionReason =
   | "genesis"
+  | "capture-promotion"
+  | "named-variant"
   | "checkpoint"
   | "idle-checkpoint"
+  | "agent-apply"
   | "restore"
   | "schema-migration";
 
@@ -2323,6 +2339,7 @@ export type StoryWorkDetailResponse = Readonly<{
   run?: AgentRun;
   receipt?: ContextReceipt;
   attempt?: StoryWorkAttempt;
+  checkFreshness?: StoryCheckStoredPayloadFreshness;
 }>;
 
 function storyWorkPath(projectId: string, suffix = ""): string {
@@ -2343,7 +2360,7 @@ export function createCharacterStoryWorkAssignment(input: Readonly<{
   brief: string; constraints: string; doneWhen: string; sceneIds: readonly string[]; model: string;
 }>): Promise<Readonly<{ assignment: StoryWorkAssignment; created: boolean }>> {
   const { projectId, ...body } = input;
-  return requestJson(storyWorkPath(projectId), jsonRequest("POST", body));
+  return requestJson(storyWorkPath(projectId), jsonRequest("POST", { ...body, taskKind: "character" }));
 }
 
 export function startCharacterStoryWorkAttempt(input: Readonly<{
@@ -2368,4 +2385,280 @@ export function applyCharacterStoryWork(input: Readonly<{
 }>): Promise<CharacterStoryWorkApplyResult> {
   const { projectId, assignmentId, ...body } = input;
   return requestJson(storyWorkPath(projectId, `/${encodeURIComponent(assignmentId)}/apply`), jsonRequest("POST", body));
+}
+
+export type ApplySceneStoryWorkArtifactBase = Readonly<{
+  expectedAssignmentVersion: number;
+  proposalId: string;
+  expectedArtifactVersion: number;
+  expectedProposalContentHash: string;
+  idempotencyKey: string;
+}>;
+
+export type ApplySceneStoryWorkManuscriptPlacement =
+  | Readonly<{ kind: "chapter"; bookId: string; chapterId: string; position?: number }>
+  | Readonly<{ kind: "unassigned"; bookId: string; position?: number }>;
+
+export type ApplySceneStoryWorkCanvasPlacement = Readonly<{
+  expectedCanvasVersion: number;
+  scope: CanvasScopeRef;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  z: number;
+  parentRegionId?: string;
+  storyOrderHint?: number;
+}>;
+
+export type ApplySceneStoryWorkCreateRequest = ApplySceneStoryWorkArtifactBase &
+  Readonly<{
+    mode: "create-scene";
+    expectedProjectVersion: number;
+    title: string;
+    manuscriptPlacement: ApplySceneStoryWorkManuscriptPlacement;
+    canvas?: ApplySceneStoryWorkCanvasPlacement;
+  }>;
+
+export type ApplySceneStoryWorkExistingSceneBase = ApplySceneStoryWorkArtifactBase &
+  Readonly<{
+    expectedSceneWorkingVersion: number;
+    expectedSceneContentHash: string;
+  }>;
+
+export type ApplySceneStoryWorkNamedVariantRequest = ApplySceneStoryWorkExistingSceneBase &
+  Readonly<{
+    mode: "named-variant";
+    variantName: string;
+  }>;
+
+export type ApplySceneStoryWorkApplyRevisionRequest = ApplySceneStoryWorkExistingSceneBase &
+  Readonly<{ mode: "apply-revision" }>;
+
+export type ApplySceneStoryWorkRequest =
+  | ApplySceneStoryWorkCreateRequest
+  | ApplySceneStoryWorkNamedVariantRequest
+  | ApplySceneStoryWorkApplyRevisionRequest;
+
+export function applySceneStoryWork(
+  input: Readonly<{ projectId: string; assignmentId: string }> & ApplySceneStoryWorkRequest
+): Promise<SceneStoryWorkApplyResult> {
+  const { projectId, assignmentId, ...body } = input;
+  return requestJson(
+    storyWorkPath(projectId, `/${encodeURIComponent(assignmentId)}/apply`),
+    jsonRequest("POST", body)
+  );
+}
+
+export function createSceneStoryWorkAssignment(input: Readonly<{
+  projectId: string; expectedProjectVersion: number; idempotencyKey: string;
+  brief: string; constraints: string; doneWhen: string; sceneIds: readonly string[]; model: string;
+  captureId?: string;
+}> & (Readonly<{ taskKind: "scene" }> | Readonly<{ taskKind: "revise"; targetSceneId: string }>)):
+Promise<Readonly<{ assignment: StoryWorkAssignment; created: boolean }>> {
+  const { projectId, ...body } = input;
+  return requestJson(storyWorkPath(projectId), jsonRequest("POST", body));
+}
+
+export function startSceneStoryWorkAttempt(input: Parameters<typeof startCharacterStoryWorkAttempt>[0]): Promise<SceneStoryWorkGenerationResult> {
+  const { projectId, assignmentId, ...body } = input;
+  return requestJson(storyWorkPath(projectId, `/${encodeURIComponent(assignmentId)}/attempts`), jsonRequest("POST", body));
+}
+
+export function reviewSceneStoryWork(input: Readonly<{
+  projectId: string; assignmentId: string; expectedAssignmentVersion: number;
+  artifact: StoryWorkArtifactPointer;
+}> & (Readonly<{ action: "open" | "reject" }> | Readonly<{ action: "edit"; payload: SceneDraftV1 }>)): Promise<SceneStoryWorkReviewResult> {
+  const { projectId, assignmentId, action, ...body } = input;
+  return requestJson(storyWorkPath(projectId, `/${encodeURIComponent(assignmentId)}/review${action === "edit" ? "" : `/${action}`}`), jsonRequest(action === "edit" ? "PATCH" : "POST", body));
+}
+
+type CreateCheckStoryWorkAssignmentBase = Readonly<{
+  projectId: string;
+  expectedProjectVersion: number;
+  idempotencyKey: string;
+  brief: string;
+  constraints: string;
+  doneWhen: string;
+  sceneIds: readonly string[];
+  model: string;
+  targetSceneId: string;
+}>;
+
+export function createCheckStoryWorkAssignment(
+  input: CreateCheckStoryWorkAssignmentBase &
+    (
+      | Readonly<{ checkMode: "applied-scene" }>
+      | Readonly<{
+          checkMode: "proposal-draft";
+          sourceAssignmentId: string;
+          sourceArtifact: StoryWorkArtifactPointer;
+        }>
+    )
+): Promise<Readonly<{ assignment: StoryWorkAssignment; created: boolean }>> {
+  const { projectId, ...body } = input;
+  return requestJson(
+    storyWorkPath(projectId),
+    jsonRequest("POST", { ...body, taskKind: "check", specialist: "continuity" })
+  );
+}
+
+export function startStoryCheckAttempt(input: Readonly<{
+  projectId: string;
+  assignmentId: string;
+  expectedAssignmentVersion: number;
+  kind: "initial";
+  sourceMode: "submitted-snapshot";
+  instruction: string;
+  idempotencyKey: string;
+}>): Promise<StoryCheckGenerationResult> {
+  const { projectId, assignmentId, ...body } = input;
+  return requestJson(
+    storyWorkPath(projectId, `/${encodeURIComponent(assignmentId)}/attempts`),
+    jsonRequest("POST", body)
+  );
+}
+
+export function openStoryCheckReview(input: Readonly<{
+  projectId: string;
+  assignmentId: string;
+  expectedAssignmentVersion: number;
+  artifact: StoryWorkArtifactPointer;
+}>): Promise<StoryCheckReviewResult> {
+  const { projectId, assignmentId, ...body } = input;
+  return requestJson(
+    storyWorkPath(projectId, `/${encodeURIComponent(assignmentId)}/review/open`),
+    jsonRequest("POST", body)
+  );
+}
+
+export function resolveStoryCheckFinding(input: Readonly<{
+  projectId: string;
+  assignmentId: string;
+  findingId: string;
+  expectedAssignmentVersion: number;
+  artifact: StoryWorkArtifactPointer;
+  resolution: StoryCheckFindingResolution;
+}>): Promise<StoryCheckReviewResult> {
+  const { projectId, assignmentId, findingId, ...body } = input;
+  return requestJson(
+    storyWorkPath(
+      projectId,
+      `/${encodeURIComponent(assignmentId)}/review/findings/${encodeURIComponent(findingId)}`
+    ),
+    jsonRequest("PATCH", body)
+  );
+}
+
+export function completeStoryCheckReview(input: Readonly<{
+  projectId: string;
+  assignmentId: string;
+  expectedAssignmentVersion: number;
+  artifact: StoryWorkArtifactPointer;
+}>): Promise<StoryCheckReviewResult> {
+  const { projectId, assignmentId, ...body } = input;
+  return requestJson(
+    storyWorkPath(projectId, `/${encodeURIComponent(assignmentId)}/review/complete`),
+    jsonRequest("POST", body)
+  );
+}
+
+export function createOutlineStoryWorkAssignment(input: Readonly<{
+  projectId: string;
+  expectedProjectVersion: number;
+  idempotencyKey: string;
+  brief: string;
+  constraints: string;
+  doneWhen: string;
+  sceneIds: readonly string[];
+  model: string;
+  targetBookId: string;
+}>): Promise<Readonly<{ assignment: StoryWorkAssignment; created: boolean }>> {
+  const { projectId, ...body } = input;
+  return requestJson(
+    storyWorkPath(projectId),
+    jsonRequest("POST", { ...body, taskKind: "outline" })
+  );
+}
+
+export function startStoryStructureAttempt(input: Readonly<{
+  projectId: string;
+  assignmentId: string;
+  expectedAssignmentVersion: number;
+  kind: "initial";
+  sourceMode: "submitted-snapshot";
+  instruction: string;
+  idempotencyKey: string;
+}>): Promise<StoryStructureGenerationResult> {
+  const { projectId, assignmentId, ...body } = input;
+  return requestJson(
+    storyWorkPath(projectId, `/${encodeURIComponent(assignmentId)}/attempts`),
+    jsonRequest("POST", body)
+  );
+}
+
+export function reviewStoryStructureStoryWork(input: Readonly<{
+  projectId: string;
+  assignmentId: string;
+  expectedAssignmentVersion: number;
+  artifact: StoryWorkArtifactPointer;
+}> & (
+  | Readonly<{ action: "open" | "reject" }>
+  | Readonly<{ action: "edit"; payload: StoryStructureProposalV1 }>
+)): Promise<StoryStructureStoryWorkReviewResult> {
+  const { projectId, assignmentId, action, ...body } = input;
+  return requestJson(
+    storyWorkPath(
+      projectId,
+      `/${encodeURIComponent(assignmentId)}/review${action === "edit" ? "" : `/${action}`}`
+    ),
+    jsonRequest(action === "edit" ? "PATCH" : "POST", body)
+  );
+}
+
+export function previewStoryStructureStoryWork(input: Readonly<{
+  projectId: string;
+  assignmentId: string;
+  expectedAssignmentVersion: number;
+  expectedProjectVersion: number;
+  artifact: StoryWorkArtifactPointer;
+  selectedOperationIds: readonly string[];
+}>): Promise<Readonly<{ preview: StoryStructurePreview }>> {
+  const { projectId, assignmentId, ...body } = input;
+  return requestJson(
+    storyWorkPath(projectId, `/${encodeURIComponent(assignmentId)}/review/preview`),
+    jsonRequest("POST", body)
+  );
+}
+
+export type ApplyStructureStoryWorkCanvasPlacement = Readonly<{
+  expectedCanvasVersion: number;
+  sceneId: string;
+  scope: CanvasScopeRef;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  z: number;
+  parentRegionId?: string;
+  storyOrderHint?: number;
+}>;
+
+export function applyStructureStoryWork(input: Readonly<{
+  projectId: string;
+  assignmentId: string;
+  expectedAssignmentVersion: number;
+  proposalId: string;
+  expectedArtifactVersion: number;
+  expectedProposalContentHash: string;
+  expectedProjectVersion: number;
+  selectedOperationIds: readonly string[];
+  idempotencyKey: string;
+  canvas?: ApplyStructureStoryWorkCanvasPlacement;
+}>): Promise<StructureStoryWorkApplyResult> {
+  const { projectId, assignmentId, ...body } = input;
+  return requestJson(
+    storyWorkPath(projectId, `/${encodeURIComponent(assignmentId)}/apply`),
+    jsonRequest("POST", body)
+  );
 }

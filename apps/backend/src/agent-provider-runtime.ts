@@ -12,6 +12,9 @@ import {
   createCaptureReflectionServices,
   createCaptureServices,
   createCharacterStoryWorkGenerationServices,
+  createSceneStoryWorkGenerationServices,
+  createStoryCheckGenerationServices,
+  createStoryStructureGenerationServices,
   createCatalogAgentServices,
   createCatalogPlaybookOverrideServices,
   createCraftPartnerServices,
@@ -53,6 +56,9 @@ import {
   type ProviderCredentialValidationState,
   type ProviderId,
   type SceneDocumentRepository,
+  type SceneStoryWorkStructuredCompletionProvider,
+  type StoryCheckStructuredCompletionProvider,
+  type StoryStructureStructuredCompletionProvider,
   type StoryKnowledgeCreateDraftServices
 } from "@ghostwriter/core";
 import {
@@ -65,6 +71,14 @@ import {
   createPostgresCharacterStoryWorkApplyUnitOfWork,
   createPostgresCharacterStoryWorkGenerationUnitOfWork,
   createPostgresCharacterStoryWorkReviewUnitOfWork,
+  createPostgresSceneStoryWorkApplyUnitOfWork,
+  createPostgresSceneStoryWorkGenerationUnitOfWork,
+  createPostgresSceneStoryWorkReviewUnitOfWork,
+  createPostgresStoryCheckGenerationUnitOfWork,
+  createPostgresStoryCheckReviewUnitOfWork,
+  createPostgresStoryStructureGenerationUnitOfWork,
+  createPostgresStoryStructureStoryWorkReviewUnitOfWork,
+  createPostgresStructureStoryWorkApplyUnitOfWork,
   createPostgresMcpGrantRepository,
   createPostgresProjectAgentInstructionsRepository,
   createPostgresProjectPlaybookRepository,
@@ -147,7 +161,10 @@ export type AgentProviderRuntime = Readonly<{
   }>): Promise<
     CaptureReflectionStructuredCompletionProvider &
       CraftPartnerStructuredCompletionProvider &
-      CharacterStoryWorkStructuredCompletionProvider
+      CharacterStoryWorkStructuredCompletionProvider &
+      SceneStoryWorkStructuredCompletionProvider &
+      StoryCheckStructuredCompletionProvider &
+      StoryStructureStructuredCompletionProvider
   >;
   createCompletionProviderForModel(input: Readonly<{
     accountId: AccountId;
@@ -157,7 +174,10 @@ export type AgentProviderRuntime = Readonly<{
   }>): Promise<
     CaptureReflectionStructuredCompletionProvider &
       CraftPartnerStructuredCompletionProvider &
-      CharacterStoryWorkStructuredCompletionProvider
+      CharacterStoryWorkStructuredCompletionProvider &
+      SceneStoryWorkStructuredCompletionProvider &
+      StoryCheckStructuredCompletionProvider &
+      StoryStructureStructuredCompletionProvider
   >;
   /** @deprecated Prefer {@link AgentProviderRuntime.createCompletionProviderForModel}. */
   createOpenAiCompletionProvider(input: Readonly<{
@@ -166,7 +186,10 @@ export type AgentProviderRuntime = Readonly<{
   }>): Promise<
     CaptureReflectionStructuredCompletionProvider &
       CraftPartnerStructuredCompletionProvider &
-      CharacterStoryWorkStructuredCompletionProvider
+      CharacterStoryWorkStructuredCompletionProvider &
+      SceneStoryWorkStructuredCompletionProvider &
+      StoryCheckStructuredCompletionProvider &
+      StoryStructureStructuredCompletionProvider
   >;
   /** Decrypts a provider key for ephemeral adapter calls (never log/return). */
   resolveProviderApiKey(input: Readonly<{
@@ -215,7 +238,10 @@ function toStructuredCompletionProvider(
   provider: StructuredCompletionProvider
 ): CaptureReflectionStructuredCompletionProvider &
   CraftPartnerStructuredCompletionProvider &
-  CharacterStoryWorkStructuredCompletionProvider {
+  CharacterStoryWorkStructuredCompletionProvider &
+  SceneStoryWorkStructuredCompletionProvider &
+  StoryCheckStructuredCompletionProvider &
+  StoryStructureStructuredCompletionProvider {
   return Object.freeze({
     async completeStructured(input: Readonly<{
       workflow: string;
@@ -248,7 +274,10 @@ function toStructuredCompletionProvider(
     }
   }) as CaptureReflectionStructuredCompletionProvider &
     CraftPartnerStructuredCompletionProvider &
-    CharacterStoryWorkStructuredCompletionProvider;
+    CharacterStoryWorkStructuredCompletionProvider &
+    SceneStoryWorkStructuredCompletionProvider &
+    StoryCheckStructuredCompletionProvider &
+    StoryStructureStructuredCompletionProvider;
 }
 
 function asValidationFactory(
@@ -420,34 +449,98 @@ export function createAgentProviderRuntime(
   });
   const storyWorkAssignments = createPostgresStoryWorkAssignmentRepository(input.db);
   const storyWorkAttempts = createPostgresStoryWorkAttemptRepository(input.db);
-  const storyWorkGeneration =
+  const characterStoryWorkGeneration =
     createPostgresCharacterStoryWorkGenerationUnitOfWork(input.db);
+  const sceneStoryWorkGeneration =
+    createPostgresSceneStoryWorkGenerationUnitOfWork(input.db);
+  const storyCheckGeneration = createPostgresStoryCheckGenerationUnitOfWork(input.db);
+  const structureStoryWorkGeneration =
+    createPostgresStoryStructureGenerationUnitOfWork(input.db);
   const storyWork = Object.freeze({
     projects: input.projects,
     sceneDocuments: input.sceneDocuments,
+    captureDocuments: input.captureDocuments,
     assignments: storyWorkAssignments,
     attempts: storyWorkAttempts,
     proposals,
     runs,
     receipts,
-    generation: createCharacterStoryWorkGenerationServices({
+    characterGeneration: createCharacterStoryWorkGenerationServices({
       projects: input.projects,
       assignments: storyWorkAssignments,
       proposals,
       guidance: agentGuidance,
-      generation: storyWorkGeneration,
+      generation: characterStoryWorkGeneration,
       hashPort,
       ids: input.ids,
       clock: input.clock
     }),
-    generationReplay: storyWorkGeneration,
-    review: createPostgresCharacterStoryWorkReviewUnitOfWork({
+    characterGenerationReplay: characterStoryWorkGeneration,
+    characterReview: createPostgresCharacterStoryWorkReviewUnitOfWork({
+      db: input.db,
+      ids: input.ids,
+      hashPort
+    }),
+    sceneGeneration: createSceneStoryWorkGenerationServices({
+      projects: input.projects,
+      assignments: storyWorkAssignments,
+      proposals,
+      guidance: agentGuidance,
+      generation: sceneStoryWorkGeneration,
+      hashPort,
+      ids: input.ids,
+      clock: input.clock
+    }),
+    sceneGenerationReplay: sceneStoryWorkGeneration,
+    sceneReview: createPostgresSceneStoryWorkReviewUnitOfWork({
+      db: input.db,
+      ids: input.ids,
+      hashPort
+    }),
+    checkGeneration: createStoryCheckGenerationServices({
+      projects: input.projects,
+      assignments: storyWorkAssignments,
+      proposals,
+      guidance: agentGuidance,
+      generation: storyCheckGeneration,
+      hashPort,
+      ids: input.ids,
+      clock: input.clock
+    }),
+    checkGenerationReplay: storyCheckGeneration,
+    checkReview: createPostgresStoryCheckReviewUnitOfWork({
+      db: input.db,
+      ids: input.ids,
+      hashPort
+    }),
+    structureGeneration: createStoryStructureGenerationServices({
+      projects: input.projects,
+      assignments: storyWorkAssignments,
+      proposals,
+      guidance: agentGuidance,
+      generation: structureStoryWorkGeneration,
+      hashPort,
+      ids: input.ids,
+      clock: input.clock
+    }),
+    structureGenerationReplay: structureStoryWorkGeneration,
+    structureReview: createPostgresStoryStructureStoryWorkReviewUnitOfWork({
+      db: input.db,
+      ids: input.ids,
+      hashPort
+    }),
+    structureApply: createPostgresStructureStoryWorkApplyUnitOfWork({
       db: input.db,
       ids: input.ids,
       hashPort
     }),
     apply: createPostgresCharacterStoryWorkApplyUnitOfWork({
       db: input.db,
+      hashPort
+    }),
+    sceneApply: createPostgresSceneStoryWorkApplyUnitOfWork({
+      db: input.db,
+      ids: input.ids,
       hashPort
     }),
     hashPort,
@@ -574,7 +667,10 @@ export function createAgentProviderRuntime(
   }>): Promise<
     CaptureReflectionStructuredCompletionProvider &
       CraftPartnerStructuredCompletionProvider &
-      CharacterStoryWorkStructuredCompletionProvider
+      CharacterStoryWorkStructuredCompletionProvider &
+      SceneStoryWorkStructuredCompletionProvider &
+      StoryCheckStructuredCompletionProvider &
+      StoryStructureStructuredCompletionProvider
   > {
     const plaintext = await decryptProviderApiKey(
       completionInput.accountId,

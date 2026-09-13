@@ -331,6 +331,33 @@ Canvas inspection is distinct from the active writing scene. Create/place comman
 include an initial typed scope placement in the same board version transaction; invalid new scope
 references are refused. Scope placement grants visibility independently of a story edge, with legacy
 graph visibility preserved during compatibility work. Scoped geometry uses one completed command;
-Undo traverses writer actions while retaining append-only audit snapshots. Full checkpoint acceptance,
-assignment persistence and narrative context are still in progress; this section does not claim the
-entire ADR is implemented.
+Undo traverses writer actions while retaining append-only audit snapshots.
+
+Durable assignments, attempts and immutable reviewed artifacts now support the local character and
+scene checkpoints. Scene apply is one transaction across the assignment/proposal and its
+mode-specific canonical stores: project + genesis + optional Canvas for create, scene revision +
+variant for a named variant, or leased working-head replacement for an applied revision. Exact
+request replay is recorded on the assignment; update lease authority comes only from the
+authenticated session. Provider work remains outside these transactions.
+
+Continuity checks use the same durable assignment/run/receipt/proposal spine but no canonical apply
+path. The provider returns candidate findings only; core attaches server IDs, exact target,
+receipt-derived coverage, validated scene/quote/block evidence, explicit dependency vectors and
+known downstream scene links before persistence. Applied scene heads and noncanonical scene
+proposals are distinct target modes. Freshness rebuilds only consumed dependencies and is a
+read-only projection; changed prose/intent/structure marks Needs recheck without spending or
+mutating assignment status. Finding resolution creates immutable review proposal versions, while
+review completion records `reviewed`, not `applied`.
+
+Outline/structure work (`taskKind: outline`) adds `story-structure-proposal-v1`: provider-local
+candidates lower to trusted operations with immutable server IDs, explicit dependency edges and
+semantic-only human review edits. Pure preview lowers selected operations through the existing
+project-command kernel without writes, surfaces manuscript/narrative-anchor/check-staleness impact,
+and refuses incomplete selections with explicit required operations. Apply is one project CAS plus
+optional Canvas transaction: empty genesis for each new scene, no prose mutation, durable
+`story-structure` result references (resolved operations, created scenes, versions, optional Canvas
+IDs) with exact replay in memory/Postgres UOWs. Check-impact preview is read-only and does not rerun
+providers.
+
+Multi-step coordination (CP5) and scoped MCP parity (CP6) remain in progress; this section does
+not claim the entire ADR or epic is complete.

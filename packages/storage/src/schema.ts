@@ -982,6 +982,8 @@ export const storyWorkAssignments = pgTable(
     generatedArtifact: jsonb("generated_artifact"),
     currentArtifact: jsonb("current_artifact"),
     results: jsonb("results").notNull(),
+    applyIdempotencyKey: text("apply_idempotency_key"),
+    applyRequestFingerprint: text("apply_request_fingerprint"),
     idempotencyKey: text("idempotency_key").notNull(),
     requestFingerprint: text("request_fingerprint").notNull(),
     createdAt: text("created_at").notNull(),
@@ -1016,7 +1018,8 @@ export const storyWorkAssignments = pgTable(
         and jsonb_typeof(${table.steps}) = 'array'
         and jsonb_typeof(${table.results}) = 'array'
         and (${table.generatedArtifact} is null or jsonb_typeof(${table.generatedArtifact}) = 'object')
-        and (${table.currentArtifact} is null or jsonb_typeof(${table.currentArtifact}) = 'object')`
+        and (${table.currentArtifact} is null or jsonb_typeof(${table.currentArtifact}) = 'object')
+        and ((${table.applyIdempotencyKey} is null) = (${table.applyRequestFingerprint} is null))`
     ),
     check(
       "story_work_assignments_active_attempt_check",

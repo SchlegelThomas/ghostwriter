@@ -194,6 +194,21 @@ export function createMemoryStoryWorkAssignmentRepository(): StoryWorkAssignment
         ) {
           return { ok: false, reason: "version-conflict" };
         }
+        const currentHasApplyIdentity =
+          stored.assignment.applyIdempotencyKey !== undefined;
+        const changesApplyIdentity =
+          next.applyIdempotencyKey !== stored.assignment.applyIdempotencyKey ||
+          next.applyRequestFingerprint !==
+            stored.assignment.applyRequestFingerprint;
+        if (
+          (currentHasApplyIdentity && changesApplyIdentity) ||
+          (stored.assignment.status === "applied" && changesApplyIdentity) ||
+          (!currentHasApplyIdentity &&
+            changesApplyIdentity &&
+            next.status !== "applied")
+        ) {
+          return { ok: false, reason: "version-conflict" };
+        }
         assignments.set(next.id, {
           assignment: next,
           requestFingerprint: stored.requestFingerprint

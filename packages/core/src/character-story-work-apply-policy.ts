@@ -1,8 +1,6 @@
-import { canonicalJsonStringify } from "./agent-canonical-json.js";
 import type { ContextReceipt } from "./agent-context-receipt.js";
 import {
   CHARACTER_STORY_WORK_WORKFLOW_ID,
-  instructionContentHash,
   type AsyncHashPort
 } from "./agent-domain.js";
 import {
@@ -38,19 +36,16 @@ import {
 } from "./project-repository.js";
 import type { SceneDocumentHead } from "./scene-documents.js";
 import {
-  assembleStoryStructureResource,
-  type StoryContextReceiptResource
-} from "./story-context-receipt.js";
-import { storyContextFromProjectRecords } from "./story-context.js";
+  validateStoryWorkApplyBindings,
+  validateStoryWorkReceiptFreshness
+} from "./story-work-apply-validation.js";
 import {
   recordAppliedStoryWorkAssignmentFromUnitOfWork,
   StoryWorkAssignmentTransitionError,
-  type StoryWorkArtifactPointer,
   type StoryWorkAssignment,
   type StoryWorkResultReference
 } from "./story-work-assignment.js";
 import type { StoryWorkAttempt } from "./story-work-attempt.js";
-import { StoryWorkAttemptTransitionError } from "./story-work-attempt.js";
 
 export class CharacterStoryWorkContextStaleError extends Error {
   readonly code = "CHARACTER_STORY_WORK_CONTEXT_STALE" as const;
@@ -87,33 +82,6 @@ export type ValidatedCharacterStoryWorkApply = Readonly<{
   result: Extract<StoryWorkResultReference, { kind: "story-knowledge" }>;
 }>;
 
-function sameArtifact(
-  left: StoryWorkArtifactPointer | undefined,
-  input: Pick<
-    ApplyCharacterStoryWorkInput,
-    "proposalId" | "expectedArtifactVersion" | "expectedProposalContentHash"
-  >
-): boolean {
-  return (
-    left?.proposalId === input.proposalId &&
-    left.artifactVersion === input.expectedArtifactVersion &&
-    left.contentHash === instructionContentHash(String(input.expectedProposalContentHash))
-  );
-}
-
-function sameArtifactPointers(
-  left: StoryWorkArtifactPointer | undefined,
-  right: StoryWorkArtifactPointer | undefined
-): boolean {
-  return (
-    left !== undefined &&
-    right !== undefined &&
-    left.proposalId === right.proposalId &&
-    left.artifactVersion === right.artifactVersion &&
-    left.contentHash === right.contentHash
-  );
-}
-
 function reservedDestination(assignment: StoryWorkAssignment): StoryKnowledgeId {
   if (
     assignment.taskKind !== "character" ||
@@ -144,63 +112,15 @@ function exactResult(
 function validateCanonicalBindings(
   input: CharacterStoryWorkCanonicalApplyInputs
 ): StoryKnowledgeId {
-  const { assignment, attempt, proposal, receipt, run, exactInput } = input;
-  const destinationId = reservedDestination(assignment);
-  if (
-    assignment.id !== exactInput.assignmentId ||
-    assignment.projectId !== exactInput.projectId ||
-    assignment.initiatorAccountId !== input.accountId ||
-    proposal.id !== exactInput.proposalId ||
-    proposal.projectId !== exactInput.projectId ||
-    proposal.runId !== run.id ||
-    proposal.receiptId !== receipt.id ||
-    run.projectId !== exactInput.projectId ||
-    run.initiatorAccountId !== input.accountId ||
-    run.receiptId !== receipt.id ||
-    run.receiptHash !== receipt.receiptHash ||
-    receipt.projectId !== exactInput.projectId
-  ) {
-    throw new CharacterStoryWorkArtifactMismatchError();
-  }
-  if (
-    run.workflowId !== CHARACTER_STORY_WORK_WORKFLOW_ID ||
-    receipt.workflowId !== CHARACTER_STORY_WORK_WORKFLOW_ID ||
-    run.workflowVersion !== receipt.workflowVersion ||
-    assignment.provider !== run.provider ||
-    assignment.model !== run.model ||
-    receipt.provider !== run.provider ||
-    receipt.model !== run.model ||
-    proposal.outputSchemaId !== "character-create-v2" ||
-    proposal.primaryTarget.kind !== "story-knowledge" ||
-    proposal.primaryTarget.id !== destinationId ||
-    receipt.outputSchemaId !== "character-create-v2" ||
-    receipt.targetStoryKnowledgeId !== destinationId ||
-    receipt.primaryTarget?.kind !== "story-knowledge" ||
-    receipt.primaryTarget.id !== destinationId
-  ) {
-    throw new CharacterStoryWorkArtifactMismatchError();
-  }
-  if (
-    !sameArtifact(assignment.currentArtifact, exactInput)
-  ) {
-    throw new CharacterStoryWorkArtifactMismatchError();
-  }
-  if (
-    proposal.contentHash !==
-    instructionContentHash(String(exactInput.expectedProposalContentHash))
-  ) {
-    throw new CharacterStoryWorkArtifactMismatchError();
-  }
-  if (
-    attempt.assignmentId !== assignment.id ||
-    attempt.projectId !== exactInput.projectId ||
-    attempt.initiatorAccountId !== input.accountId ||
-    attempt.runId !== run.id ||
-    !sameArtifactPointers(attempt.resultArtifact, assignment.generatedArtifact)
-  ) {
-    throw new StoryWorkAttemptTransitionError();
-  }
-  return destinationId;
+  return validateStoryWorkApplyBindings(input, {
+    workflowId: CHARACTER_STORY_WORK_WORKFLOW_ID,
+    outputSchemaId: "character-create-v2",
+    targetKind: "story-knowledge",
+    destinationId: reservedDestination,
+    receiptTargetId: (receipt) => receipt.targetStoryKnowledgeId,
+    artifactMismatch: (message) =>
+      new CharacterStoryWorkArtifactMismatchError(message)
+  });
 }
 
 export function characterStoryWorkExactReplay(
@@ -228,66 +148,6 @@ export function characterStoryWorkExactReplay(
     proposal: input.proposal,
     result
   });
-}
-
-function stale(
-  message = "The story context used for this character changed before apply."
-): never {
-  throw new CharacterStoryWorkContextStaleError(message);
-}
-
-async function validateReceiptFreshness(input: ValidateCharacterStoryWorkApplyInput) {
-  const resources = input.receipt.resources;
-  const storyResources = resources.filter(
-    (resource): resource is StoryContextReceiptResource =>
-      resource.resourceClass === "scene-document" ||
-      resource.resourceClass === "story-context"
-  );
-  if (storyResources.length !== resources.length) {
-    stale("Character apply receipt contains an unsupported context resource.");
-  }
-  const structureResources = storyResources.filter(
-    (resource) => resource.resourceClass === "story-context"
-  );
-  if (structureResources.length !== 1) {
-    stale("Character apply requires one exact story-context dependency.");
-  }
-  const structure = structureResources[0]!;
-  let currentStructure;
-  try {
-    currentStructure = await assembleStoryStructureResource({
-      projectId: input.currentRecords.project.id,
-      context: storyContextFromProjectRecords(input.currentRecords, {
-        scope: structure.scope
-      }),
-      inclusionReason: structure.inclusionReason,
-      hashPort: input.hashPort
-    });
-  } catch {
-    stale();
-  }
-  if (canonicalJsonStringify(currentStructure.resource) !== canonicalJsonStringify(structure)) {
-    stale();
-  }
-  const includedSceneIds = new Set(currentStructure.resource.sceneIds);
-  const seenSceneIds = new Set<SceneId>();
-  for (const resource of storyResources) {
-    if (resource.resourceClass !== "scene-document") continue;
-    if (seenSceneIds.has(resource.sceneId) || !includedSceneIds.has(resource.sceneId)) {
-      stale("Character apply scene dependencies no longer match the consumed story scope.");
-    }
-    seenSceneIds.add(resource.sceneId);
-    const head = input.sceneDocumentHeads.get(resource.sceneId);
-    if (
-      head === undefined ||
-      head.projectId !== resource.projectId ||
-      head.sceneId !== resource.sceneId ||
-      head.workingVersion !== resource.workingVersion ||
-      head.contentHash !== resource.contentHash
-    ) {
-      stale("Consumed scene prose changed before character apply.");
-    }
-  }
 }
 
 function fixedKnowledgeIdGenerator(id: StoryKnowledgeId): IdGenerator {
@@ -332,7 +192,11 @@ export async function validateCharacterStoryWorkApply(
   ) {
     throw new AgentRunReceiptMismatchError();
   }
-  await validateReceiptFreshness(input);
+  await validateStoryWorkReceiptFreshness(input, {
+    label: "Character",
+    allowCapture: false,
+    stale: (message) => new CharacterStoryWorkContextStaleError(message)
+  });
 
   const payload = validateCharacterCreateV2(input.proposal.payload);
   if (input.currentRecords.storyKnowledge.some((entry) => entry.id === destinationId)) {

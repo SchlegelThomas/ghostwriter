@@ -10,13 +10,16 @@ import {
   type AgentProposalId,
   type AgentRunId,
   type BookId,
+  type CanvasObjectId,
   type CaptureId,
   type ChapterId,
   type ProjectId,
   type RevisionId,
   type SceneId,
+  type SceneVariantId,
   type StoryKnowledgeId
 } from "./domain.js";
+import type { StoryStructureOperationId } from "./story-structure-proposal-v1.js";
 import type { AccountId } from "./identity.js";
 import { assertAgentModelId, providerForAgentModel } from "./model-catalog.js";
 import { assertProviderId, type ProviderId } from "./provider-credentials.js";
@@ -51,6 +54,7 @@ export const STORY_WORK_ASSIGNMENT_STATUSES = Object.freeze([
   "canceled",
   "stale",
   "rejected",
+  "reviewed",
   "applied"
 ] as const);
 
@@ -90,6 +94,15 @@ export type StoryWorkSourceReference =
       kind: "story-revision-vector";
       revisionVectorId: string;
       contentHash: InstructionContentHash;
+    }>
+  | Readonly<{
+      /** Exact scene-draft proposal under review; not a destination or authority. */
+      kind: "proposal-artifact";
+      assignmentId: StoryWorkAssignmentId;
+      proposalId: AgentProposalId;
+      sceneId: SceneId;
+      artifactVersion: number;
+      contentHash: InstructionContentHash;
     }>;
 
 export type StoryWorkDestinationReference =
@@ -111,7 +124,7 @@ export type StoryWorkDestinationReference =
   | Readonly<{
       kind: "scene";
       sceneId: SceneId;
-      operation: "create" | "update";
+      operation: "create" | "update" | "assess";
     }>
   | Readonly<{
       /** Create destinations reserve this canonical ID before provider execution. */
@@ -163,6 +176,7 @@ export type StoryWorkResultReference =
       sceneId: SceneId;
       workingVersion: number;
       revisionId?: RevisionId;
+      variantId?: SceneVariantId;
     }>
   | Readonly<{
       kind: "story-knowledge";
@@ -178,6 +192,22 @@ export type StoryWorkResultReference =
       kind: "plan";
       planId: string;
       planVersion: number;
+    }>
+  | Readonly<{
+      kind: "story-check";
+      proposalId: AgentProposalId;
+      artifactVersion: number;
+      contentHash: InstructionContentHash;
+      sceneId: SceneId;
+    }>
+  | Readonly<{
+      kind: "story-structure";
+      bookId: BookId;
+      projectVersion: number;
+      resolvedOperationIds: readonly StoryStructureOperationId[];
+      createdSceneIds: readonly SceneId[];
+      canvasPlacedSceneId?: SceneId;
+      canvasObjectId?: CanvasObjectId;
     }>;
 
 export type StoryWorkAssignment = Readonly<{
@@ -205,6 +235,9 @@ export type StoryWorkAssignment = Readonly<{
   generatedArtifact?: StoryWorkArtifactPointer;
   currentArtifact?: StoryWorkArtifactPointer;
   results: readonly StoryWorkResultReference[];
+  /** Idempotency identity for the one successful canonical apply. */
+  applyIdempotencyKey?: string;
+  applyRequestFingerprint?: InstructionContentHash;
   idempotencyKey: string;
   createdAt: string;
   updatedAt: string;
@@ -281,6 +314,8 @@ function sourceKey(source: StoryWorkSourceReference): string {
       return `capture:${source.captureId}`;
     case "story-revision-vector":
       return `story-revision-vector:${source.revisionVectorId}`;
+    case "proposal-artifact":
+      return `proposal-artifact:${source.assignmentId}:${source.proposalId}`;
   }
 }
 
@@ -298,7 +333,8 @@ function normalizeSource(
       "scene",
       "story-knowledge",
       "capture",
-      "story-revision-vector"
+      "story-revision-vector",
+      "proposal-artifact"
     ].includes(source.kind)
   ) {
     throw new DomainValidationError(
@@ -382,6 +418,21 @@ function normalizeSource(
         ),
         contentHash: instructionContentHash(source.contentHash)
       });
+    case "proposal-artifact":
+      requireIdentifier(source.sceneId, "Scene");
+      return Object.freeze({
+        kind: source.kind,
+        assignmentId: storyWorkAssignmentId(source.assignmentId),
+        proposalId: requireIdentifier(source.proposalId, "Agent proposal") as AgentProposalId,
+        sceneId: source.sceneId,
+        artifactVersion: requirePositiveVersion(
+          source.artifactVersion,
+          "Proposal artifact version"
+        ),
+        contentHash: instructionContentHash(
+          requireContentHash(source.contentHash, "Proposal artifact content hash")
+        )
+      });
   }
 }
 
@@ -448,9 +499,26 @@ function normalizeDestination(
     case "chapter":
       requireIdentifier(destination.chapterId, "Chapter destination");
       break;
-    case "scene":
+    case "scene": {
       requireIdentifier(destination.sceneId, "Scene destination");
+      if (destination.operation === "assess") {
+        if (taskKind !== "check") {
+          throw new DomainValidationError(
+            "INVALID_AGENT_POLICY",
+            "Only check story work may assess a scene without a canonical update."
+          );
+        }
+      } else if (
+        destination.operation !== "create" &&
+        destination.operation !== "update"
+      ) {
+        throw new DomainValidationError(
+          "UNKNOWN_REFERENCE",
+          "Scene destination operation is invalid."
+        );
+      }
       break;
+    }
     case "story-knowledge":
       requireIdentifier(destination.storyKnowledgeId, "Story knowledge destination");
       break;
@@ -464,7 +532,170 @@ function normalizeDestination(
       "Character work requires a reserved story-knowledge destination."
     );
   }
+  if (taskKind === "check") {
+    if (destination.kind !== "scene" || destination.operation !== "assess") {
+      throw new DomainValidationError(
+        "INVALID_AGENT_POLICY",
+        "Check story work must assess an exact scene without implying a canonical update."
+      );
+    }
+  }
+  if (taskKind === "outline") {
+    if (destination.kind !== "book" || destination.operation !== "update") {
+      throw new DomainValidationError(
+        "INVALID_AGENT_POLICY",
+        "Outline story work must update one active book destination."
+      );
+    }
+  }
   return Object.freeze({ ...destination });
+}
+
+function validateCheckAssignmentDefinition(
+  taskKind: StoryWorkTaskKind,
+  sources: readonly StoryWorkSourceReference[],
+  destination: StoryWorkDestinationReference
+): void {
+  if (taskKind !== "check") {
+    return;
+  }
+  if (destination.kind !== "scene" || destination.operation !== "assess") {
+    return;
+  }
+  const targetSceneId = destination.sceneId;
+  if (sources.length < 1) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Check story work requires at least one source."
+    );
+  }
+
+  for (const source of sources) {
+    if (source.kind === "capture" || source.kind === "story-revision-vector") {
+      throw new DomainValidationError(
+        "INVALID_AGENT_POLICY",
+        "Check story work does not accept Capture or story-revision-vector sources."
+      );
+    }
+    if (source.kind === "scene") {
+      if (source.workingVersion === undefined || source.contentHash === undefined) {
+        throw new DomainValidationError(
+          "INVALID_VERSION",
+          "Check story work scene sources require the exact acknowledged scene head."
+        );
+      }
+    }
+  }
+
+  const proposalArtifacts = sources.filter(
+    (source): source is Extract<StoryWorkSourceReference, { kind: "proposal-artifact" }> =>
+      source.kind === "proposal-artifact"
+  );
+  const targetSceneSources = sources.filter(
+    (source): source is Extract<StoryWorkSourceReference, { kind: "scene" }> =>
+      source.kind === "scene" && source.sceneId === targetSceneId
+  );
+
+  if (proposalArtifacts.length > 1) {
+    throw new DomainValidationError(
+      "DUPLICATE_REFERENCE",
+      "Check story work accepts at most one proposal-draft target."
+    );
+  }
+
+  if (proposalArtifacts.length === 1) {
+    const proposalTarget = proposalArtifacts[0]!;
+    if (proposalTarget.sceneId !== targetSceneId) {
+      throw new DomainValidationError(
+        "UNKNOWN_REFERENCE",
+        "Check story work source and assess destination must name the same scene."
+      );
+    }
+    if (targetSceneSources.length > 0) {
+      throw new DomainValidationError(
+        "INVALID_AGENT_POLICY",
+        "Proposal-draft checks cannot also name the assessed scene as a separate scene source."
+      );
+    }
+    return;
+  }
+
+  if (targetSceneSources.length !== 1) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Applied-scene checks require exactly one exact scene head matching the assess destination."
+    );
+  }
+}
+
+function validateOutlineAssignmentDefinition(
+  taskKind: StoryWorkTaskKind,
+  sources: readonly StoryWorkSourceReference[],
+  destination: StoryWorkDestinationReference
+): void {
+  if (taskKind !== "outline") {
+    return;
+  }
+  if (destination.kind !== "book" || destination.operation !== "update") {
+    return;
+  }
+  const targetBookId = destination.bookId;
+  if (sources.length < 1) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Outline story work requires at least one source."
+    );
+  }
+
+  for (const source of sources) {
+    if (
+      source.kind === "capture" ||
+      source.kind === "story-revision-vector" ||
+      source.kind === "proposal-artifact"
+    ) {
+      throw new DomainValidationError(
+        "INVALID_AGENT_POLICY",
+        "Outline story work does not accept Capture, proposal-artifact, or story-revision-vector sources."
+      );
+    }
+  }
+
+  const bookBaselines = sources.filter(
+    (source): source is Extract<StoryWorkSourceReference, { kind: "book" }> =>
+      source.kind === "book" && source.bookId === targetBookId
+  );
+  const projectBaselines = sources.filter(
+    (source): source is Extract<StoryWorkSourceReference, { kind: "project" }> =>
+      source.kind === "project"
+  );
+
+  if (bookBaselines.length === 0 && projectBaselines.length === 0) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Outline story work requires an exact target book or project baseline source."
+    );
+  }
+
+  const baselineVersion =
+    bookBaselines[0]?.projectVersion ?? projectBaselines[0]!.projectVersion;
+  if (
+    bookBaselines.some((source) => source.projectVersion !== baselineVersion) ||
+    projectBaselines.some((source) => source.projectVersion !== baselineVersion)
+  ) {
+    throw new DomainValidationError(
+      "INVALID_VERSION",
+      "Outline story work baseline sources must share one expected project version."
+    );
+  }
+
+  for (const source of sources) {
+    if ("projectVersion" in source && source.projectVersion !== baselineVersion) {
+      throw new DomainValidationError(
+        "INVALID_VERSION",
+        "Outline story work sources must match the baseline project version."
+      );
+    }
+  }
 }
 
 function normalizeSteps(steps: readonly StoryWorkStep[]): readonly StoryWorkStep[] {
@@ -581,12 +812,91 @@ export function createStoryWorkArtifactPointer(
   });
 }
 
+function requireStoryStructureOperationId(value: string): StoryStructureOperationId {
+  const normalized = requireIdentifier(value, "Story structure operation");
+  if (normalized.length > 128) {
+    throw new DomainValidationError(
+      "VALUE_TOO_LONG",
+      "Story structure operation id length is out of bounds."
+    );
+  }
+  return normalized as StoryStructureOperationId;
+}
+
+function normalizeUniqueIds<T extends string>(
+  values: readonly string[],
+  label: string,
+  mapValue: (value: string) => T,
+  allowEmpty: boolean
+): readonly T[] {
+  if (!Array.isArray(values)) {
+    throw new DomainValidationError("UNKNOWN_REFERENCE", `${label} must be an array.`);
+  }
+  if (!allowEmpty && values.length === 0) {
+    throw new DomainValidationError("EMPTY_VALUE", `${label} must not be empty.`);
+  }
+  if (values.length > STORY_WORK_MAX_RESULTS) {
+    throw new DomainValidationError(
+      "VALUE_TOO_LONG",
+      `${label} exceeds the story work result limit.`
+    );
+  }
+  const seen = new Set<string>();
+  const normalized = values.map((value) => {
+    const next = mapValue(value);
+    if (seen.has(next)) {
+      throw new DomainValidationError(
+        "DUPLICATE_REFERENCE",
+        `${label} must not contain duplicate entries.`
+      );
+    }
+    seen.add(next);
+    return next;
+  });
+  return Object.freeze(normalized);
+}
+
+function normalizeStoryStructureCanvasFields(
+  createdSceneIds: readonly SceneId[],
+  canvasPlacedSceneId: SceneId | undefined,
+  canvasObjectId: CanvasObjectId | undefined
+): Readonly<{
+  canvasPlacedSceneId?: SceneId;
+  canvasObjectId?: CanvasObjectId;
+}> {
+  const hasScene = canvasPlacedSceneId !== undefined;
+  const hasObject = canvasObjectId !== undefined;
+  if (hasScene !== hasObject) {
+    throw new DomainValidationError(
+      "UNKNOWN_REFERENCE",
+      "Structure Canvas placement requires both scene and object identifiers."
+    );
+  }
+  if (
+    hasScene &&
+    !createdSceneIds.some((sceneIdValue) => sceneIdValue === canvasPlacedSceneId)
+  ) {
+    throw new DomainValidationError(
+      "UNKNOWN_REFERENCE",
+      "Structure Canvas placement must reference one of the created scenes."
+    );
+  }
+  return hasScene && hasObject
+    ? Object.freeze({
+        canvasPlacedSceneId,
+        canvasObjectId: requireIdentifier(canvasObjectId, "Canvas object") as CanvasObjectId
+      })
+    : Object.freeze({});
+}
+
 function resultKey(result: StoryWorkResultReference): string {
   switch (result.kind) {
     case "project":
       return `project:${result.projectId}`;
     case "book":
       return `book:${result.bookId}`;
+    case "story-structure":
+      return `story-structure:${result.bookId}`;
     case "chapter":
       return `chapter:${result.chapterId}`;
     case "scene":
@@ -597,6 +907,8 @@ function resultKey(result: StoryWorkResultReference): string {
       return `capture:${result.captureId}`;
     case "plan":
       return `plan:${result.planId}`;
+    case "story-check":
+      return `story-check:${result.proposalId}:${result.artifactVersion}`;
   }
 }
 
@@ -622,7 +934,9 @@ function normalizeResults(
         "scene",
         "story-knowledge",
         "capture",
-        "plan"
+        "plan",
+        "story-check",
+        "story-structure"
       ].includes(result.kind)
     ) {
       throw new DomainValidationError(
@@ -659,6 +973,12 @@ function normalizeResults(
         });
         break;
       case "scene":
+        if (result.variantId !== undefined && result.revisionId === undefined) {
+          throw new DomainValidationError(
+            "UNKNOWN_REFERENCE",
+            "A named scene variant result requires its immutable revision."
+          );
+        }
         next = Object.freeze({
           ...result,
           workingVersion: requirePositiveVersion(
@@ -686,6 +1006,51 @@ function normalizeResults(
           )
         });
         break;
+      case "story-check":
+        requireIdentifier(result.sceneId, "Story check scene");
+        next = Object.freeze({
+          kind: result.kind,
+          proposalId: requireIdentifier(result.proposalId, "Agent proposal") as AgentProposalId,
+          artifactVersion: requirePositiveVersion(
+            result.artifactVersion,
+            "Story check artifact version"
+          ),
+          contentHash: instructionContentHash(
+            requireContentHash(result.contentHash, "Story check content hash")
+          ),
+          sceneId: result.sceneId
+        });
+        break;
+      case "story-structure": {
+        const createdSceneIds = normalizeUniqueIds(
+          result.createdSceneIds,
+          "Structure created scene ids",
+          (value) => requireIdentifier(value, "Scene") as SceneId,
+          true
+        );
+        const canvasFields = normalizeStoryStructureCanvasFields(
+          createdSceneIds,
+          result.canvasPlacedSceneId,
+          result.canvasObjectId
+        );
+        next = Object.freeze({
+          kind: "story-structure" as const,
+          bookId: requireIdentifier(result.bookId, "Book") as BookId,
+          projectVersion: requirePositiveVersion(
+            result.projectVersion,
+            "Project result version"
+          ),
+          resolvedOperationIds: normalizeUniqueIds(
+            result.resolvedOperationIds,
+            "Structure resolved operation ids",
+            requireStoryStructureOperationId,
+            false
+          ),
+          createdSceneIds,
+          ...canvasFields
+        });
+        break;
+      }
       default:
         throw new DomainValidationError(
           "UNKNOWN_REFERENCE",
@@ -705,6 +1070,34 @@ function normalizeResults(
   return Object.freeze(normalized);
 }
 
+function storyCheckResultMatchesReview(
+  assignment: Readonly<{
+    taskKind: StoryWorkTaskKind;
+    destination: StoryWorkDestinationReference;
+    currentArtifact?: StoryWorkArtifactPointer;
+  }>,
+  results: readonly StoryWorkResultReference[]
+): boolean {
+  if (
+    assignment.taskKind !== "check" ||
+    assignment.destination.kind !== "scene" ||
+    assignment.destination.operation !== "assess" ||
+    assignment.currentArtifact === undefined
+  ) {
+    return false;
+  }
+  const artifact = assignment.currentArtifact;
+  const targetSceneId = assignment.destination.sceneId;
+  return results.some(
+    (result) =>
+      result.kind === "story-check" &&
+      result.sceneId === targetSceneId &&
+      result.proposalId === artifact.proposalId &&
+      result.artifactVersion === artifact.artifactVersion &&
+      result.contentHash === artifact.contentHash
+  );
+}
+
 function resultsContainDestination(
   destination: StoryWorkDestinationReference,
   results: readonly StoryWorkResultReference[]
@@ -717,7 +1110,9 @@ function resultsContainDestination(
       );
     case "book":
       return results.some(
-        (result) => result.kind === "book" && result.bookId === destination.bookId
+        (result) =>
+          (result.kind === "book" || result.kind === "story-structure") &&
+          result.bookId === destination.bookId
       );
     case "chapter":
       return results.some(
@@ -763,6 +1158,7 @@ function validateStateShape(assignment: StoryWorkAssignment): void {
     (assignment.status === "artifact-ready" ||
       assignment.status === "awaiting-review" ||
       assignment.status === "rejected" ||
+      assignment.status === "reviewed" ||
       assignment.status === "applied");
   if (
     requiresArtifact &&
@@ -816,6 +1212,26 @@ function validateStateShape(assignment: StoryWorkAssignment): void {
       );
     }
   }
+  if (assignment.taskKind === "check" && assignment.status === "applied") {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Check story work completes in reviewed state and never records a canonical apply."
+    );
+  }
+  if (assignment.taskKind === "outline" && assignment.status === "applied") {
+    if (assignment.results.length !== 1) {
+      throw new DomainValidationError(
+        "INVALID_AGENT_POLICY",
+        "Outline apply requires exactly one story-structure result reference."
+      );
+    }
+    if (assignment.results[0]?.kind !== "story-structure") {
+      throw new DomainValidationError(
+        "INVALID_AGENT_POLICY",
+        "Outline apply requires a story-structure result reference."
+      );
+    }
+  }
   if (assignment.status === "applied" && assignment.results.length === 0) {
     throw new DomainValidationError(
       "INVALID_AGENT_POLICY",
@@ -831,10 +1247,52 @@ function validateStateShape(assignment: StoryWorkAssignment): void {
       "Applied story work must include its exact reserved destination in the canonical results."
     );
   }
-  if (assignment.status !== "applied" && assignment.results.length > 0) {
+  if (assignment.status === "reviewed") {
+    if (assignment.taskKind !== "check") {
+      throw new DomainValidationError(
+        "INVALID_AGENT_POLICY",
+        "Only check story work may complete in reviewed state."
+      );
+    }
+    if (assignment.results.length !== 1) {
+      throw new DomainValidationError(
+        "INVALID_AGENT_POLICY",
+        "A reviewed check requires exactly one story-check result reference."
+      );
+    }
+    if (!storyCheckResultMatchesReview(assignment, assignment.results)) {
+      throw new DomainValidationError(
+        "UNKNOWN_REFERENCE",
+        "Reviewed check results must match the current findings artifact and assess destination."
+      );
+    }
+  }
+  if (
+    assignment.status !== "applied" &&
+    assignment.status !== "reviewed" &&
+    assignment.results.length > 0
+  ) {
     throw new DomainValidationError(
       "INVALID_AGENT_POLICY",
-      "Canonical result references may be recorded only when work is applied."
+      "Result references may be recorded only when work is applied or a check is reviewed."
+    );
+  }
+  if (
+    (assignment.applyIdempotencyKey === undefined) !==
+    (assignment.applyRequestFingerprint === undefined)
+  ) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Story work apply idempotency key and fingerprint must be recorded together."
+    );
+  }
+  if (
+    assignment.applyIdempotencyKey !== undefined &&
+    assignment.status !== "applied"
+  ) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Only applied story work may record its apply request identity."
     );
   }
 }
@@ -874,6 +1332,19 @@ export function createStoryWorkAssignment(
       "Assignment update time cannot precede creation time."
     );
   }
+  if (
+    (input.applyIdempotencyKey === undefined) !==
+    (input.applyRequestFingerprint === undefined)
+  ) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Story work apply idempotency key and fingerprint must be recorded together."
+    );
+  }
+  const sources = normalizeSources(input.sources, projectId);
+  const destination = normalizeDestination(input.destination, projectId, input.taskKind);
+  validateCheckAssignmentDefinition(input.taskKind, sources, destination);
+  validateOutlineAssignmentDefinition(input.taskKind, sources, destination);
   const assignment: StoryWorkAssignment = Object.freeze({
     id,
     projectId,
@@ -891,8 +1362,8 @@ export function createStoryWorkAssignment(
       "Assignment done condition",
       4_000
     ),
-    sources: normalizeSources(input.sources, projectId),
-    destination: normalizeDestination(input.destination, projectId, input.taskKind),
+    sources,
+    destination,
     provider,
     model,
     status: input.status,
@@ -920,6 +1391,21 @@ export function createStoryWorkAssignment(
       ? {}
       : { generatedArtifact: createStoryWorkArtifactPointer(input.generatedArtifact) }),
     results: normalizeResults(input.results, projectId),
+    ...(input.applyIdempotencyKey === undefined ||
+    input.applyRequestFingerprint === undefined
+      ? {}
+      : {
+          applyIdempotencyKey: requireIdentifier(
+            input.applyIdempotencyKey,
+            "Apply idempotency key"
+          ),
+          applyRequestFingerprint: instructionContentHash(
+            requireContentHash(
+              input.applyRequestFingerprint,
+              "Apply request fingerprint"
+            )
+          )
+        }),
     idempotencyKey: requireIdentifier(input.idempotencyKey, "Idempotency key"),
     createdAt,
     updatedAt
@@ -1136,11 +1622,20 @@ export function recordAppliedStoryWorkAssignmentFromUnitOfWork(input: Readonly<{
   expectedVersion: number;
   artifact: StoryWorkArtifactPointer;
   results: readonly StoryWorkResultReference[];
+  applyRequest?: Readonly<{
+    idempotencyKey: string;
+    requestFingerprint: InstructionContentHash | string;
+  }>;
   updatedAt: string;
 }>): StoryWorkAssignment {
   const current = requireTransition(input.assignment, input.expectedVersion, [
     "awaiting-review"
   ]);
+  if (current.taskKind === "check") {
+    throw new StoryWorkAssignmentTransitionError(
+      "Check story work completes through review, not canonical apply."
+    );
+  }
   if (!sameArtifact(current.currentArtifact, input.artifact)) {
     throw new StoryWorkAssignmentTransitionError(
       "The applied artifact is no longer current."
@@ -1161,6 +1656,63 @@ export function recordAppliedStoryWorkAssignmentFromUnitOfWork(input: Readonly<{
   }
   return nextAssignment(current, input.updatedAt, {
     status: "applied",
+    results,
+    ...(input.applyRequest === undefined
+      ? {}
+      : {
+          applyIdempotencyKey: requireIdentifier(
+            input.applyRequest.idempotencyKey,
+            "Apply idempotency key"
+          ),
+          applyRequestFingerprint: instructionContentHash(
+            requireContentHash(
+              input.applyRequest.requestFingerprint,
+              "Apply request fingerprint"
+            )
+          )
+        })
+  });
+}
+
+/**
+ * Records advisory check completion. This is not a canonical apply and must not
+ * record apply replay identity.
+ */
+export function recordReviewedStoryWorkAssignment(input: Readonly<{
+  assignment: StoryWorkAssignment;
+  expectedVersion: number;
+  artifact: StoryWorkArtifactPointer;
+  result: StoryWorkResultReference;
+  updatedAt: string;
+}>): StoryWorkAssignment {
+  const current = requireTransition(input.assignment, input.expectedVersion, [
+    "awaiting-review"
+  ]);
+  if (current.taskKind !== "check") {
+    throw new StoryWorkAssignmentTransitionError(
+      "Only check story work may complete in reviewed state."
+    );
+  }
+  if (!sameArtifact(current.currentArtifact, input.artifact)) {
+    throw new StoryWorkAssignmentTransitionError(
+      "The reviewed findings artifact is no longer current."
+    );
+  }
+  const results = normalizeResults([input.result], current.projectId);
+  if (results.length !== 1 || results[0]?.kind !== "story-check") {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Reviewed check completion requires one story-check result reference."
+    );
+  }
+  if (!storyCheckResultMatchesReview({ ...current, currentArtifact: input.artifact }, results)) {
+    throw new DomainValidationError(
+      "UNKNOWN_REFERENCE",
+      "The story-check result must match the current findings artifact and assess destination."
+    );
+  }
+  return nextAssignment(current, input.updatedAt, {
+    status: "reviewed",
     results
   });
 }
@@ -1170,5 +1722,17 @@ export function storyWorkAssignmentRequestFingerprint(
 ): InstructionContentHash {
   return instructionContentHash(
     requireContentHash(value, "Assignment request fingerprint")
+  );
+}
+
+export function storyWorkApplyIdempotencyKey(value: string): string {
+  return requireIdentifier(value, "Apply idempotency key");
+}
+
+export function storyWorkApplyRequestFingerprint(
+  value: string
+): InstructionContentHash {
+  return instructionContentHash(
+    requireContentHash(value, "Apply request fingerprint")
   );
 }

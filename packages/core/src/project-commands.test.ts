@@ -52,6 +52,8 @@ const ids = () =>
     contextReceipt: [],
     agentRun: [],
     agentProposal: [],
+    storyCheckFinding: [],
+    storyStructureOperation: [],
     mcpGrant: []
   });
 

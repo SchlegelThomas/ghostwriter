@@ -101,6 +101,14 @@ function assignmentFromRow(
               row.currentArtifact as StoryWorkAssignment["currentArtifact"]
           }),
       results: row.results as StoryWorkAssignment["results"],
+      ...(row.applyIdempotencyKey === null
+        ? {}
+        : {
+            applyIdempotencyKey: row.applyIdempotencyKey,
+            applyRequestFingerprint: instructionContentHash(
+              row.applyRequestFingerprint!
+            )
+          }),
       idempotencyKey: row.idempotencyKey,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt
@@ -135,6 +143,8 @@ function assignmentToRow(
     generatedArtifact: candidate.generatedArtifact ?? null,
     currentArtifact: candidate.currentArtifact ?? null,
     results: candidate.results,
+    applyIdempotencyKey: candidate.applyIdempotencyKey ?? null,
+    applyRequestFingerprint: candidate.applyRequestFingerprint ?? null,
     idempotencyKey: candidate.idempotencyKey,
     requestFingerprint: storyWorkAssignmentRequestFingerprint(
       requestFingerprint
@@ -303,6 +313,19 @@ export function createPostgresStoryWorkAssignmentRepository(
       ) {
         return { ok: false, reason: "version-conflict" };
       }
+      const currentHasApplyIdentity = current.applyIdempotencyKey !== undefined;
+      const changesApplyIdentity =
+        next.applyIdempotencyKey !== current.applyIdempotencyKey ||
+        next.applyRequestFingerprint !== current.applyRequestFingerprint;
+      if (
+        (currentHasApplyIdentity && changesApplyIdentity) ||
+        (current.status === "applied" && changesApplyIdentity) ||
+        (!currentHasApplyIdentity &&
+          changesApplyIdentity &&
+          next.status !== "applied")
+      ) {
+        return { ok: false, reason: "version-conflict" };
+      }
       const values = assignmentToRow(next, row.requestFingerprint);
       const [updated] = await db
         .update(storyWorkAssignments)
@@ -314,6 +337,8 @@ export function createPostgresStoryWorkAssignmentRepository(
           generatedArtifact: values.generatedArtifact,
           currentArtifact: values.currentArtifact,
           results: values.results,
+          applyIdempotencyKey: values.applyIdempotencyKey,
+          applyRequestFingerprint: values.applyRequestFingerprint,
           updatedAt: values.updatedAt
         })
         .where(
