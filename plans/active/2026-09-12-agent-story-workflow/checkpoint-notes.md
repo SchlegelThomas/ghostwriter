@@ -1,6 +1,6 @@
 # Checkpoint working notes
 
-Planning only. CP1 not started. Fill this frame before delegating implementation.
+Planning only. CP1a connected Canvas/Draft spine not started. Fill this frame before delegating implementation.
 
 # Feature checkpoint template
 

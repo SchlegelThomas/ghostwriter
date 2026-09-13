@@ -59,3 +59,25 @@ domains or require a new queue vendor. Thomas must accept recoverability, approv
 context/spend boundaries and MCP transport scope before implementation. Until then ADRs 0011/0014/0016
 remain the accepted behavior. Update the ADR index and architecture/product/API/operations docs
 when accepted and as each checkpoint ships.
+
+## Proposed extension — connected story spine (2026-09-12 review)
+
+The user identified Canvas/writing integration and maintaining the main story spine as a central
+missing outcome. Deliver a shared narrative-context projection early, before agent-specific loops.
+Reuse canonical manuscript order, chapter objectives, scene sketch fields, and scene/knowledge IDs.
+Add explicitly authored narrative beat relationships and revision-addressed evidence only where
+existing semantic contracts do not cover them; settle ownership and transaction/version domains
+in CP1a. Never duplicate intent text per Canvas card, or treat spatial/knowledge links as causal
+relationships implicitly. Reading order, causal relationships and story-world chronology differ.
+
+Both Canvas and Draft expose the same acknowledged intent; editing either uses the same core
+command and expected metadata version. Prose saves stay in the scene working domain. Model-inferred
+outcomes remain provisional findings until explicit writer acceptance. Prose/intent/link changes
+invalidate relevant assessments through their version dependencies without automatic provider calls.
+A stale assessment is not proof of narrative inconsistency. Changed known dependencies identify
+scenes to revisit; model-suggested additional dependencies remain bounded, provisional and labeled.
+
+Writers may revise prose, revise intent, or defer a difference. Each approved change has its own
+precise effect and preserves history; no automatic downstream rewrite. Canvas restore remains
+spatial. Assignment/context/MCP projections share this model with the existing human-apply ceiling.
+No new store, automatic whole-book score, or hidden synchronization authority is introduced.
