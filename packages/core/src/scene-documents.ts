@@ -28,7 +28,24 @@ export type SceneRevisionReason =
   | "idle-checkpoint"
   | "restore"
   | "schema-migration"
-  | "named-variant";
+  | "named-variant"
+  | "agent-apply";
+
+const SCENE_REVISION_ORIGINS: readonly SceneRevisionOrigin[] = [
+  "human",
+  "agent",
+  "system"
+];
+const SCENE_REVISION_REASONS: readonly SceneRevisionReason[] = [
+  "genesis",
+  "capture-promotion",
+  "checkpoint",
+  "idle-checkpoint",
+  "restore",
+  "schema-migration",
+  "named-variant",
+  "agent-apply"
+];
 
 export type SceneDocumentHead = Readonly<{
   sceneId: SceneId;
@@ -163,6 +180,18 @@ export function createSceneDocumentHead(
 }
 
 export function createSceneRevision(input: SceneRevision): SceneRevision {
+  if (!SCENE_REVISION_ORIGINS.includes(input.origin)) {
+    throw new DomainValidationError(
+      "UNKNOWN_REFERENCE",
+      "Scene revision origin is not supported."
+    );
+  }
+  if (!SCENE_REVISION_REASONS.includes(input.reason)) {
+    throw new DomainValidationError(
+      "UNKNOWN_REFERENCE",
+      "Scene revision reason is not supported."
+    );
+  }
   const parentRevisionId =
     input.parentRevisionId === undefined ? undefined : input.parentRevisionId;
   return Object.freeze({

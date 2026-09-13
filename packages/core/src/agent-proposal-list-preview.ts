@@ -182,6 +182,10 @@ export function agentProposalListPreviewFromPayload(
         return previewFromPlanOutline(record);
       case "capture-reflection-v1":
         return previewFromCaptureReflection(record);
+      case "scene-draft-v1": {
+        const summary = trimText(record.prose, PREVIEW_SUMMARY_MAX);
+        return Object.freeze(summary === undefined ? {} : { summary });
+      }
       case "sketch-fields-v1":
       case "character-sheet-v1":
       case "backdrop-fields-v1":

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   createProviderAdapter,
   ProviderAdapterUnsupportedError,
@@ -10,6 +11,7 @@ import {
   createAgentGuidanceServices,
   createCaptureReflectionServices,
   createCaptureServices,
+  createCharacterStoryWorkGenerationServices,
   createCatalogAgentServices,
   createCatalogPlaybookOverrideServices,
   createCraftPartnerServices,
@@ -36,6 +38,7 @@ import {
   type CapturePromotionServices,
   type CaptureReflectionServices,
   type CaptureReflectionStructuredCompletionProvider,
+  type CharacterStoryWorkStructuredCompletionProvider,
   type Clock,
   type CraftPartnerServices,
   type CraftPartnerStructuredCompletionProvider,
@@ -59,10 +62,15 @@ import {
   createPostgresAgentRunRepository,
   createPostgresContextReceiptRepository,
   createPostgresCatalogPlaybookOverrideRepository,
+  createPostgresCharacterStoryWorkApplyUnitOfWork,
+  createPostgresCharacterStoryWorkGenerationUnitOfWork,
+  createPostgresCharacterStoryWorkReviewUnitOfWork,
   createPostgresMcpGrantRepository,
   createPostgresProjectAgentInstructionsRepository,
   createPostgresProjectPlaybookRepository,
   createPostgresProviderCredentialRepository,
+  createPostgresStoryWorkAssignmentRepository,
+  createPostgresStoryWorkAttemptRepository,
   type NodePostgresConnection
 } from "@ghostwriter/storage";
 import type { ProviderKekRuntimeConfig } from "./provider-kek-config.js";
@@ -73,6 +81,7 @@ import {
 } from "./provider-credential-crypto.js";
 import { createNodeSha256HashPort } from "./node-sha256-hash-port.js";
 import { createNodeMcpGrantTokenPort } from "./mcp-grant-token-port.js";
+import type { StoryWorkApiRuntime } from "./story-work-api.js";
 
 export type ProviderValidationFactory = (
   apiKey: string,
@@ -114,6 +123,7 @@ export type AgentProviderRuntime = Readonly<{
   catalogAgents: CatalogAgentServices;
   nextActionCoach: NextActionCoachServices;
   storyKnowledgeCreate: StoryKnowledgeCreateDraftServices;
+  storyWork: StoryWorkApiRuntime;
   catalogPlaybookOverrides: CatalogPlaybookOverrideServices;
   mcpGrants: McpGrantServices;
   policy: AgentProviderPolicy;
@@ -136,7 +146,8 @@ export type AgentProviderRuntime = Readonly<{
     createProvider?: ProviderCompletionFactory | OpenAiCompletionProviderFactory;
   }>): Promise<
     CaptureReflectionStructuredCompletionProvider &
-      CraftPartnerStructuredCompletionProvider
+      CraftPartnerStructuredCompletionProvider &
+      CharacterStoryWorkStructuredCompletionProvider
   >;
   createCompletionProviderForModel(input: Readonly<{
     accountId: AccountId;
@@ -145,7 +156,8 @@ export type AgentProviderRuntime = Readonly<{
     createProvider?: ProviderCompletionFactory | OpenAiCompletionProviderFactory;
   }>): Promise<
     CaptureReflectionStructuredCompletionProvider &
-      CraftPartnerStructuredCompletionProvider
+      CraftPartnerStructuredCompletionProvider &
+      CharacterStoryWorkStructuredCompletionProvider
   >;
   /** @deprecated Prefer {@link AgentProviderRuntime.createCompletionProviderForModel}. */
   createOpenAiCompletionProvider(input: Readonly<{
@@ -153,7 +165,8 @@ export type AgentProviderRuntime = Readonly<{
     createProvider?: OpenAiCompletionProviderFactory;
   }>): Promise<
     CaptureReflectionStructuredCompletionProvider &
-      CraftPartnerStructuredCompletionProvider
+      CraftPartnerStructuredCompletionProvider &
+      CharacterStoryWorkStructuredCompletionProvider
   >;
   /** Decrypts a provider key for ephemeral adapter calls (never log/return). */
   resolveProviderApiKey(input: Readonly<{
@@ -201,7 +214,8 @@ export class ProviderEncryptionUnavailableError extends Error {
 function toStructuredCompletionProvider(
   provider: StructuredCompletionProvider
 ): CaptureReflectionStructuredCompletionProvider &
-  CraftPartnerStructuredCompletionProvider {
+  CraftPartnerStructuredCompletionProvider &
+  CharacterStoryWorkStructuredCompletionProvider {
   return Object.freeze({
     async completeStructured(input: Readonly<{
       workflow: string;
@@ -233,7 +247,8 @@ function toStructuredCompletionProvider(
       });
     }
   }) as CaptureReflectionStructuredCompletionProvider &
-    CraftPartnerStructuredCompletionProvider;
+    CraftPartnerStructuredCompletionProvider &
+    CharacterStoryWorkStructuredCompletionProvider;
 }
 
 function asValidationFactory(
@@ -403,6 +418,43 @@ export function createAgentProviderRuntime(
     ids: input.ids,
     clock: input.clock
   });
+  const storyWorkAssignments = createPostgresStoryWorkAssignmentRepository(input.db);
+  const storyWorkAttempts = createPostgresStoryWorkAttemptRepository(input.db);
+  const storyWorkGeneration =
+    createPostgresCharacterStoryWorkGenerationUnitOfWork(input.db);
+  const storyWork = Object.freeze({
+    projects: input.projects,
+    sceneDocuments: input.sceneDocuments,
+    assignments: storyWorkAssignments,
+    attempts: storyWorkAttempts,
+    proposals,
+    runs,
+    receipts,
+    generation: createCharacterStoryWorkGenerationServices({
+      projects: input.projects,
+      assignments: storyWorkAssignments,
+      proposals,
+      guidance: agentGuidance,
+      generation: storyWorkGeneration,
+      hashPort,
+      ids: input.ids,
+      clock: input.clock
+    }),
+    generationReplay: storyWorkGeneration,
+    review: createPostgresCharacterStoryWorkReviewUnitOfWork({
+      db: input.db,
+      ids: input.ids,
+      hashPort
+    }),
+    apply: createPostgresCharacterStoryWorkApplyUnitOfWork({
+      db: input.db,
+      hashPort
+    }),
+    hashPort,
+    ids: input.ids,
+    clock: input.clock,
+    createAssignmentId: () => `story_work_assignment_${randomUUID()}`
+  }) satisfies StoryWorkApiRuntime;
   const mcpGrants = createMcpGrantServices({
     projects: input.projects,
     grants: createPostgresMcpGrantRepository(input.db),
@@ -521,7 +573,8 @@ export function createAgentProviderRuntime(
     createProvider?: ProviderCompletionFactory | OpenAiCompletionProviderFactory;
   }>): Promise<
     CaptureReflectionStructuredCompletionProvider &
-      CraftPartnerStructuredCompletionProvider
+      CraftPartnerStructuredCompletionProvider &
+      CharacterStoryWorkStructuredCompletionProvider
   > {
     const plaintext = await decryptProviderApiKey(
       completionInput.accountId,
@@ -545,6 +598,7 @@ export function createAgentProviderRuntime(
     catalogAgents,
     nextActionCoach,
     storyKnowledgeCreate,
+    storyWork,
     mcpGrants,
     policy: Object.freeze({
       callsDisabled,

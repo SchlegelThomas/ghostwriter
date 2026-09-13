@@ -839,10 +839,39 @@ export const AGENT_PROPOSAL_APPLY_CAPABILITY = Object.freeze({
   })
 }) satisfies GhostwriterCapability;
 
+/** Durable story-work bindings; scoped external proposal access is completed in CP6. */
+export const STORY_WORK_CAPABILITIES: readonly GhostwriterCapability[] = Object.freeze([
+  {
+    id: "story-work.assignment.read", title: "Resume story assignments and their exact results",
+    access: "read", scope: "project", coreUseCase: "StoryWorkAssignmentRepository.get/list",
+    bindings: { ui: "StoryWorkPanel", web: "GET /api/projects/{projectId}/story-work/assignments",
+      mcpException: "Scoped assignment status and context access remain pending CP6 of ADR 0018; no external binding is claimed." }
+  },
+  {
+    id: "story-work.character.propose", title: "Develop or revise a character from a retained brief",
+    access: "propose", scope: "project", coreUseCase: "createCharacterStoryWorkGenerationServices",
+    bindings: { ui: "StoryWorkPanel + CharacterStoryWorkReview", web: "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/attempts",
+      mcpException: "Scoped proposal creation remains pending CP6 of ADR 0018; first-party invocation only in this checkpoint." }
+  },
+  {
+    id: "story-work.character.review", title: "Review, edit or reject an exact character artifact",
+    access: "apply", scope: "project", coreUseCase: "executeCharacterStoryWorkReview",
+    bindings: { ui: "CharacterStoryWorkReview", web: "/api/projects/{projectId}/story-work/assignments/{assignmentId}/review",
+      mcpException: "Human review and rejection remain first-party authority under ADR 0018." }
+  },
+  {
+    id: "story-work.character.apply", title: "Add the reviewed character to Cast once",
+    access: "apply", scope: "project", coreUseCase: "validateCharacterStoryWorkApply",
+    bindings: { ui: "CharacterStoryWorkReview", web: "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/apply",
+      mcpException: "Canonical story application requires explicit first-party human approval under ADR 0018." }
+  }
+]);
+
 export const GHOSTWRITER_CAPABILITIES: readonly GhostwriterCapability[] = Object.freeze([
   PROJECT_NAVIGATOR_CAPABILITY,
   ...PROJECT_COMMAND_CAPABILITIES,
   ...STORY_CONTEXT_MUTATION_CAPABILITIES,
+  ...STORY_WORK_CAPABILITIES,
   SCENE_WORKSPACE_CAPABILITY,
   ...SCENE_HISTORY_CAPABILITIES,
   ...SCENE_WRITING_MUTATION_CAPABILITIES,

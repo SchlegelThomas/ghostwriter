@@ -24,6 +24,11 @@ export type CompareAndSetStoryWorkAssignmentOutcome =
   | Readonly<{ ok: true; assignment: StoryWorkAssignment }>
   | Readonly<{ ok: false; reason: "not-found" | "version-conflict" }>;
 
+export type StoryWorkAssignmentIdempotencyRecord = Readonly<{
+  assignment: StoryWorkAssignment;
+  requestFingerprint: InstructionContentHash;
+}>;
+
 /**
  * Project/account arguments are part of every lookup so an inaccessible ID is
  * indistinguishable from a missing one at the repository boundary.
@@ -34,6 +39,11 @@ export interface StoryWorkAssignmentRepository {
     projectId: ProjectId;
     assignmentId: StoryWorkAssignmentId;
   }>): Promise<StoryWorkAssignment | undefined>;
+  getByIdempotencyKey(input: Readonly<{
+    accountId: AccountId;
+    projectId: ProjectId;
+    idempotencyKey: string;
+  }>): Promise<StoryWorkAssignmentIdempotencyRecord | undefined>;
   listByProject(input: Readonly<{
     accountId: AccountId;
     projectId: ProjectId;

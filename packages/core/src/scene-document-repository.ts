@@ -77,6 +77,17 @@ export type RestoreSceneRevisionOutcome =
         | "revision-not-found";
     }>;
 
+export type ApplyDocumentAsRevisionOutcome =
+  | Readonly<{
+      ok: true;
+      head: SceneDocumentHead;
+      revision: SceneRevision;
+    }>
+  | Readonly<{
+      ok: false;
+      reason: SceneConditionalMutationConflictReason;
+    }>;
+
 export type InitializeSceneDocumentInput = Readonly<{
   head: SceneDocumentHead;
   genesisRevision: SceneRevision;
@@ -159,6 +170,13 @@ export type RestoreSceneRevisionInput = SceneConditionalMutationInput &
     restoredRevisionId: RevisionId;
   }>;
 
+export type ApplyDocumentAsRevisionInput = SceneConditionalMutationInput &
+  Readonly<{
+    revisionId: RevisionId;
+    document: SceneDocumentV1;
+    contentHash: SceneContentHash;
+  }>;
+
 export interface SceneDocumentRepository {
   getHead(sceneId: SceneId): Promise<SceneDocumentHead | undefined>;
   getHeads(
@@ -188,6 +206,9 @@ export interface SceneDocumentRepository {
   createNamedVariantFromDocument(
     input: CreateNamedVariantFromDocumentInput
   ): Promise<CreateNamedVariantFromDocumentOutcome>;
+  applyDocumentAsRevision(
+    input: ApplyDocumentAsRevisionInput
+  ): Promise<ApplyDocumentAsRevisionOutcome>;
   restoreRevision(
     input: RestoreSceneRevisionInput
   ): Promise<RestoreSceneRevisionOutcome>;

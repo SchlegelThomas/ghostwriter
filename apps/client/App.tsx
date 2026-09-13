@@ -203,6 +203,7 @@ import {
   type CurrentWriter,
   type WorkspaceChatAttachment
 } from "./src/api.js";
+import { useStoryWorkWorkspace } from "./src/use-story-work-workspace.js";
 import { useDictationSpeechRecognition } from "./src/useDictationSpeechRecognition.js";
 import { getSpeechRecognitionConstructor } from "./src/speech-recognition-dictation.js";
 import { executeWorkPlan } from "./src/work-plan-orchestrator.js";
@@ -478,6 +479,7 @@ export default function App() {
   const [includeArchived, setIncludeArchived] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const storyWorkDirtyRef = useRef(false);
   const storyContextDirtySurfacesRef = useRef(
     createStoryContextDirtySurfaces()
   );
@@ -499,6 +501,10 @@ export default function App() {
     []
   );
   const blockDirtyStoryContextNavigation = useCallback((): boolean => {
+    if (storyWorkDirtyRef.current) {
+      setError("Save or discard the character review edits before leaving.");
+      return true;
+    }
     if (!hasDirtyStoryContextSurface(storyContextDirtySurfacesRef.current)) {
       return false;
     }
@@ -4379,6 +4385,22 @@ export default function App() {
     );
   }
 
+  const storyWork = useStoryWorkWorkspace({
+    project: selectedProject,
+    accountId: writer?.account.id,
+    selectedSceneId,
+    model: chatModel,
+    models: chatAvailableModels,
+    onOpenSettings: () => openSettings("providers"),
+    onProjectChanged: (project) => {
+      if (selectedProjectRef.current?.id !== project.id) return;
+      setSelectedProject(project);
+      selectedProjectRef.current = project;
+      invalidateMetadataUndo();
+    }
+  });
+  storyWorkDirtyRef.current = storyWork.dirty || storyWork.pending;
+
   if (!fontsLoaded && fontError === null) {
     return (
       <View
@@ -4507,6 +4529,14 @@ export default function App() {
         chatCapabilities={GHOSTWRITER_CAPABILITIES}
         chatMessages={chatMessages}
         chatMode={chatMode}
+        renderStoryWorkAgent={storyWork.panel}
+        storyWorkOpen={storyWork.panelOpen}
+        renderStoryWorkReview={storyWork.review}
+        storyWorkDirty={storyWork.dirty || storyWork.pending}
+        onOpenStoryWork={storyWork.open}
+        onCloseStoryWorkReview={storyWork.closeReview}
+        requestOpenStoryKnowledgeId={storyWork.requestedKnowledgeId}
+        onStoryKnowledgeOpened={storyWork.clearRequestedKnowledge}
         chatModel={chatModel}
         chatEffort={chatEffort}
         autoSuggestionsEnabled={autoSuggestionsEnabled}

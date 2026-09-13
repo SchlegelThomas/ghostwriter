@@ -122,6 +122,7 @@ import { registerCatalogAgentRoutes } from "./catalog-agent-routes.js";
 import { registerNextActionCoachRoutes } from "./next-action-coach-routes.js";
 import { registerStoryKnowledgeCreateRoutes } from "./story-knowledge-create-routes.js";
 import { registerCatalogPlaybookRoutes } from "./catalog-playbook-routes.js";
+import { registerStoryWorkRoutes } from "./story-work-api.js";
 import type { createToolLoopProvider } from "@ghostwriter/ai";
 import {
   mapAgentGuidanceRouteError,
@@ -1497,6 +1498,10 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
   registerCatalogAgentRoutes(app, { agentProvider: dependencies.agentProvider });
   registerNextActionCoachRoutes(app, { agentProvider: dependencies.agentProvider });
   registerStoryKnowledgeCreateRoutes(app, { agentProvider: dependencies.agentProvider });
+  registerStoryWorkRoutes(app, {
+    agentProvider: dependencies.agentProvider,
+    storyWork: dependencies.agentProvider.storyWork
+  });
   registerCatalogPlaybookRoutes(app, { agentProvider: dependencies.agentProvider });
   registerScenePartnerRoutes(app, {
     agentProvider: dependencies.agentProvider,

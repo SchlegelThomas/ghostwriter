@@ -6,6 +6,8 @@ import {
 import type {
   AcquireSceneLeaseOutcome,
   AcquireSceneLeaseInput,
+  ApplyDocumentAsRevisionInput,
+  ApplyDocumentAsRevisionOutcome,
   CreateNamedSceneVariantInput,
   CreateNamedSceneVariantOutcome,
   CreateNamedVariantFromDocumentInput,
@@ -98,6 +100,7 @@ function assertGenesis(input: InitializeSceneDocumentInput): void {
 }
 
 type ConditionalSceneMutationInput =
+  | ApplyDocumentAsRevisionInput
   | CreateSceneCheckpointInput
   | CreateNamedSceneVariantInput
   | CreateNamedVariantFromDocumentInput
@@ -496,6 +499,54 @@ export function createMemorySceneDocumentRepository(): SceneDocumentRepository {
           head: createSceneDocumentHead(current),
           revision: createSceneRevision(revision),
           variant: createSceneVariant(variant)
+        };
+      });
+    },
+    applyDocumentAsRevision(
+      input: ApplyDocumentAsRevisionInput
+    ): Promise<ApplyDocumentAsRevisionOutcome> {
+      return serializeWrite(() => {
+        const conflict = conditionalMutationConflict(state, input);
+        if (conflict !== undefined) return { ok: false, reason: conflict };
+        const current = state.heads.get(input.sceneId);
+        if (current === undefined) {
+          return { ok: false, reason: "working-version-conflict" };
+        }
+        if (state.revisions.has(input.revisionId)) {
+          throw new DomainValidationError(
+            "DUPLICATE_ID",
+            "The applied scene revision ID already exists."
+          );
+        }
+
+        // Validate both records before mutating either map so failed applies are atomic.
+        const revision = createSceneRevision({
+          id: input.revisionId,
+          sceneId: input.sceneId,
+          projectId: input.projectId,
+          parentRevisionId: current.checkpointRevisionId,
+          document: input.document,
+          contentHash: input.contentHash,
+          actorAccountId: input.actorAccountId,
+          origin: "agent",
+          reason: "agent-apply",
+          createdAt: input.now
+        });
+        const head = createSceneDocumentHead({
+          ...current,
+          workingVersion: current.workingVersion + 1,
+          document: revision.document,
+          contentHash: revision.contentHash,
+          checkpointRevisionId: revision.id,
+          updatedByAccountId: input.actorAccountId,
+          updatedAt: input.now
+        });
+        state.revisions.set(revision.id, revision);
+        state.heads.set(head.sceneId, head);
+        return {
+          ok: true,
+          head: createSceneDocumentHead(head),
+          revision: createSceneRevision(revision)
         };
       });
     },

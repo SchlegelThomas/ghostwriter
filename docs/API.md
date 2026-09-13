@@ -527,3 +527,32 @@ validated; invalid saved scene scopes fall back to their active chapter or proje
 is capped at 1,024 entries, retaining project/current scope and evicting the oldest other
 view. Legacy `/canvas/preference` remains compatible and advances the same preference CAS
 while updating the project camera. Client queue/hydration acceptance is tracked in the epic.
+
+### Story-work assignments (ADR 0018, implementation in progress)
+
+The character workflow uses `/api/projects/:projectId/story-work/assignments` with the authenticated
+project owner. Assignment definitions preserve the original brief, constraints, done condition,
+selected source IDs/revisions, provider/model and server-reserved Cast destination. The separate
+assignment version fences workflow changes; canonical project metadata and scene prose keep their
+own versions.
+
+- `POST /assignments` accepts `idempotencyKey`, `expectedProjectVersion`, `brief`, `constraints`,
+  `doneWhen`, `sceneIds` (zero to 32), and `model`; returns `{assignment,created}`.
+- `GET /assignments?limit=100` returns bounded assignments. `GET /assignments/:id` returns the
+  assignment and available current proposal, latest/active attempt, linked run and context receipt.
+- `POST /assignments/:id/attempts` accepts `expectedAssignmentVersion`, `kind` (`initial` or
+  `revision`), exact `instruction`, optional exact `priorArtifact`, `sourceMode`
+  (`submitted-snapshot` initially; `latest-authorized` for an explicit refresh revision), and `idempotencyKey`. Replayed
+  requests return the same persisted attempt without another provider call.
+- `POST /assignments/:id/review/open`, `PATCH /assignments/:id/review`, and
+  `POST /assignments/:id/review/reject` use `expectedAssignmentVersion` and the exact `artifact`
+  (`proposalId`, `artifactVersion`, `contentHash`). PATCH additionally accepts the complete
+  `character-create-v2` payload. Edits produce an immutable replacement proposal and preserve the
+  original generated artifact's lineage.
+- `POST /assignments/:id/apply` requires `expectedAssignmentVersion`, `proposalId`,
+  `expectedArtifactVersion`, `expectedProposalContentHash`, and `expectedProjectVersion`.
+  It returns `{replayed,assignment,proposal,result}` only after the atomic write. Exact repeated
+  application creates no duplicate. Changed consumed prose or story context refuses application.
+
+These are first-party human review/apply routes. They do not grant external MCP clients direct
+canonical-write authority. MCP bindings remain the later CP6 checkpoint.

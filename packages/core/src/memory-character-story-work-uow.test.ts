@@ -19,7 +19,8 @@ import {
   agentRunId,
   contextReceiptId,
   defineProjectRecords,
-  storyKnowledgeId
+  storyKnowledgeId,
+  type ProjectRecords
 } from "./domain.js";
 import {
   BELLWETHER_FIXTURE,
@@ -34,13 +35,22 @@ import {
 } from "./memory-character-story-work-uow.js";
 import { createMemoryContextReceiptRepository } from "./memory-context-receipt-repository.js";
 import { createMemoryProjectRepository } from "./memory-project-repository.js";
+import { createMemorySceneDocumentRepository } from "./memory-scene-document-repository.js";
 import { createMemoryStoryWorkAssignmentRepository } from "./memory-story-work-assignment-repository.js";
 import { createMemoryStoryWorkAttemptRepository } from "./memory-story-work-attempt-repository.js";
 import {
   createStoryWorkAssignment,
-  storyWorkAssignmentId
+  storyWorkAssignmentId,
+  type StoryWorkArtifactPointer
 } from "./story-work-assignment.js";
 import { createStoryWorkAttempt } from "./story-work-attempt.js";
+import { sceneContentHash } from "./scene-documents.js";
+import { createInitialSceneDocumentState } from "./scene-writing-services.js";
+import {
+  assembleStorySceneResource,
+  assembleStoryStructureResource
+} from "./story-context-receipt.js";
+import { storyContextFromProjectRecords } from "./story-context.js";
 
 const OWNER = accountId("account-character-story-work-owner");
 const FOREIGN = accountId("account-character-story-work-foreign");
@@ -54,19 +64,84 @@ const RECEIPT_HASH = instructionContentHash("b".repeat(64));
 const SCENE_ID = BELLWETHER_FIXTURE.scenes[0]!.id;
 const CREATED_AT = "2026-09-12T14:00:00.000Z";
 const APPLIED_AT = "2026-09-12T14:05:00.000Z";
+const hashPort = Object.freeze({
+  async digestSha256Hex(value: string) {
+    return createHash("sha256").update(value).digest("hex");
+  }
+});
 
 type HarnessOptions = Readonly<{
   failAfter?: MemoryCharacterStoryWorkFailurePoint;
   archived?: boolean;
   destinationId?: typeof DESTINATION_ID;
   assignmentArtifactProposalId?: typeof PROPOSAL_ID;
+  currentArtifactVersion?: number;
+  generatedArtifact?: StoryWorkArtifactPointer;
   runAccountId?: typeof OWNER;
   runReceiptHash?: typeof RECEIPT_HASH;
   proposalTargetId?: typeof DESTINATION_ID;
   receiptTargetId?: typeof DESTINATION_ID;
   payloadSourceSceneIds?: readonly typeof SCENE_ID[];
   assignmentSceneSources?: readonly typeof SCENE_ID[];
+  missingConsumedHead?: boolean;
+  staleSceneReceipt?: "version" | "hash";
+  staleStructureReceipt?: "intent" | "order" | "knowledge";
+  includeUnconsumedHead?: boolean;
 }>;
+
+function changedStructureRecords(
+  records: ProjectRecords,
+  change: NonNullable<HarnessOptions["staleStructureReceipt"]>
+): ProjectRecords {
+  if (change === "intent") {
+    return defineProjectRecords({
+      ...records,
+      scenes: records.scenes.map((scene) =>
+        scene.id === SCENE_ID
+          ? {
+              ...scene,
+              sketch: { ...scene.sketch, purpose: "A changed scene purpose." }
+            }
+          : scene
+      )
+    });
+  }
+  if (change === "knowledge") {
+    return defineProjectRecords({
+      ...records,
+      storyKnowledge: records.storyKnowledge.map((knowledge) =>
+        knowledge.kind === "thread"
+          ? { ...knowledge, label: `${knowledge.label} changed` }
+          : knowledge
+      )
+    });
+  }
+  return defineProjectRecords({
+    ...records,
+    books: records.books.map((book, bookIndex) =>
+      bookIndex === 0
+        ? {
+            ...book,
+            manuscript: {
+              ...book.manuscript,
+              parts: book.manuscript.parts.map((part, partIndex) =>
+                partIndex === 0
+                  ? {
+                      ...part,
+                      chapters: part.chapters.map((chapter, chapterIndex) =>
+                        chapterIndex === 0
+                          ? { ...chapter, sceneIds: [...chapter.sceneIds].reverse() }
+                          : chapter
+                      )
+                    }
+                  : part
+              )
+            }
+          }
+        : book
+    )
+  });
+}
 
 async function createHarness(options: HarnessOptions = {}) {
   const destinationId = options.destinationId ?? DESTINATION_ID;
@@ -95,6 +170,27 @@ async function createHarness(options: HarnessOptions = {}) {
   const proposals = createMemoryAgentProposalRepository();
   const runs = createMemoryAgentRunRepository();
   const receipts = createMemoryContextReceiptRepository();
+  const sceneDocuments = createMemorySceneDocumentRepository();
+  const initialScene = await createInitialSceneDocumentState({
+    projectId: projectRecords.project.id,
+    sceneId: SCENE_ID,
+    actorAccountId: OWNER,
+    ids: { create: (kind) => `${kind}-character-story-work` },
+    now: CREATED_AT
+  });
+  if (options.missingConsumedHead !== true) {
+    await sceneDocuments.initialize(initialScene);
+  }
+  if (options.includeUnconsumedHead === true) {
+    const unrelatedScene = await createInitialSceneDocumentState({
+      projectId: projectRecords.project.id,
+      sceneId: projectRecords.scenes[1]!.id,
+      actorAccountId: OWNER,
+      ids: { create: (kind) => `${kind}-unconsumed-character-story-work` },
+      now: CREATED_AT
+    });
+    await sceneDocuments.initialize(unrelatedScene);
+  }
   const sceneSources = options.assignmentSceneSources ?? [SCENE_ID];
   const assignment = createStoryWorkAssignment({
     id: ASSIGNMENT_ID,
@@ -121,7 +217,12 @@ async function createHarness(options: HarnessOptions = {}) {
     steps: [{ id: "draft-dossier", title: "Draft dossier", dependencies: [] }],
     currentArtifact: {
       proposalId: options.assignmentArtifactProposalId ?? PROPOSAL_ID,
-      artifactVersion: 1,
+      artifactVersion: options.currentArtifactVersion ?? 1,
+      contentHash: CONTENT_HASH
+    },
+    generatedArtifact: options.generatedArtifact ?? {
+      proposalId: options.assignmentArtifactProposalId ?? PROPOSAL_ID,
+      artifactVersion: options.currentArtifactVersion ?? 1,
       contentHash: CONTENT_HASH
     },
     results: [],
@@ -136,13 +237,34 @@ async function createHarness(options: HarnessOptions = {}) {
     })
   ).toMatchObject({ ok: true, created: true });
 
+  const receiptHead = options.staleSceneReceipt === "version"
+    ? { ...initialScene.head, workingVersion: initialScene.head.workingVersion + 1 }
+    : options.staleSceneReceipt === "hash"
+      ? { ...initialScene.head, contentHash: sceneContentHash("9".repeat(64)) }
+      : initialScene.head;
+  const sceneResource = await assembleStorySceneResource({
+    projectId: projectRecords.project.id,
+    sceneId: SCENE_ID,
+    head: receiptHead,
+    inclusionReason: "The writer selected this scene.",
+    hashPort
+  });
+  const structureRecords = options.staleStructureReceipt === undefined
+    ? projectRecords
+    : changedStructureRecords(projectRecords, options.staleStructureReceipt);
+  const structureResource = await assembleStoryStructureResource({
+    projectId: projectRecords.project.id,
+    context: storyContextFromProjectRecords(structureRecords),
+    inclusionReason: "The assignment's exact story context.",
+    hashPort
+  });
   const receipt: ContextReceipt = Object.freeze({
     id: RECEIPT_ID,
     projectId: projectRecords.project.id,
     workflowId: CHARACTER_STORY_WORK_WORKFLOW_ID,
     workflowVersion: "1.0.0",
     layers: [],
-    resources: [],
+    resources: [structureResource.resource, sceneResource.resource],
     excludedContextClasses: [
       "publishing-profile",
       "attachments",
@@ -241,8 +363,11 @@ async function createHarness(options: HarnessOptions = {}) {
         runId: RUN_ID,
         version: 2,
         kind: "initial",
+        sourceMode: "submitted-snapshot",
         instruction: assignment.brief,
-        resultArtifact: assignment.currentArtifact,
+        idempotencyKey: "attempt-character-story-work-key",
+        requestFingerprint: instructionContentHash("f".repeat(64)),
+        resultArtifact: assignment.generatedArtifact,
         createdAt: CREATED_AT,
         completedAt: "2026-09-12T14:02:00.000Z"
       })
@@ -251,11 +376,13 @@ async function createHarness(options: HarnessOptions = {}) {
 
   const unitOfWork = createMemoryCharacterStoryWorkApplyUnitOfWork({
     projects,
+    sceneDocuments,
     assignments,
     attempts,
     proposals,
     runs,
     receipts,
+    hashPort,
     ...(options.failAfter === undefined ? {} : { failAfter: options.failAfter })
   });
   const service = createCharacterStoryWorkServices({
@@ -268,7 +395,7 @@ async function createHarness(options: HarnessOptions = {}) {
     assignmentId: ASSIGNMENT_ID,
     expectedAssignmentVersion: assignment.version,
     proposalId: PROPOSAL_ID,
-    expectedArtifactVersion: 1,
+    expectedArtifactVersion: assignment.currentArtifact!.artifactVersion,
     expectedProposalContentHash: CONTENT_HASH,
     expectedProjectVersion: projectRecords.project.version
   });
@@ -341,6 +468,29 @@ describe("memory character story work apply unit of work", () => {
         (entry) => entry.id === DESTINATION_ID
       )
     ).toHaveLength(1);
+  });
+
+  it("applies an edited review artifact through its immutable generated origin", async () => {
+    const generatedArtifact: StoryWorkArtifactPointer = {
+      proposalId: agentProposalId("proposal-character-story-work-generated"),
+      artifactVersion: 1,
+      contentHash: instructionContentHash("8".repeat(64))
+    };
+    const harness = await createHarness({
+      currentArtifactVersion: 2,
+      generatedArtifact
+    });
+    const applied = await harness.service.applyCharacterProposal(harness.input);
+    expect(applied).toMatchObject({ replayed: false, assignment: { status: "applied" } });
+    expect(applied.assignment.generatedArtifact).toEqual(generatedArtifact);
+    expect(applied.assignment.currentArtifact).toMatchObject({
+      proposalId: PROPOSAL_ID,
+      artifactVersion: 2,
+      contentHash: CONTENT_HASH
+    });
+    await expect(
+      harness.service.applyCharacterProposal(harness.input)
+    ).resolves.toMatchObject({ replayed: true });
   });
 
   for (const failAfter of ["after-project", "after-proposal"] as const) {
@@ -443,4 +593,34 @@ describe("memory character story work apply unit of work", () => {
     );
     await expectUnchanged(collision);
   });
+
+  it("checks only exact consumed prose and structure dependencies", async () => {
+    for (const change of ["version", "hash"] as const) {
+      const staleProse = await createHarness({ staleSceneReceipt: change });
+      await expect(
+        staleProse.service.applyCharacterProposal(staleProse.input)
+      ).rejects.toMatchObject({ code: "CHARACTER_STORY_WORK_CONTEXT_STALE" });
+      await expectUnchanged(staleProse);
+    }
+
+    const missingProse = await createHarness({ missingConsumedHead: true });
+    await expect(
+      missingProse.service.applyCharacterProposal(missingProse.input)
+    ).rejects.toMatchObject({ code: "CHARACTER_STORY_WORK_CONTEXT_STALE" });
+    await expectUnchanged(missingProse);
+
+    for (const change of ["intent", "order", "knowledge"] as const) {
+      const staleStructure = await createHarness({ staleStructureReceipt: change });
+      await expect(
+        staleStructure.service.applyCharacterProposal(staleStructure.input)
+      ).rejects.toMatchObject({ code: "CHARACTER_STORY_WORK_CONTEXT_STALE" });
+      await expectUnchanged(staleStructure);
+    }
+
+    const unrelatedProse = await createHarness({ includeUnconsumedHead: true });
+    await expect(
+      unrelatedProse.service.applyCharacterProposal(unrelatedProse.input)
+    ).resolves.toMatchObject({ replayed: false });
+  });
 });
+import { createHash } from "node:crypto";

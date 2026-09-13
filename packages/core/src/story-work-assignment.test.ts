@@ -218,6 +218,7 @@ describe("story work assignment", () => {
       runId: RUN_ONE,
       updatedAt: "2026-09-12T12:01:00.000Z"
     });
+    expect(first.latestAttemptId).toBe(RUN_ONE);
     const canceled = finishStoryWorkAttemptWithoutArtifact({
       assignment: first,
       expectedVersion: 2,
@@ -226,6 +227,7 @@ describe("story work assignment", () => {
       updatedAt: "2026-09-12T12:02:00.000Z"
     });
     expect(canceled.currentArtifact).toBeUndefined();
+    expect(canceled.latestAttemptId).toBe(RUN_ONE);
 
     const retry = startStoryWorkAttempt({
       assignment: canceled,
@@ -233,6 +235,7 @@ describe("story work assignment", () => {
       runId: RUN_TWO,
       updatedAt: "2026-09-12T12:03:00.000Z"
     });
+    expect(retry.latestAttemptId).toBe(RUN_TWO);
     expect(() =>
       attachGeneratedStoryWorkArtifact({
         assignment: retry,
@@ -252,6 +255,8 @@ describe("story work assignment", () => {
     });
     expect(ready.status).toBe("artifact-ready");
     expect(ready.activeAttemptId).toBeUndefined();
+    expect(ready.latestAttemptId).toBe(RUN_TWO);
+    expect(ready.generatedArtifact).toEqual(ready.currentArtifact);
   });
 
   it("never turns provider failure or cancellation into an artifact-ready state", () => {
@@ -271,6 +276,7 @@ describe("story work assignment", () => {
 
     expect(failed.status).toBe("failed");
     expect(failed.currentArtifact).toBeUndefined();
+    expect(failed.latestAttemptId).toBe(RUN_ONE);
     expect(() =>
       attachGeneratedStoryWorkArtifact({
         assignment: failed,
@@ -280,6 +286,42 @@ describe("story work assignment", () => {
         updatedAt: "2026-09-12T12:03:00.000Z"
       })
     ).toThrow(StoryWorkAssignmentTransitionError);
+  });
+
+  it("retains the failed revision attempt while preserving the prior review artifact", () => {
+    const review = readyForReview();
+    const priorArtifact = review.currentArtifact;
+    const running = startStoryWorkAttempt({
+      assignment: review,
+      expectedVersion: 4,
+      runId: RUN_TWO,
+      updatedAt: "2026-09-12T12:04:00.000Z"
+    });
+    const failed = finishStoryWorkAttemptWithoutArtifact({
+      assignment: running,
+      expectedVersion: 5,
+      runId: RUN_TWO,
+      outcome: "failed",
+      updatedAt: "2026-09-12T12:05:00.000Z"
+    });
+
+    expect(failed).toMatchObject({
+      status: "failed",
+      latestAttemptId: RUN_TWO,
+      currentArtifact: priorArtifact,
+      generatedArtifact: review.generatedArtifact
+    });
+    expect(failed.activeAttemptId).toBeUndefined();
+  });
+
+  it("rejects assignments whose active and latest attempts disagree", () => {
+    expect(() =>
+      assignment({
+        status: "running",
+        activeAttemptId: RUN_ONE,
+        latestAttemptId: RUN_TWO
+      })
+    ).toThrow(/active attempt.*latest attempt/i);
   });
 
   it("allows identical generated content under a new proposal and next artifact version", () => {
@@ -319,7 +361,9 @@ describe("story work assignment", () => {
     });
 
     expect(review.currentArtifact).toEqual(original);
+    expect(review.generatedArtifact).toEqual(original);
     expect(edited.currentArtifact).toEqual(editedArtifact);
+    expect(edited.generatedArtifact).toEqual(original);
     expect(() =>
       replaceStoryWorkReviewArtifact({
         assignment: edited,
@@ -374,5 +418,42 @@ describe("story work assignment", () => {
       updatedAt: "2026-09-12T12:05:00.000Z"
     });
     expect(applied).toMatchObject({ status: "applied", version: 6 });
+    expect(applied.generatedArtifact).toEqual(original);
+  });
+
+  it("requires coherent generated lineage for reviewable assignments", () => {
+    const generated = artifact("proposal-generated", 1, "a");
+    const edited = artifact("proposal-edited", 2, "b");
+    expect(() =>
+      assignment({
+        status: "awaiting-review",
+        version: 3,
+        currentArtifact: edited
+      })
+    ).toThrow(/generated artifact lineage/i);
+    expect(() =>
+      assignment({
+        status: "awaiting-review",
+        version: 3,
+        generatedArtifact: edited,
+        currentArtifact: generated
+      })
+    ).toThrow(/cannot be newer/i);
+    expect(() =>
+      assignment({
+        status: "artifact-ready",
+        version: 3,
+        generatedArtifact: generated,
+        currentArtifact: edited
+      })
+    ).toThrow(/newly generated artifact/i);
+    expect(() =>
+      assignment({
+        status: "awaiting-review",
+        version: 3,
+        generatedArtifact: generated,
+        currentArtifact: artifact("proposal-same-version-edit", 1, "c")
+      })
+    ).toThrow(/must advance/i);
   });
 });

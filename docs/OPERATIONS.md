@@ -449,3 +449,13 @@ JSONB map to the existing preference row. Legacy x/y/zoom/selected-object values
 backfilled into the project scope; no historical child camera is inferred. Old clients keep
 the legacy columns in sync. Empty/legacy migration, stale writes and account isolation are
 covered by focused repository tests. This is UI return state, never canonical story content.
+
+
+### Story-work assignment migration (ADR 0018)
+
+Migration `0027_premium_randall.sql` adds assignment and attempt persistence. It stores
+request keys/fingerprints and original/current artifact pointers independently of canonical story
+metadata. Attempt source mode distinguishes submitted snapshots from explicitly refreshed revisions.
+Generation, review and apply use transactional UOWs; provider network calls remain outside database
+transactions. The migration has been checked from empty and prior local schemas; production follows
+the existing migration/deployment workflow and has not been run for this epic.

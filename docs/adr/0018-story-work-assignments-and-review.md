@@ -183,3 +183,41 @@ reserved target before apply. One storage transaction updates project metadata, 
 and assignment result under their preconditions. Exact repeated apply returns the recorded result
 without a second character or metadata version increment. Network calls are outside transactions;
 start, success and failure each commit their run/attempt/assignment transition atomically.
+
+### Character review lineage and transactional freshness
+
+Each assignment keeps the provider's `generatedArtifact` separately from its `currentArtifact`.
+Human review edits create a new immutable proposal and advance only the current pointer; they do
+not rewrite the provider attempt. A subsequent generated revision resets both pointers to its new
+result. Apply ties the attempt's result to the generated pointer and the human-reviewed input to the
+current pointer, preserving the same run, receipt, owner, reserved destination and source scope.
+
+Freshness checks run inside the apply transaction. Project metadata version alone is insufficient:
+scene prose has an independent working version. Postgres locks the consumed scene heads and checks
+exact versions/content hashes, then reconstructs and hashes the consumed story-context projection.
+Changed or missing consumed sources refuse application. Unconsumed prose does not invalidate an
+artifact. Assignment locking serializes duplicate review/apply actions, and all proposal/assignment/
+canonical mutations roll back together on a later conflict. Initial and revision attempt request keys
+and fingerprints prevent duplicate provider invocation after an uncertain response.
+
+
+An attempt records `sourceMode`. Initial generation uses `submitted-snapshot`. An explicit revision
+uses `latest-authorized`, which reloads the same authorized source IDs at their current acknowledged
+revisions without widening scope. The UI names this choice; no source change starts a provider call
+automatically. The original assignment snapshot remains immutable and each attempt's receipt records
+exactly what was consumed. Source mode participates in the attempt request fingerprint. Retrying a
+failed attempt preserves its exact instruction, prior artifact and source mode.
+
+### Scene artifact and revision prerequisites
+
+Scene proposals use `scene-draft-v1`: bounded literal prose and authorized source scene references.
+The server-reserved destination is outside model output. On application the trusted server converts
+reviewed prose into the existing document schema with newly generated block IDs; markup-looking text
+remains literal text. This proposal is not a second canonical document store.
+
+The scene repository's `applyDocumentAsRevision` operation requires an exact working version and a
+held, unexpired editing lease. It creates an immutable `agent` / `agent-apply` revision and advances
+the head once. Its caller must compose this mutation with proposal and assignment state in the same
+outer transaction, validate context and destination freshness, and return stored results on exact
+replay. Named variants remain separate and leave working prose unchanged. These repository and
+schema prerequisites alone do not expose scene application to a writer or MCP client.

@@ -7,8 +7,11 @@ import type { StoryWorkAssignmentId } from "./story-work-assignment.js";
 import type { AgentRunId } from "./domain.js";
 
 export type CreateStoryWorkAttemptOutcome =
-  | Readonly<{ ok: true; attempt: StoryWorkAttempt }>
-  | Readonly<{ ok: false; reason: "duplicate-run" }>;
+  | Readonly<{ ok: true; attempt: StoryWorkAttempt; created: boolean }>
+  | Readonly<{
+      ok: false;
+      reason: "idempotency-conflict" | "duplicate-run";
+    }>;
 
 export type CompareAndSetStoryWorkAttemptOutcome =
   | Readonly<{ ok: true; attempt: StoryWorkAttempt }>
@@ -20,6 +23,12 @@ export interface StoryWorkAttemptRepository {
     projectId: ProjectId;
     assignmentId: StoryWorkAssignmentId;
     runId: AgentRunId;
+  }>): Promise<StoryWorkAttempt | undefined>;
+  getByIdempotencyKey(input: Readonly<{
+    accountId: AccountId;
+    projectId: ProjectId;
+    assignmentId: StoryWorkAssignmentId;
+    idempotencyKey: string;
   }>): Promise<StoryWorkAttempt | undefined>;
   listByAssignment(input: Readonly<{
     accountId: AccountId;

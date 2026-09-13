@@ -199,6 +199,10 @@ export type StoryWorkAssignment = Readonly<{
   status: StoryWorkAssignmentStatus;
   steps: readonly StoryWorkStep[];
   activeAttemptId?: AgentRunId;
+  /** Most recently started attempt, retained after its active state ends. */
+  latestAttemptId?: AgentRunId;
+  /** Last provider-generated artifact; review edits advance currentArtifact only. */
+  generatedArtifact?: StoryWorkArtifactPointer;
   currentArtifact?: StoryWorkArtifactPointer;
   results: readonly StoryWorkResultReference[];
   idempotencyKey: string;
@@ -746,16 +750,71 @@ function validateStateShape(assignment: StoryWorkAssignment): void {
     );
   }
   if (
-    (assignment.status === "artifact-ready" ||
-      assignment.status === "awaiting-review" ||
-      assignment.status === "rejected" ||
-      assignment.status === "applied") &&
-    assignment.currentArtifact === undefined
+    assignment.activeAttemptId !== undefined &&
+    assignment.latestAttemptId !== undefined &&
+    assignment.activeAttemptId !== assignment.latestAttemptId
   ) {
     throw new DomainValidationError(
       "INVALID_AGENT_POLICY",
-      "This assignment state requires an artifact."
+      "The active attempt must also be the latest attempt."
     );
+  }
+  const requiresArtifact =
+    (assignment.status === "artifact-ready" ||
+      assignment.status === "awaiting-review" ||
+      assignment.status === "rejected" ||
+      assignment.status === "applied");
+  if (
+    requiresArtifact &&
+    (assignment.currentArtifact === undefined ||
+      assignment.generatedArtifact === undefined)
+  ) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "This assignment state requires current and generated artifact lineage."
+    );
+  }
+  if (
+    (assignment.currentArtifact === undefined) !==
+    (assignment.generatedArtifact === undefined)
+  ) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Current story work artifacts require their generated origin."
+    );
+  }
+  if (
+    assignment.currentArtifact !== undefined &&
+    assignment.generatedArtifact !== undefined
+  ) {
+    if (
+      assignment.generatedArtifact.artifactVersion >
+      assignment.currentArtifact.artifactVersion
+    ) {
+      throw new DomainValidationError(
+        "INVALID_VERSION",
+        "Generated artifact lineage cannot be newer than the current review artifact."
+      );
+    }
+    if (
+      assignment.generatedArtifact.artifactVersion ===
+        assignment.currentArtifact.artifactVersion &&
+      !sameArtifact(assignment.generatedArtifact, assignment.currentArtifact)
+    ) {
+      throw new DomainValidationError(
+        "INVALID_VERSION",
+        "A review edit must advance beyond its generated artifact version."
+      );
+    }
+    if (
+      assignment.status === "artifact-ready" &&
+      !sameArtifact(assignment.generatedArtifact, assignment.currentArtifact)
+    ) {
+      throw new DomainValidationError(
+        "INVALID_AGENT_POLICY",
+        "A newly generated artifact must be the current review artifact."
+      );
+    }
   }
   if (assignment.status === "applied" && assignment.results.length === 0) {
     throw new DomainValidationError(
@@ -846,9 +905,20 @@ export function createStoryWorkAssignment(
             "Active agent run"
           ) as AgentRunId
         }),
+    ...(input.latestAttemptId === undefined
+      ? {}
+      : {
+          latestAttemptId: requireIdentifier(
+            input.latestAttemptId,
+            "Latest agent run"
+          ) as AgentRunId
+        }),
     ...(input.currentArtifact === undefined
       ? {}
       : { currentArtifact: createStoryWorkArtifactPointer(input.currentArtifact) }),
+    ...(input.generatedArtifact === undefined
+      ? {}
+      : { generatedArtifact: createStoryWorkArtifactPointer(input.generatedArtifact) }),
     results: normalizeResults(input.results, projectId),
     idempotencyKey: requireIdentifier(input.idempotencyKey, "Idempotency key"),
     createdAt,
@@ -919,7 +989,8 @@ export function startStoryWorkAttempt(input: Readonly<{
   ]);
   return nextAssignment(current, input.updatedAt, {
     status: "running",
-    activeAttemptId: requireIdentifier(input.runId, "Agent run") as AgentRunId
+    activeAttemptId: requireIdentifier(input.runId, "Agent run") as AgentRunId,
+    latestAttemptId: requireIdentifier(input.runId, "Agent run") as AgentRunId
   });
 }
 
@@ -985,6 +1056,7 @@ export function attachGeneratedStoryWorkArtifact(input: Readonly<{
   const { activeAttemptId: _activeAttemptId, ...withoutActiveAttempt } = current;
   return nextAssignment(withoutActiveAttempt, input.updatedAt, {
     status: "artifact-ready",
+    generatedArtifact: artifact,
     currentArtifact: artifact
   });
 }

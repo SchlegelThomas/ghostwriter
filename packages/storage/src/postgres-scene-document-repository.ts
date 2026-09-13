@@ -1,5 +1,7 @@
 import {
   accountId,
+  type ApplyDocumentAsRevisionInput,
+  type ApplyDocumentAsRevisionOutcome,
   createSceneDocumentHead,
   createSceneEditingLease,
   createSceneRevision,
@@ -280,6 +282,7 @@ async function queryLease(
 }
 
 type ConditionalSceneMutationInput =
+  | ApplyDocumentAsRevisionInput
   | CreateSceneCheckpointInput
   | CreateNamedSceneVariantInput
   | CreateNamedVariantFromDocumentInput
@@ -788,6 +791,57 @@ export function createPostgresSceneDocumentRepository(
           revision,
           variant: variantFromRow(created)
         };
+      });
+    },
+    applyDocumentAsRevision(
+      input: ApplyDocumentAsRevisionInput
+    ): Promise<ApplyDocumentAsRevisionOutcome> {
+      return db.transaction(async (transaction) => {
+        const exec = transaction as unknown as RepositoryDatabase;
+        const context = await lockConditionalMutation(exec, input);
+        if (!context.ok) return context;
+
+        const revision = await insertRevision(
+          exec,
+          createSceneRevision({
+            id: input.revisionId,
+            sceneId: input.sceneId,
+            projectId: input.projectId,
+            parentRevisionId: context.head.checkpointRevisionId,
+            document: input.document,
+            contentHash: input.contentHash,
+            actorAccountId: input.actorAccountId,
+            origin: "agent",
+            reason: "agent-apply",
+            createdAt: input.now
+          })
+        );
+        const [updated] = await exec
+          .update(sceneDocuments)
+          .set({
+            workingVersion: context.head.workingVersion + 1,
+            schemaVersion: revision.document.schemaVersion,
+            document: revision.document,
+            contentHash: revision.contentHash,
+            checkpointRevisionId: revision.id,
+            updatedByAccountId: input.actorAccountId,
+            updatedAt: input.now
+          })
+          .where(
+            and(
+              eq(sceneDocuments.sceneId, input.sceneId),
+              eq(sceneDocuments.projectId, input.projectId),
+              eq(
+                sceneDocuments.workingVersion,
+                context.head.workingVersion
+              )
+            )
+          )
+          .returning();
+        if (updated === undefined) {
+          throw new Error("Locked agent scene apply update returned no row.");
+        }
+        return { ok: true, head: headFromRow(updated), revision };
       });
     },
     restoreRevision(

@@ -341,6 +341,7 @@ async function validateResources(
       source.kind === "story-knowledge"
   );
   if (
+    input.attempt.sourceMode === "submitted-snapshot" &&
     projectVersionSources.some(
       (source) => source.projectVersion !== input.storyContext.projectVersion
     )
@@ -352,6 +353,10 @@ async function validateResources(
   }
 
   const contextSceneIds = new Set(input.storyContext.scenes.map((scene) => scene.id));
+  const expectedSceneSources = assignment.sources.filter(
+    (source) => source.kind === "scene"
+  );
+  const consumedSceneIds = new Set<SceneId>();
   let structureCount = 0;
   let totalCharacters = 0;
   const validated: CharacterStoryWorkResourceInput[] = [];
@@ -410,6 +415,8 @@ async function validateResources(
     } else {
       const source = expectedSceneSource(assignment, resource.sceneId);
       if (
+        source?.kind !== "scene" ||
+        consumedSceneIds.has(resource.sceneId) ||
         !contextSceneIds.has(resource.sceneId) ||
         !assignmentAuthorizesScene(assignment, input.storyContext, resource.sceneId)
       ) {
@@ -418,12 +425,14 @@ async function validateResources(
           "Character scene resource is outside the assignment story scope."
         );
       }
+      consumedSceneIds.add(resource.sceneId);
       if (
-        source?.kind === "scene" &&
-        (source.projectVersion !== input.storyContext.projectVersion ||
-          (source.workingVersion !== undefined &&
-            (source.workingVersion !== resource.workingVersion ||
-              source.contentHash !== resource.contentHash)))
+        input.attempt.sourceMode === "submitted-snapshot" &&
+        (source.workingVersion === undefined ||
+          source.contentHash === undefined ||
+          source.projectVersion !== input.storyContext.projectVersion ||
+          source.workingVersion !== resource.workingVersion ||
+          source.contentHash !== resource.contentHash)
       ) {
         throw new DomainValidationError(
           "INVALID_VERSION",
@@ -437,6 +446,15 @@ async function validateResources(
     throw new DomainValidationError(
       "UNKNOWN_REFERENCE",
       "Character work requires exactly one story-structure resource."
+    );
+  }
+  if (
+    consumedSceneIds.size !== expectedSceneSources.length ||
+    expectedSceneSources.some((source) => !consumedSceneIds.has(source.sceneId))
+  ) {
+    throw new DomainValidationError(
+      "UNKNOWN_REFERENCE",
+      "Character work must consume exactly the selected scene sources."
     );
   }
   return Object.freeze(validated);

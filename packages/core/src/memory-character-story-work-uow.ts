@@ -1,7 +1,4 @@
-import {
-  CHARACTER_STORY_WORK_WORKFLOW_ID,
-  instructionContentHash
-} from "./agent-domain.js";
+import type { AsyncHashPort } from "./agent-domain.js";
 import type {
   AgentProposalRepository,
   AgentRunRepository,
@@ -11,28 +8,19 @@ import {
   AgentProposalNotFoundError,
   AgentProposalStateConflictError,
   AgentReceiptNotFoundError,
-  AgentRunNotFoundError,
-  AgentRunReceiptMismatchError,
-  type AgentProposal
+  AgentRunNotFoundError
 } from "./agent-runs-proposals.js";
 import {
-  CharacterStoryWorkArtifactMismatchError,
-  StoryWorkAssignmentNotFoundError
-} from "./character-story-work-services.js";
+  characterStoryWorkExactReplay,
+  validateCharacterStoryWorkApply
+} from "./character-story-work-apply-policy.js";
+import { StoryWorkAssignmentNotFoundError } from "./character-story-work-services.js";
 import type {
   ApplyCharacterStoryWorkInput,
   CharacterStoryWorkApplyResult,
   CharacterStoryWorkApplyUnitOfWork
 } from "./character-story-work-uow.js";
-import { validateCharacterCreateV2 } from "./character-create-v2.js";
-import {
-  createStoryKnowledge,
-  defineProjectRecords,
-  DomainValidationError,
-  storyKnowledgeId,
-  type ProjectRecords,
-  type StoryKnowledgeId
-} from "./domain.js";
+import { defineProjectRecords, type ProjectRecords } from "./domain.js";
 import {
   ProjectAccessDeniedError,
   requireProjectOwner
@@ -42,22 +30,10 @@ import {
   type MemoryTransactionParticipant,
   type MemoryTransactionalRepository
 } from "./memory-transaction.js";
-import { applyProjectCommandToRecords } from "./project-commands.js";
-import {
-  ProjectVersionConflictError,
-  type DomainIdKind,
-  type IdGenerator,
-  type ProjectRepository
-} from "./project-repository.js";
-import { ProjectArchivedMutationError } from "./capture-documents.js";
+import type { ProjectRepository } from "./project-repository.js";
+import type { SceneDocumentRepository } from "./scene-document-repository.js";
 import type { StoryWorkAssignmentRepository } from "./story-work-assignment-repository.js";
-import {
-  recordAppliedStoryWorkAssignmentFromUnitOfWork,
-  StoryWorkAssignmentTransitionError,
-  type StoryWorkArtifactPointer,
-  type StoryWorkAssignment,
-  type StoryWorkResultReference
-} from "./story-work-assignment.js";
+import { StoryWorkAssignmentTransitionError } from "./story-work-assignment.js";
 import type { StoryWorkAttemptRepository } from "./story-work-attempt-repository.js";
 import { StoryWorkAttemptTransitionError } from "./story-work-attempt.js";
 
@@ -65,68 +41,15 @@ export type MemoryCharacterStoryWorkFailurePoint = "after-project" | "after-prop
 
 type Dependencies = Readonly<{
   projects: ProjectRepository;
+  sceneDocuments: SceneDocumentRepository;
   assignments: StoryWorkAssignmentRepository;
   attempts: StoryWorkAttemptRepository;
   proposals: AgentProposalRepository;
   runs: AgentRunRepository;
   receipts: ContextReceiptRepository;
+  hashPort: AsyncHashPort;
   failAfter?: MemoryCharacterStoryWorkFailurePoint;
 }>;
-
-function sameArtifact(
-  left: StoryWorkArtifactPointer | undefined,
-  input: Pick<
-    ApplyCharacterStoryWorkInput,
-    "proposalId" | "expectedArtifactVersion" | "expectedProposalContentHash"
-  >
-): boolean {
-  return (
-    left?.proposalId === input.proposalId &&
-    left.artifactVersion === input.expectedArtifactVersion &&
-    left.contentHash === instructionContentHash(String(input.expectedProposalContentHash))
-  );
-}
-
-function reservedDestination(assignment: StoryWorkAssignment): StoryKnowledgeId {
-  if (
-    assignment.taskKind !== "character" ||
-    assignment.destination.kind !== "story-knowledge" ||
-    assignment.destination.operation !== "create"
-  ) {
-    throw new CharacterStoryWorkArtifactMismatchError(
-      "Character apply requires the assignment's exact reserved Cast destination."
-    );
-  }
-  return assignment.destination.storyKnowledgeId;
-}
-
-function exactResult(
-  assignment: StoryWorkAssignment,
-  destinationId: StoryKnowledgeId,
-  projectVersion: number
-): Extract<StoryWorkResultReference, { kind: "story-knowledge" }> | undefined {
-  if (assignment.results.length !== 1) return undefined;
-  const [result] = assignment.results;
-  return result?.kind === "story-knowledge" &&
-    result.storyKnowledgeId === destinationId &&
-    result.projectVersion === projectVersion
-    ? result
-    : undefined;
-}
-
-function fixedKnowledgeIdGenerator(id: StoryKnowledgeId): IdGenerator {
-  return Object.freeze({
-    create(kind: DomainIdKind): string {
-      if (kind !== "storyKnowledge") {
-        throw new DomainValidationError(
-          "INVALID_AGENT_POLICY",
-          "Character apply may generate only its reserved story-knowledge ID."
-        );
-      }
-      return id;
-    }
-  });
-}
 
 async function loadProjectRecords(
   projects: ProjectRepository,
@@ -144,74 +67,6 @@ async function loadProjectRecords(
     : defineProjectRecords({ project, books, scenes, storyKnowledge, editions });
 }
 
-function characterProjectRecords(input: Readonly<{
-  current: ProjectRecords;
-  assignment: StoryWorkAssignment;
-  proposal: AgentProposal;
-  destinationId: StoryKnowledgeId;
-  appliedAt: string;
-}>): ProjectRecords {
-  const payload = validateCharacterCreateV2(input.proposal.payload);
-  if (input.current.storyKnowledge.some((entry) => entry.id === input.destinationId)) {
-    throw new DomainValidationError(
-      "DUPLICATE_ID",
-      "The reserved Cast destination is already in use."
-    );
-  }
-  const permittedSceneIds = new Set(
-    input.assignment.sources.flatMap((source) =>
-      source.kind === "scene" ? [source.sceneId] : []
-    )
-  );
-  const sourceSceneIds = payload.sourceSceneIds ?? [];
-  for (const sourceSceneId of sourceSceneIds) {
-    if (!permittedSceneIds.has(sourceSceneId)) {
-      throw new DomainValidationError(
-        "UNKNOWN_REFERENCE",
-        "Character scene links must stay within the assignment's explicit scene sources."
-      );
-    }
-    const scene = input.current.scenes.find((candidate) => candidate.id === sourceSceneId);
-    if (scene === undefined || scene.archivedAt !== undefined) {
-      throw new DomainValidationError(
-        "UNKNOWN_REFERENCE",
-        "Character scene links require active scenes in the current project."
-      );
-    }
-  }
-  const created = applyProjectCommandToRecords(
-    input.current,
-    {
-      type: "storyKnowledge.create",
-      label: payload.name,
-      kind: "character",
-      authority: "planned"
-    },
-    fixedKnowledgeIdGenerator(input.destinationId),
-    input.appliedAt
-  );
-  const base = created.storyKnowledge.find((entry) => entry.id === input.destinationId);
-  if (base === undefined) {
-    throw new DomainValidationError(
-      "UNKNOWN_REFERENCE",
-      "Character apply did not create its reserved Cast destination."
-    );
-  }
-  const dossier = createStoryKnowledge({
-    ...base,
-    notes: payload.summary,
-    aliases: payload.aliases,
-    characterSheet: payload.characterSheet,
-    linkedSceneIds: sourceSceneIds
-  });
-  return defineProjectRecords({
-    ...created,
-    storyKnowledge: created.storyKnowledge.map((entry) =>
-      entry.id === dossier.id ? dossier : entry
-    )
-  });
-}
-
 function participant(repository: unknown, label: string): MemoryTransactionParticipant {
   const candidate = (repository as MemoryTransactionalRepository)[MEMORY_TRANSACTION_STATE];
   if (candidate === undefined) {
@@ -220,7 +75,10 @@ function participant(repository: unknown, label: string): MemoryTransactionParti
   return candidate;
 }
 
-function failAt(expected: MemoryCharacterStoryWorkFailurePoint | undefined, actual: MemoryCharacterStoryWorkFailurePoint): void {
+function failAt(
+  expected: MemoryCharacterStoryWorkFailurePoint | undefined,
+  actual: MemoryCharacterStoryWorkFailurePoint
+): void {
   if (expected === actual) throw new Error(`Injected character apply failure ${actual}.`);
 }
 
@@ -229,6 +87,7 @@ export function createMemoryCharacterStoryWorkApplyUnitOfWork(
 ): CharacterStoryWorkApplyUnitOfWork {
   const participants = [
     participant(dependencies.projects, "project"),
+    participant(dependencies.sceneDocuments, "scene-document"),
     participant(dependencies.assignments, "assignment"),
     participant(dependencies.proposals, "proposal")
   ];
@@ -246,7 +105,7 @@ export function createMemoryCharacterStoryWorkApplyUnitOfWork(
       await previous;
       const snapshots = participants.map((entry) => entry.snapshot());
       try {
-        let assignment = await dependencies.assignments.get({
+        const assignment = await dependencies.assignments.get({
           accountId: input.accountId,
           projectId: input.projectId,
           assignmentId: input.assignmentId
@@ -266,114 +125,53 @@ export function createMemoryCharacterStoryWorkApplyUnitOfWork(
           }
           throw error;
         }
-        const destinationId = reservedDestination(assignment);
         const proposal = await dependencies.proposals.get(input.proposalId);
-        if (proposal === undefined || proposal.projectId !== input.projectId) {
-          throw new AgentProposalNotFoundError();
-        }
-        if (!sameArtifact(assignment.currentArtifact, input)) {
-          throw new CharacterStoryWorkArtifactMismatchError();
-        }
+        if (proposal === undefined) throw new AgentProposalNotFoundError();
         const run = await dependencies.runs.get(proposal.runId);
-        if (
-          run === undefined ||
-          run.projectId !== input.projectId ||
-          run.initiatorAccountId !== input.accountId
-        ) throw new AgentRunNotFoundError();
+        if (run === undefined) throw new AgentRunNotFoundError();
         const receipt = await dependencies.receipts.get(proposal.receiptId);
-        if (receipt === undefined || receipt.projectId !== input.projectId) {
-          throw new AgentReceiptNotFoundError();
-        }
-        if (
-          run.receiptId !== receipt.id ||
-          run.receiptHash !== receipt.receiptHash ||
-          proposal.receiptId !== receipt.id
-        ) throw new AgentRunReceiptMismatchError();
-        if (
-          proposal.runId !== run.id ||
-          run.workflowId !== CHARACTER_STORY_WORK_WORKFLOW_ID ||
-          receipt.workflowId !== CHARACTER_STORY_WORK_WORKFLOW_ID ||
-          run.workflowVersion !== receipt.workflowVersion ||
-          assignment.provider !== run.provider ||
-          assignment.model !== run.model ||
-          receipt.provider !== run.provider ||
-          receipt.model !== run.model ||
-          proposal.outputSchemaId !== "character-create-v2" ||
-          proposal.primaryTarget.kind !== "story-knowledge" ||
-          proposal.primaryTarget.id !== destinationId ||
-          receipt.outputSchemaId !== "character-create-v2" ||
-          receipt.targetStoryKnowledgeId !== destinationId ||
-          receipt.primaryTarget?.kind !== "story-knowledge" ||
-          receipt.primaryTarget.id !== destinationId
-        ) throw new CharacterStoryWorkArtifactMismatchError();
+        if (receipt === undefined) throw new AgentReceiptNotFoundError();
         const attempt = await dependencies.attempts.get({
           accountId: input.accountId,
           projectId: input.projectId,
           assignmentId: input.assignmentId,
           runId: run.id
         });
-        if (
-          attempt === undefined ||
-          !sameArtifact(attempt.resultArtifact, input)
-        ) throw new StoryWorkAttemptTransitionError();
-
-        if (assignment.status === "applied") {
-          const result = exactResult(
-            assignment,
-            destinationId,
-            input.expectedProjectVersion + 1
-          );
-          if (
-            assignment.version !== input.expectedAssignmentVersion + 1 ||
-            proposal.status !== "applied" ||
-            proposal.applied?.actorAccountId !== input.accountId ||
-            result === undefined
-          ) throw new StoryWorkAssignmentTransitionError();
-          return Object.freeze({ replayed: true, assignment, proposal, result });
-        }
-        if (
-          assignment.version !== input.expectedAssignmentVersion ||
-          assignment.status !== "awaiting-review"
-        ) throw new StoryWorkAssignmentTransitionError();
-        if (proposal.status !== "ready") throw new AgentProposalStateConflictError();
-        if (
-          proposal.contentHash !==
-          instructionContentHash(String(input.expectedProposalContentHash))
-        ) throw new CharacterStoryWorkArtifactMismatchError();
-        if (run.status !== "ready") throw new AgentProposalStateConflictError();
-
-        const current = await loadProjectRecords(dependencies.projects, input.projectId);
-        if (current === undefined || current.project.version !== input.expectedProjectVersion) {
-          throw new ProjectVersionConflictError(
-            input.projectId,
-            input.expectedProjectVersion
-          );
-        }
-        if (current.project.archivedAt !== undefined) {
-          throw new ProjectArchivedMutationError();
-        }
-        const updatedRecords = characterProjectRecords({
-          current,
-          assignment,
-          proposal,
-          destinationId,
-          appliedAt: input.appliedAt
+        if (attempt === undefined) throw new StoryWorkAttemptTransitionError();
+        const canonical = { assignment, attempt, proposal, run, receipt };
+        const replay = characterStoryWorkExactReplay({
+          accountId: input.accountId,
+          exactInput: input,
+          ...canonical
         });
-        const result = Object.freeze({
-          kind: "story-knowledge" as const,
-          storyKnowledgeId: storyKnowledgeId(destinationId),
-          projectVersion: updatedRecords.project.version
-        });
-        const updatedAssignment = recordAppliedStoryWorkAssignmentFromUnitOfWork({
-          assignment,
-          expectedVersion: input.expectedAssignmentVersion,
-          artifact: assignment.currentArtifact!,
-          results: [result],
-          updatedAt: input.appliedAt
+        if (replay !== undefined) return replay;
+
+        const currentRecords = await loadProjectRecords(
+          dependencies.projects,
+          input.projectId
+        );
+        if (currentRecords === undefined) throw new StoryWorkAssignmentNotFoundError();
+        const consumedSceneIds = receipt.resources.flatMap((resource) =>
+          resource.resourceClass === "scene-document" ? [resource.sceneId] : []
+        );
+        const sceneDocumentHeads = await dependencies.sceneDocuments.getHeads(
+          consumedSceneIds
+        );
+        const validated = await validateCharacterStoryWorkApply({
+          accountId: input.accountId,
+          exactInput: input,
+          appliedAt: input.appliedAt,
+          currentRecords,
+          sceneDocumentHeads,
+          hashPort: dependencies.hashPort,
+          ...canonical
         });
 
         await dependencies.projects.transaction((writer) => {
-          writer.replaceProjectRecords(updatedRecords, input.expectedProjectVersion);
+          writer.replaceProjectRecords(
+            validated.updatedRecords,
+            input.expectedProjectVersion
+          );
         });
         failAt(dependencies.failAfter, "after-project");
         const proposalOutcome = await dependencies.proposals.markApplied({
@@ -391,15 +189,14 @@ export function createMemoryCharacterStoryWorkApplyUnitOfWork(
           projectId: input.projectId,
           assignmentId: assignment.id,
           expectedVersion: input.expectedAssignmentVersion,
-          next: updatedAssignment
+          next: validated.updatedAssignment
         });
         if (!assignmentOutcome.ok) throw new StoryWorkAssignmentTransitionError();
-        assignment = assignmentOutcome.assignment;
         return Object.freeze({
           replayed: false,
-          assignment,
+          assignment: assignmentOutcome.assignment,
           proposal: proposalOutcome.proposal,
-          result
+          result: validated.result
         });
       } catch (error) {
         participants.forEach((entry, index) => entry.restore(snapshots[index]));

@@ -294,6 +294,22 @@ const hermeticFakeProvider = createFakeStructuredCompletionProvider((input) => {
       }
     };
   }
+  if (schemaName === "character_create_v2") {
+    return {
+      output: {
+        schemaId: "character-create-v2",
+        name: "Mara Venn",
+        summary:
+          "A harbor pilot who reads danger early and hides how much the old wreck still shapes her choices.",
+        aliases: ["Mara"],
+        characterSheet: {
+          desire: "Guide the crew home without repeating the loss that made her cautious.",
+          pressure: "The safest route conflicts with the promise she made before departure.",
+          voiceNotes: "Precise, restrained, and unexpectedly dry under pressure."
+        }
+      }
+    };
+  }
   if (schemaName === "backdrop-fields-v1") {
     return {
       output: {
@@ -334,6 +350,18 @@ const liveProviderFactory = (apiKey: string, providerId: ProviderId) =>
   createProviderAdapter({ providerId, apiKey });
 const hermeticProviderFactory = (_apiKey: string, _providerId: ProviderId) =>
   hermeticFakeProvider;
+const hermeticListModelsFactory = () =>
+  Object.freeze({
+    completeStructured: hermeticFakeProvider.completeStructured.bind(
+      hermeticFakeProvider
+    ),
+    validateCredential: hermeticFakeProvider.validateCredential.bind(
+      hermeticFakeProvider
+    ),
+    async listModels() {
+      return Object.freeze([{ id: "gpt-4.1", displayName: "GPT-4.1 (hermetic)" }]);
+    }
+  });
 const providerFactory = liveProviders
   ? liveProviderFactory
   : hermeticProviderFactory;
@@ -347,6 +375,7 @@ const agentProvider = createTestAgentProviderRuntime({
   kekConfig: createTestProviderKekRuntimeConfig(),
   defaultValidationProviderFactory: providerFactory,
   defaultCompletionProviderFactory: providerFactory,
+  ...(liveProviders ? {} : { listModelsFactory: hermeticListModelsFactory }),
   capturePromotions,
   sceneDocuments
 });

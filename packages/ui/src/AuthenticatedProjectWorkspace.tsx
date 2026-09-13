@@ -266,6 +266,14 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   onCanvasHistoryOpenChange?(open: boolean): void;
   storageAccountId?: string;
   renderCanvas?: ReactNode;
+  renderStoryWorkAgent?: ReactNode;
+  storyWorkOpen?: boolean;
+  renderStoryWorkReview?: ReactNode;
+  storyWorkDirty?: boolean;
+  onOpenStoryWork?(): void;
+  onCloseStoryWorkReview?(): void;
+  requestOpenStoryKnowledgeId?: StoryKnowledgeId;
+  onStoryKnowledgeOpened?(): void;
   renderDraft?(
     scene: ProjectNavigatorScene | undefined,
     presentation: DraftWorkspacePresentation
@@ -543,6 +551,14 @@ export function AuthenticatedProjectWorkspace({
   onCanvasHistoryOpenChange,
   storageAccountId,
   renderCanvas,
+  renderStoryWorkAgent,
+  storyWorkOpen = false,
+  renderStoryWorkReview,
+  storyWorkDirty = false,
+  onOpenStoryWork,
+  onCloseStoryWorkReview,
+  requestOpenStoryKnowledgeId,
+  onStoryKnowledgeOpened,
   renderDraft,
   sceneProseById = {},
   onChronologySceneIdsChange,
@@ -657,6 +673,10 @@ export function AuthenticatedProjectWorkspace({
   }
 
   function blockDirtyStoryContextDeparture(): boolean {
+    if (storyWorkDirty) {
+      setStoryContextNavigationMessage("Save or discard the character review edits before leaving.");
+      return true;
+    }
     if (!draftStoryContextDirty) return false;
     setStoryContextNavigationMessage(STORY_CONTEXT_DIRTY_NAVIGATION_MESSAGE);
     return true;
@@ -670,6 +690,7 @@ export function AuthenticatedProjectWorkspace({
 
   function openPlans(): void {
     if (blockDirtyStoryContextDeparture()) return;
+    if (narrow) setCollapsedPanel("none");
     setPrimarySideView("explorer");
     setRailDestination("write");
     if (structureCollapsible) setStructureRail("expanded");
@@ -714,12 +735,14 @@ export function AuthenticatedProjectWorkspace({
   function requestModeChange(next: ProjectWorkspaceMode): boolean {
     if (next !== mode && blockDirtyStoryContextDeparture()) return false;
     closeInboxForNavigation("mode-change");
+    onCloseStoryWorkReview?.();
     onModeChange(next);
     return true;
   }
 
   function requestOpenReader(): void {
     if (blockDirtyStoryContextDeparture()) return;
+    if (narrow) setCollapsedPanel("none");
     closeInboxForNavigation("reader");
     // Same Reader rail as Draft/Title Page — leave Cast lens so center yields.
     setRailDestination("write");
@@ -826,6 +849,12 @@ export function AuthenticatedProjectWorkspace({
   const [collapsedPanel, setCollapsedPanel] =
     useState<CollapsedPanel>("tree");
   const previousSceneId = useRef(selectedSceneId);
+  const narrowAgentOwnsCenter =
+    narrow &&
+    secondaryOpen &&
+    secondaryMode === "agent" &&
+    collapsedPanel === "inspector";
+  const storyWorkReviewOpen = Boolean(renderStoryWorkReview);
   const canvasVisible = mode === "canvas" || mode === "split";
   // Same collapsible manuscript rail in Draft, Canvas, and Split (wide layouts).
   const structureCollapsible = !narrow;
@@ -887,11 +916,12 @@ export function AuthenticatedProjectWorkspace({
     );
   }
 
-  function openAgentSecondary(): void {
-    if (blockDirtyStoryContextDeparture()) return;
+  function openAgentSecondary(): boolean {
+    if (blockDirtyStoryContextDeparture()) return false;
     setSecondaryOpen(true);
     setSecondaryMode(nextSecondaryModeOnAgentOpen(secondaryMode, true));
     if (!wide) setCollapsedPanel("inspector");
+    return true;
   }
 
   useEffect(() => {
@@ -900,6 +930,13 @@ export function AuthenticatedProjectWorkspace({
     }
     openAgentSecondary();
   }, [requestOpenAgentPanel]);
+
+  useEffect(() => {
+    if (!narrow || !storyWorkReviewOpen) return;
+    setSecondaryOpen(true);
+    setSecondaryMode("agent");
+    setCollapsedPanel("inspector");
+  }, [narrow, storyWorkReviewOpen]);
 
   useEffect(() => {
     if (requestFocusDraftScene === undefined || requestFocusDraftScene < 1) {
@@ -931,6 +968,7 @@ export function AuthenticatedProjectWorkspace({
       return;
     }
     if (blockDirtyStoryContextDeparture()) return;
+    onCloseStoryWorkReview?.();
     closeInboxForNavigation("manuscript-selection");
     setRailDestination("write");
     setPrimarySideView("explorer");
@@ -1172,6 +1210,12 @@ export function AuthenticatedProjectWorkspace({
     return true;
   }
 
+  useEffect(() => {
+    if (requestOpenStoryKnowledgeId === undefined) return;
+    if (!project.storyKnowledge.some((entry) => entry.id === requestOpenStoryKnowledgeId)) return;
+    if (chooseSelection({ kind: "storyKnowledge", storyKnowledgeId: requestOpenStoryKnowledgeId })) onStoryKnowledgeOpened?.();
+  }, [requestOpenStoryKnowledgeId, project]);
+
   const [quickBuildOpen, setQuickBuildOpen] = useState(false);
   const [railDestination, setRailDestination] = useState<
     "write" | "characters"
@@ -1223,7 +1267,7 @@ export function AuthenticatedProjectWorkspace({
     inboxOpen
   });
   const exclusiveCenterOwner = inboxOwnsCenter || castOwnsCenter;
-  const denseCenter = centerUsesDenseColumn(surfaceDense, exclusiveCenterOwner);
+  const denseCenter = Boolean(renderStoryWorkReview) || centerUsesDenseColumn(surfaceDense, exclusiveCenterOwner);
   const castSelectedKnowledge = selectedCastKnowledge(project, selection);
   const chronology = manuscriptChronology(project, selection);
   const manuscriptChronologyVisible =
@@ -2262,6 +2306,17 @@ export function AuthenticatedProjectWorkspace({
               selected={inboxOpen}
             />
           )}
+          {renderStoryWorkAgent === undefined ? null : (
+            <Button
+              disabled={busy}
+              label="Agent"
+              onPress={() => {
+                if (!openAgentSecondary()) return;
+                onOpenStoryWork?.();
+              }}
+              selected={narrowAgentOwnsCenter || storyWorkReviewOpen}
+            />
+          )}
           {onOpenReader === undefined ? null : (
             <Button
               disabled={busy || selectedSceneId === undefined}
@@ -2273,7 +2328,9 @@ export function AuthenticatedProjectWorkspace({
             <Button
               label="Settings"
               onPress={() => {
-                if (!blockDirtyStoryContextDeparture()) onOpenSettings();
+                if (blockDirtyStoryContextDeparture()) return;
+                setCollapsedPanel("none");
+                onOpenSettings();
               }}
               selected={settingsOpen}
             />
@@ -2752,10 +2809,12 @@ export function AuthenticatedProjectWorkspace({
             </>
           );
           const workSurface = (
+          <>
           <View
             ref={splitSurfaceRef}
             style={[
               styles.workSurface,
+              renderStoryWorkReview ? { display: "none" } : undefined,
               (surfaceDense || exclusiveCenterOwner) && styles.workSurfaceMap,
               splitPanesActive && styles.workSurfaceSplit,
               narrow && styles.workSurfaceNarrow
@@ -2909,11 +2968,21 @@ export function AuthenticatedProjectWorkspace({
               </>
             )}
           </View>
+          {renderStoryWorkReview ? <View key="story-work-review" style={[styles.workSurfacePane, styles.workSurfaceInbox]}>{renderStoryWorkReview}</View> : null}
+          </>
           );
           // Dense Draft/Canvas/Split or Inbox: bounded flex column (no page ScrollView).
           if (denseCenter) {
             return (
-              <View style={[styles.center, styles.centerMap]}>
+              <View
+                style={[
+                  styles.center,
+                  styles.centerMap,
+                  narrowAgentOwnsCenter &&
+                  !renderStoryWorkReview &&
+                  styles.regionHidden
+                ]}
+              >
                 {error === undefined ? null : (
                   <View accessibilityRole="alert" style={styles.error}>
                     <Text style={styles.errorText}>{error}</Text>
@@ -2932,7 +3001,12 @@ export function AuthenticatedProjectWorkspace({
               ]}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator
-              style={styles.center}
+              style={[
+                styles.center,
+                narrowAgentOwnsCenter &&
+                  !renderStoryWorkReview &&
+                  styles.regionHidden
+              ]}
             >
               {error === undefined ? null : (
                 <View accessibilityRole="alert" style={styles.error}>
@@ -2959,7 +3033,11 @@ export function AuthenticatedProjectWorkspace({
             styles.inspectorRegion,
             !wide && styles.collapsedRegion,
             narrow && styles.narrowRegion,
+            narrowAgentOwnsCenter &&
+              !renderStoryWorkReview &&
+              styles.narrowAgentRegion,
             (focusHalo ||
+              (narrow && storyWorkReviewOpen) ||
               !secondaryOpen ||
               (!wide && collapsedPanel !== "inspector")) &&
               styles.regionHidden
@@ -2970,7 +3048,10 @@ export function AuthenticatedProjectWorkspace({
           ) : (
             <WorkspaceSecondaryPanel
               agent={
+                <View style={{ flex: 1, minHeight: 0 }}>
+                <View style={{ flex: 1, minHeight: 0, display: storyWorkOpen ? "none" : "flex" }}>
                 <WorkspaceChatPanel
+                  onOpenStoryWork={onOpenStoryWork}
                   activeChatSessionId={activeChatSessionId}
                   availableModels={chatAvailableModels}
                   busy={busy}
@@ -3057,6 +3138,9 @@ export function AuthenticatedProjectWorkspace({
                   workPlanJobSummary={workPlanJobSummary}
                   workPlanJobs={workPlanJobs}
                 />
+                </View>
+                <View style={{ flex: 1, minHeight: 0, display: storyWorkOpen ? "flex" : "none" }}>{renderStoryWorkAgent}</View>
+                </View>
               }
               autoSuggestionsEnabled={autoSuggestionsEnabled}
               inspector={draftDeskActive ? draftContextDock : inspector}
@@ -3068,7 +3152,13 @@ export function AuthenticatedProjectWorkspace({
                 setSecondaryOpen(false);
                 if (!wide) setCollapsedPanel("none");
               }}
-              width={wide ? secondaryWidthPx : shell.inspectorWidth}
+              width={
+                narrow
+                  ? width
+                  : wide
+                    ? secondaryWidthPx
+                    : shell.inspectorWidth
+              }
             />
           )}
         </View>
@@ -3741,6 +3831,12 @@ const styles = StyleSheet.create({
     maxHeight: 430,
     minHeight: 0,
     width: "100%"
+  },
+  narrowAgentRegion: {
+    flexGrow: 1,
+    flexShrink: 1,
+    height: "auto",
+    maxHeight: "100%"
   },
   regionHidden: {
     display: "none"

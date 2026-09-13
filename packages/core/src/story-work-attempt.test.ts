@@ -23,7 +23,10 @@ function pendingInitial() {
     runId: RUN_ID,
     version: 1,
     kind: "initial",
+    sourceMode: "submitted-snapshot",
     instruction: "  Keep Mara wary of the signal.  ",
+    idempotencyKey: "character-attempt-1",
+    requestFingerprint: instructionContentHash("1".repeat(64)),
     createdAt: "2026-09-12T12:00:00.000Z"
   });
 }
@@ -64,7 +67,8 @@ describe("story work attempts", () => {
       createStoryWorkAttempt({
         ...pendingInitial(),
         runId: agentRunId("run-story-work-attempt-2"),
-        kind: "revision"
+        kind: "revision",
+        sourceMode: "latest-authorized"
       })
     ).toThrow(/prior reviewed artifact/i);
 
@@ -72,6 +76,7 @@ describe("story work attempts", () => {
       ...pendingInitial(),
       runId: agentRunId("run-story-work-attempt-2"),
       kind: "revision",
+      sourceMode: "latest-authorized",
       instruction: "Make the voice more guarded.",
       priorArtifact: {
         proposalId: agentProposalId("proposal-character-mara-v1"),
@@ -90,10 +95,47 @@ describe("story work attempts", () => {
     ).toThrow(StoryWorkAttemptTransitionError);
   });
 
+  it("requires submitted snapshots for initial work and explicit latest sources for revisions", () => {
+    expect(() =>
+      createStoryWorkAttempt({
+        ...pendingInitial(),
+        sourceMode: "latest-authorized"
+      })
+    ).toThrow(/initial work requires submitted sources/i);
+    expect(() =>
+      createStoryWorkAttempt({
+        ...pendingInitial(),
+        runId: agentRunId("run-story-work-attempt-refresh"),
+        kind: "revision",
+        sourceMode: "submitted-snapshot",
+        instruction: "Revise from the latest saved sources.",
+        priorArtifact: {
+          proposalId: agentProposalId("proposal-character-mara-v1"),
+          artifactVersion: 1,
+          contentHash: instructionContentHash("a".repeat(64))
+        }
+      })
+    ).toThrow(/revisions require an explicit latest-source refresh/i);
+  });
+
   it("scopes repository reads and protects immutable attempt authorship", async () => {
     const repository = createMemoryStoryWorkAttemptRepository();
     const created = await repository.create({ attempt: pendingInitial() });
-    expect(created.ok).toBe(true);
+    expect(created).toMatchObject({ ok: true, created: true });
+    expect(
+      await repository.create({
+        attempt: { ...pendingInitial(), runId: agentRunId("ignored-replay-run") }
+      })
+    ).toMatchObject({ ok: true, created: false, attempt: { runId: RUN_ID } });
+    expect(
+      await repository.create({
+        attempt: {
+          ...pendingInitial(),
+          runId: agentRunId("conflicting-replay-run"),
+          requestFingerprint: instructionContentHash("2".repeat(64))
+        }
+      })
+    ).toEqual({ ok: false, reason: "idempotency-conflict" });
     expect(
       await repository.get({
         accountId: accountId("account-foreign"),

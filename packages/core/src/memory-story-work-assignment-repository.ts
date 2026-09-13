@@ -95,6 +95,26 @@ export function createMemoryStoryWorkAssignmentRepository(): StoryWorkAssignment
       return cloneAssignment(stored.assignment);
     },
 
+    async getByIdempotencyKey(input) {
+      const assignmentId = assignmentsByIdempotencyKey.get(
+        `${scopeKey(input.accountId, input.projectId)}\u0000${input.idempotencyKey}`
+      );
+      const stored = assignmentId === undefined
+        ? undefined
+        : assignments.get(assignmentId);
+      if (
+        stored === undefined ||
+        stored.assignment.projectId !== input.projectId ||
+        stored.assignment.initiatorAccountId !== input.accountId
+      ) {
+        return undefined;
+      }
+      return Object.freeze({
+        assignment: cloneAssignment(stored.assignment),
+        requestFingerprint: stored.requestFingerprint
+      });
+    },
+
     async listByProject(input) {
       const limit = normalizeLimit(input.options?.limit);
       return Object.freeze(

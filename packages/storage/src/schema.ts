@@ -952,6 +952,139 @@ export const agentProposals = pgTable(
   ]
 );
 
+export const storyWorkAssignments = pgTable(
+  "story_work_assignments",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    initiatorAccountId: text("initiator_account_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    taskKind: text("task_kind").notNull(),
+    brief: text("brief").notNull(),
+    constraints: text("constraints").notNull(),
+    doneWhen: text("done_when").notNull(),
+    sources: jsonb("sources").notNull(),
+    destination: jsonb("destination").notNull(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    status: text("status").notNull(),
+    steps: jsonb("steps").notNull(),
+    activeAttemptId: text("active_attempt_id").references(() => agentRuns.id, {
+      onDelete: "restrict"
+    }),
+    latestAttemptId: text("latest_attempt_id").references(() => agentRuns.id, {
+      onDelete: "restrict"
+    }),
+    generatedArtifact: jsonb("generated_artifact"),
+    currentArtifact: jsonb("current_artifact"),
+    results: jsonb("results").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    requestFingerprint: text("request_fingerprint").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("story_work_assignments_idempotency_unique").on(
+      table.initiatorAccountId,
+      table.projectId,
+      table.idempotencyKey
+    ),
+    index("story_work_assignments_project_account_updated_index").on(
+      table.projectId,
+      table.initiatorAccountId,
+      table.updatedAt,
+      table.id
+    ),
+    index("story_work_assignments_project_account_status_index").on(
+      table.projectId,
+      table.initiatorAccountId,
+      table.status,
+      table.updatedAt
+    ),
+    check(
+      "story_work_assignments_version_check",
+      sql`${table.version} >= 1`
+    ),
+    check(
+      "story_work_assignments_json_shape_check",
+      sql`jsonb_typeof(${table.sources}) = 'array'
+        and jsonb_typeof(${table.destination}) = 'object'
+        and jsonb_typeof(${table.steps}) = 'array'
+        and jsonb_typeof(${table.results}) = 'array'
+        and (${table.generatedArtifact} is null or jsonb_typeof(${table.generatedArtifact}) = 'object')
+        and (${table.currentArtifact} is null or jsonb_typeof(${table.currentArtifact}) = 'object')`
+    ),
+    check(
+      "story_work_assignments_active_attempt_check",
+      sql`(${table.status} = 'running') = (${table.activeAttemptId} is not null)`
+    )
+  ]
+);
+
+export const storyWorkAttempts = pgTable(
+  "story_work_attempts",
+  {
+    runId: text("run_id")
+      .primaryKey()
+      .references(() => agentRuns.id, { onDelete: "restrict" }),
+    assignmentId: text("assignment_id")
+      .notNull()
+      .references(() => storyWorkAssignments.id, { onDelete: "cascade" }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    initiatorAccountId: text("initiator_account_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    kind: text("kind").notNull(),
+    sourceMode: text("source_mode").notNull(),
+    instruction: text("instruction").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    requestFingerprint: text("request_fingerprint").notNull(),
+    priorArtifact: jsonb("prior_artifact"),
+    resultArtifact: jsonb("result_artifact"),
+    createdAt: text("created_at").notNull(),
+    completedAt: text("completed_at")
+  },
+  (table) => [
+    index("story_work_attempts_assignment_created_index").on(
+      table.projectId,
+      table.initiatorAccountId,
+      table.assignmentId,
+      table.createdAt,
+      table.runId
+    ),
+    uniqueIndex("story_work_attempts_idempotency_unique").on(
+      table.initiatorAccountId,
+      table.projectId,
+      table.assignmentId,
+      table.idempotencyKey
+    ),
+    check("story_work_attempts_version_check", sql`${table.version} >= 1`),
+    check(
+      "story_work_attempts_kind_check",
+      sql`${table.kind} in ('initial', 'revision')`
+    ),
+    check(
+      "story_work_attempts_source_mode_check",
+      sql`${table.sourceMode} in ('submitted-snapshot', 'latest-authorized')
+        and ((${table.kind} = 'initial' and ${table.sourceMode} = 'submitted-snapshot')
+          or (${table.kind} = 'revision' and ${table.sourceMode} = 'latest-authorized'))`
+    ),
+    check(
+      "story_work_attempts_artifact_shape_check",
+      sql`(${table.priorArtifact} is null or jsonb_typeof(${table.priorArtifact}) = 'object')
+        and (${table.resultArtifact} is null or jsonb_typeof(${table.resultArtifact}) = 'object')
+        and ((${table.completedAt} is null) = (${table.resultArtifact} is null))`
+    )
+  ]
+);
+
 export const mcpGrants = pgTable(
   "mcp_grants",
   {
@@ -1053,6 +1186,8 @@ export const ghostwriterSchema = {
   contextReceipts,
   agentRuns,
   agentProposals,
+  storyWorkAssignments,
+  storyWorkAttempts,
   mcpGrants,
   editions,
   editionSceneRevisions,

@@ -178,6 +178,7 @@ export type WorkspaceChatPanelProps = Readonly<{
   onManualNextActionCoach?(sceneId?: SceneId): void;
   nextActionCoachBusy?: boolean;
   /** Active work-plan job strip under session tabs. */
+  onOpenStoryWork?(): void;
   workPlanJobSummary?: string;
   workPlanJobs?: readonly WorkPlanJobStripJob[];
   workPlanJobActions?: readonly WorkPlanJobStripAction[];
@@ -233,6 +234,7 @@ export function WorkspaceChatPanel({
   onMessageActionChip,
   onManualNextActionCoach,
   nextActionCoachBusy = false,
+  onOpenStoryWork,
   workPlanJobSummary,
   workPlanJobs = [],
   workPlanJobActions = [],
@@ -450,6 +452,8 @@ export function WorkspaceChatPanel({
           </Pressable>
         </View>
       ) : null}
+
+      {onOpenStoryWork ? <Pressable accessibilityRole="button" accessibilityLabel="Develop story" onPress={onOpenStoryWork} style={styles.ghostButton}><Text style={styles.ghostButtonText}>Develop story</Text></Pressable> : null}
 
       {showSessionRow ? (
         <View

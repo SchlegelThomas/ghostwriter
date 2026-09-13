@@ -1,4 +1,14 @@
 import type {
+  AgentProposal,
+  AgentRun,
+  ContextReceipt,
+  CharacterCreateV2,
+  CharacterStoryWorkApplyResult,
+  CharacterStoryWorkGenerationResult,
+  CharacterStoryWorkReviewResult,
+  StoryWorkAssignment,
+  StoryWorkAttempt,
+  StoryWorkArtifactPointer,
   BookId,
   BookReaderProjection,
   CanvasBoard,
@@ -2305,4 +2315,57 @@ export async function getCharacterVisualDownload(input: Readonly<{
       `visuals/${encodeURIComponent(input.visualId)}/download`
     )
   );
+}
+
+export type StoryWorkDetailResponse = Readonly<{
+  assignment: StoryWorkAssignment;
+  proposal?: AgentProposal;
+  run?: AgentRun;
+  receipt?: ContextReceipt;
+  attempt?: StoryWorkAttempt;
+}>;
+
+function storyWorkPath(projectId: string, suffix = ""): string {
+  return `/api/projects/${encodeURIComponent(projectId)}/story-work/assignments${suffix}`;
+}
+
+export async function listStoryWorkAssignments(projectId: string): Promise<readonly StoryWorkAssignment[]> {
+  const result = await requestJson<{ assignments: readonly StoryWorkAssignment[] }>(storyWorkPath(projectId, "?limit=100"));
+  return result.assignments;
+}
+
+export function getStoryWorkAssignment(projectId: string, assignmentId: string): Promise<StoryWorkDetailResponse> {
+  return requestJson(storyWorkPath(projectId, `/${encodeURIComponent(assignmentId)}`));
+}
+
+export function createCharacterStoryWorkAssignment(input: Readonly<{
+  projectId: string; expectedProjectVersion: number; idempotencyKey: string;
+  brief: string; constraints: string; doneWhen: string; sceneIds: readonly string[]; model: string;
+}>): Promise<Readonly<{ assignment: StoryWorkAssignment; created: boolean }>> {
+  const { projectId, ...body } = input;
+  return requestJson(storyWorkPath(projectId), jsonRequest("POST", body));
+}
+
+export function startCharacterStoryWorkAttempt(input: Readonly<{
+  projectId: string; assignmentId: string; expectedAssignmentVersion: number;
+  kind: "initial" | "revision"; sourceMode: "submitted-snapshot" | "latest-authorized"; instruction: string; priorArtifact?: StoryWorkArtifactPointer; idempotencyKey: string;
+}>): Promise<CharacterStoryWorkGenerationResult> {
+  const { projectId, assignmentId, ...body } = input;
+  return requestJson(storyWorkPath(projectId, `/${encodeURIComponent(assignmentId)}/attempts`), jsonRequest("POST", body));
+}
+
+export function reviewCharacterStoryWork(input: Readonly<{
+  projectId: string; assignmentId: string; expectedAssignmentVersion: number;
+  artifact: StoryWorkArtifactPointer;
+}> & (Readonly<{ action: "open" | "reject" }> | Readonly<{ action: "edit"; payload: CharacterCreateV2 }>)): Promise<CharacterStoryWorkReviewResult> {
+  const { projectId, assignmentId, action, ...body } = input;
+  return requestJson(storyWorkPath(projectId, `/${encodeURIComponent(assignmentId)}/review${action === "edit" ? "" : `/${action}`}`), jsonRequest(action === "edit" ? "PATCH" : "POST", body));
+}
+
+export function applyCharacterStoryWork(input: Readonly<{
+  projectId: string; assignmentId: string; expectedAssignmentVersion: number; expectedProjectVersion: number;
+  proposalId: string; expectedArtifactVersion: number; expectedProposalContentHash: string;
+}>): Promise<CharacterStoryWorkApplyResult> {
+  const { projectId, assignmentId, ...body } = input;
+  return requestJson(storyWorkPath(projectId, `/${encodeURIComponent(assignmentId)}/apply`), jsonRequest("POST", body));
 }

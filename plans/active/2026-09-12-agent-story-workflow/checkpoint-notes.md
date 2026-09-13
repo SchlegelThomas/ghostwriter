@@ -1,5 +1,7 @@
 # Checkpoint working notes
 
+**Current resume state (2026-09-13):** see [resume-notes.md](resume-notes.md), [backend-handoff.md](backend-handoff.md), [storage-handoff.md](storage-handoff.md) and [cp2-handoff.md](cp2-handoff.md). The frames below record earlier implementation stages; they are not current completion claims.
+
 Implementation authorized 2026-09-12. CP0a/CP0b foundation slice in progress.
 
 - Outcome: inspect Canvas without replacing Draft; create visible chapter objects; find unplaced scenes; consistent scoped geometry; predictable consecutive Undo.

@@ -1,3 +1,4 @@
+import { instructionContentHash, type InstructionContentHash } from "./agent-domain.js";
 import { DomainValidationError, type AgentRunId, type ProjectId } from "./domain.js";
 import type { AccountId } from "./identity.js";
 import {
@@ -11,6 +12,7 @@ export const STORY_WORK_ATTEMPT_INSTRUCTION_MAX = 20_000;
 export const STORY_WORK_ATTEMPT_LIST_MAX = 100;
 
 export type StoryWorkAttemptKind = "initial" | "revision";
+export type StoryWorkSourceMode = "submitted-snapshot" | "latest-authorized";
 
 export type StoryWorkAttempt = Readonly<{
   assignmentId: StoryWorkAssignmentId;
@@ -19,8 +21,12 @@ export type StoryWorkAttempt = Readonly<{
   runId: AgentRunId;
   version: number;
   kind: StoryWorkAttemptKind;
+  /** Whether this attempt uses the submitted source revisions or an explicit refresh of the same authorized scope. */
+  sourceMode: StoryWorkSourceMode;
   /** Exact writer-authored attempt instruction. */
   instruction: string;
+  idempotencyKey: string;
+  requestFingerprint: InstructionContentHash;
   priorArtifact?: StoryWorkArtifactPointer;
   resultArtifact?: StoryWorkArtifactPointer;
   createdAt: string;
@@ -47,6 +53,10 @@ function identifier(value: string, label: string): string {
   return normalized;
 }
 
+export function storyWorkAttemptIdempotencyKey(value: string): string {
+  return identifier(value, "Attempt idempotency key");
+}
+
 function timestamp(value: string, label: string): string {
   const normalized = identifier(value, label);
   if (!Number.isFinite(Date.parse(normalized))) {
@@ -66,6 +76,24 @@ export function createStoryWorkAttempt(input: StoryWorkAttempt): StoryWorkAttemp
     throw new DomainValidationError(
       "INVALID_AGENT_POLICY",
       "Story work attempt kind is invalid."
+    );
+  }
+  if (
+    input.sourceMode !== "submitted-snapshot" &&
+    input.sourceMode !== "latest-authorized"
+  ) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Story work source mode is invalid."
+    );
+  }
+  if (
+    (input.kind === "initial" && input.sourceMode !== "submitted-snapshot") ||
+    (input.kind === "revision" && input.sourceMode !== "latest-authorized")
+  ) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Initial work requires submitted sources and revisions require an explicit latest-source refresh."
     );
   }
   if (
@@ -124,7 +152,10 @@ export function createStoryWorkAttempt(input: StoryWorkAttempt): StoryWorkAttemp
     runId: identifier(input.runId, "Agent run") as AgentRunId,
     version: input.version,
     kind: input.kind,
+    sourceMode: input.sourceMode,
     instruction: input.instruction,
+    idempotencyKey: storyWorkAttemptIdempotencyKey(input.idempotencyKey),
+    requestFingerprint: instructionContentHash(String(input.requestFingerprint)),
     ...(priorArtifact === undefined ? {} : { priorArtifact }),
     ...(resultArtifact === undefined ? {} : { resultArtifact }),
     createdAt,

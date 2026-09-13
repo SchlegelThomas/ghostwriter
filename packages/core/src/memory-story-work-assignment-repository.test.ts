@@ -57,6 +57,13 @@ describe("memory story work assignment repository", () => {
       repository.create({ assignment: original, requestFingerprint })
     ).resolves.toMatchObject({ ok: true, created: true });
     await expect(
+      repository.getByIdempotencyKey({
+        accountId: OWNER,
+        projectId: PROJECT,
+        idempotencyKey: original.idempotencyKey
+      })
+    ).resolves.toEqual({ assignment: original, requestFingerprint });
+    await expect(
       repository.create({
         assignment: createStoryWorkAssignment({
           ...original,
@@ -87,6 +94,20 @@ describe("memory story work assignment repository", () => {
 
     await expect(
       repository.get({ accountId: STRANGER, projectId: PROJECT, assignmentId: original.id })
+    ).resolves.toBeUndefined();
+    await expect(
+      repository.getByIdempotencyKey({
+        accountId: STRANGER,
+        projectId: PROJECT,
+        idempotencyKey: original.idempotencyKey
+      })
+    ).resolves.toBeUndefined();
+    await expect(
+      repository.getByIdempotencyKey({
+        accountId: OWNER,
+        projectId: OTHER_PROJECT,
+        idempotencyKey: original.idempotencyKey
+      })
     ).resolves.toBeUndefined();
     await expect(
       repository.get({ accountId: OWNER, projectId: OTHER_PROJECT, assignmentId: original.id })
@@ -169,7 +190,8 @@ describe("memory story work assignment repository", () => {
     ).resolves.toMatchObject({
       version: 2,
       status: "running",
-      activeAttemptId: agentRunId("run-current")
+      activeAttemptId: agentRunId("run-current"),
+      latestAttemptId: agentRunId("run-current")
     });
   });
 

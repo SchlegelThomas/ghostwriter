@@ -67,7 +67,16 @@ function assignment(
     brief: "  Keep this exact brief.\nSecond line with `code`.  ",
     constraints: "  No prophecy; keep the uncertainty.  ",
     doneWhen: "  A complete character is ready for my review.  ",
-    sources: [{ kind: "project", projectId: PROJECT, projectVersion: 5 }],
+    sources: [
+      { kind: "project", projectId: PROJECT, projectVersion: 5 },
+      {
+        kind: "scene",
+        sceneId: SCENE,
+        projectVersion: 5,
+        workingVersion: 3,
+        contentHash: sceneContentHash("a".repeat(64))
+      }
+    ],
     destination: {
       kind: "story-knowledge",
       storyKnowledgeId: TARGET,
@@ -97,16 +106,23 @@ function attempt(
     runId: RUN,
     version: 1,
     kind: "initial",
+    sourceMode: "submitted-snapshot",
     instruction: current.brief,
+    idempotencyKey: "character-attempt-request",
+    requestFingerprint: instructionContentHash("c".repeat(64)),
     createdAt: NOW,
     ...overrides
   });
 }
 
-function storyContext(project = PROJECT, selectedScene = SCENE): StoryContextProjection {
+function storyContext(
+  project = PROJECT,
+  selectedScene = SCENE,
+  projectVersion = 5
+): StoryContextProjection {
   return Object.freeze({
     projectId: project,
-    projectVersion: 5,
+    projectVersion,
     scope: Object.freeze({ kind: "project" as const }),
     totalCanonicalSceneCount: 1,
     scenes: Object.freeze([
@@ -133,7 +149,9 @@ function storyContext(project = PROJECT, selectedScene = SCENE): StoryContextPro
 
 async function resources(
   context = storyContext(),
-  scene = SCENE
+  scene = SCENE,
+  workingVersion = 3,
+  contentHash = sceneContentHash("a".repeat(64))
 ): Promise<readonly CharacterStoryWorkResourceInput[]> {
   const structureText = canonicalJsonStringify(context);
   const structureHash = instructionContentHash(
@@ -164,8 +182,8 @@ async function resources(
         resourceClass: "scene-document" as const,
         projectId: context.projectId,
         sceneId: scene,
-        workingVersion: 3,
-        contentHash: sceneContentHash("a".repeat(64)),
+        workingVersion,
+        contentHash,
         fullTextCharCount: sceneText.length,
         truncated: false,
         inclusionReason: "Character source scene",
@@ -225,10 +243,11 @@ describe("character story work compiler", () => {
       artifactVersion: 1,
       contentHash: instructionContentHash("b".repeat(64))
     };
-    const current = assignment({ currentArtifact: pointer });
+    const current = assignment({ currentArtifact: pointer, generatedArtifact: pointer });
     const revisionInstruction = "  Keep the same history.\nMake her voice less certain.  ";
     const revisionAttempt = attempt(current, {
       kind: "revision",
+      sourceMode: "latest-authorized",
       instruction: revisionInstruction,
       priorArtifact: pointer
     });
@@ -263,6 +282,88 @@ describe("character story work compiler", () => {
         }
       })
     ).rejects.toThrow(/does not match its proposal/i);
+  });
+
+  it("refreshes only an explicitly revised assignment to current authorized source revisions", async () => {
+    const pointer: StoryWorkArtifactPointer = {
+      proposalId: agentProposalId("proposal-character-refresh-prior"),
+      artifactVersion: 1,
+      contentHash: instructionContentHash("b".repeat(64))
+    };
+    const submittedSceneHash = sceneContentHash("a".repeat(64));
+    const current = assignment({
+      sources: [
+        { kind: "project", projectId: PROJECT, projectVersion: 5 },
+        {
+          kind: "scene",
+          sceneId: SCENE,
+          projectVersion: 5,
+          workingVersion: 3,
+          contentHash: submittedSceneHash
+        }
+      ],
+      currentArtifact: pointer,
+      generatedArtifact: pointer
+    });
+    const latestContext = storyContext(PROJECT, SCENE, 6);
+    const latestResources = await resources(
+      latestContext,
+      SCENE,
+      4,
+      sceneContentHash("d".repeat(64))
+    );
+    const proposal = createReadyAgentProposal({
+      id: pointer.proposalId,
+      projectId: PROJECT,
+      runId: agentRunId("run-character-refresh-prior"),
+      receiptId: contextReceiptId("receipt-character-refresh-prior"),
+      status: "ready",
+      outputSchemaId: "character-create-v2",
+      payload: generatedCharacter,
+      contentHash: pointer.contentHash,
+      primaryTarget: { kind: "story-knowledge", id: TARGET },
+      createdAt: NOW,
+      updatedAt: NOW
+    });
+    const revisionAttempt = attempt(current, {
+      kind: "revision",
+      sourceMode: "latest-authorized",
+      instruction: "Use the latest saved scene while retaining the original brief.",
+      priorArtifact: pointer
+    });
+
+    const compiled = await compileInput({
+      assignment: current,
+      attempt: revisionAttempt,
+      storyContext: latestContext,
+      resources: latestResources,
+      priorArtifact: { proposal, payload: generatedCharacter }
+    });
+    expect(compiled.receipt.resources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          resourceClass: "scene-document",
+          sceneId: SCENE,
+          workingVersion: 4
+        })
+      ])
+    );
+    expect(current.sources).toContainEqual(
+      expect.objectContaining({
+        kind: "scene",
+        sceneId: SCENE,
+        workingVersion: 3,
+        contentHash: submittedSceneHash
+      })
+    );
+    await expect(
+      compileInput({
+        assignment: current,
+        attempt: attempt(current),
+        storyContext: latestContext,
+        resources: latestResources
+      })
+    ).rejects.toThrow(/project version does not match/i);
   });
 
   it("rejects wrong project, scene, character count, and provider-text hash before completion", async () => {
@@ -333,7 +434,16 @@ describe("character story work compiler", () => {
       )
     });
     const current = assignment({
-      sources: [{ kind: "chapter", chapterId: chapter, projectVersion: 5 }]
+      sources: [
+        { kind: "chapter", chapterId: chapter, projectVersion: 5 },
+        {
+          kind: "scene",
+          sceneId: SCENE,
+          projectVersion: 5,
+          workingVersion: 3,
+          contentHash: sceneContentHash("a".repeat(64))
+        }
+      ]
     });
 
     await expect(
