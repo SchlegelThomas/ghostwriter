@@ -167,7 +167,13 @@ metadata persistence now updates stable canonical rows rather than deleting/rebu
   or sign-out; it is not an offline project replica.
 - Canvas uses relational current-state boards/objects/links, immutable snapshots, personal viewport
   preferences, a manuscript-derived spine, and a separate board version. The combined unit of work
-  atomically creates a manuscript scene, genesis document, and Canvas card.
+  atomically creates a manuscript scene, genesis document, and Canvas card. ADR0018 adds explicit
+  scope membership without reinterpreting legacy geometry rows, separates Canvas inspection from
+  the active Draft, and records restore provenance for bounded Undo/history traversal. Personal
+  per-scope camera/selection/lens/focus is persisted in a bounded aggregate on the existing preference
+  row (migration0026), with independent CAS and serialized coalescing client saves. Legacy viewport
+  clients advance that same preference version. Passive Canvas opening hydrates saved return state;
+  explicit scene navigation takes precedence. This preference never owns canonical story content.
 - The responsive client exposes Draft, Canvas, Split, and Project setup. Wide web supports spatial
   editing and inspectors; narrow web defaults to an ordered keyboard/screen-reader representation.
   Canvas position and story-order hints expose drift but never reorder the manuscript.

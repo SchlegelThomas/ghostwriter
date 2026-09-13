@@ -54,3 +54,5 @@ export * from "./workspace-capture-shell.js";
 export * from "./rail-icons.js";
 export * from "./writing-studio.js";
 export * from "./WritingAssistPanel.js";
+export * from "./StoryContextCompanion.js";
+export * from "./story-context-companion.js";

@@ -58,6 +58,7 @@ export type DomainIdKind =
   | "scene"
   | "sceneDocumentBlock"
   | "storyKnowledge"
+  | "narrativeBeat"
   | "edition"
   | "revision"
   | "sceneVariant"

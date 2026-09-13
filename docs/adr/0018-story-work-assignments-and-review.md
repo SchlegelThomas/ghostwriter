@@ -136,3 +136,50 @@ provenance form a deliberate boundary: new actions can still be undone to that s
 traversal beyond an ambiguous legacy Undo refuses with a link to history instead of guessing. No
 old snapshot is deleted or rewritten. This also enables bounded public history pages without an
 unbounded list read for ordinary commands or Undo.
+
+### CP1a authored narrative contract
+
+Scene intent remains in the existing sketch. A partial `scene.updateIntent` command changes only
+purpose/conflict/turn/open questions (null clears a field), preserving other sketch content.
+An optional narrative aggregate belongs to a thread-kind story-knowledge record: explicit beats
+with stable IDs, scene anchors, roles and same-thread dependency IDs, plus thread resolution
+(open, intentionally open, resolved). Absence means Unmapped. Scene-local free-text beats and
+knowledge associations retain their existing meaning and are never inferred into causal links.
+
+Persist the bounded aggregate in one nullable JSONB column on the existing story-knowledge row,
+following character-sheet aggregate persistence under the existing project-version transaction.
+No second store or version domain is introduced. Domain validation owns project-wide beat-ID
+uniqueness, active new anchors, dependency existence/uniqueness/cycles and bounds (1,500 beats per
+project, 100 dependencies per beat). Archive/restore preserves beat IDs and dependency references;
+archived scene anchors remain inspectable. Cross-thread causal dependencies are outside this first
+contract. Shared context consumes only this canonical aggregate once wired, replacing the temporary
+projection-only beat input. Provider context and advisory findings remain later checkpoints.
+
+### Personal Canvas return state
+
+Extend the existing account/project viewport preference with a bounded JSON map of canonical
+project/chapter/scene scope views and a last scope. This remains personal UI state, independent
+of project metadata and board versions. A preference-level CAS and serialized client saves prevent
+late requests overwriting newer acknowledged views. Legacy columns and endpoint remain compatible
+and increment the same preference version. Migration backfills only the known project camera.
+Scope entries retain camera, selection, inspection, lens, view and focus intent; invalid active
+references fall back to a valid ancestor while historical entries remain available for restore.
+Bound the map to 1,024 entries, evicting the least recently used non-project/non-current entry.
+This is not a new canonical story store or an offline replica.
+
+### CP1b submission, revision and atomic character apply
+
+The brief is editable before Submit. Submission persists its exact immutable definition and
+server-reserved destination ID; request fingerprints exclude generated IDs/timestamps and bind the
+writer's submitted fields and context. Revision instructions are durable attempt records linked to
+existing AgentRun IDs. They preserve the original brief and prior artifact pointer. An explicit retry
+creates a new attempt; an uncertain provider outcome never resubmits automatically.
+
+Character output uses character-create-v2 with Cast-shaped fields and no model-selected destination.
+Reviewed edits and generated revisions create new immutable proposals and increasing artifact
+versions, preserving prior artifacts. Identical content may share a hash; the full proposal/version/hash
+pointer identifies review authority. The server validates context, owner, project, run, receipt and
+reserved target before apply. One storage transaction updates project metadata, proposal applied state
+and assignment result under their preconditions. Exact repeated apply returns the recorded result
+without a second character or metadata version increment. Network calls are outside transactions;
+start, success and failure each commit their run/attempt/assignment transition atomically.

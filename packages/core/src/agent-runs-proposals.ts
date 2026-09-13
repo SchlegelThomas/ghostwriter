@@ -27,6 +27,8 @@ import type { WorkPlanV1 } from "./work-plan-v1.js";
 import { validateWorkPlanV1 } from "./work-plan-v1.js";
 import type { StoryKnowledgeCreateV1 } from "./story-knowledge-create-v1.js";
 import { validateStoryKnowledgeCreateV1 } from "./story-knowledge-create-v1.js";
+import type { CharacterCreateV2 } from "./character-create-v2.js";
+import { validateCharacterCreateV2 } from "./character-create-v2.js";
 import {
   agentProposalListPreviewFromPayload,
   type AgentProposalListPreview
@@ -50,6 +52,7 @@ export type AgentProposalPayload =
   | NextActionV1
   | WorkPlanV1
   | StoryKnowledgeCreateV1
+  | CharacterCreateV2
   | CraftPartnerPayload;
 
 export const AGENT_FOUNDATION_LIST_MAX = 100;
@@ -629,6 +632,9 @@ export function validateAgentProposalPayload(
   }
   if (outputSchemaId === "story-knowledge-create-v1") {
     return validateStoryKnowledgeCreateV1(payload);
+  }
+  if (outputSchemaId === "character-create-v2") {
+    return validateCharacterCreateV2(payload);
   }
   return validateCraftPartnerPayload(outputSchemaId, payload);
 }

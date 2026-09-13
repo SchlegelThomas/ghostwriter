@@ -6,15 +6,19 @@ import {
   CANVAS_MAX_DIMENSION,
   CANVAS_MAX_ZOOM,
   CANVAS_MIN_ZOOM,
+  CANVAS_HISTORY_DEFAULT_LIMIT,
+  CANVAS_HISTORY_MAX_LIMIT,
   CATALOG_AGENT_IDS,
   canvasLinkId,
   canvasObjectId,
   canvasRevisionId,
   captureContentHash,
   chapterId,
+  narrativeBeatId,
   partId,
   revisionId,
   SCENE_VARIANT_NAME_MAX_LENGTH,
+  STORY_NARRATIVE_MAX_BEAT_DEPENDENCIES,
   sceneId,
   storyKnowledgeId,
   isAgentModelId,
@@ -22,6 +26,8 @@ import {
   OPENAI_PROVIDER_ID,
   type AccountId,
   type CanvasCommand,
+  type CanvasPersonalScopeView,
+  type CanvasScopeRef,
   type CaptureId,
   type CreateSceneFromCanvasInput,
   type ProjectCommand,
@@ -184,6 +190,44 @@ const characterSheet = z
   );
 const longText = z.string().trim().min(1).max(20_000);
 const alias = z.string().trim().min(1).max(200);
+const narrativeBeatRole = z.enum([
+  "setup",
+  "development",
+  "payoff",
+  "consequence"
+]);
+const narrativeThreadResolution = z.enum([
+  "open",
+  "intentionally-open",
+  "resolved"
+]);
+const narrativeBeatDependencies = z
+  .array(id)
+  .max(STORY_NARRATIVE_MAX_BEAT_DEPENDENCIES);
+const sceneIntentPatchSchema = z
+  .object({
+    purpose: z.string().trim().min(1).max(2_000).nullable().optional(),
+    conflict: z.string().trim().min(1).max(2_000).nullable().optional(),
+    turn: z.string().trim().min(1).max(2_000).nullable().optional(),
+    openQuestions: z.string().trim().min(1).max(5_000).nullable().optional()
+  })
+  .strict()
+  .refine(
+    (patch) => Object.values(patch).some((value) => value !== undefined),
+    "Scene intent update must change at least one field"
+  );
+const narrativeBeatPatchSchema = z
+  .object({
+    sceneId: id.optional(),
+    role: narrativeBeatRole.optional(),
+    summary: z.string().trim().min(1).max(5_000).optional(),
+    dependsOnBeatIds: narrativeBeatDependencies.optional()
+  })
+  .strict()
+  .refine(
+    (patch) => Object.values(patch).some((value) => value !== undefined),
+    "Narrative beat update must change at least one field"
+  );
 
 export const createProjectRequestSchema = z.object({
   title,
@@ -343,6 +387,13 @@ const commandSchema = z.discriminatedUnion("type", [
     imageRefs: z.array(sceneImageRef).max(50).nullable().optional(),
     sketch: sceneSketch.nullable().optional()
   }),
+  z
+    .object({
+      type: z.literal("scene.updateIntent"),
+      sceneId: id,
+      patch: sceneIntentPatchSchema
+    })
+    .strict(),
   z.object({
     type: z.literal("scene.move"),
     sceneId: id,
@@ -389,7 +440,40 @@ const commandSchema = z.discriminatedUnion("type", [
     type: z.literal("storyKnowledge.setArchived"),
     storyKnowledgeId: id,
     archived: z.boolean()
-  })
+  }),
+  z
+    .object({
+      type: z.literal("storyKnowledge.addNarrativeBeat"),
+      storyKnowledgeId: id,
+      sceneId: id,
+      role: narrativeBeatRole,
+      summary: z.string().trim().min(1).max(5_000),
+      dependsOnBeatIds: narrativeBeatDependencies.optional()
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("storyKnowledge.updateNarrativeBeat"),
+      storyKnowledgeId: id,
+      beatId: id,
+      patch: narrativeBeatPatchSchema
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("storyKnowledge.setNarrativeBeatArchived"),
+      storyKnowledgeId: id,
+      beatId: id,
+      archived: z.boolean()
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("storyKnowledge.setNarrativeResolution"),
+      storyKnowledgeId: id,
+      resolution: narrativeThreadResolution
+    })
+    .strict()
 ]);
 
 export const executeProjectCommandRequestSchema = z.object({
@@ -615,11 +699,42 @@ const canvasLinkUpdateSchema = z
   })
   .strict();
 
+const canvasScopeFields = {
+  scopeKind: z.enum(["project", "chapter", "scene"]),
+  scopeId: z.string().trim().min(1).max(200).optional()
+} as const;
+
+function refineCanvasScope(
+  value: Readonly<{ scopeKind: "project" | "chapter" | "scene"; scopeId?: string }>,
+  context: z.RefinementCtx
+): void {
+  if (value.scopeKind === "project" && value.scopeId !== undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A project Canvas scope must not carry a scope ID.",
+      path: ["scopeId"]
+    });
+  }
+  if (value.scopeKind !== "project" && value.scopeId === undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Chapter and scene Canvas scopes require a scope ID.",
+      path: ["scopeId"]
+    });
+  }
+}
+
+const canvasScopeRefSchema = z
+  .object(canvasScopeFields)
+  .strict()
+  .superRefine(refineCanvasScope);
+
 const canvasCommandSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.enum(["canvas.object.create", "canvas.object.place"]),
-      object: canvasObjectDraftSchema
+      object: canvasObjectDraftSchema,
+      scope: canvasScopeRefSchema.optional()
     })
     .strict(),
   z
@@ -650,30 +765,23 @@ const canvasCommandSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("canvas.object.setScopePlacement"),
       objectId: canvasObjectReference,
-      scopeKind: z.enum(["project", "chapter", "scene"]),
-      scopeId: z.string().trim().min(1).max(200).optional(),
+      ...canvasScopeFields,
       x: canvasCoordinate,
       y: canvasCoordinate,
       width: canvasDimension.optional(),
       height: canvasDimension.optional()
     })
     .strict()
-    .superRefine((value, context) => {
-      if (value.scopeKind === "project" && value.scopeId !== undefined) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "A project Canvas scope must not carry a scope ID.",
-          path: ["scopeId"]
-        });
-      }
-      if (value.scopeKind !== "project" && value.scopeId === undefined) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Chapter and scene Canvas scopes require a scope ID.",
-          path: ["scopeId"]
-        });
-      }
-    }),
+    .superRefine(refineCanvasScope),
+  z
+    .object({
+      type: z.literal("canvas.object.setScopeMembership"),
+      objectId: canvasObjectReference,
+      ...canvasScopeFields,
+      member: z.boolean()
+    })
+    .strict()
+    .superRefine(refineCanvasScope),
   z
     .object({
       type: z.enum([
@@ -725,6 +833,18 @@ export const restoreCanvasRequestSchema = z
   })
   .strict();
 
+export const canvasHistoryQuerySchema = z
+  .object({
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(CANVAS_HISTORY_MAX_LIMIT)
+      .default(CANVAS_HISTORY_DEFAULT_LIMIT),
+    beforeVersion: z.coerce.number().int().positive().optional()
+  })
+  .strict();
+
 export const saveCanvasPreferenceRequestSchema = z
   .object({
     x: canvasCoordinate,
@@ -733,6 +853,66 @@ export const saveCanvasPreferenceRequestSchema = z
     selectedObjectId: canvasObjectReference.nullable().optional()
   })
   .strict();
+
+const canvasPersonalScopeViewSchema = z
+  .object({
+    scope: canvasScopeRefSchema,
+    viewport: z
+      .object({
+        x: canvasCoordinate,
+        y: canvasCoordinate,
+        zoom: z.number().finite().min(CANVAS_MIN_ZOOM).max(CANVAS_MAX_ZOOM)
+      })
+      .strict(),
+    viewMode: z.enum(["spatial", "outline"]),
+    inspectorOpen: z.boolean(),
+    focusToken: z.enum(["surface", "inspector", "search"]),
+    selectedObjectId: canvasObjectReference.nullable().optional(),
+    inspectedSceneId: id.nullable().optional(),
+    workflowLens: z.enum([
+      "outline",
+      "relationships",
+      "continuity",
+      "plan-draft",
+      "review"
+    ])
+  })
+  .strict();
+
+export const saveCanvasPersonalViewRequestSchema = z
+  .object({
+    expectedPreferenceVersion: z.number().int().nonnegative(),
+    scopeView: canvasPersonalScopeViewSchema,
+    lastScope: canvasScopeRefSchema
+  })
+  .strict();
+
+export type ParsedCanvasPersonalViewRequest = z.infer<
+  typeof saveCanvasPersonalViewRequestSchema
+>;
+
+export function toCanvasPersonalViewRequest(
+  request: ParsedCanvasPersonalViewRequest
+): Readonly<{
+  expectedPreferenceVersion: number;
+  scopeView: Omit<CanvasPersonalScopeView, "updatedAt">;
+  lastScope: CanvasScopeRef;
+}> {
+  const { selectedObjectId, inspectedSceneId, ...scopeView } = request.scopeView;
+  return {
+    expectedPreferenceVersion: request.expectedPreferenceVersion,
+    lastScope: request.lastScope,
+    scopeView: {
+      ...scopeView,
+      ...(selectedObjectId === undefined || selectedObjectId === null
+        ? {}
+        : { selectedObjectId: canvasObjectId(selectedObjectId) }),
+      ...(inspectedSceneId === undefined || inspectedSceneId === null
+        ? {}
+        : { inspectedSceneId: sceneId(inspectedSceneId) })
+    }
+  };
+}
 
 const canvasGeometrySchema = z
   .object({
@@ -777,7 +957,9 @@ export const createSceneFromCanvasRequestSchema = z
     expectedCanvasVersion: z.number().int().positive(),
     title,
     manuscriptPlacement: manuscriptPlacementSchema,
-    canvas: canvasGeometrySchema
+    canvas: canvasGeometrySchema.extend({
+      scope: canvasScopeRefSchema.optional()
+    })
   })
   .strict();
 
@@ -956,6 +1138,11 @@ export function toProjectCommand(command: ParsedCommand): ProjectCommand {
             : { povStoryKnowledgeId: storyKnowledgeId(rawPovId) })
       };
     }
+    case "scene.updateIntent":
+      return {
+        ...command,
+        sceneId: sceneId(command.sceneId)
+      };
     case "scene.move": {
       const {
         sceneId: rawSceneId,
@@ -991,6 +1178,64 @@ export function toProjectCommand(command: ParsedCommand): ProjectCommand {
         ...command,
         fromId: storyKnowledgeId(command.fromId),
         toId: storyKnowledgeId(command.toId)
+      };
+    case "storyKnowledge.addNarrativeBeat": {
+      const {
+        storyKnowledgeId: rawStoryKnowledgeId,
+        sceneId: rawSceneId,
+        dependsOnBeatIds: rawDependsOnBeatIds,
+        ...beat
+      } = command;
+      return {
+        ...beat,
+        storyKnowledgeId: storyKnowledgeId(rawStoryKnowledgeId),
+        sceneId: sceneId(rawSceneId),
+        ...(rawDependsOnBeatIds === undefined
+          ? {}
+          : {
+              dependsOnBeatIds: rawDependsOnBeatIds.map(narrativeBeatId)
+            })
+      };
+    }
+    case "storyKnowledge.updateNarrativeBeat": {
+      const {
+        storyKnowledgeId: rawStoryKnowledgeId,
+        beatId: rawBeatId,
+        patch: rawPatch,
+        ...beatUpdate
+      } = command;
+      const {
+        sceneId: rawSceneId,
+        dependsOnBeatIds: rawDependsOnBeatIds,
+        ...patch
+      } = rawPatch;
+      return {
+        ...beatUpdate,
+        storyKnowledgeId: storyKnowledgeId(rawStoryKnowledgeId),
+        beatId: narrativeBeatId(rawBeatId),
+        patch: {
+          ...patch,
+          ...(rawSceneId === undefined
+            ? {}
+            : { sceneId: sceneId(rawSceneId) }),
+          ...(rawDependsOnBeatIds === undefined
+            ? {}
+            : {
+                dependsOnBeatIds: rawDependsOnBeatIds.map(narrativeBeatId)
+              })
+        }
+      };
+    }
+    case "storyKnowledge.setNarrativeBeatArchived":
+      return {
+        ...command,
+        storyKnowledgeId: storyKnowledgeId(command.storyKnowledgeId),
+        beatId: narrativeBeatId(command.beatId)
+      };
+    case "storyKnowledge.setNarrativeResolution":
+      return {
+        ...command,
+        storyKnowledgeId: storyKnowledgeId(command.storyKnowledgeId)
       };
   }
 }

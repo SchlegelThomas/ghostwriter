@@ -1,0 +1,86 @@
+{
+  "viewport": {
+    "width": 768,
+    "height": 1024
+  },
+  "method": "Action to visible accessibility state, includes browser-control overhead; not frame or network-only timings",
+  "initialCanvasMs": 984,
+  "navigation": [
+    {
+      "action": "Open chapter Chapter 1",
+      "elapsedMs": 954,
+      "observed": [
+        "+\t\t\t\t\t733 button Back to parent Canvas scope · Esc",
+        "+\t\t\t\t\t\t737 button Reading-order spine, 5 scenes. Activate to change size."
+      ]
+    },
+    {
+      "action": "Back to parent Canvas scope · Esc",
+      "elapsedMs": 1007,
+      "observed": [
+        "730 button Reading-order spine, 500 scenes. Activate to change size."
+      ]
+    },
+    {
+      "action": "Open chapter Chapter 1",
+      "elapsedMs": 723,
+      "observed": [
+        "+\t\t\t\t\t\t734 button Back to parent Canvas scope · Esc",
+        "+\t\t\t\t\t\t\t738 button Reading-order spine, 5 scenes. Activate to change size."
+      ]
+    },
+    {
+      "action": "Back to parent Canvas scope · Esc",
+      "elapsedMs": 911,
+      "observed": [
+        "731 button Reading-order spine, 500 scenes. Activate to change size."
+      ]
+    },
+    {
+      "action": "Open chapter Chapter 1",
+      "elapsedMs": 832,
+      "observed": [
+        "87 button Back to parent Canvas scope · Esc",
+        "131 button Reading-order spine, 5 scenes. Activate to change size."
+      ]
+    },
+    {
+      "action": "Back to parent Canvas scope · Esc",
+      "elapsedMs": 991,
+      "observed": [
+        "738 button Reading-order spine, 500 scenes. Activate to change size."
+      ]
+    },
+    {
+      "action": "Open chapter Chapter 1",
+      "elapsedMs": 1144,
+      "observed": [
+        "+\t\t\t\t\t\t135 button Back to parent Canvas scope · Esc",
+        "+\t\t\t\t\t\t\t139 button Reading-order spine, 5 scenes. Activate to change size."
+      ]
+    },
+    {
+      "action": "Back to parent Canvas scope · Esc",
+      "elapsedMs": 1036,
+      "observed": [
+        "738 button Reading-order spine, 500 scenes. Activate to change size."
+      ]
+    },
+    {
+      "action": "Open chapter Chapter 1",
+      "elapsedMs": 814,
+      "observed": [
+        "+\t\t\t\t\t\t135 button Back to parent Canvas scope · Esc",
+        "+\t\t\t\t\t\t\t139 button Reading-order spine, 5 scenes. Activate to change size."
+      ]
+    },
+    {
+      "action": "Back to parent Canvas scope · Esc",
+      "elapsedMs": 875,
+      "observed": [
+        "730 button Reading-order spine, 500 scenes. Activate to change size."
+      ]
+    }
+  ],
+  "orderedFinding": "Rendering all 1000 rows took approximately 3–4.4 seconds for selection/full accessibility reads; failed 3000ms upper-bound budget and prompted bounded rendering."
+}

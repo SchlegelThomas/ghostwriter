@@ -452,8 +452,14 @@ export const storyKnowledge = pgTable("story_knowledge", {
   aliases: jsonb("aliases"),
   characterSheet: jsonb("character_sheet"),
   visuals: jsonb("visuals"),
+  narrative: jsonb("narrative"),
   archivedAt: text("archived_at")
-});
+}, (table) => [
+  check(
+    "story_knowledge_narrative_thread_object_check",
+    sql`${table.narrative} is null or (${table.kind} = 'thread' and jsonb_typeof(${table.narrative}) = 'object')`
+  )
+]);
 
 export const storyKnowledgeScenes = pgTable(
   "story_knowledge_scenes",
@@ -622,6 +628,8 @@ export const canvasScopePlacements = pgTable(
     scopeKind: text("scope_kind").notNull(),
     /** Empty string means no scope id (project lens). */
     scopeId: text("scope_id").notNull().default(""),
+    /** Null preserves legacy geometry-only placements. */
+    membership: text("membership"),
     x: doublePrecision("x").notNull(),
     y: doublePrecision("y").notNull(),
     width: doublePrecision("width"),
@@ -632,6 +640,10 @@ export const canvasScopePlacements = pgTable(
       columns: [table.projectId, table.objectId, table.scopeKind, table.scopeId],
       name: "canvas_scope_placements_pk"
     }),
+    check(
+      "canvas_scope_placements_membership_check",
+      sql`${table.membership} is null or ${table.membership} = 'explicit'`
+    ),
     index("canvas_scope_placements_project_id_index").on(table.projectId),
     index("canvas_scope_placements_object_id_index").on(table.objectId)
   ]
@@ -653,11 +665,24 @@ export const canvasViewportPreferences = pgTable(
       () => canvasObjects.id,
       { onDelete: "set null" }
     ),
+    preferenceVersion: integer("preference_version").notNull().default(1),
+    scopeViews: jsonb("scope_views").notNull().default(sql`'{}'::jsonb`),
+    lastScopeKind: text("last_scope_kind").notNull().default("project"),
+    /** Empty string means no scope id (project lens). */
+    lastScopeId: text("last_scope_id").notNull().default(""),
     updatedAt: text("updated_at").notNull()
   },
   (table) => [
     primaryKey({ columns: [table.projectId, table.accountId] }),
-    index("canvas_viewport_preferences_account_id_index").on(table.accountId)
+    index("canvas_viewport_preferences_account_id_index").on(table.accountId),
+    check(
+      "canvas_viewport_preferences_scope_views_object_check",
+      sql`jsonb_typeof(${table.scopeViews}) = 'object'`
+    ),
+    check(
+      "canvas_viewport_preferences_last_scope_check",
+      sql`(${table.lastScopeKind} = 'project' and ${table.lastScopeId} = '') or (${table.lastScopeKind} in ('chapter', 'scene') and ${table.lastScopeId} <> '')`
+    )
   ]
 );
 
@@ -680,6 +705,10 @@ export const canvasRevisions = pgTable(
       (): AnyPgColumn => canvasRevisions.id,
       { onDelete: "restrict" }
     ),
+    restoredFromRevisionId: text("restored_from_revision_id").references(
+      (): AnyPgColumn => canvasRevisions.id,
+      { onDelete: "restrict" }
+    ),
     createdAt: text("created_at").notNull()
   },
   (table) => [
@@ -691,6 +720,9 @@ export const canvasRevisions = pgTable(
     index("canvas_revisions_content_hash_index").on(table.contentHash),
     index("canvas_revisions_parent_revision_id_index").on(
       table.parentRevisionId
+    ),
+    index("canvas_revisions_restored_from_revision_id_index").on(
+      table.restoredFromRevisionId
     )
   ]
 );

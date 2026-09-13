@@ -176,6 +176,7 @@ export function agentProposalListPreviewFromPayload(
       case "work-plan-v1":
         return previewFromWorkPlan(record);
       case "story-knowledge-create-v1":
+      case "character-create-v2":
         return previewFromStoryKnowledgeCreate(record);
       case "plan-outline-v1":
         return previewFromPlanOutline(record);

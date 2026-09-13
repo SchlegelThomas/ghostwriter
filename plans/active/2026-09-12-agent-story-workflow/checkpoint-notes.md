@@ -4,12 +4,12 @@ Implementation authorized 2026-09-12. CP0a/CP0b foundation slice in progress.
 
 - Outcome: inspect Canvas without replacing Draft; create visible chapter objects; find unplaced scenes; consistent scoped geometry; predictable consecutive Undo.
 - Refusals: unknown/foreign scope, stale board version, archived target; no canonical prose writes from Canvas inspection or Undo.
-- Domain: same canonical scene/knowledge IDs, board version for placement/geometry/history, independent scene lease/version. Scope placement explicitly grants visibility; legacy graph inclusion is currently preserved and requires compatibility review before CP0a acceptance.
-- Binding: core CanvasCommand adds optional scope to create/place; existing relational placement table persists within the same board transaction; strict backend accepts typed scope; UI sets current scope. No new store/migration for this additive contract.
-- History: reconstruct action stack from append-only ordered revision reasons. Normal command/explicit restore pushes, Undo pops; exhausted stack refuses without mutation. No Redo introduced; snapshot restore stays explicit. Older pre-fix Undo sequences require documented compatibility treatment before CP0b completion.
-- Delegation: Sol/medium and Sol/high agents all failed before edits due workspace credits. Parent continues locally under user’s explicit continue instruction; no model success claim.
+- Domain: same canonical scene/knowledge IDs, board version for placement/geometry/history, independent scene lease/version. Only membership=explicit on a scope placement grants direct visibility; legacy geometry-only rows and graph inclusion are preserved. Migration 0023 adds a nullable marker with no backfill.
+- Binding: core CanvasCommand adds optional scope to create/place; existing relational placement table persists within the same board transaction; strict backend accepts typed scope; UI sets current scope. Migration 0023 adds the explicit membership marker without changing old geometry semantics.
+- History: new restored-from provenance supports bounded logical predecessor traversal while preserving append-only snapshots. Legacy Undo without provenance is a review-history boundary; no guessed traversal or Redo. Public history pagination and sparse geometry persistence are under implementation.
+- Delegation: initial Sol attempts failed before edits due workspace credits. Retried native Sol agents succeeded after the user continued; scope/storage, App/view-state and independent story-context contracts have distinct owners.
 - Checks: focused existing + new scope/search/Undo tests, client typecheck, direct browser, affected backend/storage, then pnpm verify. Playwright remains gated on complete-outcome user verification.
-- Parent still owns: all checkpoint acceptance, scope legacy independence/recovery, complete narrow/focus behavior, new-scene atomic scope handoff, persistence and browser evidence; remaining epic CP1–CP7 untouched.
+- Parent still owns: all checkpoint acceptance, scope legacy independence/recovery, complete narrow/focus behavior, new-scene atomic scope handoff, persistence and browser evidence; CP1a pure context/freshness groundwork overlaps validation; narrative persistence and writer-visible CP1–CP7 remain pending.
  Fill this frame before delegating implementation.
 
 # Feature checkpoint template
@@ -141,3 +141,18 @@ For each Task/subagent:
 - Friction observed:
 - Reusable improvement:
 - Skill/rule/template update:
+
+## CP1b frame — durable assignment prerequisites
+
+Outcome: retain the exact writer brief and reserved destination from submission through generated
+character review and acknowledged Add to Cast. Build the generic assignment contract first; no
+character-only transient store. Assignment state coordinates existing run/proposal IDs and never
+copies canonical prose. Core prerequisite owns immutable validated assignment/review transitions,
+separate assignment CAS, exact attempt and artifact identity, bounded typed context/dependency/result
+references. Character destination IDs are server reserved. No provider retry is automatic.
+
+Refusals: stale version/attempt/review hash, missing artifact, invalid dependencies, crossed project,
+and malformed generated payload. Applied is recorded only by an atomic application transaction,
+not a public generic status setter. Review edits create a new proposal identity/hash and invalidate
+prior review. Storage and provider orchestration follow as serialized slices; this prerequisite alone
+does not fulfill character acceptance. No automatic external grant or canonical apply.

@@ -39,7 +39,8 @@ import {
   type StoryKnowledgeAuthority,
   type StoryKnowledgeKind,
   type StoryKnowledgeLink,
-  type StoryKnowledgeLinkKind
+  type StoryKnowledgeLinkKind,
+  type StoryThreadNarrative
 } from "@ghostwriter/core";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import {
@@ -286,6 +287,7 @@ async function persistBuffer(
         aliases: knowledge.aliases === undefined ? null : [...knowledge.aliases],
         characterSheet: knowledge.characterSheet ?? null,
         visuals: knowledge.visuals === undefined ? null : [...knowledge.visuals],
+        narrative: knowledge.narrative ?? null,
         archivedAt: knowledge.archivedAt ?? null
       }))
     );
@@ -458,6 +460,7 @@ function replacementRows(records: ProjectRecords): ReplacementRows {
       aliases: knowledge.aliases === undefined ? null : [...knowledge.aliases],
       characterSheet: knowledge.characterSheet ?? null,
       visuals: knowledge.visuals === undefined ? null : [...knowledge.visuals],
+      narrative: knowledge.narrative ?? null,
       archivedAt: knowledge.archivedAt ?? null
     });
 
@@ -628,6 +631,7 @@ async function persistStableReplacementRows(
           aliases: row.aliases,
           characterSheet: row.characterSheet,
           visuals: row.visuals,
+          narrative: row.narrative,
           archivedAt: row.archivedAt
         })
         .where(eq(storyKnowledge.id, row.id));
@@ -1017,6 +1021,9 @@ async function queryStoryKnowledge(
         ...(knowledge.visuals === null
           ? {}
           : { visuals: knowledge.visuals as CharacterVisual[] }),
+        ...(knowledge.narrative === null
+          ? {}
+          : { narrative: knowledge.narrative as StoryThreadNarrative }),
         ...(knowledge.archivedAt === null
           ? {}
           : { archivedAt: knowledge.archivedAt })

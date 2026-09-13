@@ -354,7 +354,7 @@ describe("MCP grant services", () => {
       captureId: CAPTURE
     });
     expect(receipt.workflowId).toBe("scene-partner.capture-reflection");
-    expect(receipt.resources[0]?.captureId).toBe(CAPTURE);
+    expect(receipt.resources[0]).toMatchObject({ resourceClass: "capture", captureId: CAPTURE });
 
     const proposed = await harness.services.proposeCaptureReflectionUnderToken({
       token: created.token,

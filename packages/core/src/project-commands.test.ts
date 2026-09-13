@@ -5,6 +5,7 @@ import {
   chapterId,
   createGhostwriterServices,
   createMemoryProjectRepository,
+  narrativeBeatId,
   partId,
   ProjectVersionConflictError,
   sceneId,
@@ -36,6 +37,7 @@ const ids = () =>
     scene: ["scene-one"],
     sceneDocumentBlock: [],
     storyKnowledge: ["knowledge-one", "knowledge-two"],
+    narrativeBeat: ["beat-one", "beat-two", "beat-three"],
     edition: [],
     revision: [],
     sceneVariant: [],
@@ -593,5 +595,198 @@ describe("project commands", () => {
     });
 
     expect(navigator.storyKnowledge[0]?.linkedSceneCount).toBe(0);
+  });
+
+  it("patches scene intent without replacing other sketch fields", async () => {
+    const { execute, services, projectId } = await setup();
+    let navigator = await execute(1, {
+      type: "scene.create",
+      bookId: bookId("book-one"),
+      title: "Intent scene"
+    });
+    navigator = await execute(navigator.version, {
+      type: "scene.update",
+      sceneId: sceneId("scene-one"),
+      sketch: {
+        purpose: "Hide the letter.",
+        conflict: "Theo is watching.",
+        turn: "The seal breaks.",
+        openQuestions: "Who sent it?",
+        beats: ["Mara reaches the quay."],
+        sensoryNotes: "Salt and wet rope",
+        detail: "Keep the opening quiet.",
+        inkPaths: [
+          { color: "#112233", size: 2, points: [{ x: 1, y: 2 }] }
+        ]
+      }
+    });
+    navigator = await execute(navigator.version, {
+      type: "scene.updateIntent",
+      sceneId: sceneId("scene-one"),
+      patch: {
+        purpose: "Burn the letter.",
+        conflict: null,
+        openQuestions: "What can Theo recover?"
+      }
+    });
+
+    expect(navigator.books[0]?.unassignedScenes[0]?.sketch).toEqual({
+      purpose: "Burn the letter.",
+      turn: "The seal breaks.",
+      openQuestions: "What can Theo recover?",
+      beats: ["Mara reaches the quay."],
+      sensoryNotes: "Salt and wet rope",
+      detail: "Keep the opening quiet.",
+      inkPaths: [
+        { color: "#112233", size: 2, points: [{ x: 1, y: 2 }] }
+      ]
+    });
+
+    navigator = await execute(navigator.version, {
+      type: "scene.update",
+      sceneId: sceneId("scene-one"),
+      sketch: { purpose: "Temporary intent" }
+    });
+    navigator = await execute(navigator.version, {
+      type: "scene.updateIntent",
+      sceneId: sceneId("scene-one"),
+      patch: { purpose: null }
+    });
+    expect(navigator.books[0]?.unassignedScenes[0]?.sketch).toBeUndefined();
+
+    const beforeRefusal = navigator.version;
+    navigator = await execute(navigator.version, {
+      type: "scene.setArchived",
+      sceneId: sceneId("scene-one"),
+      archived: true
+    });
+    await expect(
+      execute(navigator.version, {
+        type: "scene.updateIntent",
+        sceneId: sceneId("scene-one"),
+        patch: { turn: "A hidden overwrite" }
+      })
+    ).rejects.toMatchObject({ code: "INVALID_PLACEMENT" });
+    expect((await services.getProjectNavigator(
+      accountId("account-owner"),
+      projectId
+    ))?.version).toBe(beforeRefusal + 1);
+  });
+
+  it("authors and archives narrative beats without changing associations", async () => {
+    const { execute, services, ownerAccountId, projectId } = await setup();
+    let navigator = await execute(1, {
+      type: "scene.create",
+      bookId: bookId("book-one"),
+      title: "Letter scene"
+    });
+    navigator = await execute(navigator.version, {
+      type: "storyKnowledge.create",
+      label: "The sealed letter",
+      kind: "thread",
+      authority: "planned"
+    });
+    navigator = await execute(navigator.version, {
+      type: "storyKnowledge.create",
+      label: "Mara",
+      kind: "character",
+      authority: "confirmed"
+    });
+
+    await expect(
+      execute(navigator.version, {
+        type: "storyKnowledge.addNarrativeBeat",
+        storyKnowledgeId: storyKnowledgeId("knowledge-two"),
+        sceneId: sceneId("scene-one"),
+        role: "setup",
+        summary: "Not a thread."
+      })
+    ).rejects.toMatchObject({ code: "INVALID_PLACEMENT" });
+    expect((await services.getProjectNavigator(ownerAccountId, projectId))?.version)
+      .toBe(navigator.version);
+
+    navigator = await execute(navigator.version, {
+      type: "storyKnowledge.addNarrativeBeat",
+      storyKnowledgeId: storyKnowledgeId("knowledge-one"),
+      sceneId: sceneId("scene-one"),
+      role: "setup",
+      summary: "Mara conceals the sealed letter."
+    });
+    navigator = await execute(navigator.version, {
+      type: "storyKnowledge.addNarrativeBeat",
+      storyKnowledgeId: storyKnowledgeId("knowledge-one"),
+      sceneId: sceneId("scene-one"),
+      role: "payoff",
+      summary: "Theo recognizes the seal.",
+      dependsOnBeatIds: [narrativeBeatId("beat-one")]
+    });
+    navigator = await execute(navigator.version, {
+      type: "storyKnowledge.updateNarrativeBeat",
+      storyKnowledgeId: storyKnowledgeId("knowledge-one"),
+      beatId: narrativeBeatId("beat-two"),
+      patch: {
+        role: "consequence",
+        summary: "Theo acts on the broken seal."
+      }
+    });
+    const beforeCycle = navigator.version;
+    await expect(
+      execute(beforeCycle, {
+        type: "storyKnowledge.updateNarrativeBeat",
+        storyKnowledgeId: storyKnowledgeId("knowledge-one"),
+        beatId: narrativeBeatId("beat-one"),
+        patch: { dependsOnBeatIds: [narrativeBeatId("beat-two")] }
+      })
+    ).rejects.toMatchObject({ code: "INVALID_CRAFT" });
+    expect((await services.getProjectNavigator(ownerAccountId, projectId))?.version)
+      .toBe(beforeCycle);
+
+    navigator = await execute(navigator.version, {
+      type: "storyKnowledge.setNarrativeBeatArchived",
+      storyKnowledgeId: storyKnowledgeId("knowledge-one"),
+      beatId: narrativeBeatId("beat-one"),
+      archived: true
+    });
+    navigator = await execute(navigator.version, {
+      type: "storyKnowledge.setNarrativeResolution",
+      storyKnowledgeId: storyKnowledgeId("knowledge-one"),
+      resolution: "intentionally-open"
+    });
+    const thread = navigator.storyKnowledge.find(
+      (knowledge) => knowledge.id === storyKnowledgeId("knowledge-one")
+    );
+    expect(thread).toMatchObject({
+      linkedSceneIds: [],
+      narrative: {
+        resolution: "intentionally-open",
+        beats: [
+          { id: narrativeBeatId("beat-one"), archivedAt: expect.any(String) },
+          {
+            id: narrativeBeatId("beat-two"),
+            role: "consequence",
+            summary: "Theo acts on the broken seal.",
+            dependsOnBeatIds: [narrativeBeatId("beat-one")]
+          }
+        ]
+      }
+    });
+
+    navigator = await execute(navigator.version, {
+      type: "scene.setArchived",
+      sceneId: sceneId("scene-one"),
+      archived: true
+    });
+    const beforeArchivedAnchorRefusal = navigator.version;
+    await expect(
+      execute(beforeArchivedAnchorRefusal, {
+        type: "storyKnowledge.addNarrativeBeat",
+        storyKnowledgeId: storyKnowledgeId("knowledge-one"),
+        sceneId: sceneId("scene-one"),
+        role: "consequence",
+        summary: "An invalid new archived anchor."
+      })
+    ).rejects.toMatchObject({ code: "INVALID_PLACEMENT" });
+    expect((await services.getProjectNavigator(ownerAccountId, projectId))?.version)
+      .toBe(beforeArchivedAnchorRefusal);
   });
 });

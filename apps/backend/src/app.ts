@@ -17,6 +17,7 @@ import {
   attachmentId,
   CanvasCommandError,
   CanvasNotFoundError,
+  CanvasPreferenceVersionConflictError,
   CanvasRevisionNotFoundError,
   CanvasVersionConflictError,
   DomainValidationError,
@@ -62,6 +63,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import {
   compareSceneRevisionsRequestSchema,
+  canvasHistoryQuerySchema,
   CAPTURE_DOCUMENT_REQUEST_MAX_BYTES,
   createCaptureRequestSchema,
   createSceneFromCanvasRequestSchema,
@@ -73,6 +75,7 @@ import {
   restoreSceneRevisionRequestSchema,
   restoreCanvasRequestSchema,
   saveCanvasPreferenceRequestSchema,
+  saveCanvasPersonalViewRequestSchema,
   parseJsonRequest,
   parseOptionalJsonRequest,
   initCaptureAttachmentRequestSchema,
@@ -83,6 +86,7 @@ import {
   setCaptureArchivedRequestSchema,
   SCENE_DOCUMENT_REQUEST_MAX_BYTES,
   toCanvasCommand,
+  toCanvasPersonalViewRequest,
   toCreateSceneFromCanvasInput,
   toPromoteCaptureToSceneInput,
   toProjectCommand,
@@ -341,6 +345,9 @@ function canvasRevisionResponse(revision: CanvasRevisionMetadata) {
     ...(revision.parentRevisionId === undefined
       ? {}
       : { parentRevisionId: revision.parentRevisionId }),
+    ...(revision.restoredFromRevisionId === undefined
+      ? {}
+      : { restoredFromRevisionId: revision.restoredFromRevisionId }),
     createdAt: revision.createdAt
   };
 }
@@ -747,13 +754,34 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
   });
 
   app.get("/api/projects/:projectId/canvas/history", async (context) => {
+    const parsed = canvasHistoryQuerySchema.safeParse(context.req.query());
+    if (!parsed.success) {
+      return context.json(
+        {
+          error: "Invalid Canvas history query.",
+          code: "INVALID_REQUEST",
+          issues: parsed.error.issues.map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message
+          }))
+        },
+        400
+      );
+    }
     const authSession = context.get("authSession");
-    const revisions = await dependencies.canvas.listCanvasHistory({
+    const page = await dependencies.canvas.listCanvasHistory({
       accountId: accountId(authSession.account.id),
-      projectId: projectId(context.req.param("projectId"))
+      projectId: projectId(context.req.param("projectId")),
+      limit: parsed.data.limit,
+      ...(parsed.data.beforeVersion === undefined
+        ? {}
+        : { beforeVersion: parsed.data.beforeVersion })
     });
     return context.json({
-      revisions: revisions.map(canvasRevisionResponse)
+      revisions: page.revisions.map(canvasRevisionResponse),
+      ...(page.nextBeforeVersion === undefined
+        ? {}
+        : { nextBeforeVersion: page.nextBeforeVersion })
     });
   });
 
@@ -829,6 +857,47 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
       });
     return context.json({ preference });
   });
+
+  app.get(
+    "/api/projects/:projectId/canvas/view-preference",
+    async (context) => {
+      const authSession = context.get("authSession");
+      const preference =
+        await dependencies.canvas.getCanvasPersonalViewPreference({
+          accountId: accountId(authSession.account.id),
+          projectId: projectId(context.req.param("projectId"))
+        });
+      return context.json({ preference: preference ?? null });
+    }
+  );
+
+  app.put(
+    "/api/projects/:projectId/canvas/view-preference",
+    async (context) => {
+      const parsed = await parseJsonRequest(
+        context.req.raw,
+        saveCanvasPersonalViewRequestSchema
+      );
+      if (!parsed.success) {
+        return context.json(
+          {
+            error: "Invalid personal Canvas view request.",
+            code: parsed.code,
+            ...(parsed.issues === undefined ? {} : { issues: parsed.issues })
+          },
+          parsed.code === "PAYLOAD_TOO_LARGE" ? 413 : 400
+        );
+      }
+      const authSession = context.get("authSession");
+      const preference =
+        await dependencies.canvas.saveCanvasPersonalViewPreference({
+          accountId: accountId(authSession.account.id),
+          projectId: projectId(context.req.param("projectId")),
+          ...toCanvasPersonalViewRequest(parsed.data)
+        });
+      return context.json({ preference });
+    }
+  );
 
   app.post("/api/projects/:projectId/canvas/scenes", async (context) => {
     const parsed = await parseJsonRequest(
@@ -1475,6 +1544,15 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
         {
           error: "The Canvas changed since it was loaded.",
           code: "CANVAS_VERSION_CONFLICT"
+        },
+        409
+      );
+    }
+    if (error instanceof CanvasPreferenceVersionConflictError) {
+      return context.json(
+        {
+          error: "This personal Canvas view changed since it was loaded.",
+          code: "PREFERENCE_VERSION_CONFLICT"
         },
         409
       );

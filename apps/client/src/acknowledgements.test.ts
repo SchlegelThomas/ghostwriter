@@ -1,6 +1,7 @@
 import {
   bookId,
   chapterId,
+  narrativeBeatId,
   partId,
   projectId,
   sceneId,
@@ -194,6 +195,146 @@ describe("project acknowledgement and inverse commands", () => {
     ).toEqual({
       title: "Relationship linked",
       detail: "Thread relationship · Saved to Canvas",
+      actionLabel: "Undo"
+    });
+  });
+
+  it("acknowledges all story-context command variants", () => {
+    const beatId = narrativeBeatId("beat-acknowledgement");
+    const threadBefore: ProjectNavigator = {
+      ...before,
+      storyKnowledge: [
+        {
+          ...before.storyKnowledge[0]!,
+          kind: "thread",
+          narrative: {
+            resolution: "open",
+            beats: [
+              {
+                id: beatId,
+                sceneId: firstScene,
+                role: "setup",
+                summary: "The signal arrives.",
+                dependsOnBeatIds: []
+              }
+            ]
+          }
+        }
+      ]
+    };
+    const threadAfter: ProjectNavigator = {
+      ...threadBefore,
+      version: 5,
+      storyKnowledge: [
+        {
+          ...threadBefore.storyKnowledge[0]!,
+          narrative: {
+            resolution: "resolved",
+            beats: threadBefore.storyKnowledge[0]!.narrative!.beats
+          }
+        }
+      ]
+    };
+
+    expect(
+      acknowledgementForProjectCommand(
+        before,
+        {
+          type: "scene.updateIntent",
+          sceneId: firstScene,
+          patch: { purpose: "Trace the signal.", conflict: null }
+        },
+        { ...before, version: 5 }
+      )
+    ).toMatchObject({
+      title: "Scene intent updated",
+      inverse: {
+        type: "scene.updateIntent",
+        sceneId: firstScene,
+        patch: { purpose: null, conflict: null }
+      },
+      actionLabel: "Undo"
+    });
+
+    const acknowledgements = [
+      acknowledgementForProjectCommand(
+        threadBefore,
+        {
+          type: "storyKnowledge.addNarrativeBeat",
+          storyKnowledgeId: knowledge,
+          sceneId: firstScene,
+          role: "development",
+          summary: "The signal returns."
+        },
+        threadAfter
+      ),
+      acknowledgementForProjectCommand(
+        threadBefore,
+        {
+          type: "storyKnowledge.updateNarrativeBeat",
+          storyKnowledgeId: knowledge,
+          beatId,
+          patch: { role: "payoff" }
+        },
+        threadAfter
+      ),
+      acknowledgementForProjectCommand(
+        threadBefore,
+        {
+          type: "storyKnowledge.setNarrativeBeatArchived",
+          storyKnowledgeId: knowledge,
+          beatId,
+          archived: true
+        },
+        threadAfter
+      ),
+      acknowledgementForProjectCommand(
+        threadBefore,
+        {
+          type: "storyKnowledge.setNarrativeResolution",
+          storyKnowledgeId: knowledge,
+          resolution: "resolved"
+        },
+        threadAfter
+      )
+    ];
+    expect(acknowledgements.map(({ title }) => title)).toEqual([
+      "Narrative beat added",
+      "Narrative beat updated",
+      "Narrative beat archived",
+      "Thread resolution updated"
+    ]);
+    expect(acknowledgements[2]?.inverse).toEqual({
+      type: "storyKnowledge.setNarrativeBeatArchived",
+      storyKnowledgeId: knowledge,
+      beatId,
+      archived: false
+    });
+    expect(acknowledgements[3]?.inverse).toEqual({
+      type: "storyKnowledge.setNarrativeResolution",
+      storyKnowledgeId: knowledge,
+      resolution: "open"
+    });
+  });
+
+  it("explains explicit Canvas scope inclusion and removal", () => {
+    const base = {
+      type: "canvas.object.setScopeMembership" as const,
+      objectId: "canvas-object-scope" as never,
+      scopeKind: "scene" as const,
+      scopeId: "scene-scope",
+      member: true
+    };
+    expect(acknowledgementForCanvasCommand(base)).toEqual({
+      title: "Included in Canvas scope",
+      detail: "Scope inclusion · Saved to Canvas",
+      actionLabel: "Undo"
+    });
+    expect(
+      acknowledgementForCanvasCommand({ ...base, member: false })
+    ).toEqual({
+      title: "Explicit Canvas inclusion removed",
+      detail: "Canonical or related visibility may remain · Saved to Canvas",
       actionLabel: "Undo"
     });
   });

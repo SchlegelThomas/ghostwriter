@@ -334,7 +334,8 @@ another manuscript-order authority.
 - `GET /api/projects/{projectId}/canvas` idempotently initializes and returns `{ board, spine }`.
   The board contains canonical objects, typed links, and optional `scopePlacements` keyed by
   `(objectId, scopeKind, scopeId?)`. Missing placements fall back to each object's global geometry.
-  Scope layouts are interpretive only; manuscript order stays on the tree. The spine is derived at
+  Legacy scope layouts are geometry-only. A placement marked `membership: "explicit"` also
+  grants direct visibility in that scope; manuscript order stays on the tree. The spine is derived at
   read time from canonical book/part/chapter/unassigned scene order.
 - `POST /api/projects/{projectId}/canvas/commands` accepts `expectedCanvasVersion` and one closed
   Canvas command. A completed create/place/update/move/resize/setScopePlacement/archive/restore/
@@ -343,11 +344,15 @@ another manuscript-order authority.
   rewriting object identity; when `scopeKind` is `project`, it also updates global x/y/(optional)
   width/height so the project lens stays a single source. Pointer-move events are not API commands.
 - `GET /api/projects/{projectId}/canvas/history` returns newest-first snapshot metadata without
-  snapshot bodies.
+  snapshot bodies. `limit` defaults to 100 and is bounded to 1–100; optional `beforeVersion` is an
+  exclusive positive board-version cursor. A page returns `revisions` and, when more remain,
+  `nextBeforeVersion`. New Undo/restore metadata includes `restoredFromRevisionId`.
 - `POST /api/projects/{projectId}/canvas/history/restore` accepts `expectedCanvasVersion` and an
   optional `revisionId`. A supplied revision restores that snapshot as a new version/revision;
-  omitting it performs immediate guarded Undo to the preceding snapshot. Existing history is never
-  rewritten.
+  omitting it performs guarded Undo of the latest logical writer action. Commands and explicit
+  restores are actions; Undo records are traversed using provenance. Ambiguous legacy Undo or
+  exhausted/unavailable history refuses without mutation; explicit history review remains available.
+  Existing snapshots are never rewritten, and Canvas restore never restores manuscript prose.
 - `GET /api/projects/{projectId}/canvas/preference` returns the current account's viewport or
   `null`. `PUT /api/projects/{projectId}/canvas/preference` accepts bounded `x`, `y`, `zoom`, and an
   optional `selectedObjectId`. Preferences are per-account and never advance the board version.
@@ -474,7 +479,51 @@ fixture process owner authority.
 Canvas `canvas.object.create` / `canvas.object.place` accept optional
 `scope: { scopeKind: "project" | "chapter" | "scene", scopeId?: string }`.
 Project scope has no ID; chapter and scene scopes require an existing authorized-project target.
-The object and its initial scoped geometry persist in one expected-Canvas-version command.
+The object and its initial scoped geometry with `membership: "explicit"` persist in one
+expected-Canvas-version command. Existing geometry-only rows are not backfilled; geometry edits
+preserve the marker without inventing membership. Invalid new targets are refused while old
+orphan placements remain inspectable from project Canvas.
 Create-scene-from-Canvas accepts the same optional `canvas.scope` in its existing atomic handoff.
 `canvas.object.setScopePlacement` also validates newly targeted scopes and serves complete geometry
 updates (position plus size) without two racing writes. No endpoint bypasses owner authorization.
+
+`canvas.object.setScopeMembership` accepts `objectId`, the typed scope fields and `member`.
+Adding explicit inclusion requires an active object and active target scope and uses existing
+resolved geometry. Removing inclusion permits historical unavailable scopes and preserves all
+placement geometry, objects and links. Canonical scene membership and legacy graph-related
+visibility can still keep an object visible after its explicit marker is removed. Both operations
+use the normal expected board version; neither changes manuscript membership.
+
+### Shared scene intent and narrative threads
+
+The existing owned-project command endpoint accepts `scene.updateIntent` with a partial
+`patch` of purpose, conflict, turn and openQuestions. Null clears a field; omitted fields
+and the rest of the sketch are preserved. These changes use the project metadata version,
+not the scene document or Canvas board version.
+
+Thread-kind story knowledge supports `storyKnowledge.addNarrativeBeat`,
+`storyKnowledge.updateNarrativeBeat`, `storyKnowledge.setNarrativeBeatArchived`, and
+`storyKnowledge.setNarrativeResolution`. Beats have stable IDs, scene anchors, explicit
+roles and same-thread dependency IDs. Invalid/cyclic references and stale project versions
+refuse without mutation. New anchors must be active; archival retains inspectable references.
+The project navigator returns this canonical optional narrative aggregate. Legacy threads
+without one remain Unmapped; ordinary knowledge links do not imply causality.
+
+Draft and Canvas share these commands through StoryContextCompanion. External canonical
+approval/apply remains unavailable; scoped proposal parity is an open epic checkpoint.
+
+### Personal Canvas return state
+
+`GET /api/projects/:projectId/canvas/view-preference` returns `{ preference }` (null if
+absent). `PUT` accepts `expectedPreferenceVersion` (0 for creation), one full `scopeView`,
+and `lastScope`. Both scopes use `{ scopeKind: "project" | "chapter" | "scene", scopeId? }`.
+A view contains viewport `{x,y,zoom}`, spatial/outline viewMode, inspectorOpen, focusToken
+(surface/inspector/search), workflowLens and optional selectedObjectId/inspectedSceneId
+(null clears a selection). Server timestamps and a new independent preference version are
+returned. This never advances project or Canvas board versions.
+
+A stale write returns `409 PREFERENCE_VERSION_CONFLICT`. Ownership and references are
+validated; invalid saved scene scopes fall back to their active chapter or project. The map
+is capped at 1,024 entries, retaining project/current scope and evicting the oldest other
+view. Legacy `/canvas/preference` remains compatible and advances the same preference CAS
+while updating the project camera. Client queue/hydration acceptance is tracked in the epic.

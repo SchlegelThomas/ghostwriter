@@ -3,11 +3,17 @@ import type {
   CanvasMutationResult,
   CanvasRevision,
   CanvasRevisionMetadata,
+  CanvasPersonalViewPreference,
   CanvasViewportPreference
 } from "./canvas.js";
 import type { ProjectId, ProjectRecords } from "./domain.js";
 import type { AccountId } from "./identity.js";
 import type { InitializeSceneDocumentInput } from "./scene-document-repository.js";
+
+export type CanvasRevisionListOptions = Readonly<{
+  limit?: number;
+  beforeVersion?: number;
+}>;
 
 export interface CanvasRepository {
   getBoard(projectId: ProjectId): Promise<CanvasBoard | undefined>;
@@ -20,7 +26,10 @@ export interface CanvasRepository {
     projectId: ProjectId,
     revisionId: CanvasRevision["id"]
   ): Promise<CanvasRevision | undefined>;
-  listRevisions(projectId: ProjectId): Promise<readonly CanvasRevisionMetadata[]>;
+  listRevisions(
+    projectId: ProjectId,
+    options?: CanvasRevisionListOptions
+  ): Promise<readonly CanvasRevisionMetadata[]>;
   getViewportPreference(
     projectId: ProjectId,
     accountId: AccountId
@@ -28,6 +37,14 @@ export interface CanvasRepository {
   saveViewportPreference(
     preference: CanvasViewportPreference
   ): Promise<CanvasViewportPreference>;
+  getPersonalViewPreference(
+    projectId: ProjectId,
+    accountId: AccountId
+  ): Promise<CanvasPersonalViewPreference | undefined>;
+  savePersonalViewPreference(input: Readonly<{
+    preference: CanvasPersonalViewPreference;
+    expectedPreferenceVersion: number;
+  }>): Promise<CanvasPersonalViewPreference>;
 }
 
 export type CommitCanvasSceneCreationInput = Readonly<{

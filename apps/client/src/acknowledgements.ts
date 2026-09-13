@@ -409,6 +409,40 @@ export function acknowledgementForProjectCommand(
             })
       };
     }
+    case "scene.updateIntent": {
+      const oldScene = locateScene(before, command.sceneId)?.scene;
+      const newScene = locateScene(after, command.sceneId)?.scene;
+      return {
+        title: "Scene intent updated",
+        detail: `${newScene?.title ?? oldScene?.title ?? "Scene"} · Saved to project`,
+        ...(oldScene === undefined
+          ? {}
+          : {
+              inverse: {
+                type: "scene.updateIntent" as const,
+                sceneId: command.sceneId,
+                patch: {
+                  ...(command.patch.purpose === undefined
+                    ? {}
+                    : { purpose: oldScene.sketch?.purpose ?? null }),
+                  ...(command.patch.conflict === undefined
+                    ? {}
+                    : { conflict: oldScene.sketch?.conflict ?? null }),
+                  ...(command.patch.turn === undefined
+                    ? {}
+                    : { turn: oldScene.sketch?.turn ?? null }),
+                  ...(command.patch.openQuestions === undefined
+                    ? {}
+                    : {
+                        openQuestions:
+                          oldScene.sketch?.openQuestions ?? null
+                      })
+                }
+              },
+              actionLabel: "Undo" as const
+            })
+      };
+    }
     case "scene.move": {
       const oldPlacement = locateScene(before, command.sceneId);
       const newPlacement = locateScene(after, command.sceneId);
@@ -557,6 +591,58 @@ export function acknowledgementForProjectCommand(
         actionLabel: command.archived ? "Restore" : "Undo"
       };
     }
+    case "storyKnowledge.addNarrativeBeat": {
+      const knowledge = findKnowledge(after, command.storyKnowledgeId);
+      return {
+        title: "Narrative beat added",
+        detail: `${knowledge?.label ?? "Story thread"} · Saved to project`
+      };
+    }
+    case "storyKnowledge.updateNarrativeBeat": {
+      const knowledge =
+        findKnowledge(after, command.storyKnowledgeId) ??
+        findKnowledge(before, command.storyKnowledgeId);
+      return {
+        title: "Narrative beat updated",
+        detail: `${knowledge?.label ?? "Story thread"} · Saved to project`
+      };
+    }
+    case "storyKnowledge.setNarrativeBeatArchived": {
+      const knowledge =
+        findKnowledge(after, command.storyKnowledgeId) ??
+        findKnowledge(before, command.storyKnowledgeId);
+      return {
+        title: command.archived
+          ? "Narrative beat archived"
+          : "Narrative beat restored",
+        detail: `${knowledge?.label ?? "Story thread"} · Saved to project`,
+        inverse: {
+          type: "storyKnowledge.setNarrativeBeatArchived",
+          storyKnowledgeId: command.storyKnowledgeId,
+          beatId: command.beatId,
+          archived: !command.archived
+        },
+        actionLabel: command.archived ? "Restore" : "Undo"
+      };
+    }
+    case "storyKnowledge.setNarrativeResolution": {
+      const oldKnowledge = findKnowledge(before, command.storyKnowledgeId);
+      const newKnowledge = findKnowledge(after, command.storyKnowledgeId);
+      return {
+        title: "Thread resolution updated",
+        detail: `${newKnowledge?.label ?? oldKnowledge?.label ?? "Story thread"} · Saved to project`,
+        ...(oldKnowledge?.narrative === undefined
+          ? {}
+          : {
+              inverse: {
+                type: "storyKnowledge.setNarrativeResolution" as const,
+                storyKnowledgeId: command.storyKnowledgeId,
+                resolution: oldKnowledge.narrative.resolution
+              },
+              actionLabel: "Undo" as const
+            })
+      };
+    }
   }
 }
 
@@ -615,6 +701,16 @@ export function acknowledgementForCanvasCommand(
             : command.scopeKind === "chapter"
               ? "Chapter layout · Saved to Canvas"
               : "Scene layout · Saved to Canvas",
+        actionLabel: "Undo"
+      };
+    case "canvas.object.setScopeMembership":
+      return {
+        title: command.member
+          ? "Included in Canvas scope"
+          : "Explicit Canvas inclusion removed",
+        detail: command.member
+          ? "Scope inclusion · Saved to Canvas"
+          : "Canonical or related visibility may remain · Saved to Canvas",
         actionLabel: "Undo"
       };
     case "canvas.object.archive":

@@ -249,6 +249,9 @@ describe("backend app", () => {
       board: { version: 1, objects: [], links: [] },
       spine: { projectVersion: 1, canvasVersion: 1 }
     });
+    const absentView = await app.request(`${basePath}/view-preference`);
+    expect(absentView.status).toBe(200);
+    await expect(absentView.json()).resolves.toEqual({ preference: null });
 
     const created = await app.request(`${basePath}/commands`, {
       method: "POST",
@@ -327,6 +330,102 @@ describe("backend app", () => {
         selectedObjectId: objectId
       }
     });
+    const migratedView = await app.request(`${basePath}/view-preference`);
+    expect(migratedView.status).toBe(200);
+    await expect(migratedView.json()).resolves.toMatchObject({
+      preference: {
+        version: 1,
+        lastScope: { scopeKind: "project" },
+        scopeViews: [
+          {
+            scope: { scopeKind: "project" },
+            viewport: { x: 400, y: -200, zoom: 1.75 },
+            selectedObjectId: objectId
+          }
+        ]
+      }
+    });
+    const scopedView = await app.request(`${basePath}/view-preference`, {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        origin: TEST_ORIGIN
+      },
+      body: JSON.stringify({
+        expectedPreferenceVersion: 1,
+        scopeView: {
+          scope: { scopeKind: "scene", scopeId: SCENE_ID },
+          viewport: { x: 900, y: 120, zoom: 2 },
+          viewMode: "outline",
+          inspectorOpen: true,
+          focusToken: "inspector",
+          selectedObjectId: objectId,
+          inspectedSceneId: SCENE_ID,
+          workflowLens: "continuity"
+        },
+        lastScope: { scopeKind: "scene", scopeId: SCENE_ID }
+      })
+    });
+    expect(scopedView.status).toBe(200);
+    await expect(scopedView.json()).resolves.toMatchObject({
+      preference: {
+        version: 2,
+        lastScope: { scopeKind: "scene", scopeId: SCENE_ID },
+        scopeViews: [
+          { scope: { scopeKind: "project" } },
+          {
+            scope: { scopeKind: "scene", scopeId: SCENE_ID },
+            inspectedSceneId: SCENE_ID
+          }
+        ]
+      }
+    });
+    const staleView = await app.request(`${basePath}/view-preference`, {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        origin: TEST_ORIGIN
+      },
+      body: JSON.stringify({
+        expectedPreferenceVersion: 1,
+        scopeView: {
+          scope: { scopeKind: "project" },
+          viewport: { x: 0, y: 0, zoom: 1 },
+          viewMode: "spatial",
+          inspectorOpen: false,
+          focusToken: "surface",
+          workflowLens: "outline"
+        },
+        lastScope: { scopeKind: "project" }
+      })
+    });
+    expect(staleView.status).toBe(409);
+    await expect(staleView.json()).resolves.toMatchObject({
+      code: "PREFERENCE_VERSION_CONFLICT"
+    });
+    const legacyInterveningWrite = await app.request(`${basePath}/preference`, {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        origin: TEST_ORIGIN
+      },
+      body: JSON.stringify({ x: 12, y: 24, zoom: 1.1 })
+    });
+    expect(legacyInterveningWrite.status).toBe(200);
+    const afterLegacyWrite = await app.request(`${basePath}/view-preference`);
+    await expect(afterLegacyWrite.json()).resolves.toMatchObject({
+      preference: {
+        version: 3,
+        lastScope: { scopeKind: "scene", scopeId: SCENE_ID },
+        scopeViews: [
+          {
+            scope: { scopeKind: "project" },
+            viewport: { x: 12, y: 24, zoom: 1.1 }
+          },
+          { scope: { scopeKind: "scene", scopeId: SCENE_ID } }
+        ]
+      }
+    });
     const unchanged = await app.request(basePath);
     await expect(unchanged.json()).resolves.toMatchObject({
       board: { version: 2 }
@@ -340,6 +439,25 @@ describe("backend app", () => {
         { boardVersion: 1, reason: "genesis" }
       ]
     });
+    const firstHistoryPage = await app.request(`${basePath}/history?limit=1`);
+    expect(firstHistoryPage.status).toBe(200);
+    await expect(firstHistoryPage.json()).resolves.toMatchObject({
+      revisions: [{ boardVersion: 2 }],
+      nextBeforeVersion: 2
+    });
+    const finalHistoryPage = await app.request(
+      `${basePath}/history?limit=1&beforeVersion=2`
+    );
+    await expect(finalHistoryPage.json()).resolves.toEqual({
+      revisions: [expect.objectContaining({ boardVersion: 1 })]
+    });
+    const excessiveHistoryPage = await app.request(
+      `${basePath}/history?limit=101`
+    );
+    expect(excessiveHistoryPage.status).toBe(400);
+    await expect(excessiveHistoryPage.json()).resolves.toMatchObject({
+      code: "INVALID_REQUEST"
+    });
     const undone = await app.request(`${basePath}/history/restore`, {
       method: "POST",
       headers: {
@@ -351,6 +469,16 @@ describe("backend app", () => {
     expect(undone.status).toBe(201);
     await expect(undone.json()).resolves.toMatchObject({
       board: { version: 3, objects: [] }
+    });
+    const historyAfterUndo = await app.request(`${basePath}/history?limit=1`);
+    await expect(historyAfterUndo.json()).resolves.toMatchObject({
+      revisions: [
+        {
+          boardVersion: 3,
+          reason: "undo",
+          restoredFromRevisionId: expect.any(String)
+        }
+      ]
     });
   });
 
@@ -1690,6 +1818,9 @@ describe("backend app", () => {
     const canvas = await app.request(
       `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/canvas`
     );
+    const canvasHistory = await app.request(
+      `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/canvas/history?limit=1`
+    );
     const canvasCommand = await app.request(
       `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/canvas/commands`,
       {
@@ -1736,6 +1867,10 @@ describe("backend app", () => {
     });
     expect(canvas.status).toBe(404);
     await expect(canvas.json()).resolves.toMatchObject({
+      code: "CANVAS_NOT_FOUND"
+    });
+    expect(canvasHistory.status).toBe(404);
+    await expect(canvasHistory.json()).resolves.toMatchObject({
       code: "CANVAS_NOT_FOUND"
     });
     expect(canvasCommand.status).toBe(404);

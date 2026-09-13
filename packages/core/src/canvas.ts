@@ -36,7 +36,16 @@ export type CanvasLinkKind =
   | "dependency"
   | "reference";
 export type CanvasScopeKind = "project" | "chapter" | "scene";
+export type CanvasScopeMembership = "explicit";
 export type CanvasRevisionReason = "genesis" | "command" | "restore" | "undo";
+export type CanvasPersonalViewMode = "spatial" | "outline";
+export type CanvasPersonalFocusToken = "surface" | "inspector" | "search";
+export type CanvasPersonalWorkflowLens =
+  | "outline"
+  | "relationships"
+  | "continuity"
+  | "plan-draft"
+  | "review";
 
 export const CANVAS_MAX_COORDINATE = 1_000_000;
 export const CANVAS_MAX_DIMENSION = 100_000;
@@ -46,6 +55,7 @@ export const CANVAS_LABEL_MAX_LENGTH = 200;
 export const CANVAS_SOURCE_KEY_MAX_LENGTH = 500;
 export const CANVAS_PROVENANCE_MAX_LENGTH = 1_000;
 export const CANVAS_NOTE_BODY_MAX_LENGTH = 20_000;
+export const CANVAS_PERSONAL_VIEW_MAX_SCOPES = 1_024;
 
 const OBJECT_KINDS = new Set<CanvasObjectKind>([
   "scene-card",
@@ -62,6 +72,22 @@ const LINK_KINDS = new Set<CanvasLinkKind>([
   "reference"
 ]);
 const SCOPE_KINDS = new Set<CanvasScopeKind>(["project", "chapter", "scene"]);
+const PERSONAL_VIEW_MODES = new Set<CanvasPersonalViewMode>([
+  "spatial",
+  "outline"
+]);
+const PERSONAL_FOCUS_TOKENS = new Set<CanvasPersonalFocusToken>([
+  "surface",
+  "inspector",
+  "search"
+]);
+const PERSONAL_WORKFLOW_LENSES = new Set<CanvasPersonalWorkflowLens>([
+  "outline",
+  "relationships",
+  "continuity",
+  "plan-draft",
+  "review"
+]);
 const AUTHORITIES = new Set<CanvasAuthority>(["confirmed", "provisional"]);
 const REVISION_REASONS = new Set<CanvasRevisionReason>([
   "genesis",
@@ -76,6 +102,7 @@ const COMMAND_TYPES = new Set<CanvasCommand["type"]>([
   "canvas.object.move",
   "canvas.object.resize",
   "canvas.object.setScopePlacement",
+  "canvas.object.setScopeMembership",
   "canvas.object.archive",
   "canvas.object.restore",
   "canvas.object.confirm",
@@ -141,6 +168,7 @@ export type CanvasScopePlacement = Readonly<{
   objectId: CanvasObjectId;
   scopeKind: CanvasScopeKind;
   scopeId?: string;
+  membership?: CanvasScopeMembership;
   x: number;
   y: number;
   width?: number;
@@ -179,6 +207,7 @@ export type CanvasRevision = Readonly<{
   reason: CanvasRevisionReason;
   commandType?: CanvasCommand["type"];
   parentRevisionId?: CanvasRevisionId;
+  restoredFromRevisionId?: CanvasRevisionId;
   createdAt: string;
 }>;
 
@@ -191,6 +220,27 @@ export type CanvasViewportPreference = Readonly<{
   y: number;
   zoom: number;
   selectedObjectId?: CanvasObjectId;
+  updatedAt: string;
+}>;
+
+export type CanvasPersonalScopeView = Readonly<{
+  scope: CanvasScopeRef;
+  viewport: Readonly<{ x: number; y: number; zoom: number }>;
+  viewMode: CanvasPersonalViewMode;
+  inspectorOpen: boolean;
+  focusToken: CanvasPersonalFocusToken;
+  selectedObjectId?: CanvasObjectId;
+  inspectedSceneId?: SceneId;
+  workflowLens: CanvasPersonalWorkflowLens;
+  updatedAt: string;
+}>;
+
+export type CanvasPersonalViewPreference = Readonly<{
+  projectId: ProjectId;
+  accountId: AccountId;
+  version: number;
+  lastScope: CanvasScopeRef;
+  scopeViews: readonly CanvasPersonalScopeView[];
   updatedAt: string;
 }>;
 
@@ -224,6 +274,7 @@ export type CanvasCommand =
   | Readonly<{
       type: "canvas.object.create" | "canvas.object.place";
       object: CanvasObjectDraft;
+      scope?: CanvasScopeRef;
     }>
   | Readonly<{
       type: "canvas.object.update";
@@ -254,6 +305,13 @@ export type CanvasCommand =
       height?: number;
     }>
   | Readonly<{
+      type: "canvas.object.setScopeMembership";
+      objectId: CanvasObjectId;
+      scopeKind: CanvasScopeKind;
+      scopeId?: string;
+      member: boolean;
+    }>
+  | Readonly<{
       type:
         | "canvas.object.archive"
         | "canvas.object.restore"
@@ -282,6 +340,11 @@ export type CanvasCommand =
 export type CanvasMutationResult = Readonly<{
   board: CanvasBoard;
   revision: CanvasRevision;
+}>;
+
+export type CanvasSparseGeometryChanges = Readonly<{
+  objects: readonly CanvasObject[];
+  scopePlacements: readonly CanvasScopePlacement[];
 }>;
 
 export type CanvasSpineDrift =
@@ -333,6 +396,18 @@ export class CanvasVersionConflictError extends Error {
   constructor(projectId: ProjectId, expectedVersion: number) {
     super("The Canvas changed since it was loaded.");
     this.name = "CanvasVersionConflictError";
+    this.projectId = projectId;
+    this.expectedVersion = expectedVersion;
+  }
+}
+
+export class CanvasPreferenceVersionConflictError extends Error {
+  readonly projectId: ProjectId;
+  readonly expectedVersion: number;
+
+  constructor(projectId: ProjectId, expectedVersion: number) {
+    super("This personal Canvas view changed since it was loaded.");
+    this.name = "CanvasPreferenceVersionConflictError";
     this.projectId = projectId;
     this.expectedVersion = expectedVersion;
   }
@@ -644,10 +719,19 @@ export function createCanvasScopePlacement(
 ): CanvasScopePlacement {
   const scopeKind = requireScopeKind(input.scopeKind);
   const scopeId = normalizeScopeId(scopeKind, input.scopeId);
+  if (input.membership !== undefined && input.membership !== "explicit") {
+    throw new DomainValidationError(
+      "EMPTY_VALUE",
+      "Canvas scope membership must be explicit."
+    );
+  }
   return Object.freeze({
     objectId: input.objectId,
     scopeKind,
     ...(scopeId === undefined ? {} : { scopeId }),
+    ...(input.membership === undefined
+      ? {}
+      : { membership: input.membership }),
     x: finiteBounded(
       input.x,
       "Canvas scope placement x",
@@ -917,6 +1001,111 @@ export function createCanvasBoard(
   return board;
 }
 
+function withoutObjectGeometry(object: CanvasObject): string {
+  const {
+    x: _x,
+    y: _y,
+    width: _width,
+    height: _height,
+    ...identity
+  } = object;
+  return JSON.stringify(identity);
+}
+
+function withoutPlacementGeometry(placement: CanvasScopePlacement): string {
+  const {
+    x: _x,
+    y: _y,
+    width: _width,
+    height: _height,
+    ...identity
+  } = placement;
+  return JSON.stringify(identity);
+}
+
+function objectGeometryMatches(left: CanvasObject, right: CanvasObject): boolean {
+  return (
+    left.x === right.x &&
+    left.y === right.y &&
+    left.width === right.width &&
+    left.height === right.height
+  );
+}
+
+function placementGeometryMatches(
+  left: CanvasScopePlacement,
+  right: CanvasScopePlacement
+): boolean {
+  return (
+    left.x === right.x &&
+    left.y === right.y &&
+    left.width === right.width &&
+    left.height === right.height
+  );
+}
+
+/**
+ * Returns the rows that can be updated without replacing the Canvas relational
+ * projection. Both boards are normalized before comparison, and every field
+ * outside object and scope-placement rectangles must remain identical. A new
+ * placement is safe because the normalized board has already checked its object
+ * reference; removal or semantic placement changes require a full replacement.
+ */
+export function canvasSparseGeometryChanges(
+  beforeInput: CanvasBoard,
+  afterInput: CanvasBoard
+): CanvasSparseGeometryChanges | undefined {
+  const before = createCanvasBoard(beforeInput);
+  const after = createCanvasBoard(afterInput);
+  if (
+    before.projectId !== after.projectId ||
+    after.version !== before.version + 1 ||
+    before.createdAt !== after.createdAt ||
+    before.objects.length !== after.objects.length ||
+    before.scopePlacements.length > after.scopePlacements.length ||
+    JSON.stringify(before.links) !== JSON.stringify(after.links)
+  ) {
+    return undefined;
+  }
+
+  const changedObjects: CanvasObject[] = [];
+  for (let index = 0; index < before.objects.length; index += 1) {
+    const previous = before.objects[index]!;
+    const next = after.objects[index]!;
+    if (withoutObjectGeometry(previous) !== withoutObjectGeometry(next)) {
+      return undefined;
+    }
+    if (!objectGeometryMatches(previous, next)) changedObjects.push(next);
+  }
+
+  const beforePlacements = new Map(
+    before.scopePlacements.map((placement) => [
+      canvasScopePlacementKey(placement),
+      placement
+    ])
+  );
+  const changedPlacements: CanvasScopePlacement[] = [];
+  for (const placement of after.scopePlacements) {
+    const previous = beforePlacements.get(canvasScopePlacementKey(placement));
+    if (previous === undefined) {
+      changedPlacements.push(placement);
+      continue;
+    }
+    beforePlacements.delete(canvasScopePlacementKey(placement));
+    if (withoutPlacementGeometry(previous) !== withoutPlacementGeometry(placement)) {
+      return undefined;
+    }
+    if (!placementGeometryMatches(previous, placement)) {
+      changedPlacements.push(placement);
+    }
+  }
+  if (beforePlacements.size > 0) return undefined;
+  return Object.freeze({
+    objects: Object.freeze(changedObjects),
+    scopePlacements: Object.freeze(changedPlacements)
+  });
+}
+
 export function validateCanvasBoardReferences(
   board: CanvasBoard,
   records: ProjectRecords
@@ -951,6 +1140,33 @@ export function validateCanvasBoardReferences(
         );
       }
     }
+  }
+}
+
+export function requireCanvasScope(
+  scope: CanvasScopeRef,
+  records: ProjectRecords
+): void {
+  const kind = requireScopeKind(scope.scopeKind);
+  const id = normalizeScopeId(kind, scope.scopeId);
+  const exists =
+    kind === "project" ||
+    (kind === "scene"
+      ? records.scenes.some(
+          (scene) => scene.id === id && scene.archivedAt === undefined
+        )
+      : records.books.some(
+          (book) =>
+            book.archivedAt === undefined &&
+            book.manuscript.parts.some((part) =>
+              part.chapters.some((chapter) => chapter.id === id)
+            )
+        ));
+  if (!exists) {
+    throw new DomainValidationError(
+      "UNKNOWN_REFERENCE",
+      "Canvas scope is unavailable in this project."
+    );
   }
 }
 
@@ -1041,6 +1257,16 @@ export function createCanvasRevision(input: CanvasRevision): CanvasRevision {
       "Only a Canvas command revision may name a valid command type."
     );
   }
+  if (
+    input.restoredFromRevisionId !== undefined &&
+    input.reason !== "restore" &&
+    input.reason !== "undo"
+  ) {
+    throw new DomainValidationError(
+      "UNKNOWN_REFERENCE",
+      "Only a restored Canvas revision may name its restored source."
+    );
+  }
   return Object.freeze({
     id: input.id,
     projectId: input.projectId,
@@ -1053,6 +1279,9 @@ export function createCanvasRevision(input: CanvasRevision): CanvasRevision {
     ...(input.parentRevisionId === undefined
       ? {}
       : { parentRevisionId: input.parentRevisionId }),
+    ...(input.restoredFromRevisionId === undefined
+      ? {}
+      : { restoredFromRevisionId: input.restoredFromRevisionId }),
     createdAt: requireText(input.createdAt, "Canvas revision creation time", 100)
   });
 }
@@ -1070,6 +1299,7 @@ async function snapshotRevision(input: {
   reason: CanvasRevisionReason;
   commandType?: CanvasCommand["type"];
   parentRevisionId?: CanvasRevisionId;
+  restoredFromRevisionId?: CanvasRevisionId;
   createdAt: string;
 }): Promise<CanvasRevision> {
   const contentHash = await hashCanvasBoard(input.board);
@@ -1085,6 +1315,9 @@ async function snapshotRevision(input: {
     ...(input.parentRevisionId === undefined
       ? {}
       : { parentRevisionId: input.parentRevisionId }),
+    ...(input.restoredFromRevisionId === undefined
+      ? {}
+      : { restoredFromRevisionId: input.restoredFromRevisionId }),
     createdAt: input.createdAt
   });
 }
@@ -1256,15 +1489,24 @@ export async function applyCanvasCommand(input: {
 
   switch (command.type) {
     case "canvas.object.create":
-    case "canvas.object.place":
-      objects.push(
-        createCanvasObject({
-          ...command.object,
-          id: canvasObjectId(input.ids.create("canvasObject")),
-          projectId: board.projectId
-        })
-      );
+    case "canvas.object.place": {
+      const object = createCanvasObject({
+        ...command.object,
+        id: canvasObjectId(input.ids.create("canvasObject")),
+        projectId: board.projectId
+      });
+      objects.push(object);
+      if (command.scope !== undefined) {
+        requireCanvasScope(command.scope, input.projectRecords);
+        scopePlacements = upsertScopePlacement(scopePlacements, createCanvasScopePlacement({
+          objectId: object.id,
+          ...command.scope,
+          membership: "explicit",
+          x: object.x, y: object.y, width: object.width, height: object.height
+        }));
+      }
       break;
+    }
     case "canvas.object.update": {
       const current = requiredObject(objects, command.objectId);
       requireActiveRecord(current, "Canvas object");
@@ -1286,11 +1528,17 @@ export async function applyCanvasCommand(input: {
           scopeKind: "project"
         }) !== undefined
       ) {
+        const currentPlacement = findScopePlacement(scopePlacements, current.id, {
+          scopeKind: "project"
+        });
         scopePlacements = upsertScopePlacement(
           scopePlacements,
           createCanvasScopePlacement({
             objectId: current.id,
             scopeKind: "project",
+            ...(currentPlacement?.membership === undefined
+              ? {}
+              : { membership: currentPlacement.membership }),
             x: command.x,
             y: command.y,
             width: current.width,
@@ -1314,12 +1562,20 @@ export async function applyCanvasCommand(input: {
       break;
     }
     case "canvas.object.setScopePlacement": {
+      requireCanvasScope(command, input.projectRecords);
       const current = requiredObject(objects, command.objectId);
       requireActiveRecord(current, "Canvas object");
+      const currentPlacement = findScopePlacement(scopePlacements, command.objectId, {
+        scopeKind: command.scopeKind,
+        ...(command.scopeId === undefined ? {} : { scopeId: command.scopeId })
+      });
       const placement = createCanvasScopePlacement({
         objectId: command.objectId,
         scopeKind: command.scopeKind,
         ...(command.scopeId === undefined ? {} : { scopeId: command.scopeId }),
+        ...(currentPlacement?.membership === undefined
+          ? {}
+          : { membership: currentPlacement.membership }),
         x: command.x,
         y: command.y,
         ...(command.width === undefined ? {} : { width: command.width }),
@@ -1336,6 +1592,55 @@ export async function applyCanvasCommand(input: {
             width: placement.width ?? current.width,
             height: placement.height ?? current.height
           })
+        );
+      }
+      break;
+    }
+    case "canvas.object.setScopeMembership": {
+      const current = requiredObject(objects, command.objectId);
+      const scopeKind = requireScopeKind(command.scopeKind);
+      const scopeId = normalizeScopeId(scopeKind, command.scopeId);
+      const scope = {
+        scopeKind,
+        ...(scopeId === undefined ? {} : { scopeId })
+      } satisfies CanvasScopeRef;
+      const currentPlacement = findScopePlacement(
+        scopePlacements,
+        command.objectId,
+        scope
+      );
+      if (command.member) {
+        if (
+          current.archivedAt !== undefined ||
+          current.dismissedAt !== undefined
+        ) {
+          throw new CanvasCommandError(
+            "ARCHIVED_RECORD",
+            "Canvas object must be restored before it can be included in a scope."
+          );
+        }
+        requireCanvasScope(scope, input.projectRecords);
+        const geometry = resolveObjectGeometry(
+          current,
+          scopePlacements,
+          scope
+        );
+        scopePlacements = upsertScopePlacement(
+          scopePlacements,
+          createCanvasScopePlacement({
+            ...(currentPlacement ?? {
+              objectId: current.id,
+              ...scope,
+              ...geometry
+            }),
+            membership: "explicit"
+          })
+        );
+      } else if (currentPlacement !== undefined) {
+        const { membership: _membership, ...placement } = currentPlacement;
+        scopePlacements = upsertScopePlacement(
+          scopePlacements,
+          createCanvasScopePlacement(placement)
         );
       }
       break;
@@ -1508,6 +1813,7 @@ export async function restoreCanvasSnapshot(input: {
   now: string;
   reason?: "restore" | "undo";
   parentRevisionId?: CanvasRevisionId;
+  restoredFromRevisionId?: CanvasRevisionId;
 }): Promise<CanvasMutationResult> {
   const current = createCanvasBoard(input.currentBoard);
   if (current.version !== input.expectedCanvasVersion) {
@@ -1537,6 +1843,8 @@ export async function restoreCanvasSnapshot(input: {
       ...(input.parentRevisionId === undefined
         ? {}
         : { parentRevisionId: input.parentRevisionId }),
+      restoredFromRevisionId:
+        input.restoredFromRevisionId ?? target.id,
       createdAt: input.now
     })
   });
@@ -1570,6 +1878,114 @@ export function createCanvasViewportPreference(
       ? {}
       : { selectedObjectId: input.selectedObjectId }),
     updatedAt: requireText(input.updatedAt, "Canvas viewport update time", 100)
+  });
+}
+
+export function createCanvasScopeRef(input: CanvasScopeRef): CanvasScopeRef {
+  const scopeKind = requireScopeKind(input.scopeKind);
+  const scopeId = normalizeScopeId(scopeKind, input.scopeId);
+  return Object.freeze({
+    scopeKind,
+    ...(scopeId === undefined ? {} : { scopeId })
+  });
+}
+
+export function canvasPersonalScopeKey(scope: CanvasScopeRef): string {
+  const validated = createCanvasScopeRef(scope);
+  return validated.scopeKind === "project"
+    ? "project"
+    : `${validated.scopeKind}:${validated.scopeId}`;
+}
+
+export function createCanvasPersonalScopeView(
+  input: CanvasPersonalScopeView
+): CanvasPersonalScopeView {
+  const scope = createCanvasScopeRef(input.scope);
+  if (!PERSONAL_VIEW_MODES.has(input.viewMode)) {
+    throw new DomainValidationError(
+      "EMPTY_VALUE",
+      "Canvas personal view mode is invalid."
+    );
+  }
+  if (!PERSONAL_FOCUS_TOKENS.has(input.focusToken)) {
+    throw new DomainValidationError(
+      "EMPTY_VALUE",
+      "Canvas personal focus target is invalid."
+    );
+  }
+  if (!PERSONAL_WORKFLOW_LENSES.has(input.workflowLens)) {
+    throw new DomainValidationError(
+      "EMPTY_VALUE",
+      "Canvas personal workflow lens is invalid."
+    );
+  }
+  return Object.freeze({
+    scope,
+    viewport: Object.freeze({
+      x: finiteBounded(
+        input.viewport.x,
+        "Canvas viewport x",
+        -CANVAS_MAX_COORDINATE,
+        CANVAS_MAX_COORDINATE
+      ),
+      y: finiteBounded(
+        input.viewport.y,
+        "Canvas viewport y",
+        -CANVAS_MAX_COORDINATE,
+        CANVAS_MAX_COORDINATE
+      ),
+      zoom: finiteBounded(
+        input.viewport.zoom,
+        "Canvas viewport zoom",
+        CANVAS_MIN_ZOOM,
+        CANVAS_MAX_ZOOM
+      )
+    }),
+    viewMode: input.viewMode,
+    inspectorOpen: input.inspectorOpen,
+    focusToken: input.focusToken,
+    ...(input.selectedObjectId === undefined
+      ? {}
+      : { selectedObjectId: input.selectedObjectId }),
+    ...(input.inspectedSceneId === undefined
+      ? {}
+      : { inspectedSceneId: input.inspectedSceneId }),
+    workflowLens: input.workflowLens,
+    updatedAt: requireText(input.updatedAt, "Canvas scope view update time", 100)
+  });
+}
+
+export function createCanvasPersonalViewPreference(
+  input: CanvasPersonalViewPreference
+): CanvasPersonalViewPreference {
+  if (input.scopeViews.length > CANVAS_PERSONAL_VIEW_MAX_SCOPES) {
+    throw new DomainValidationError(
+      "VALUE_TOO_LONG",
+      `Canvas personal views are limited to ${CANVAS_PERSONAL_VIEW_MAX_SCOPES} scopes.`
+    );
+  }
+  const lastScope = createCanvasScopeRef(input.lastScope);
+  const scopeViews = input.scopeViews.map(createCanvasPersonalScopeView);
+  const keys = scopeViews.map((view) => canvasPersonalScopeKey(view.scope));
+  if (new Set(keys).size !== keys.length) {
+    throw new DomainValidationError(
+      "DUPLICATE_REFERENCE",
+      "Canvas personal scope views must have unique scopes."
+    );
+  }
+  if (!keys.includes("project")) {
+    throw new DomainValidationError(
+      "UNKNOWN_REFERENCE",
+      "Canvas personal views must include the project scope."
+    );
+  }
+  return Object.freeze({
+    projectId: input.projectId,
+    accountId: input.accountId,
+    version: positiveVersion(input.version, "Canvas preference version"),
+    lastScope,
+    scopeViews: Object.freeze(scopeViews),
+    updatedAt: requireText(input.updatedAt, "Canvas preference update time", 100)
   });
 }
 

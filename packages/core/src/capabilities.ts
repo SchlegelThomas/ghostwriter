@@ -151,6 +151,27 @@ export const PROJECT_COMMAND_CAPABILITIES: readonly GhostwriterCapability[] =
     )
   ]);
 
+/** Shared intent uses project metadata CAS; external agents may only propose changes. */
+export const STORY_CONTEXT_MUTATION_CAPABILITIES: readonly GhostwriterCapability[] =
+  Object.freeze(([
+    ["scene.updateIntent", "Update shared scene intent", "scene"],
+    ["storyKnowledge.addNarrativeBeat", "Add an authored narrative beat", "project"],
+    ["storyKnowledge.updateNarrativeBeat", "Edit an authored narrative beat", "project"],
+    ["storyKnowledge.setNarrativeBeatArchived", "Archive or restore a narrative beat", "project"],
+    ["storyKnowledge.setNarrativeResolution", "Set a thread's narrative resolution", "project"]
+  ] as const).map(([command, title, scope]) => Object.freeze({
+    id: command,
+    title,
+    access: "apply" as const,
+    scope,
+    coreUseCase: `executeProjectCommand:${command}`,
+    bindings: Object.freeze({
+      ui: "StoryContextCompanion (Draft and Canvas)",
+      web: "POST /api/projects/{projectId}/commands",
+      mcpException: "Canonical intent and narrative changes require explicit first-party human apply; scoped MCP proposal bindings are tracked in the story-workflow epic."
+    })
+  })));
+
 export const SCENE_WORKSPACE_CAPABILITY = Object.freeze({
   id: "scene.workspace.read",
   title: "Read an owned scene writing workspace",
@@ -278,6 +299,17 @@ export const CANVAS_READ_CAPABILITIES: readonly GhostwriterCapability[] =
       })
     }),
     Object.freeze({
+      id: "canvas.personalView.read",
+      title: "Read the writer's Canvas scope return state",
+      access: "read",
+      scope: "project",
+      coreUseCase: "getCanvasPersonalViewPreference",
+      bindings: Object.freeze({
+        web: "GET /api/projects/{projectId}/canvas/view-preference",
+        mcpException: "Personal camera, selection and focus state is account-owned UI state, outside external story grants."
+      })
+    }),
+    Object.freeze({
       id: "canvas.preference.read",
       title: "Read a writer's Story Canvas viewport preference",
       access: "read",
@@ -313,6 +345,17 @@ export const CANVAS_MUTATION_CAPABILITIES: readonly GhostwriterCapability[] =
       bindings: Object.freeze({
         web: "POST /api/projects/{projectId}/canvas/history/restore",
         mcpException: MCP_CANONICAL_MUTATION_EXCEPTION
+      })
+    }),
+    Object.freeze({
+      id: "canvas.personalView.save",
+      title: "Save the writer's Canvas scope return state",
+      access: "apply",
+      scope: "project",
+      coreUseCase: "saveCanvasPersonalViewPreference",
+      bindings: Object.freeze({
+        web: "PUT /api/projects/{projectId}/canvas/view-preference",
+        mcpException: "Personal camera, selection and focus state is account-owned UI state, outside external story grants."
       })
     }),
     Object.freeze({
@@ -799,6 +842,7 @@ export const AGENT_PROPOSAL_APPLY_CAPABILITY = Object.freeze({
 export const GHOSTWRITER_CAPABILITIES: readonly GhostwriterCapability[] = Object.freeze([
   PROJECT_NAVIGATOR_CAPABILITY,
   ...PROJECT_COMMAND_CAPABILITIES,
+  ...STORY_CONTEXT_MUTATION_CAPABILITIES,
   SCENE_WORKSPACE_CAPABILITY,
   ...SCENE_HISTORY_CAPABILITIES,
   ...SCENE_WRITING_MUTATION_CAPABILITIES,

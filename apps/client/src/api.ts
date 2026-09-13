@@ -2,8 +2,11 @@ import type {
   BookId,
   BookReaderProjection,
   CanvasBoard,
+  CanvasScopeRef,
   CanvasCommand,
   CanvasObjectId,
+  CanvasPersonalScopeView,
+  CanvasPersonalViewPreference,
   CanvasReadingOrderSpine,
   CanvasRevisionId,
   CanvasRevisionMetadata,
@@ -23,6 +26,7 @@ import type {
   ProjectCommand,
   ProjectNavigator,
   Scene,
+  SceneId,
   StoryProjectSummary,
   WorkPlanV1,
   WriterProfile
@@ -227,6 +231,7 @@ export type CanvasLinkResponse = CanvasBoard["links"][number];
 export type CanvasSpineResponse = CanvasReadingOrderSpine;
 export type CanvasRevisionResponse = CanvasRevisionMetadata;
 export type CanvasPreferenceResponse = CanvasViewportPreference;
+export type CanvasPersonalViewPreferenceResponse = CanvasPersonalViewPreference;
 
 export type CanvasWorkspaceResponse = Readonly<{
   board: CanvasBoardResponse;
@@ -235,6 +240,7 @@ export type CanvasWorkspaceResponse = Readonly<{
 
 export type CanvasHistoryResponse = Readonly<{
   revisions: readonly CanvasRevisionResponse[];
+  nextBeforeVersion?: number;
 }>;
 
 export type CanvasScenePlacementInput =
@@ -251,6 +257,7 @@ export type CanvasScenePlacementInput =
     }>;
 
 export type CanvasSceneGeometryInput = Readonly<{
+  scope?: CanvasScopeRef;
   x: number;
   y: number;
   width: number;
@@ -454,9 +461,13 @@ export function executeCanvasCommand(input: {
 }
 
 export function getCanvasHistory(
-  projectId: string
+  projectId: string,
+  beforeVersion?: number
 ): Promise<CanvasHistoryResponse> {
-  return requestJson(canvasPath(projectId, "history"));
+  const query = beforeVersion === undefined
+    ? ""
+    : `?beforeVersion=${encodeURIComponent(beforeVersion)}`;
+  return requestJson(`${canvasPath(projectId, "history")}${query}`);
 }
 
 export function undoCanvas(input: {
@@ -512,6 +523,41 @@ export async function saveCanvasPreference(input: {
       ...(input.selectedObjectId === undefined
         ? {}
         : { selectedObjectId: input.selectedObjectId })
+    })
+  );
+  return response.preference;
+}
+
+export async function getCanvasPersonalViewPreference(
+  projectId: string
+): Promise<CanvasPersonalViewPreferenceResponse | null> {
+  const response = await requestJson<
+    Readonly<{ preference: CanvasPersonalViewPreferenceResponse | null }>
+  >(canvasPath(projectId, "view-preference"));
+  return response.preference;
+}
+
+export async function saveCanvasPersonalViewPreference(input: Readonly<{
+  projectId: string;
+  expectedPreferenceVersion: number;
+  scopeView: Omit<
+    CanvasPersonalScopeView,
+    "updatedAt" | "selectedObjectId" | "inspectedSceneId"
+  > &
+    Readonly<{
+      selectedObjectId?: CanvasObjectId | null;
+      inspectedSceneId?: SceneId | null;
+    }>;
+  lastScope: CanvasScopeRef;
+}>): Promise<CanvasPersonalViewPreferenceResponse> {
+  const response = await requestJson<
+    Readonly<{ preference: CanvasPersonalViewPreferenceResponse }>
+  >(
+    canvasPath(input.projectId, "view-preference"),
+    jsonRequest("PUT", {
+      expectedPreferenceVersion: input.expectedPreferenceVersion,
+      scopeView: input.scopeView,
+      lastScope: input.lastScope
     })
   );
   return response.preference;

@@ -417,3 +417,35 @@ gh workflow run ops-fly-r2-secrets.yml -f generate_kek=false
 | "provision public media / R2" | `./scripts/public-media/provision-public-bucket.sh` then sync / `ops-fly-r2-secrets` |
 | "release desktop build" (later) | tag push → Actions → GitHub Release |
 | "push a mobile update" (later) | `eas update` |
+
+## Story workflow Canvas foundations (implementation in progress)
+
+Migration 0023 adds nullable explicit scope membership without backfilling legacy placements.
+Existing geometry-only rows keep their prior behavior. Undo provenance is additive and historical
+snapshots remain intact; ambiguous old Undo records require explicit history review. These local
+changes have not been deployed. Apply migrations through the normal branch/CI workflow.
+
+The opt-in capacity probe runs entirely in a disposable in-memory PGlite database:
+`pnpm --filter @ghostwriter/storage exec tsx src/canvas-capacity-profile.ts`. It reports hardware,
+payload and timings for 1,000 objects, 1,500 links, scoped geometry and 200 serialized writes.
+It does not connect to production or establish network/browser frame performance.
+
+For direct-browser acceptance using the same fixture, start the existing isolated backend with
+`GHOSTWRITER_E2E=1 GHOSTWRITER_CANVAS_CAPACITY=1 PORT=8787 E2E_APP_ORIGIN=http://localhost:8081 pnpm --filter @ghostwriter/backend exec tsx src/e2e-server.ts`.
+The opt-in Capacity novel has 201 Canvas revisions and belongs only to the hermetic writer.
+It is discarded with the in-memory backend and never seeds the normal backend.
+
+#### Story workflow migration 0025
+
+`0025_even_radioactive_man.sql` adds nullable thread narrative JSONB to story knowledge.
+Existing records remain NULL; no causal beats are inferred or backfilled. Normal project
+CAS transactions persist the aggregate. Apply through the standard migration process;
+local hermetic tests exercise empty/legacy migration and round-trip preservation.
+
+#### Story workflow migration 0026
+
+The personal Canvas preference migration adds independent CAS and a bounded scope-view
+JSONB map to the existing preference row. Legacy x/y/zoom/selected-object values are
+backfilled into the project scope; no historical child camera is inferred. Old clients keep
+the legacy columns in sync. Empty/legacy migration, stale writes and account isolation are
+covered by focused repository tests. This is UI return state, never canonical story content.

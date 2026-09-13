@@ -49,10 +49,12 @@ export const CAPTURE_REFLECTION_MAX_OUTPUT_TOKENS = 1_500;
 
 export const CAPTURE_REFLECTION_WALL_CLOCK_SECONDS = 60;
 
-export type ContextResourceClass = "capture";
+export type ContextResourceClass = "capture" | "scene-document" | "story-context";
 
-export type ContextReceiptResource = Readonly<{
-  resourceClass: ContextResourceClass;
+export type ContextReceiptResource = CaptureContextReceiptResource | import("./story-context-receipt.js").StoryContextReceiptResource;
+
+export type CaptureContextReceiptResource = Readonly<{
+  resourceClass: "capture";
   captureId: CaptureId;
   workingVersion: number;
   contentHash: CaptureContentHash;
@@ -122,7 +124,7 @@ export type AssembleCaptureReflectionResourceInput = Readonly<{
 
 export async function assembleCaptureReflectionResource(
   input: AssembleCaptureReflectionResourceInput
-): Promise<ContextReceiptResource> {
+): Promise<CaptureContextReceiptResource> {
   if (input.captureHead.captureId !== input.assignment.captureId) {
     throw new DomainValidationError(
       "UNKNOWN_REFERENCE",

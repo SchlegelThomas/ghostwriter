@@ -1,0 +1,3 @@
+ALTER TABLE "canvas_revisions" ADD COLUMN "restored_from_revision_id" text;--> statement-breakpoint
+ALTER TABLE "canvas_revisions" ADD CONSTRAINT "canvas_revisions_restored_from_revision_id_canvas_revisions_id_fk" FOREIGN KEY ("restored_from_revision_id") REFERENCES "public"."canvas_revisions"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "canvas_revisions_restored_from_revision_id_index" ON "canvas_revisions" USING btree ("restored_from_revision_id");

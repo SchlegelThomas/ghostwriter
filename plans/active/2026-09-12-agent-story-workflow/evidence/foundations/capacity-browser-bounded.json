@@ -1,0 +1,86 @@
+{
+  "viewport": {
+    "width": 768,
+    "height": 1024
+  },
+  "build": "fixed Expo web export",
+  "method": "Action to visible acknowledged accessibility state, including control overhead; not frame or network-only timings",
+  "canvasOpenMs": 818,
+  "orderedOpenMs": 750,
+  "rowSelectionMs": 718,
+  "historyOpenMs": 837,
+  "interactions": [
+    {
+      "action": "Nudge right",
+      "elapsedMs": 1337,
+      "observed": [
+        "+\t\t\t\t2952 text Saved",
+        "~\t\t\t\t\t\t\t\t1855 text CONFIRMED · WRITER-CREATED Scene card  · active · rendered scope bounds x  24 , y 0  ·  260  ×  192"
+      ]
+    },
+    {
+      "action": "Nudge right",
+      "elapsedMs": 1217,
+      "observed": [
+        "~\t\t\t\t\t\t\t\t1855 text CONFIRMED · WRITER-CREATED Scene card  · active · rendered scope bounds x  48 , y 0  ·  260  ×  192"
+      ]
+    },
+    {
+      "action": "Nudge right",
+      "elapsedMs": 1191,
+      "observed": [
+        "~\t\t\t\t\t\t\t\t1855 text CONFIRMED · WRITER-CREATED Scene card  · active · rendered scope bounds x  72 , y 0  ·  260  ×  192"
+      ]
+    },
+    {
+      "action": "Nudge right",
+      "elapsedMs": 1215,
+      "observed": [
+        "~\t\t\t\t\t\t\t\t1855 text CONFIRMED · WRITER-CREATED Scene card  · active · rendered scope bounds x  96 , y 0  ·  260  ×  192"
+      ]
+    },
+    {
+      "action": "Nudge right",
+      "elapsedMs": 1333,
+      "observed": [
+        "~\t\t\t\t\t\t\t\t1855 text CONFIRMED · WRITER-CREATED Scene card  · active · rendered scope bounds x  120 , y 0  ·  260  ×  192"
+      ]
+    },
+    {
+      "action": "Nudge right",
+      "elapsedMs": 1207,
+      "observed": [
+        "~\t\t\t\t\t\t\t\t1855 text CONFIRMED · WRITER-CREATED Scene card  · active · rendered scope bounds x  144 , y 0  ·  260  ×  192"
+      ]
+    },
+    {
+      "action": "Nudge right",
+      "elapsedMs": 1188,
+      "observed": [
+        "~\t\t\t\t\t\t\t\t1855 text CONFIRMED · WRITER-CREATED Scene card  · active · rendered scope bounds x  168 , y 0  ·  260  ×  192"
+      ]
+    },
+    {
+      "action": "Nudge right",
+      "elapsedMs": 1128,
+      "observed": [
+        "~\t\t\t\t\t\t\t\t1855 text CONFIRMED · WRITER-CREATED Scene card  · active · rendered scope bounds x  192 , y 0  ·  260  ×  192"
+      ]
+    },
+    {
+      "action": "Nudge right",
+      "elapsedMs": 1155,
+      "observed": [
+        "~\t\t\t\t\t\t\t\t1855 text CONFIRMED · WRITER-CREATED Scene card  · active · rendered scope bounds x  216 , y 0  ·  260  ×  192"
+      ]
+    },
+    {
+      "action": "Nudge right",
+      "elapsedMs": 1182,
+      "observed": [
+        "~\t\t\t\t\t\t\t\t1855 text CONFIRMED · WRITER-CREATED Scene card  · active · rendered scope bounds x  240 , y 0  ·  260  ×  192"
+      ]
+    }
+  ],
+  "history": "100-row pages reached genesis; explicit restore returned Scene1 x0; Undo of restore returned prior Scene1 x240."
+}

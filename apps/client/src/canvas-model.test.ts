@@ -35,6 +35,8 @@ import {
   preferredCanvasSceneId,
   projectCanvasOutline,
   searchCanvasObjects,
+  searchCanvasStory,
+  canvasObjectTitle,
   visibleCanvasObjects,
   type CanvasTool
 } from "./canvas-model.js";
@@ -127,6 +129,23 @@ function object(
 }
 
 describe("Canvas presentation helpers", () => {
+  it("finds unplaced canonical scenes and renamed cards without duplicating results", () => {
+    const title = navigator.books[0]!.parts[0]!.chapters[0]!.scenes[0]!.title;
+    const card = object("old-title-card", { kind: "scene-card", sceneId: scene, label: "Old annotation" });
+    expect(searchCanvasStory(navigator, [], title)).toEqual([
+      expect.objectContaining({ sceneId: scene, label: title })
+    ]);
+    expect(searchCanvasStory(navigator, [card], title)).toEqual([
+      expect.objectContaining({ object: card, sceneId: scene, label: title })
+    ]);
+    expect(canvasObjectTitle(card, navigator)).toBe(title);
+    expect(searchCanvasStory(navigator, [card], "Old annotation")[0]?.label).toBe(title);
+    expect(searchCanvasStory(navigator, [object("hidden", { archivedAt: "2026-09-12" })], "hidden")).toEqual([]);
+    expect(searchCanvasStory(navigator, [object("hidden", { archivedAt: "2026-09-12" })], "hidden", { includeArchived: true }))
+      .toEqual([expect.objectContaining({ archived: true, label: "hidden" })]);
+    expect(searchCanvasStory(navigator, [], "   ")).toEqual([]);
+  });
+
   it("transforms world geometry and converts one completed drag at any zoom", () => {
     expect(
       canvasScreenFrame(object("canvas-object-frame", { x: 120, y: 80 }), {
@@ -241,7 +260,7 @@ describe("Canvas presentation helpers", () => {
       archived.id
     ]);
     expect(projection[0]).toMatchObject({
-      authorityLabel: "Provisional fixture",
+      authorityLabel: "Provisional",
       stateLabel: "Active",
       orderLabel: "Draft 1 · Later on Canvas"
     });

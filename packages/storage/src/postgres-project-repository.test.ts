@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
 import {
   BELLWETHER_FIXTURE,
   BELLWETHER_FIXTURE_NAVIGATOR,
@@ -11,6 +12,7 @@ import {
   createProjectMembership,
   createScene,
   DomainValidationError,
+  narrativeBeatId,
   partId,
   projectId,
   sceneId,
@@ -68,6 +70,42 @@ function sequenceIds(values: readonly string[]): IdGenerator {
 }
 
 describe("postgres project repository", () => {
+  it("adds nullable thread-only narrative JSON to legacy story knowledge", async () => {
+    const { client, close } = createPgliteDatabase();
+    closers.push(close);
+    await client.exec(`
+      create table story_knowledge (
+        id text primary key,
+        kind text not null
+      );
+      insert into story_knowledge (id, kind) values
+        ('legacy-character', 'character'),
+        ('legacy-thread', 'thread');
+    `);
+    const migration = await readFile(
+      new URL("../drizzle/0025_even_radioactive_man.sql", import.meta.url),
+      "utf8"
+    );
+    await client.exec(migration.replaceAll("--> statement-breakpoint", ""));
+    const legacy = await client.query<{ narrative: unknown }>(
+      "select narrative from story_knowledge where id = 'legacy-character'"
+    );
+    expect(legacy.rows).toEqual([{ narrative: null }]);
+    await expect(
+      client.exec(
+        `update story_knowledge set narrative = '{}'::jsonb where id = 'legacy-character'`
+      )
+    ).rejects.toBeDefined();
+    await expect(
+      client.exec(
+        `update story_knowledge set narrative = '[]'::jsonb where id = 'legacy-thread'`
+      )
+    ).rejects.toBeDefined();
+    await client.exec(
+      `update story_knowledge set narrative = '{}'::jsonb where id = 'legacy-thread'`
+    );
+  });
+
   it("persists and reads the seeded fixture as the same navigator", async () => {
     const repository = await freshRepository();
     await seedProject(repository, BELLWETHER_FIXTURE);
@@ -129,6 +167,189 @@ describe("postgres project repository", () => {
       books: [{ title: "The Long Way Home", status: "planned", sceneCount: 0 }],
       totals: { books: 1, scenes: 0, storyKnowledge: 0, editions: 0 }
     });
+  });
+
+  it("persists scene intent and narrative aggregates under project CAS", async () => {
+    const { repository, client } = await freshRepositoryDatabase();
+    await seedProject(repository, BELLWETHER_FIXTURE);
+    await repository.transaction((writer) => {
+      writer.insertProjectMembership(
+        createProjectMembership({
+          projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+          accountId: OWNER_ACCOUNT_ID,
+          role: "owner",
+          createdAt: "2026-07-11T19:00:00.000Z"
+        })
+      );
+    });
+    const services = createGhostwriterServices({
+      projects: repository,
+      ids: sequenceIds(["beat-storage-one", "beat-storage-two"]),
+      clock: { now: () => "2026-09-12T21:00:00.000Z" }
+    });
+    const scope = {
+      accountId: OWNER_ACCOUNT_ID,
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID
+    };
+    const threadId = storyKnowledgeId("knowledge-caller-thread");
+    const firstBeatId = narrativeBeatId("beat-storage-one");
+    const secondBeatId = narrativeBeatId("beat-storage-two");
+    let navigator = await services.executeProjectCommand({
+      ...scope,
+      expectedVersion: 1,
+      command: {
+        type: "scene.updateIntent",
+        sceneId: sceneId("scene-arrival-at-bellwether"),
+        patch: {
+          purpose: "Answer the impossible call.",
+          conflict: "Mara distrusts the voice.",
+          turn: "The caller knows tomorrow."
+        }
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      ...scope,
+      expectedVersion: navigator.version,
+      command: {
+        type: "storyKnowledge.addNarrativeBeat",
+        storyKnowledgeId: threadId,
+        sceneId: sceneId("scene-arrival-at-bellwether"),
+        role: "setup",
+        summary: "The first impossible warning arrives."
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      ...scope,
+      expectedVersion: navigator.version,
+      command: {
+        type: "storyKnowledge.addNarrativeBeat",
+        storyKnowledgeId: threadId,
+        sceneId: sceneId("scene-dead-frequency"),
+        role: "payoff",
+        summary: "The warning predicts a death.",
+        dependsOnBeatIds: [firstBeatId]
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      ...scope,
+      expectedVersion: navigator.version,
+      command: {
+        type: "storyKnowledge.updateNarrativeBeat",
+        storyKnowledgeId: threadId,
+        beatId: secondBeatId,
+        patch: {
+          role: "consequence",
+          summary: "The warning names the next victim."
+        }
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      ...scope,
+      expectedVersion: navigator.version,
+      command: {
+        type: "storyKnowledge.setNarrativeBeatArchived",
+        storyKnowledgeId: threadId,
+        beatId: firstBeatId,
+        archived: true
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      ...scope,
+      expectedVersion: navigator.version,
+      command: {
+        type: "storyKnowledge.setNarrativeResolution",
+        storyKnowledgeId: threadId,
+        resolution: "intentionally-open"
+      }
+    });
+    navigator = await services.executeProjectCommand({
+      ...scope,
+      expectedVersion: navigator.version,
+      command: {
+        type: "scene.setArchived",
+        sceneId: sceneId("scene-arrival-at-bellwether"),
+        archived: true
+      }
+    });
+
+    const reloaded = await services.getProjectNavigator(
+      OWNER_ACCOUNT_ID,
+      BELLWETHER_FIXTURE_PROJECT_ID
+    );
+    expect(
+      reloaded?.storyKnowledge.find((knowledge) => knowledge.id === threadId)
+    ).toMatchObject({
+      linkedSceneIds: [
+        sceneId("scene-dead-frequency"),
+        sceneId("scene-future-call"),
+        sceneId("scene-second-signal")
+      ],
+      narrative: {
+        resolution: "intentionally-open",
+        beats: [
+          {
+            id: firstBeatId,
+            sceneId: sceneId("scene-arrival-at-bellwether"),
+            archivedAt: "2026-09-12T21:00:00.000Z"
+          },
+          {
+            id: secondBeatId,
+            role: "consequence",
+            summary: "The warning names the next victim.",
+            dependsOnBeatIds: [firstBeatId]
+          }
+        ]
+      }
+    });
+    const narrativeRow = await client.query<{ narrative: unknown }>(
+      "select narrative from story_knowledge where id = 'knowledge-caller-thread'"
+    );
+    expect(narrativeRow.rows[0]?.narrative).toMatchObject({
+      resolution: "intentionally-open",
+      beats: [{ id: firstBeatId }, { id: secondBeatId }]
+    });
+
+    const stableVersion = navigator.version;
+    await expect(
+      services.executeProjectCommand({
+        ...scope,
+        expectedVersion: stableVersion - 1,
+        command: {
+          type: "storyKnowledge.setNarrativeResolution",
+          storyKnowledgeId: threadId,
+          resolution: "resolved"
+        }
+      })
+    ).rejects.toMatchObject({ name: "ProjectVersionConflictError" });
+    await expect(
+      services.executeProjectCommand({
+        ...scope,
+        expectedVersion: stableVersion,
+        command: {
+          type: "storyKnowledge.updateNarrativeBeat",
+          storyKnowledgeId: threadId,
+          beatId: firstBeatId,
+          patch: { dependsOnBeatIds: [secondBeatId] }
+        }
+      })
+    ).rejects.toMatchObject({ code: "INVALID_CRAFT" });
+    await expect(
+      services.executeProjectCommand({
+        ...scope,
+        expectedVersion: stableVersion,
+        command: {
+          type: "storyKnowledge.update",
+          storyKnowledgeId: threadId,
+          kind: "location"
+        }
+      })
+    ).rejects.toMatchObject({ code: "INVALID_CRAFT" });
+    expect(
+      await services.getProjectNavigator(
+        OWNER_ACCOUNT_ID,
+        BELLWETHER_FIXTURE_PROJECT_ID
+      )
+    ).toEqual(reloaded);
   });
 
   it("atomically replaces an owned project from expected-version commands", async () => {

@@ -165,9 +165,14 @@ export function chapterScopeForScene(
   sceneId: SceneId
 ): Extract<CanvasDrillScope, { kind: "chapter" }> | undefined {
   for (const book of project.books) {
+    if (book.archivedAt !== undefined) continue;
     for (const part of book.parts) {
       for (const chapter of part.chapters) {
-        if (chapter.scenes.some((scene) => scene.id === sceneId)) {
+        if (
+          chapter.scenes.some(
+            (scene) => scene.id === sceneId && scene.archivedAt === undefined
+          )
+        ) {
           return {
             kind: "chapter",
             bookId: book.id,
@@ -186,9 +191,13 @@ export function sceneDrillScope(
   sceneId: SceneId
 ): Extract<CanvasDrillScope, { kind: "scene" }> | undefined {
   for (const book of project.books) {
+    if (book.archivedAt !== undefined) continue;
     for (const part of book.parts) {
       for (const chapter of part.chapters) {
-        const scene = chapter.scenes.find((candidate) => candidate.id === sceneId);
+        const scene = chapter.scenes.find(
+          (candidate) =>
+            candidate.id === sceneId && candidate.archivedAt === undefined
+        );
         if (scene !== undefined) {
           return {
             kind: "scene",
@@ -201,7 +210,8 @@ export function sceneDrillScope(
       }
     }
     const unassigned = book.unassignedScenes.find(
-      (candidate) => candidate.id === sceneId
+      (candidate) =>
+        candidate.id === sceneId && candidate.archivedAt === undefined
     );
     if (unassigned !== undefined) {
       return {
@@ -212,6 +222,41 @@ export function sceneDrillScope(
     }
   }
   return undefined;
+}
+
+/**
+ * Rebuilds the current scope trail from canonical active records. Canvas
+ * placements may intentionally outlive a removed or archived scope, but the UI
+ * must not strand the writer inside that stale scope.
+ */
+export function sanitizeCanvasDrillStack(
+  project: ProjectNavigator,
+  stack: CanvasDrillStack
+): CanvasDrillStack {
+  const current = currentDrillScope(stack);
+  if (current.kind === "project") return initialDrillStack();
+  if (current.kind === "chapter") {
+    const available = project.books.some(
+      (book) =>
+        book.archivedAt === undefined &&
+        book.id === current.bookId &&
+        book.parts.some(
+          (part) =>
+            part.id === current.partId &&
+            part.chapters.some((chapter) => chapter.id === current.chapterId)
+        )
+    );
+    return available ? [{ kind: "project" }, current] : initialDrillStack();
+  }
+
+  const sceneScope = sceneDrillScope(project, current.sceneId);
+  if (sceneScope === undefined) {
+    return sanitizeCanvasDrillStack(project, stack.slice(0, -1));
+  }
+  const chapterScope = chapterScopeForScene(project, current.sceneId);
+  return chapterScope === undefined
+    ? [{ kind: "project" }, sceneScope]
+    : [{ kind: "project" }, chapterScope, sceneScope];
 }
 
 export function drillBreadcrumbs(
@@ -430,6 +475,14 @@ export function scopeSeedObjectIds(
 ): ReadonlySet<CanvasObjectId> {
   const objects = activeObjects(board);
   const ids = new Set<CanvasObjectId>();
+  for (const placement of board.scopePlacements) {
+    if (placement.membership === "explicit" &&
+        placement.scopeKind === scope.kind &&
+        (scope.kind === "project" || placement.scopeId ===
+          (scope.kind === "chapter" ? scope.chapterId : scope.sceneId))) {
+      ids.add(placement.objectId);
+    }
+  }
   switch (scope.kind) {
     case "project":
       for (const object of objects) ids.add(object.id);

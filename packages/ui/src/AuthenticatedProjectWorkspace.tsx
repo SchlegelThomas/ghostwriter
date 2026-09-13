@@ -42,6 +42,11 @@ import {
   type CanvasWorkflowLens
 } from "./canvas-drill.js";
 import { CanvasDrillBar } from "./CanvasDrillBar.js";
+import { StoryContextCompanion } from "./StoryContextCompanion.js";
+import {
+  STORY_CONTEXT_DIRTY_NAVIGATION_MESSAGE,
+  type StoryContextSurface
+} from "./story-context-companion.js";
 import {
   ManuscriptTree,
   type ManuscriptTreeAddRequest,
@@ -241,6 +246,11 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   onCommand(command: ProjectCommand): Promise<boolean>;
   onModeChange(mode: ProjectWorkspaceMode): void;
   onSelectedSceneIdChange(sceneId: SceneId | undefined): void;
+  onOpenStoryContextScene?(
+    sceneId: SceneId,
+    mode: Extract<ProjectWorkspaceMode, "canvas" | "split">
+  ): void;
+  onStoryContextDirtyChange?(surface: StoryContextSurface, dirty: boolean): void;
   onOpenReader?(): void;
   onToastAction?(id: string): void;
   onToastDismiss?(id: string): void;
@@ -518,6 +528,8 @@ export function AuthenticatedProjectWorkspace({
   onCommand,
   onModeChange,
   onSelectedSceneIdChange,
+  onOpenStoryContextScene,
+  onStoryContextDirtyChange,
   onOpenReader,
   onToastAction = () => undefined,
   onToastDismiss = () => undefined,
@@ -644,7 +656,20 @@ export function AuthenticatedProjectWorkspace({
     onCloseInbox?.();
   }
 
+  function blockDirtyStoryContextDeparture(): boolean {
+    if (!draftStoryContextDirty) return false;
+    setStoryContextNavigationMessage(STORY_CONTEXT_DIRTY_NAVIGATION_MESSAGE);
+    return true;
+  }
+
+  function handleDraftStoryContextDirtyChange(dirty: boolean): void {
+    setDraftStoryContextDirty(dirty);
+    if (!dirty) setStoryContextNavigationMessage(undefined);
+    onStoryContextDirtyChange?.("draft", dirty);
+  }
+
   function openPlans(): void {
+    if (blockDirtyStoryContextDeparture()) return;
     setPrimarySideView("explorer");
     setRailDestination("write");
     if (structureCollapsible) setStructureRail("expanded");
@@ -669,6 +694,7 @@ export function AuthenticatedProjectWorkspace({
   }
 
   function openCharactersPrimary(): void {
+    if (blockDirtyStoryContextDeparture()) return;
     // Cast owns the center; Explorer stays the only wide primary content.
     setPrimarySideView("explorer");
     setRailDestination("characters");
@@ -685,12 +711,15 @@ export function AuthenticatedProjectWorkspace({
     }
   }
 
-  function requestModeChange(next: ProjectWorkspaceMode): void {
+  function requestModeChange(next: ProjectWorkspaceMode): boolean {
+    if (next !== mode && blockDirtyStoryContextDeparture()) return false;
     closeInboxForNavigation("mode-change");
     onModeChange(next);
+    return true;
   }
 
   function requestOpenReader(): void {
+    if (blockDirtyStoryContextDeparture()) return;
     closeInboxForNavigation("reader");
     // Same Reader rail as Draft/Title Page — leave Cast lens so center yields.
     setRailDestination("write");
@@ -699,6 +728,7 @@ export function AuthenticatedProjectWorkspace({
   }
 
   function handleProjectBack(): void {
+    if (blockDirtyStoryContextDeparture()) return;
     closeInboxForNavigation("project-back");
     onBack();
   }
@@ -715,6 +745,9 @@ export function AuthenticatedProjectWorkspace({
   const [secondaryOpen, setSecondaryOpen] = useState(true);
   const [explorerQuery, setExplorerQuery] = useState("");
   const [contextDockOpen, setContextDockOpen] = useState(false);
+  const [draftStoryContextDirty, setDraftStoryContextDirty] = useState(false);
+  const [storyContextNavigationMessage, setStoryContextNavigationMessage] =
+    useState<string>();
   const [draftDockTab, setDraftDockTab] = useState<
     "brief" | "story" | "canvas" | "history"
   >("brief");
@@ -855,6 +888,7 @@ export function AuthenticatedProjectWorkspace({
   }
 
   function openAgentSecondary(): void {
+    if (blockDirtyStoryContextDeparture()) return;
     setSecondaryOpen(true);
     setSecondaryMode(nextSecondaryModeOnAgentOpen(secondaryMode, true));
     if (!wide) setCollapsedPanel("inspector");
@@ -871,6 +905,7 @@ export function AuthenticatedProjectWorkspace({
     if (requestFocusDraftScene === undefined || requestFocusDraftScene < 1) {
       return;
     }
+    if (blockDirtyStoryContextDeparture()) return;
     setFocusHalo(false);
     setContextDockOpen(false);
     if (!wide) {
@@ -895,6 +930,7 @@ export function AuthenticatedProjectWorkspace({
     ) {
       return;
     }
+    if (blockDirtyStoryContextDeparture()) return;
     closeInboxForNavigation("manuscript-selection");
     setRailDestination("write");
     setPrimarySideView("explorer");
@@ -915,6 +951,7 @@ export function AuthenticatedProjectWorkspace({
     }
     const sceneId = requestReviewSceneDraftsSceneId;
     if (sceneId === undefined) return;
+    if (blockDirtyStoryContextDeparture()) return;
     closeInboxForNavigation("manuscript-selection");
     setRailDestination("write");
     setPrimarySideView("explorer");
@@ -941,6 +978,7 @@ export function AuthenticatedProjectWorkspace({
     }
     const scope = requestOpenEntityDraftScope;
     if (scope === undefined) return;
+    if (blockDirtyStoryContextDeparture()) return;
     closeInboxForNavigation("manuscript-selection");
     setRailDestination("write");
     setPrimarySideView("explorer");
@@ -971,6 +1009,7 @@ export function AuthenticatedProjectWorkspace({
   ]);
 
   function handleContextDockOpenChange(open: boolean): void {
+    if (!open && blockDirtyStoryContextDeparture()) return;
     setContextDockOpen(open);
     if (onChatSend === undefined) return;
     if (open) {
@@ -1031,7 +1070,7 @@ export function AuthenticatedProjectWorkspace({
   useEffect(() => {
     if (!canvasVisible || typeof document === "undefined") return;
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== "Escape" || drillStack.length <= 1) return;
+      if (event.defaultPrevented || event.key !== "Escape" || drillStack.length <= 1) return;
       event.preventDefault();
       onDrillBack();
     };
@@ -1087,7 +1126,7 @@ export function AuthenticatedProjectWorkspace({
   useEffect(() => {
     if (!narrow || (mode !== "draft" && mode !== "canvas")) return;
     setCollapsedPanel("none");
-    if (mode === "draft") setContextDockOpen(false);
+    if (mode === "draft" && !draftStoryContextDirty) setContextDockOpen(false);
   }, [mode, narrow, selectedSceneId]);
 
   useEffect(() => {
@@ -1110,7 +1149,13 @@ export function AuthenticatedProjectWorkspace({
     );
   }, [project, selectedSceneId, selection]);
 
-  function chooseSelection(next: ManuscriptSelection): void {
+  function chooseSelection(next: ManuscriptSelection): boolean {
+    if (
+      manuscriptSelectionKey(next) !== manuscriptSelectionKey(selection) &&
+      blockDirtyStoryContextDeparture()
+    ) {
+      return false;
+    }
     closeInboxForNavigation("manuscript-selection");
     // Write-rail character records open Cast; structure selection returns to Write.
     if (next.kind === "storyKnowledge") {
@@ -1124,6 +1169,7 @@ export function AuthenticatedProjectWorkspace({
     }
     setSelection(next);
     if (next.kind === "scene") onSelectedSceneIdChange(next.sceneId);
+    return true;
   }
 
   const [quickBuildOpen, setQuickBuildOpen] = useState(false);
@@ -1142,6 +1188,7 @@ export function AuthenticatedProjectWorkspace({
   // History "Review covers" → Title Page studio (project home + draft).
   useEffect(() => {
     if (coverReviewBookId === undefined) return;
+    if (blockDirtyStoryContextDeparture()) return;
     closeInboxForNavigation("manuscript-selection");
     setRailDestination("write");
     setPrimarySideView("explorer");
@@ -1154,6 +1201,7 @@ export function AuthenticatedProjectWorkspace({
   // Split Sheet → Cast studio handoff (same knowledge id).
   useEffect(() => {
     if (castFocusKnowledgeId === undefined) return;
+    if (blockDirtyStoryContextDeparture()) return;
     openCharactersPrimary();
     chooseSelection({
       kind: "storyKnowledge",
@@ -1303,7 +1351,7 @@ export function AuthenticatedProjectWorkspace({
     }
     if (target.selection !== undefined) {
       openExplorerPrimary();
-      chooseSelection(target.selection);
+      if (!chooseSelection(target.selection)) return;
       if (!wide) setCollapsedPanel("tree");
     }
     if (target.mode !== undefined) {
@@ -1644,14 +1692,14 @@ export function AuthenticatedProjectWorkspace({
       onAddChild={addChild}
       onArchiveAction={runExplorerArchive}
       onEnterChapter={(next) => {
-        chooseSelection(next);
+        if (!chooseSelection(next)) return;
         onEnterChapter(next);
         if (mode !== "canvas" && mode !== "split") requestModeChange("canvas");
       }}
       onMoveScene={moveScene}
       onOpenScene={(next) => {
         openExplorerPrimary();
-        chooseSelection(next);
+        if (!chooseSelection(next)) return;
         requestModeChange("draft");
         if (!wide) {
           setCollapsedPanel("none");
@@ -1751,7 +1799,7 @@ export function AuthenticatedProjectWorkspace({
         </View>
         <Button
           label="Close Context Dock"
-          onPress={() => setContextDockOpen(false)}
+          onPress={() => handleContextDockOpenChange(false)}
         />
       </View>
       <View accessibilityLabel="Draft Context Dock tabs" style={styles.draftDockTabs}>
@@ -1760,7 +1808,14 @@ export function AuthenticatedProjectWorkspace({
             accessibilityRole="tab"
             accessibilityState={{ selected: draftDockTab === tab }}
             key={tab}
-            onPress={() => setDraftDockTab(tab)}
+            onPress={() => {
+              if (
+                tab !== "brief" &&
+                draftDockTab === "brief" &&
+                blockDirtyStoryContextDeparture()
+              ) return;
+              setDraftDockTab(tab);
+            }}
             style={({ pressed }) => [
               styles.draftDockTab,
               draftDockTab === tab && styles.draftDockTabSelected,
@@ -1779,8 +1834,49 @@ export function AuthenticatedProjectWorkspace({
           </Pressable>
         ))}
       </View>
+      {storyContextNavigationMessage === undefined ? null : (
+        <Text accessibilityLiveRegion="polite" style={styles.draftDockGuard}>
+          {storyContextNavigationMessage}
+        </Text>
+      )}
       {draftDockTab === "brief" ? (
-        inspector
+        selectedScene === undefined ? null : (
+          <View style={styles.draftDockCompanion}>
+            <StoryContextCompanion
+              busy={busy}
+              key={selectedScene.id}
+              onCommand={onCommand}
+              onDirtyChange={handleDraftStoryContextDirtyChange}
+              onOpenScene={(sceneId) => {
+                const next = sceneSelection(project, sceneId);
+                if (next !== undefined) chooseSelection(next);
+              }}
+              onShowCanvas={() => {
+                if (blockDirtyStoryContextDeparture()) return;
+                if (onOpenStoryContextScene !== undefined) {
+                  onOpenStoryContextScene(selectedScene.id, "canvas");
+                  return;
+                }
+                requestModeChange("canvas");
+              }}
+              project={project}
+              sceneId={selectedScene.id}
+            />
+            {wide ? (
+              <Button
+                label="Open Split"
+                onPress={() => {
+                  if (blockDirtyStoryContextDeparture()) return;
+                  if (onOpenStoryContextScene !== undefined) {
+                    onOpenStoryContextScene(selectedScene.id, "split");
+                    return;
+                  }
+                  requestModeChange("split");
+                }}
+              />
+            ) : null}
+          </View>
+        )
       ) : draftDockTab === "story" ? (
         <ScrollView contentContainerStyle={styles.draftDockBody}>
           <Text style={styles.draftDockSectionTitle}>Story in this scene</Text>
@@ -1941,7 +2037,7 @@ export function AuthenticatedProjectWorkspace({
         drillScope.kind === "project" ? (
           <View style={styles.storyTrailItem}>
             <Text style={styles.mapSelectionHint}>
-              · card selected: {selectedScene.title} · Enter to dive
+              · writing: {selectedScene.title}
             </Text>
           </View>
         ) : null}
@@ -2050,6 +2146,10 @@ export function AuthenticatedProjectWorkspace({
                 onPress={() => {
                   setCollapsedPanel((current) => {
                     const next = current === "tree" ? "none" : "tree";
+                    if (
+                      next === "tree" &&
+                      blockDirtyStoryContextDeparture()
+                    ) return current;
                     if (next === "tree") setContextDockOpen(false);
                     return next;
                   });
@@ -2098,7 +2198,13 @@ export function AuthenticatedProjectWorkspace({
             </>
           )}
           {surfaceDense ? null : (
-            <Button disabled={busy} label="Refresh" onPress={onRefresh} />
+            <Button
+              disabled={busy}
+              label="Refresh"
+              onPress={() => {
+                if (!blockDirtyStoryContextDeparture()) onRefresh();
+              }}
+            />
           )}
           {surfaceDense || onOpenReader === undefined ? null : (
             <Button
@@ -2107,7 +2213,13 @@ export function AuthenticatedProjectWorkspace({
               onPress={requestOpenReader}
             />
           )}
-          <Button disabled={busy} label="Sign out" onPress={onSignOut} />
+          <Button
+            disabled={busy}
+            label="Sign out"
+            onPress={() => {
+              if (!blockDirtyStoryContextDeparture()) onSignOut();
+            }}
+          />
         </View>
       </View>
 
@@ -2119,6 +2231,7 @@ export function AuthenticatedProjectWorkspace({
           <Button
             label="Project"
             onPress={() => {
+              if (blockDirtyStoryContextDeparture()) return;
               setContextDockOpen(false);
               setCollapsedPanel("tree");
             }}
@@ -2127,6 +2240,7 @@ export function AuthenticatedProjectWorkspace({
           <Button
             label="Draft"
             onPress={() => {
+              if (blockDirtyStoryContextDeparture()) return;
               setCollapsedPanel("none");
               setContextDockOpen(false);
               requestModeChange("draft");
@@ -2136,8 +2250,8 @@ export function AuthenticatedProjectWorkspace({
           <Button
             label="Canvas"
             onPress={() => {
+              if (!requestModeChange("canvas")) return;
               setCollapsedPanel("none");
-              requestModeChange("canvas");
             }}
             selected={mode === "canvas" && collapsedPanel === "none"}
           />
@@ -2158,7 +2272,9 @@ export function AuthenticatedProjectWorkspace({
           {onOpenSettings === undefined ? null : (
             <Button
               label="Settings"
-              onPress={onOpenSettings}
+              onPress={() => {
+                if (!blockDirtyStoryContextDeparture()) onOpenSettings();
+              }}
               selected={settingsOpen}
             />
           )}
@@ -2354,7 +2470,9 @@ export function AuthenticatedProjectWorkspace({
                 disabled={busy}
                 icon={(tone) => <SettingsRailIcon tone={tone} />}
                 label="Settings"
-                onPress={onOpenSettings}
+                onPress={() => {
+                  if (!blockDirtyStoryContextDeparture()) onOpenSettings();
+                }}
                 selected={settingsOpen}
               />
             )}
@@ -2673,7 +2791,7 @@ export function AuthenticatedProjectWorkspace({
                     const next = sceneSelection(project, sceneId);
                     if (next === undefined) return;
                     setRailDestination("write");
-                    chooseSelection(next);
+                    if (!chooseSelection(next)) return;
                     requestModeChange("draft");
                   }}
                   onResolveCharacterVisualDisplayUrl={
@@ -2776,7 +2894,7 @@ export function AuthenticatedProjectWorkspace({
                     busy={busy}
                     onOpenScene={(sceneSelectionNext) => {
                       setRailDestination("write");
-                      chooseSelection(sceneSelectionNext);
+                      if (!chooseSelection(sceneSelectionNext)) return;
                       requestModeChange("draft");
                     }}
                     project={project}
@@ -2946,6 +3064,7 @@ export function AuthenticatedProjectWorkspace({
               mode={secondaryMode}
               onAutoSuggestionsChange={onAutoSuggestionsChange}
               onCollapse={() => {
+                if (draftDeskActive && blockDirtyStoryContextDeparture()) return;
                 setSecondaryOpen(false);
                 if (!wide) setCollapsedPanel("none");
               }}
@@ -3537,6 +3656,20 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 3,
     padding: 7
+  },
+  draftDockGuard: {
+    backgroundColor: colors.redSoft,
+    color: colors.red,
+    fontFamily: fonts.uiMedium,
+    fontSize: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7
+  },
+  draftDockCompanion: {
+    flex: 1,
+    gap: 8,
+    minHeight: 0,
+    paddingBottom: 10
   },
   draftDockTab: {
     borderColor: "transparent",

@@ -281,8 +281,10 @@ describe("capture reflection instruction compiler", () => {
     expect(injected.receipt.maxOutputTokens).toBe(baseline.receipt.maxOutputTokens);
     expect(injected.receipt.wallClockSeconds).toBe(baseline.receipt.wallClockSeconds);
     expect(injected.receipt.egressClass).toBe(baseline.receipt.egressClass);
-    expect(injected.receipt.resources[0]?.captureId).toBe(CAPTURE);
-    expect(injected.receipt.resources[0]?.workingVersion).toBe(baseline.receipt.resources[0]?.workingVersion);
+    const injectedCapture = injected.receipt.resources.find((resource) => resource.resourceClass === "capture");
+    const baselineCapture = baseline.receipt.resources.find((resource) => resource.resourceClass === "capture");
+    expect(injectedCapture?.captureId).toBe(CAPTURE);
+    expect(injectedCapture?.workingVersion).toBe(baselineCapture?.workingVersion);
     expect(injected.receipt.resources[0]?.contentHash).toBe(CONTENT_HASH);
     expect(injected.layers[0]).toEqual(baseline.layers[0]);
     expect(injected.layers[1]).toEqual(baseline.layers[1]);

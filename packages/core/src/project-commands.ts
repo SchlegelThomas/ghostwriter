@@ -7,6 +7,7 @@ import {
   createScene,
   createStoryKnowledge,
   defineProjectRecords,
+  narrativeBeatId,
   partId,
   sceneId,
   storyKnowledgeId,
@@ -17,6 +18,9 @@ import {
   type ChapterId,
   type ManuscriptChapter,
   type ManuscriptPart,
+  type NarrativeBeatId,
+  type NarrativeBeatRole,
+  type NarrativeThreadResolution,
   type PartId,
   type Project,
   type ProjectId,
@@ -156,6 +160,11 @@ export type ProjectCommand =
       sketch?: SceneSketch | null;
     }>
   | Readonly<{
+      type: "scene.updateIntent";
+      sceneId: SceneId;
+      patch: SceneIntentPatch;
+    }>
+  | Readonly<{
       type: "scene.move";
       sceneId: SceneId;
       bookId: BookId;
@@ -197,7 +206,44 @@ export type ProjectCommand =
       type: "storyKnowledge.setArchived";
       storyKnowledgeId: StoryKnowledgeId;
       archived: boolean;
+    }>
+  | Readonly<{
+      type: "storyKnowledge.addNarrativeBeat";
+      storyKnowledgeId: StoryKnowledgeId;
+      sceneId: SceneId;
+      role: NarrativeBeatRole;
+      summary: string;
+      dependsOnBeatIds?: readonly NarrativeBeatId[];
+    }>
+  | Readonly<{
+      type: "storyKnowledge.updateNarrativeBeat";
+      storyKnowledgeId: StoryKnowledgeId;
+      beatId: NarrativeBeatId;
+      patch: Readonly<{
+        sceneId?: SceneId;
+        role?: NarrativeBeatRole;
+        summary?: string;
+        dependsOnBeatIds?: readonly NarrativeBeatId[];
+      }>;
+    }>
+  | Readonly<{
+      type: "storyKnowledge.setNarrativeBeatArchived";
+      storyKnowledgeId: StoryKnowledgeId;
+      beatId: NarrativeBeatId;
+      archived: boolean;
+    }>
+  | Readonly<{
+      type: "storyKnowledge.setNarrativeResolution";
+      storyKnowledgeId: StoryKnowledgeId;
+      resolution: NarrativeThreadResolution;
     }>;
+
+export type SceneIntentPatch = Readonly<{
+  purpose?: string | null;
+  conflict?: string | null;
+  turn?: string | null;
+  openQuestions?: string | null;
+}>;
 
 export type ExecuteProjectCommandInput = Readonly<{
   accountId: AccountId;
@@ -372,6 +418,86 @@ function updatedArchive(
   current: string | undefined
 ): string | undefined {
   return archived ? current ?? now : undefined;
+}
+
+function updateSceneIntent(scene: Scene, patch: SceneIntentPatch): Scene {
+  if (
+    patch.purpose === undefined &&
+    patch.conflict === undefined &&
+    patch.turn === undefined &&
+    patch.openQuestions === undefined
+  ) {
+    throw new ProjectCommandError(
+      "INVALID_PLACEMENT",
+      "Scene intent update must change at least one field."
+    );
+  }
+  if (scene.archivedAt !== undefined) {
+    throw new ProjectCommandError(
+      "INVALID_PLACEMENT",
+      "Restore the scene before updating its intent."
+    );
+  }
+  let sketch: SceneSketch = { ...(scene.sketch ?? {}) };
+  if (patch.purpose !== undefined) {
+    const { purpose: _ignored, ...withoutPurpose } = sketch;
+    sketch =
+      patch.purpose === null
+        ? withoutPurpose
+        : { ...withoutPurpose, purpose: patch.purpose };
+  }
+  if (patch.conflict !== undefined) {
+    const { conflict: _ignored, ...withoutConflict } = sketch;
+    sketch =
+      patch.conflict === null
+        ? withoutConflict
+        : { ...withoutConflict, conflict: patch.conflict };
+  }
+  if (patch.turn !== undefined) {
+    const { turn: _ignored, ...withoutTurn } = sketch;
+    sketch =
+      patch.turn === null ? withoutTurn : { ...withoutTurn, turn: patch.turn };
+  }
+  if (patch.openQuestions !== undefined) {
+    const { openQuestions: _ignored, ...withoutQuestions } = sketch;
+    sketch =
+      patch.openQuestions === null
+        ? withoutQuestions
+        : { ...withoutQuestions, openQuestions: patch.openQuestions };
+  }
+  const { sketch: _ignored, ...withoutSketch } = scene;
+  return Object.keys(sketch).length === 0
+    ? createScene(withoutSketch)
+    : createScene({ ...withoutSketch, sketch });
+}
+
+function requireMutableThread(
+  knowledge: readonly StoryKnowledge[],
+  id: StoryKnowledgeId
+): StoryKnowledge {
+  const thread = findKnowledge(knowledge, id);
+  if (thread.kind !== "thread") {
+    throw new ProjectCommandError(
+      "INVALID_PLACEMENT",
+      "Narrative beats can only be authored on thread story knowledge."
+    );
+  }
+  if (thread.archivedAt !== undefined) {
+    throw new ProjectCommandError(
+      "INVALID_PLACEMENT",
+      "Restore the story thread before changing its narrative map."
+    );
+  }
+  return thread;
+}
+
+function replaceKnowledge(
+  knowledge: readonly StoryKnowledge[],
+  replacement: StoryKnowledge
+): StoryKnowledge[] {
+  return knowledge.map((record) =>
+    record.id === replacement.id ? replacement : record
+  );
 }
 
 export function applyProjectCommandToRecords(
@@ -703,6 +829,15 @@ export function applyProjectCommandToRecords(
       scenes = replaceScene(scenes, command.sceneId, createScene(updated));
       break;
     }
+    case "scene.updateIntent": {
+      const existing = findScene(scenes, command.sceneId);
+      scenes = replaceScene(
+        scenes,
+        command.sceneId,
+        updateSceneIntent(existing, command.patch)
+      );
+      break;
+    }
     case "scene.move": {
       const existing = findScene(scenes, command.sceneId);
       if (
@@ -874,6 +1009,149 @@ export function applyProjectCommandToRecords(
       storyKnowledge = storyKnowledge.map((record) =>
         record.id === updated.id ? updated : record
       );
+      break;
+    }
+    case "storyKnowledge.addNarrativeBeat": {
+      const thread = requireMutableThread(
+        storyKnowledge,
+        command.storyKnowledgeId
+      );
+      const scene = findScene(scenes, command.sceneId);
+      if (scene.archivedAt !== undefined) {
+        throw new ProjectCommandError(
+          "INVALID_PLACEMENT",
+          "Restore the scene before adding a narrative beat."
+        );
+      }
+      const updated = createStoryKnowledge({
+        ...thread,
+        narrative: {
+          resolution: thread.narrative?.resolution ?? "open",
+          beats: [
+            ...(thread.narrative?.beats ?? []),
+            {
+              id: narrativeBeatId(ids.create("narrativeBeat")),
+              sceneId: command.sceneId,
+              role: command.role,
+              summary: command.summary,
+              dependsOnBeatIds: command.dependsOnBeatIds ?? []
+            }
+          ]
+        }
+      });
+      storyKnowledge = replaceKnowledge(storyKnowledge, updated);
+      break;
+    }
+    case "storyKnowledge.updateNarrativeBeat": {
+      const thread = requireMutableThread(
+        storyKnowledge,
+        command.storyKnowledgeId
+      );
+      if (
+        command.patch.sceneId === undefined &&
+        command.patch.role === undefined &&
+        command.patch.summary === undefined &&
+        command.patch.dependsOnBeatIds === undefined
+      ) {
+        throw new ProjectCommandError(
+          "INVALID_PLACEMENT",
+          "Narrative beat update must change at least one field."
+        );
+      }
+      const narrative = thread.narrative;
+      const existing = narrative?.beats.find(
+        (beat) => beat.id === command.beatId
+      );
+      if (narrative === undefined || existing === undefined) {
+        missing("Narrative beat", command.beatId);
+      }
+      if (command.patch.sceneId !== undefined) {
+        const scene = findScene(scenes, command.patch.sceneId);
+        if (scene.archivedAt !== undefined) {
+          throw new ProjectCommandError(
+            "INVALID_PLACEMENT",
+            "Restore the scene before retargeting a narrative beat."
+          );
+        }
+      }
+      const updatedBeat = {
+        ...existing,
+        ...(command.patch.sceneId === undefined
+          ? {}
+          : { sceneId: command.patch.sceneId }),
+        ...(command.patch.role === undefined ? {} : { role: command.patch.role }),
+        ...(command.patch.summary === undefined
+          ? {}
+          : { summary: command.patch.summary }),
+        ...(command.patch.dependsOnBeatIds === undefined
+          ? {}
+          : { dependsOnBeatIds: command.patch.dependsOnBeatIds })
+      };
+      const updated = createStoryKnowledge({
+        ...thread,
+        narrative: {
+          ...narrative,
+          beats: narrative.beats.map((beat) =>
+            beat.id === command.beatId ? updatedBeat : beat
+          )
+        }
+      });
+      storyKnowledge = replaceKnowledge(storyKnowledge, updated);
+      break;
+    }
+    case "storyKnowledge.setNarrativeBeatArchived": {
+      const thread = requireMutableThread(
+        storyKnowledge,
+        command.storyKnowledgeId
+      );
+      const narrative = thread.narrative;
+      const existing = narrative?.beats.find(
+        (beat) => beat.id === command.beatId
+      );
+      if (narrative === undefined || existing === undefined) {
+        missing("Narrative beat", command.beatId);
+      }
+      const archivedAt = updatedArchive(
+        command.archived,
+        now,
+        existing.archivedAt
+      );
+      const { archivedAt: _ignored, ...activeBeat } = existing;
+      const updated = createStoryKnowledge({
+        ...thread,
+        narrative: {
+          ...narrative,
+          beats: narrative.beats.map((beat) =>
+            beat.id !== command.beatId
+              ? beat
+              : archivedAt === undefined
+                ? activeBeat
+                : { ...activeBeat, archivedAt }
+          )
+        }
+      });
+      storyKnowledge = replaceKnowledge(storyKnowledge, updated);
+      break;
+    }
+    case "storyKnowledge.setNarrativeResolution": {
+      const thread = requireMutableThread(
+        storyKnowledge,
+        command.storyKnowledgeId
+      );
+      if (thread.narrative === undefined) {
+        throw new ProjectCommandError(
+          "INVALID_PLACEMENT",
+          "Map at least one narrative beat before setting thread resolution."
+        );
+      }
+      const updated = createStoryKnowledge({
+        ...thread,
+        narrative: {
+          ...thread.narrative,
+          resolution: command.resolution
+        }
+      });
+      storyKnowledge = replaceKnowledge(storyKnowledge, updated);
       break;
     }
   }

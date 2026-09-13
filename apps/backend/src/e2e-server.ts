@@ -2,6 +2,11 @@ import { randomUUID } from "node:crypto";
 import { serve } from "@hono/node-server";
 import {
   accountId,
+  canvasRevisionId,
+  createCanvasRevision,
+  hashCanvasBoard,
+  applyCanvasCommand,
+  createProjectMembership,
   createBookReaderServices,
   createCanvasServices,
   createCaptureServices,
@@ -24,7 +29,8 @@ import {
   createPostgresSceneDocumentRepository,
   createPostgresWriterProfileRepository,
   toRepositoryDatabase,
-  user
+  user,
+  seedProject
 } from "@ghostwriter/storage";
 import {
   createPgliteDatabase,
@@ -43,6 +49,7 @@ import type { AuthGateway, AuthenticatedSession } from "./auth.js";
 import { createTestAgentProviderRuntime } from "./agent-provider-runtime.js";
 import { createTestProviderKekRuntimeConfig } from "./provider-kek-config.js";
 import type { ScenePartnerImageGenerator } from "./scene-partner-routes.js";
+import { createCanvasCapacityFixture } from "@ghostwriter/storage/capacity-fixture";
 import { seedHermeticHarryPotter } from "./hermetic-seed.js";
 
 if (process.env.GHOSTWRITER_E2E !== "1") {
@@ -167,6 +174,39 @@ await seedHermeticHarryPotter({
 console.log(
   "Hermetic seed: Harry Potter series + character portraits ready for E2E writer."
 );
+// Explicitly opt-in, disposable data for direct-browser capacity acceptance.
+if (process.env.GHOSTWRITER_CANVAS_CAPACITY === "1") {
+  const fixture = createCanvasCapacityFixture();
+  await seedProject(projects, fixture.records);
+  await projects.transaction((writer) => {
+    writer.insertProjectMembership(createProjectMembership({
+      projectId: fixture.project, accountId: accountId(account.id),
+      role: "owner", createdAt: fixture.now
+    }));
+  });
+  const hash = await hashCanvasBoard(fixture.initial);
+  let board = await canvases.initialize({
+    board: fixture.initial,
+    revision: createCanvasRevision({
+      id: canvasRevisionId(`canvas_revision_${hash}`), projectId: fixture.project,
+      boardVersion: 1, contentHash: hash, snapshot: fixture.initial,
+      actorAccountId: accountId(account.id), reason: "genesis", createdAt: fixture.now
+    })
+  });
+  for (let i = 0; i < 200; i++) {
+    const mutation = await applyCanvasCommand({
+      board, projectRecords: fixture.records, expectedCanvasVersion: board.version,
+      actorAccountId: accountId(account.id), ids, now: fixture.now,
+      command: {
+        type: "canvas.object.setScopePlacement", objectId: fixture.objects[i]!.id,
+        scopeKind: "chapter", scopeId: `capacity-chapter-${Math.floor(i / 5)}`,
+        x: (i % 5) * 300 + i + 1, y: 12, width: 260, height: 160
+      }
+    });
+    board = await canvases.replace({ mutation, expectedCanvasVersion: board.version });
+  }
+  console.log("Canvas capacity fixture: 100 chapters, 1000 objects, 1500 links, 201 revisions.");
+}
 const captureAttachments = createCaptureAttachmentServices({
   projects,
   captureDocuments,

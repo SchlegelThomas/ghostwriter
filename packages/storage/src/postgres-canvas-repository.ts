@@ -1,19 +1,23 @@
 import {
   accountId,
+  canvasPersonalScopeKey,
   canvasContentHash,
   canvasLinkId,
   canvasObjectId,
   canvasRevisionId,
+  canvasSparseGeometryChanges,
   createCanvasBoard,
   createCanvasLink,
   createCanvasObject,
   createCanvasRevision,
+  createCanvasPersonalViewPreference,
   createCanvasScopePlacement,
   createCanvasViewportPreference,
   projectId,
   sceneId,
   storyKnowledgeId,
   CanvasVersionConflictError,
+  CanvasPreferenceVersionConflictError,
   DomainValidationError,
   type CanvasAuthority,
   type CanvasBoard,
@@ -22,6 +26,8 @@ import {
   type CanvasLinkKind,
   type CanvasObject,
   type CanvasObjectKind,
+  type CanvasPersonalScopeView,
+  type CanvasPersonalViewPreference,
   type CanvasRepository,
   type CanvasRevision,
   type CanvasRevisionMetadata,
@@ -30,7 +36,7 @@ import {
   type CanvasScopePlacement,
   type ProjectId
 } from "@ghostwriter/core";
-import { and, asc, desc, eq, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, lt, notInArray, sql } from "drizzle-orm";
 import type { RepositoryDatabase } from "./client.js";
 import {
   canvasBoards,
@@ -117,6 +123,9 @@ function placementFromRow(
     objectId: canvasObjectId(row.objectId),
     scopeKind: row.scopeKind as CanvasScopeKind,
     ...(row.scopeId === "" ? {} : { scopeId: row.scopeId }),
+    ...(row.membership === null
+      ? {}
+      : { membership: row.membership as CanvasScopePlacement["membership"] }),
     x: row.x,
     y: row.y,
     ...(row.width === null ? {} : { width: row.width }),
@@ -186,6 +195,13 @@ function revisionFromRow(
     ...(row.parentRevisionId === null
       ? {}
       : { parentRevisionId: canvasRevisionId(row.parentRevisionId) }),
+    ...(row.restoredFromRevisionId === null
+      ? {}
+      : {
+          restoredFromRevisionId: canvasRevisionId(
+            row.restoredFromRevisionId
+          )
+        }),
     createdAt: row.createdAt
   });
 }
@@ -211,8 +227,56 @@ function revisionMetadataFromRow(
     ...(row.parentRevisionId === null
       ? {}
       : { parentRevisionId: canvasRevisionId(row.parentRevisionId) }),
+    ...(row.restoredFromRevisionId === null
+      ? {}
+      : {
+          restoredFromRevisionId: canvasRevisionId(
+            row.restoredFromRevisionId
+          )
+        }),
     createdAt: row.createdAt
   });
+}
+
+function encodedPersonalScopeViews(
+  views: readonly CanvasPersonalScopeView[]
+): Readonly<Record<string, CanvasPersonalScopeView>> {
+  return Object.fromEntries(
+    views.map((view) => [canvasPersonalScopeKey(view.scope), view])
+  );
+}
+
+function personalViewFromRow(
+  row: typeof canvasViewportPreferences.$inferSelect
+): CanvasPersonalViewPreference {
+  const scopeViews = Object.entries(
+    row.scopeViews as Readonly<Record<string, CanvasPersonalScopeView>>
+  )
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, view]) => view);
+  return createCanvasPersonalViewPreference({
+    projectId: projectId(row.projectId),
+    accountId: accountId(row.accountId),
+    version: row.preferenceVersion,
+    lastScope: {
+      scopeKind: row.lastScopeKind as CanvasScopeKind,
+      ...(row.lastScopeId === "" ? {} : { scopeId: row.lastScopeId })
+    },
+    scopeViews,
+    updatedAt: row.updatedAt
+  });
+}
+
+function projectViewFromPreference(
+  preference: CanvasPersonalViewPreference
+): CanvasPersonalScopeView {
+  const projectView = preference.scopeViews.find(
+    (view) => canvasPersonalScopeKey(view.scope) === "project"
+  );
+  if (projectView === undefined) {
+    throw new Error("Canvas personal preference is missing its project view.");
+  }
+  return projectView;
 }
 
 async function queryBoard(
@@ -311,6 +375,7 @@ function placementRow(
     objectId: placement.objectId,
     scopeKind: placement.scopeKind,
     scopeId: placement.scopeId ?? "",
+    membership: placement.membership ?? null,
     x: placement.x,
     y: placement.y,
     width: placement.width ?? null,
@@ -332,6 +397,7 @@ async function insertRevision(
     reason: revision.reason,
     commandType: revision.commandType ?? null,
     parentRevisionId: revision.parentRevisionId ?? null,
+    restoredFromRevisionId: revision.restoredFromRevisionId ?? null,
     createdAt: revision.createdAt
   });
 }
@@ -430,6 +496,55 @@ async function replaceScopePlacements(
         placementRow(board.projectId, placement)
       )
     );
+}
+
+async function persistSparseGeometry(
+  db: RepositoryDatabase,
+  projectIdValue: ProjectId,
+  changes: NonNullable<ReturnType<typeof canvasSparseGeometryChanges>>
+): Promise<void> {
+  for (const object of changes.objects) {
+    const [updated] = await db
+      .update(canvasObjects)
+      .set({
+        x: object.x,
+        y: object.y,
+        width: object.width,
+        height: object.height
+      })
+      .where(
+        and(
+          eq(canvasObjects.projectId, projectIdValue),
+          eq(canvasObjects.id, object.id)
+        )
+      )
+      .returning({ id: canvasObjects.id });
+    if (updated === undefined) {
+      throw new DomainValidationError(
+        "UNKNOWN_REFERENCE",
+        "Canvas geometry references an object that does not exist."
+      );
+    }
+  }
+  for (const placement of changes.scopePlacements) {
+    await db
+      .insert(canvasScopePlacements)
+      .values(placementRow(projectIdValue, placement))
+      .onConflictDoUpdate({
+        target: [
+          canvasScopePlacements.projectId,
+          canvasScopePlacements.objectId,
+          canvasScopePlacements.scopeKind,
+          canvasScopePlacements.scopeId
+        ],
+        set: {
+          x: placement.x,
+          y: placement.y,
+          width: placement.width ?? null,
+          height: placement.height ?? null
+        }
+      });
+  }
 }
 
 async function removeMissingRows(
@@ -592,6 +707,17 @@ export function createPostgresCanvasRepository(
       try {
         return await db.transaction(async (transaction) => {
           const exec = transaction as unknown as RepositoryDatabase;
+          const current = await queryBoard(exec, board.projectId);
+          if (
+            current === undefined ||
+            current.version !== input.expectedCanvasVersion
+          ) {
+            throw new CanvasVersionConflictError(
+              board.projectId,
+              input.expectedCanvasVersion
+            );
+          }
+          const sparseGeometry = canvasSparseGeometryChanges(current, board);
           const [updated] = await exec
             .update(canvasBoards)
             .set({
@@ -613,29 +739,29 @@ export function createPostgresCanvasRepository(
             );
           }
 
-          const replacementArchiveMarker = `canvas-replace-${board.version}`;
-          await exec
-            .update(canvasLinks)
-            .set({ archivedAt: replacementArchiveMarker })
-            .where(eq(canvasLinks.projectId, board.projectId));
-          await exec
-            .update(canvasObjects)
-            .set({
-              parentRegionId: null,
-              archivedAt: replacementArchiveMarker
-            })
-            .where(eq(canvasObjects.projectId, board.projectId));
-          await upsertObjects(exec, board);
-          await upsertLinks(exec, board);
-          await removeMissingRows(exec, board);
-          await restoreRegionParents(exec, board);
-          await replaceScopePlacements(exec, board);
-          await insertRevision(exec, revision);
-          const persisted = await queryBoard(exec, board.projectId);
-          if (persisted === undefined) {
-            throw new Error("Canvas replacement returned no board.");
+          if (sparseGeometry === undefined) {
+            const replacementArchiveMarker = `canvas-replace-${board.version}`;
+            await exec
+              .update(canvasLinks)
+              .set({ archivedAt: replacementArchiveMarker })
+              .where(eq(canvasLinks.projectId, board.projectId));
+            await exec
+              .update(canvasObjects)
+              .set({
+                parentRegionId: null,
+                archivedAt: replacementArchiveMarker
+              })
+              .where(eq(canvasObjects.projectId, board.projectId));
+            await upsertObjects(exec, board);
+            await upsertLinks(exec, board);
+            await removeMissingRows(exec, board);
+            await restoreRegionParents(exec, board);
+            await replaceScopePlacements(exec, board);
+          } else {
+            await persistSparseGeometry(exec, board.projectId, sparseGeometry);
           }
-          return persisted;
+          await insertRevision(exec, revision);
+          return board;
         });
       } catch (error) {
         return mapPersistError(error);
@@ -654,7 +780,35 @@ export function createPostgresCanvasRepository(
         .limit(1);
       return row === undefined ? undefined : revisionFromRow(row);
     },
-    async listRevisions(id): Promise<readonly CanvasRevisionMetadata[]> {
+    async listRevisions(
+      id,
+      options
+    ): Promise<readonly CanvasRevisionMetadata[]> {
+      if (
+        options?.limit !== undefined &&
+        (!Number.isInteger(options.limit) || options.limit < 1)
+      ) {
+        throw new DomainValidationError(
+          "INVALID_VERSION",
+          "Canvas revision page size must be a positive integer."
+        );
+      }
+      if (
+        options?.beforeVersion !== undefined &&
+        (!Number.isInteger(options.beforeVersion) || options.beforeVersion < 1)
+      ) {
+        throw new DomainValidationError(
+          "INVALID_VERSION",
+          "Canvas revision cursor must be a positive integer."
+        );
+      }
+      const revisionWhere =
+        options?.beforeVersion === undefined
+          ? eq(canvasRevisions.projectId, id)
+          : and(
+              eq(canvasRevisions.projectId, id),
+              lt(canvasRevisions.boardVersion, options.beforeVersion)
+            );
       const rows = await db
         .select({
           id: canvasRevisions.id,
@@ -665,14 +819,16 @@ export function createPostgresCanvasRepository(
           reason: canvasRevisions.reason,
           commandType: canvasRevisions.commandType,
           parentRevisionId: canvasRevisions.parentRevisionId,
+          restoredFromRevisionId: canvasRevisions.restoredFromRevisionId,
           createdAt: canvasRevisions.createdAt
         })
         .from(canvasRevisions)
-        .where(eq(canvasRevisions.projectId, id))
+        .where(revisionWhere)
         .orderBy(
           desc(canvasRevisions.boardVersion),
           desc(canvasRevisions.createdAt)
-        );
+        )
+        .limit(options?.limit ?? 2_147_483_647);
       return rows.map(revisionMetadataFromRow);
     },
     async getViewportPreference(id, idOfAccount) {
@@ -702,6 +858,18 @@ export function createPostgresCanvasRepository(
     },
     async saveViewportPreference(preference) {
       const validated = createCanvasViewportPreference(preference);
+      const projectView: CanvasPersonalScopeView = {
+        scope: { scopeKind: "project" },
+        viewport: { x: validated.x, y: validated.y, zoom: validated.zoom },
+        viewMode: "spatial",
+        inspectorOpen: false,
+        focusToken: "surface",
+        ...(validated.selectedObjectId === undefined
+          ? {}
+          : { selectedObjectId: validated.selectedObjectId }),
+        workflowLens: "outline",
+        updatedAt: validated.updatedAt
+      };
       const [row] = await db
         .insert(canvasViewportPreferences)
         .values({
@@ -711,6 +879,10 @@ export function createPostgresCanvasRepository(
           y: validated.y,
           zoom: validated.zoom,
           selectedObjectId: validated.selectedObjectId ?? null,
+          preferenceVersion: 1,
+          scopeViews: { project: projectView },
+          lastScopeKind: "project",
+          lastScopeId: "",
           updatedAt: validated.updatedAt
         })
         .onConflictDoUpdate({
@@ -723,6 +895,8 @@ export function createPostgresCanvasRepository(
             y: validated.y,
             zoom: validated.zoom,
             selectedObjectId: validated.selectedObjectId ?? null,
+            preferenceVersion: sql`${canvasViewportPreferences.preferenceVersion} + 1`,
+            scopeViews: sql`jsonb_set(${canvasViewportPreferences.scopeViews}, '{project}', ${JSON.stringify(projectView)}::jsonb, true)`,
             updatedAt: validated.updatedAt
           }
         })
@@ -741,6 +915,80 @@ export function createPostgresCanvasRepository(
           : { selectedObjectId: canvasObjectId(row.selectedObjectId) }),
         updatedAt: row.updatedAt
       });
+    },
+    async getPersonalViewPreference(id, idOfAccount) {
+      const [row] = await db
+        .select()
+        .from(canvasViewportPreferences)
+        .where(
+          and(
+            eq(canvasViewportPreferences.projectId, id),
+            eq(canvasViewportPreferences.accountId, idOfAccount)
+          )
+        )
+        .limit(1);
+      return row === undefined ? undefined : personalViewFromRow(row);
+    },
+    async savePersonalViewPreference(input) {
+      const validated = createCanvasPersonalViewPreference(input.preference);
+      if (validated.version !== input.expectedPreferenceVersion + 1) {
+        throw new CanvasPreferenceVersionConflictError(
+          validated.projectId,
+          input.expectedPreferenceVersion
+        );
+      }
+      const projectView = projectViewFromPreference(validated);
+      const values: typeof canvasViewportPreferences.$inferInsert = {
+        projectId: validated.projectId,
+        accountId: validated.accountId,
+        x: projectView.viewport.x,
+        y: projectView.viewport.y,
+        zoom: projectView.viewport.zoom,
+        selectedObjectId: projectView.selectedObjectId ?? null,
+        preferenceVersion: validated.version,
+        scopeViews: encodedPersonalScopeViews(validated.scopeViews),
+        lastScopeKind: validated.lastScope.scopeKind,
+        lastScopeId: validated.lastScope.scopeId ?? "",
+        updatedAt: validated.updatedAt
+      };
+      const [row] =
+        input.expectedPreferenceVersion === 0
+          ? await db
+              .insert(canvasViewportPreferences)
+              .values(values)
+              .onConflictDoNothing()
+              .returning()
+          : await db
+              .update(canvasViewportPreferences)
+              .set({
+                x: values.x,
+                y: values.y,
+                zoom: values.zoom,
+                selectedObjectId: values.selectedObjectId,
+                preferenceVersion: values.preferenceVersion,
+                scopeViews: values.scopeViews,
+                lastScopeKind: values.lastScopeKind,
+                lastScopeId: values.lastScopeId,
+                updatedAt: values.updatedAt
+              })
+              .where(
+                and(
+                  eq(canvasViewportPreferences.projectId, validated.projectId),
+                  eq(canvasViewportPreferences.accountId, validated.accountId),
+                  eq(
+                    canvasViewportPreferences.preferenceVersion,
+                    input.expectedPreferenceVersion
+                  )
+                )
+              )
+              .returning();
+      if (row === undefined) {
+        throw new CanvasPreferenceVersionConflictError(
+          validated.projectId,
+          input.expectedPreferenceVersion
+        );
+      }
+      return personalViewFromRow(row);
     }
   };
   return Object.freeze(repository);
