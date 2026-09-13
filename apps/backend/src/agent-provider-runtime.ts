@@ -85,7 +85,11 @@ import {
   createPostgresProviderCredentialRepository,
   createPostgresStoryWorkAssignmentRepository,
   createPostgresStoryWorkAttemptRepository,
-  type NodePostgresConnection
+  createPostgresStoryWorkCoordinationRepository,
+  createPostgresStoryWorkCoordinationUnitOfWork,
+  createPostgresStoryWorkRecoveryUnitOfWork,
+  type NodePostgresConnection,
+  type PostgresStoryWorkCoordinationUnitOfWorkOptions
 } from "@ghostwriter/storage";
 import type { ProviderKekRuntimeConfig } from "./provider-kek-config.js";
 import { parseProviderCallsDisabled } from "./provider-kek-config.js";
@@ -218,6 +222,7 @@ export type CreateAgentProviderRuntimeInput = Readonly<{
   listModelsFactory?: ModelListFactory;
   capturePromotions?: Pick<CapturePromotionServices, "promoteCaptureToScene">;
   sceneDocuments?: SceneDocumentRepository;
+  storyWorkCoordinationUnitOfWork?: PostgresStoryWorkCoordinationUnitOfWorkOptions;
 }>;
 
 export class ProviderCallsDisabledError extends Error {
@@ -543,16 +548,26 @@ export function createAgentProviderRuntime(
       ids: input.ids,
       hashPort
     }),
+    recovery: createPostgresStoryWorkRecoveryUnitOfWork(input.db),
+    coordinations: createPostgresStoryWorkCoordinationRepository(input.db),
+    coordinationUnitOfWork: createPostgresStoryWorkCoordinationUnitOfWork(
+      input.db,
+      input.storyWorkCoordinationUnitOfWork
+    ),
     hashPort,
     ids: input.ids,
     clock: input.clock,
-    createAssignmentId: () => `story_work_assignment_${randomUUID()}`
+    createAssignmentId: () => `story_work_assignment_${randomUUID()}`,
+    createCoordinationId: () => `story_work_coordination_${randomUUID()}`,
+    createCoordinationStepId: () => `story_work_coordination_step_${randomUUID()}`
   }) satisfies StoryWorkApiRuntime;
   const mcpGrants = createMcpGrantServices({
     projects: input.projects,
     grants: createPostgresMcpGrantRepository(input.db),
     captureDocuments: input.captureDocuments,
     captureReflection,
+    storyWorkAssignments,
+    storyWorkCoordinations: storyWork.coordinations,
     tokens: createNodeMcpGrantTokenPort(),
     ids: input.ids,
     clock: input.clock

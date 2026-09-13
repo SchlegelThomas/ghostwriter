@@ -986,6 +986,10 @@ export const storyWorkAssignments = pgTable(
     applyRequestFingerprint: text("apply_request_fingerprint"),
     idempotencyKey: text("idempotency_key").notNull(),
     requestFingerprint: text("request_fingerprint").notNull(),
+    originKind: text("origin_kind"),
+    originMcpGrantId: text("origin_mcp_grant_id").references(() => mcpGrants.id, {
+      onDelete: "restrict"
+    }),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull()
   },
@@ -1007,6 +1011,10 @@ export const storyWorkAssignments = pgTable(
       table.status,
       table.updatedAt
     ),
+    index("story_work_assignments_origin_grant_project_index").on(
+      table.originMcpGrantId,
+      table.projectId
+    ),
     check(
       "story_work_assignments_version_check",
       sql`${table.version} >= 1`
@@ -1024,6 +1032,11 @@ export const storyWorkAssignments = pgTable(
     check(
       "story_work_assignments_active_attempt_check",
       sql`(${table.status} = 'running') = (${table.activeAttemptId} is not null)`
+    ),
+    check(
+      "story_work_assignments_origin_pair_check",
+      sql`((${table.originKind} is null and ${table.originMcpGrantId} is null)
+        or (${table.originKind} = 'mcp' and ${table.originMcpGrantId} is not null))`
     )
   ]
 );
@@ -1088,6 +1101,92 @@ export const storyWorkAttempts = pgTable(
   ]
 );
 
+export const storyWorkCoordinations = pgTable(
+  "story_work_coordinations",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    initiatorAccountId: text("initiator_account_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    title: text("title").notNull(),
+    status: text("status").notNull(),
+    stepDefinitions: jsonb("step_definitions").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    requestFingerprint: text("request_fingerprint").notNull(),
+    originKind: text("origin_kind"),
+    originMcpGrantId: text("origin_mcp_grant_id").references(() => mcpGrants.id, {
+      onDelete: "restrict"
+    }),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("story_work_coordinations_idempotency_unique").on(
+      table.initiatorAccountId,
+      table.projectId,
+      table.idempotencyKey
+    ),
+    index("story_work_coordinations_project_account_updated_index").on(
+      table.projectId,
+      table.initiatorAccountId,
+      table.updatedAt,
+      table.id
+    ),
+    index("story_work_coordinations_origin_grant_project_index").on(
+      table.originMcpGrantId,
+      table.projectId
+    ),
+    check("story_work_coordinations_version_check", sql`${table.version} >= 1`),
+    check(
+      "story_work_coordinations_status_check",
+      sql`${table.status} in ('active', 'canceled')`
+    ),
+    check(
+      "story_work_coordinations_step_definitions_shape_check",
+      sql`jsonb_typeof(${table.stepDefinitions}) = 'array'`
+    ),
+    check(
+      "story_work_coordinations_origin_pair_check",
+      sql`((${table.originKind} is null and ${table.originMcpGrantId} is null)
+        or (${table.originKind} = 'mcp' and ${table.originMcpGrantId} is not null))`
+    )
+  ]
+);
+
+export const storyWorkCoordinationStepBindings = pgTable(
+  "story_work_coordination_step_bindings",
+  {
+    coordinationId: text("coordination_id")
+      .notNull()
+      .references(() => storyWorkCoordinations.id, { onDelete: "cascade" }),
+    stepId: text("step_id").notNull(),
+    assignmentId: text("assignment_id")
+      .notNull()
+      .references(() => storyWorkAssignments.id, { onDelete: "restrict" }),
+    resolvedDependency: jsonb("resolved_dependency"),
+    boundAt: text("bound_at").notNull()
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.coordinationId, table.stepId],
+      name: "story_work_coordination_step_bindings_pkey"
+    }),
+    uniqueIndex("story_work_coordination_step_bindings_assignment_unique").on(
+      table.coordinationId,
+      table.assignmentId
+    ),
+    check(
+      "story_work_coordination_step_bindings_dependency_shape_check",
+      sql`${table.resolvedDependency} is null
+        or jsonb_typeof(${table.resolvedDependency}) = 'object'`
+    )
+  ]
+);
+
 export const mcpGrants = pgTable(
   "mcp_grants",
   {
@@ -1098,7 +1197,14 @@ export const mcpGrants = pgTable(
     projectId: text("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    captureIds: jsonb("capture_ids").notNull(),
+    captureIds: jsonb("capture_ids").notNull().default([]),
+    sceneIds: jsonb("scene_ids").notNull().default([]),
+    bookIds: jsonb("book_ids").notNull().default([]),
+    assignmentIds: jsonb("assignment_ids").notNull().default([]),
+    coordinationIds: jsonb("coordination_ids").notNull().default([]),
+    allowProjectStructureRead: boolean("allow_project_structure_read")
+      .notNull()
+      .default(false),
     tools: jsonb("tools").notNull(),
     tokenHash: text("token_hash").notNull(),
     tokenHint: text("token_hint").notNull(),
@@ -1110,7 +1216,16 @@ export const mcpGrants = pgTable(
   (table) => [
     uniqueIndex("mcp_grants_token_hash_unique").on(table.tokenHash),
     index("mcp_grants_project_id_created_at_index").on(table.projectId, table.createdAt),
-    index("mcp_grants_account_id_index").on(table.accountId)
+    index("mcp_grants_account_id_index").on(table.accountId),
+    check(
+      "mcp_grants_json_shape_check",
+      sql`jsonb_typeof(${table.captureIds}) = 'array'
+        and jsonb_typeof(${table.sceneIds}) = 'array'
+        and jsonb_typeof(${table.bookIds}) = 'array'
+        and jsonb_typeof(${table.assignmentIds}) = 'array'
+        and jsonb_typeof(${table.coordinationIds}) = 'array'
+        and jsonb_typeof(${table.tools}) = 'array'`
+    )
   ]
 );
 

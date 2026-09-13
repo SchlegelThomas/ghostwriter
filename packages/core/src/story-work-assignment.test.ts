@@ -17,6 +17,7 @@ import {
 import { accountId } from "./identity.js";
 import { sceneContentHash } from "./scene-documents.js";
 import { storyStructureOperationId } from "./story-structure-proposal-v1.js";
+import { mcpGrantId } from "./mcp-grants.js";
 import {
   STORY_WORK_MAX_SOURCES,
   STORY_WORK_MAX_STEPS,
@@ -117,6 +118,15 @@ function readyForReview(): StoryWorkAssignment {
 }
 
 describe("story work assignment", () => {
+  it("accepts optional MCP origin and omits it for first-party rows", () => {
+    expect(assignment().origin).toBeUndefined();
+    expect(
+      assignment({
+        origin: { kind: "mcp", grantId: mcpGrantId("grant-assignment-domain") }
+      }).origin
+    ).toEqual({ kind: "mcp", grantId: mcpGrantId("grant-assignment-domain") });
+  });
+
   it("preserves exact nonempty writer text and a server-reserved character destination", () => {
     const created = assignment();
 

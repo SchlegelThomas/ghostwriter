@@ -75,7 +75,9 @@ export type DomainIdKind =
   | "agentProposal"
   | "storyCheckFinding"
   | "storyStructureOperation"
-  | "mcpGrant";
+  | "mcpGrant"
+  | "storyWorkCoordination"
+  | "storyWorkCoordinationStep";
 
 export interface IdGenerator {
   create(kind: DomainIdKind): string;

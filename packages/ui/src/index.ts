@@ -67,3 +67,5 @@ export * from "./StoryCheckReview.js";
 export * from "./story-check-review.js";
 export * from "./StoryStructureReview.js";
 export * from "./story-structure-review.js";
+export * from "./StoryWorkCoordinationReview.js";
+export * from "./story-work-coordination-review.js";

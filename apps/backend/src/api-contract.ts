@@ -1,6 +1,11 @@
 import {
   bookId,
   CAPTURE_ATTACHMENT_MAX_DISPLAY_FILENAME_LENGTH,
+  MCP_GRANT_MAX_ASSIGNMENT_IDS,
+  MCP_GRANT_MAX_BOOK_IDS,
+  MCP_GRANT_MAX_CAPTURE_IDS,
+  MCP_GRANT_MAX_COORDINATION_IDS,
+  MCP_GRANT_MAX_SCENE_IDS,
   MCP_GRANT_TOOL_NAMES,
   CANVAS_MAX_COORDINATE,
   CANVAS_MAX_DIMENSION,
@@ -1604,7 +1609,12 @@ export const agentApplyProposalRequestSchema = z.discriminatedUnion("mode", [
 
 export const createMcpGrantRequestSchema = z
   .object({
-    captureIds: z.array(id).min(1).max(64),
+    captureIds: z.array(id).max(MCP_GRANT_MAX_CAPTURE_IDS).default([]),
+    sceneIds: z.array(id).max(MCP_GRANT_MAX_SCENE_IDS).default([]),
+    bookIds: z.array(id).max(MCP_GRANT_MAX_BOOK_IDS).default([]),
+    assignmentIds: z.array(id).max(MCP_GRANT_MAX_ASSIGNMENT_IDS).default([]),
+    coordinationIds: z.array(id).max(MCP_GRANT_MAX_COORDINATION_IDS).default([]),
+    allowProjectStructureRead: z.boolean().optional().default(false),
     tools: z.array(z.enum(MCP_GRANT_TOOL_NAMES)).min(1),
     expiresAt: z.string().trim().min(1).max(64)
   })

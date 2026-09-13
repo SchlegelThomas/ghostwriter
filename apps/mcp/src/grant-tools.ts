@@ -23,11 +23,15 @@ export type McpGrantRuntime = Readonly<{
   provider: CaptureReflectionStructuredCompletionProvider;
 }>;
 
-function contentFreeError(message: string) {
+export function mcpToolContentFreeError(message: string) {
   return {
     isError: true as const,
     content: [{ type: "text" as const, text: message }]
   };
+}
+
+function contentFreeError(message: string) {
+  return mcpToolContentFreeError(message);
 }
 
 function mapGrantToolError(error: unknown) {
@@ -44,7 +48,7 @@ function mapGrantToolError(error: unknown) {
   return contentFreeError("Request failed.");
 }
 
-function okStructured(output: unknown) {
+export function mcpToolOkStructured(output: unknown) {
   return {
     structuredContent: output as Record<string, unknown>,
     content: [
@@ -56,18 +60,73 @@ function okStructured(output: unknown) {
   };
 }
 
+function okStructured(output: unknown) {
+  return mcpToolOkStructured(output);
+}
+
+export const MCP_GRANT_EFFECTIVE_OUTPUT_SCHEMA = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  captureIds: z.array(z.string()).max(500),
+  sceneIds: z.array(z.string()).max(500),
+  bookIds: z.array(z.string()).max(500),
+  assignmentIds: z.array(z.string()).max(500),
+  coordinationIds: z.array(z.string()).max(500),
+  allowProjectStructureRead: z.boolean(),
+  tools: z.array(z.string()).max(100),
+  expiresAt: z.string()
+});
+
+const boundedCaptureId = z.string().min(1).max(200);
+
+export const MCP_READ_CAPTURE_INPUT_SCHEMA = z.object({
+  captureId: boundedCaptureId.describe("Capture ID allowed by the active grant.")
+});
+
+export const MCP_READ_CAPTURE_OUTPUT_SCHEMA = z.object({
+  captureId: z.string(),
+  projectId: z.string(),
+  status: z.string(),
+  sourceModality: z.string(),
+  workingVersion: z.number().int().positive(),
+  contentHash: z.string(),
+  plainTextSummary: z.string(),
+  truncated: z.boolean(),
+  updatedAt: z.string()
+});
+
+export const MCP_ASSEMBLE_CAPTURE_REFLECTION_CONTEXT_INPUT_SCHEMA = z.object({
+  captureId: boundedCaptureId
+});
+
+export const MCP_ASSEMBLE_CAPTURE_REFLECTION_CONTEXT_OUTPUT_SCHEMA = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  workflowId: z.string(),
+  receiptHash: z.string(),
+  model: z.string(),
+  createdAt: z.string()
+});
+
+export const MCP_PROPOSE_CAPTURE_REFLECTION_INPUT_SCHEMA = z.object({
+  captureId: boundedCaptureId
+});
+
+export const MCP_PROPOSE_CAPTURE_REFLECTION_OUTPUT_SCHEMA = z.object({
+  kind: z.string(),
+  runId: z.string().optional(),
+  proposalId: z.string().optional(),
+  status: z.string().optional()
+});
+
+export function mapMcpGrantToolError(error: unknown) {
+  return mapGrantToolError(error);
+}
+
 export function registerMcpGrantTools(
   server: McpServer,
   runtime: McpGrantRuntime
 ): void {
-  const grantEffectiveSchema = z.object({
-    id: z.string(),
-    projectId: z.string(),
-    captureIds: z.array(z.string()),
-    tools: z.array(z.string()),
-    expiresAt: z.string()
-  });
-
   server.registerTool(
     GET_GRANT_TOOL_NAME,
     {
@@ -75,7 +134,7 @@ export function registerMcpGrantTools(
       description:
         "Return the effective project-scoped MCP grant for this client. Does not list other projects.",
       inputSchema: z.object({}),
-      outputSchema: grantEffectiveSchema,
+      outputSchema: MCP_GRANT_EFFECTIVE_OUTPUT_SCHEMA,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -99,20 +158,8 @@ export function registerMcpGrantTools(
       title: "Read a granted Capture summary",
       description:
         "Read one granted Capture head and plain-text summary. Attachments and credentials are never included.",
-      inputSchema: z.object({
-        captureId: z.string().describe("Capture ID allowed by the active grant.")
-      }),
-      outputSchema: z.object({
-        captureId: z.string(),
-        projectId: z.string(),
-        status: z.string(),
-        sourceModality: z.string(),
-        workingVersion: z.number().int().positive(),
-        contentHash: z.string(),
-        plainTextSummary: z.string(),
-        truncated: z.boolean(),
-        updatedAt: z.string()
-      }),
+      inputSchema: MCP_READ_CAPTURE_INPUT_SCHEMA,
+      outputSchema: MCP_READ_CAPTURE_OUTPUT_SCHEMA,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -139,17 +186,8 @@ export function registerMcpGrantTools(
       title: "Assemble Capture reflection context receipt",
       description:
         "Server-assemble a Capture reflection context receipt preview for one granted Capture.",
-      inputSchema: z.object({
-        captureId: z.string()
-      }),
-      outputSchema: z.object({
-        id: z.string(),
-        projectId: z.string(),
-        workflowId: z.string(),
-        receiptHash: z.string(),
-        model: z.string(),
-        createdAt: z.string()
-      }),
+      inputSchema: MCP_ASSEMBLE_CAPTURE_REFLECTION_CONTEXT_INPUT_SCHEMA,
+      outputSchema: MCP_ASSEMBLE_CAPTURE_REFLECTION_CONTEXT_OUTPUT_SCHEMA,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -184,15 +222,8 @@ export function registerMcpGrantTools(
       title: "Propose Capture reflection",
       description:
         "Submit a Capture reflection run through the same core path as the UI. Creates a noncanonical proposal in the project Inbox. Cannot apply.",
-      inputSchema: z.object({
-        captureId: z.string()
-      }),
-      outputSchema: z.object({
-        kind: z.string(),
-        runId: z.string().optional(),
-        proposalId: z.string().optional(),
-        status: z.string().optional()
-      }),
+      inputSchema: MCP_PROPOSE_CAPTURE_REFLECTION_INPUT_SCHEMA,
+      outputSchema: MCP_PROPOSE_CAPTURE_REFLECTION_OUTPUT_SCHEMA,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,

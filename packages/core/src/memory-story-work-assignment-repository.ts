@@ -3,6 +3,7 @@ import { canonicalJsonStringify } from "./agent-canonical-json.js";
 import { DomainValidationError } from "./domain.js";
 import {
   STORY_WORK_ASSIGNMENT_LIST_MAX,
+  assertStoryWorkAssignmentOriginImmutable,
   createStoryWorkAssignment,
   storyWorkAssignmentRequestFingerprint,
   type StoryWorkAssignment,
@@ -137,6 +138,28 @@ export function createMemoryStoryWorkAssignmentRepository(): StoryWorkAssignment
       );
     },
 
+    async listByMcpGrantOrigin(input) {
+      const limit = normalizeLimit(input.options?.limit);
+      return Object.freeze(
+        [...assignments.values()]
+          .map((stored) => stored.assignment)
+          .filter(
+            (assignment) =>
+              assignment.projectId === input.projectId &&
+              assignment.initiatorAccountId === input.accountId &&
+              assignment.origin?.kind === "mcp" &&
+              assignment.origin.grantId === input.originMcpGrantId
+          )
+          .sort(
+            (left, right) =>
+              right.updatedAt.localeCompare(left.updatedAt) ||
+              right.id.localeCompare(left.id)
+          )
+          .slice(0, limit)
+          .map(cloneAssignment)
+      );
+    },
+
     create(input): Promise<CreateStoryWorkAssignmentOutcome> {
       return serializeWrite(() => {
         const assignment = cloneAssignment(input.assignment);
@@ -182,6 +205,11 @@ export function createMemoryStoryWorkAssignmentRepository(): StoryWorkAssignment
           return { ok: false, reason: "version-conflict" };
         }
         const next = cloneAssignment(input.next);
+        try {
+          assertStoryWorkAssignmentOriginImmutable(stored.assignment, next);
+        } catch {
+          return { ok: false, reason: "version-conflict" };
+        }
         if (
           next.id !== stored.assignment.id ||
           next.projectId !== stored.assignment.projectId ||

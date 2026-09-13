@@ -107,6 +107,7 @@ export const AGENT_RUN_TERMINAL_DIAGNOSTIC_CODES = Object.freeze([
   "provider-malformed-output",
   "provider-unavailable",
   "run-canceled",
+  "client-interrupted",
   "context-stale",
   "internal-failure"
 ] as const);

@@ -21,7 +21,8 @@ export const PROJECT_NAVIGATOR_CAPABILITY = Object.freeze({
   bindings: Object.freeze({
     ui: "ManuscriptTree",
     web: "GET /api/projects/{projectId}/navigator + POST /api/workspace/chat",
-    mcp: "ghostwriter_project_navigator"
+    mcpException:
+      "ghostwriter_project_navigator is explicit fixture-only test data; live project hierarchy is not exposed without a scoped grant."
   })
 }) satisfies GhostwriterCapability;
 
@@ -839,10 +840,6 @@ export const AGENT_PROPOSAL_APPLY_CAPABILITY = Object.freeze({
   })
 }) satisfies GhostwriterCapability;
 
-const STORY_WORK_CP6_PROPOSE_EXCEPTION =
-  "Scoped proposal creation remains pending CP6 of ADR 0018; first-party invocation only in this checkpoint.";
-const STORY_WORK_CP6_READ_EXCEPTION =
-  "Scoped assignment status and context access remain pending CP6 of ADR 0018; no external binding is claimed.";
 const STORY_WORK_HUMAN_REVIEW_EXCEPTION =
   "Human review and rejection remain first-party authority under ADR 0018.";
 const STORY_WORK_HUMAN_APPLY_EXCEPTION =
@@ -862,7 +859,7 @@ export const STORY_WORK_CAPABILITIES: readonly GhostwriterCapability[] = Object.
       ui: "StoryWorkPanel",
       web:
         "GET /api/projects/{projectId}/story-work/assignments + GET /api/projects/{projectId}/story-work/assignments/{assignmentId}",
-      mcpException: STORY_WORK_CP6_READ_EXCEPTION
+      mcp: "ghostwriter_list_story_work + ghostwriter_get_story_work"
     })
   }),
   Object.freeze({
@@ -875,7 +872,7 @@ export const STORY_WORK_CAPABILITIES: readonly GhostwriterCapability[] = Object.
       ui: "StoryWorkPanel + CharacterStoryWorkReview",
       web:
         "POST /api/projects/{projectId}/story-work/assignments (taskKind character) + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/attempts",
-      mcpException: STORY_WORK_CP6_PROPOSE_EXCEPTION
+      mcp: "ghostwriter_submit_character_work"
     })
   }),
   Object.freeze({
@@ -913,7 +910,7 @@ export const STORY_WORK_CAPABILITIES: readonly GhostwriterCapability[] = Object.
       ui: "StoryWorkPanel + SceneStoryWorkReview",
       web:
         "POST /api/projects/{projectId}/story-work/assignments (taskKind scene|revise) + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/attempts",
-      mcpException: STORY_WORK_CP6_PROPOSE_EXCEPTION
+      mcp: "ghostwriter_submit_scene_work (new-scene proposals only)"
     })
   }),
   Object.freeze({
@@ -952,7 +949,7 @@ export const STORY_WORK_CAPABILITIES: readonly GhostwriterCapability[] = Object.
       ui: "StoryWorkPanel + StoryStructureReview",
       web:
         "POST /api/projects/{projectId}/story-work/assignments (taskKind outline) + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/attempts",
-      mcpException: STORY_WORK_CP6_PROPOSE_EXCEPTION
+      mcp: "ghostwriter_submit_structure_work"
     })
   }),
   Object.freeze({
@@ -978,7 +975,7 @@ export const STORY_WORK_CAPABILITIES: readonly GhostwriterCapability[] = Object.
       ui: "StoryStructureReview",
       web:
         "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/preview",
-      mcpException: STORY_WORK_CP6_READ_EXCEPTION
+      mcp: "ghostwriter_preview_story_structure"
     })
   }),
   Object.freeze({
@@ -995,6 +992,60 @@ export const STORY_WORK_CAPABILITIES: readonly GhostwriterCapability[] = Object.
     })
   }),
   Object.freeze({
+    id: "story-work.recovery.read",
+    title: "Read active or uncertain story-work recovery status",
+    access: "read",
+    scope: "project",
+    coreUseCase: "matchesStoryWorkRecoveryReplay",
+    bindings: Object.freeze({
+      ui: "Story work assignment recovery",
+      web:
+        "GET /api/projects/{projectId}/story-work/assignments/{assignmentId} (recovery)",
+      mcp: "ghostwriter_get_story_work (read-only recovery projection)"
+    })
+  }),
+  Object.freeze({
+    id: "story-work.recovery.manage",
+    title: "Cancel or mark an uncertain story-work generation interrupted",
+    access: "apply",
+    scope: "project",
+    coreUseCase: "createRepositoryStoryWorkRecoveryExecutor",
+    bindings: Object.freeze({
+      ui: "Story work assignment recovery",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/recover",
+      mcpException: STORY_WORK_HUMAN_REVIEW_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.coordination.read",
+    title: "Read durable coordinated story-work dependencies and child status",
+    access: "read",
+    scope: "project",
+    coreUseCase: "projectStoryWorkCoordination",
+    bindings: Object.freeze({
+      ui: "StoryWorkCoordinationReview",
+      web:
+        "GET /api/projects/{projectId}/story-work/coordinations + GET /api/projects/{projectId}/story-work/coordinations/{coordinationId}",
+      mcp:
+        "ghostwriter_list_story_work_coordinations + ghostwriter_get_story_work_coordination"
+    })
+  }),
+  Object.freeze({
+    id: "story-work.coordination.manage",
+    title: "Create and explicitly continue foreground coordinated story work",
+    access: "propose",
+    scope: "project",
+    coreUseCase: "createRepositoryStoryWorkCoordinationExecutor",
+    bindings: Object.freeze({
+      ui: "StoryWorkPanel + StoryWorkCoordinationReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/coordinations + POST /api/projects/{projectId}/story-work/coordinations/{coordinationId}/steps/{stepId}/continue",
+      mcp:
+        "ghostwriter_create_story_work_coordination + ghostwriter_continue_story_work_coordination"
+    })
+  }),
+  Object.freeze({
     id: "story-work.check.propose",
     title: "Run a continuity check from a retained brief and selected evidence",
     access: "propose",
@@ -1004,7 +1055,7 @@ export const STORY_WORK_CAPABILITIES: readonly GhostwriterCapability[] = Object.
       ui: "StoryWorkPanel + StoryCheckReview",
       web:
         "POST /api/projects/{projectId}/story-work/assignments (taskKind check) + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/attempts",
-      mcpException: STORY_WORK_CP6_PROPOSE_EXCEPTION
+      mcp: "ghostwriter_submit_check_work"
     })
   }),
   Object.freeze({
@@ -1016,7 +1067,7 @@ export const STORY_WORK_CAPABILITIES: readonly GhostwriterCapability[] = Object.
     bindings: Object.freeze({
       ui: "StoryCheckReview",
       web: "GET /api/projects/{projectId}/story-work/assignments/{assignmentId} (checkFreshness)",
-      mcpException: STORY_WORK_CP6_READ_EXCEPTION
+      mcp: "ghostwriter_get_story_work (checkFreshness projection)"
     })
   }),
   Object.freeze({

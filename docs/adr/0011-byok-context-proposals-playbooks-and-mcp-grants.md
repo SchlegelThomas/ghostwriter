@@ -107,6 +107,35 @@ an external service, and Anthropic workload identity federation authenticates ma
 - UI and MCP proposal creation share core use cases and normalized outcomes; parity does not imply
   equal permission ceilings.
 
+### Accepted extension — story-work grants (CP6, complete locally 2026-09-13)
+
+The agent story-workflow epic adds **read/status** and **propose-only** MCP parity under the same
+grant model. Human review/apply/reject, recovery manage/cancel, credentials, grant admin, and
+canonical project/scene/Canvas commands remain first-party only.
+
+- Extend mint-time allowlists with `sceneIds`, `bookIds`, `assignmentIds`, `coordinationIds`, and
+  `allowProjectStructureRead`, alongside existing `captureIds`. Capture-only, story-only, and mixed
+  grants are supported; mint validates tool/resource pairing. No external project listing.
+- Assignments and coordinations created via MCP store origin `{ kind: "mcp", grantId }` as
+  `origin_kind` + `origin_mcp_grant_id` (FK/index, migration `0030`, checked in; not
+  production-deployed). Reads and submits may target allowlisted resources or grant-origin rows;
+  foreign-origin rows are allowlist-read-only; list filters use indexed grant-visible queries.
+- Story-work compiler gates: structure metadata only when `allowProjectStructureRead`; scene prose
+  only for allowlisted scenes; structure targets require allowlisted books; check/scene sources must
+  be allowlisted or grant-origin; coordination continue requires same grant origin as the
+  coordination. Prompt text never widens scope.
+- Closed **15-tool** grant enum (discover, three Capture tools, eleven story-work tools). Submit
+  creates one foreground attempt; scene MCP is new-scene only; coordination create/continue does not
+  auto-start children.
+- Local/test stdio uses `GHOSTWRITER_MCP_API_URL`, `GHOSTWRITER_MCP_GRANT_TOKEN`, and backend bridge
+  enabled only by `GHOSTWRITER_ENABLE_LOCAL_MCP_BRIDGE=1` on `/local-mcp/v1/*`. Fixture navigator
+  only under `GHOSTWRITER_MCP_FIXTURE=1`. Production remote OAuth, owner mint UI, last-used audit
+  table, and project-wide external navigator remain later explicit non-goals.
+- Grant failures stay nondisclosing; token plaintext once at mint, hash only at rest. Hermetic stdio
+  walkthrough and final monorepo verify recorded in plan contract:
+  [cp6-mcp-parity-contract.md](../../plans/active/2026-09-12-agent-story-workflow/cp6-mcp-parity-contract.md).
+  **CP7** AC10 browser acceptance follows.
+
 ### Threat model and verification
 
 - Protected assets are provider credentials, manuscript/Capture content, publishing profile data,

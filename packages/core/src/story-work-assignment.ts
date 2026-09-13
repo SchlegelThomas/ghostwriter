@@ -21,6 +21,11 @@ import {
 } from "./domain.js";
 import type { StoryStructureOperationId } from "./story-structure-proposal-v1.js";
 import type { AccountId } from "./identity.js";
+import {
+  mcpStoryWorkOriginsEqual,
+  normalizeMcpStoryWorkOrigin,
+  type McpStoryWorkOrigin
+} from "./mcp-grants.js";
 import { assertAgentModelId, providerForAgentModel } from "./model-catalog.js";
 import { assertProviderId, type ProviderId } from "./provider-credentials.js";
 import { sceneContentHash, type SceneContentHash } from "./scene-documents.js";
@@ -241,7 +246,11 @@ export type StoryWorkAssignment = Readonly<{
   idempotencyKey: string;
   createdAt: string;
   updatedAt: string;
+  /** Present when the row was created through scoped MCP; omitted for first-party work. */
+  origin?: McpStoryWorkOrigin;
 }>;
+
+export type { McpStoryWorkOrigin };
 
 export class StoryWorkAssignmentTransitionError extends Error {
   readonly code = "STORY_WORK_ASSIGNMENT_TRANSITION_CONFLICT" as const;
@@ -1345,6 +1354,7 @@ export function createStoryWorkAssignment(
   const destination = normalizeDestination(input.destination, projectId, input.taskKind);
   validateCheckAssignmentDefinition(input.taskKind, sources, destination);
   validateOutlineAssignmentDefinition(input.taskKind, sources, destination);
+  const origin = normalizeMcpStoryWorkOrigin(input.origin);
   const assignment: StoryWorkAssignment = Object.freeze({
     id,
     projectId,
@@ -1408,10 +1418,23 @@ export function createStoryWorkAssignment(
         }),
     idempotencyKey: requireIdentifier(input.idempotencyKey, "Idempotency key"),
     createdAt,
-    updatedAt
+    updatedAt,
+    ...(origin === undefined ? {} : { origin })
   });
   validateStateShape(assignment);
   return assignment;
+}
+
+export function assertStoryWorkAssignmentOriginImmutable(
+  previous: StoryWorkAssignment,
+  next: StoryWorkAssignment
+): void {
+  if (!mcpStoryWorkOriginsEqual(previous.origin, next.origin)) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Story work assignment MCP origin cannot change."
+    );
+  }
 }
 
 function requireTransition(

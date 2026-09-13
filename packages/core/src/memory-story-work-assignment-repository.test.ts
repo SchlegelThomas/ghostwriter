@@ -10,6 +10,7 @@ import {
 } from "./domain.js";
 import { sceneContentHash } from "./scene-documents.js";
 import { accountId } from "./identity.js";
+import { mcpGrantId } from "./mcp-grants.js";
 import { createMemoryStoryWorkAssignmentRepository } from "./memory-story-work-assignment-repository.js";
 import {
   createStoryWorkAssignment,
@@ -355,5 +356,122 @@ describe("memory story work assignment repository", () => {
       storyWorkAssignmentId("assignment-105"),
       storyWorkAssignmentId("assignment-104")
     ]);
+  });
+
+  it("roundtrips MCP origin and rejects origin mutation on compare-and-set", async () => {
+    const repository = createMemoryStoryWorkAssignmentRepository();
+    const withOrigin = createStoryWorkAssignment({
+      ...assignment(),
+      origin: { kind: "mcp", grantId: mcpGrantId("grant-assignment-origin") }
+    });
+    await repository.create({
+      assignment: withOrigin,
+      requestFingerprint: fingerprint("b")
+    });
+    await expect(
+      repository.get({
+        accountId: OWNER,
+        projectId: PROJECT,
+        assignmentId: withOrigin.id
+      })
+    ).resolves.toMatchObject({
+      origin: { kind: "mcp", grantId: mcpGrantId("grant-assignment-origin") }
+    });
+
+    const started = startStoryWorkAttempt({
+      assignment: withOrigin,
+      expectedVersion: 1,
+      runId: agentRunId("run-origin"),
+      updatedAt: new Date(Date.UTC(2026, 8, 12, 12, 1, 0)).toISOString()
+    });
+    await expect(
+      repository.compareAndSet({
+        accountId: OWNER,
+        projectId: PROJECT,
+        assignmentId: withOrigin.id,
+        expectedVersion: 1,
+        next: createStoryWorkAssignment({
+          ...started,
+          origin: { kind: "mcp", grantId: mcpGrantId("grant-other") }
+        })
+      })
+    ).resolves.toEqual({ ok: false, reason: "version-conflict" });
+  });
+
+  it("lists MCP grant origin rows without project-page truncation and empty cross-scope", async () => {
+    const repository = createMemoryStoryWorkAssignmentRepository();
+    const grant = mcpGrantId("grant-origin-list");
+    const otherGrant = mcpGrantId("grant-origin-list-other");
+    const oldOriginId = storyWorkAssignmentId("assignment-origin-old");
+    const oldOrigin = createStoryWorkAssignment({
+      ...assignment(1),
+      id: oldOriginId,
+      idempotencyKey: "submit-origin-old",
+      origin: { kind: "mcp", grantId: grant },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z"
+    });
+    await repository.create({
+      assignment: oldOrigin,
+      requestFingerprint: fingerprint("a")
+    });
+    for (let index = 2; index <= 152; index += 1) {
+      await repository.create({
+        assignment: createStoryWorkAssignment({
+          ...assignment(index),
+          id: storyWorkAssignmentId(`assignment-noise-${index}`),
+          idempotencyKey: `submit-noise-${index}`,
+          updatedAt: new Date(Date.UTC(2026, 8, 12, 12, 0, index)).toISOString()
+        }),
+        requestFingerprint: fingerprint((index % 10).toString())
+      });
+    }
+    await repository.create({
+      assignment: createStoryWorkAssignment({
+        ...assignment(999),
+        id: storyWorkAssignmentId("assignment-origin-foreign-project"),
+        projectId: OTHER_PROJECT,
+        sources: [{ kind: "project", projectId: OTHER_PROJECT, projectVersion: 1 }],
+        idempotencyKey: "submit-origin-foreign-project",
+        origin: { kind: "mcp", grantId: grant }
+      }),
+      requestFingerprint: fingerprint("c")
+    });
+    await repository.create({
+      assignment: createStoryWorkAssignment({
+        ...assignment(998),
+        id: storyWorkAssignmentId("assignment-origin-stranger"),
+        initiatorAccountId: STRANGER,
+        idempotencyKey: "submit-origin-stranger",
+        origin: { kind: "mcp", grantId: grant }
+      }),
+      requestFingerprint: fingerprint("d")
+    });
+    await repository.create({
+      assignment: createStoryWorkAssignment({
+        ...assignment(997),
+        id: storyWorkAssignmentId("assignment-origin-wrong-grant"),
+        idempotencyKey: "submit-origin-wrong-grant",
+        origin: { kind: "mcp", grantId: otherGrant }
+      }),
+      requestFingerprint: fingerprint("e")
+    });
+
+    const listed = await repository.listByMcpGrantOrigin({
+      accountId: OWNER,
+      projectId: PROJECT,
+      originMcpGrantId: grant
+    });
+    expect(listed.map((row) => row.id)).toEqual([oldOriginId]);
+    expect(listed.every((row) => row.initiatorAccountId === OWNER)).toBe(true);
+    expect(
+      listed.some((row) => row.id === storyWorkAssignmentId("assignment-origin-foreign-project"))
+    ).toBe(false);
+    expect(
+      listed.some((row) => row.id === storyWorkAssignmentId("assignment-origin-stranger"))
+    ).toBe(false);
+    expect(
+      listed.some((row) => row.id === storyWorkAssignmentId("assignment-origin-wrong-grant"))
+    ).toBe(false);
   });
 });

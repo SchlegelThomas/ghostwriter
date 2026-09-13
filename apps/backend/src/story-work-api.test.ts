@@ -1,11 +1,71 @@
+import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
 import { createFakeStructuredCompletionProvider } from "@ghostwriter/ai";
-import { BELLWETHER_FIXTURE_PROJECT_ID, STORY_STRUCTURE_SCHEMA_ID } from "@ghostwriter/core";
+import {
+  BELLWETHER_FIXTURE,
+  BELLWETHER_FIXTURE_PROJECT_ID,
+  CHARACTER_STORY_WORK_WORKFLOW_ID,
+  SCENE_STORY_WORK_WORKFLOW_ID,
+  STORY_CHECK_CONTINUITY_WORKFLOW_ID,
+  STORY_STRUCTURE_SCHEMA_ID,
+  STORY_WORK_STRUCTURE_WORKFLOW_ID,
+  accountId,
+  agentRunId,
+  buildStoryWorkRecoveryTerminalAssignment,
+  buildStoryWorkRecoveryTerminalRun,
+  contextReceiptId,
+  createAgentRun,
+  createProjectMembership,
+  createQueuedAgentRun,
+  createRepositoryCharacterStoryWorkGenerationExecutor,
+  createStoryWorkAssignment,
+  createStoryWorkAttempt,
+  instructionContentHash,
+  sceneContentHash,
+  sceneId,
+  startStoryWorkAttempt,
+  storyKnowledgeId,
+  storyWorkAssignmentId,
+  bookId,
+  CharacterStoryWorkGenerationConflictError,
+  createBookReaderServices,
+  createCanvasServices,
+  createCaptureAttachmentServices,
+  createCapturePromotionServices,
+  createCaptureServices,
+  createGhostwriterServices,
+  createIdentityServices,
+  createMemoryCaptureObjectStorage,
+  createMemoryWriterProfileRepository,
+  createSceneWritingServices
+} from "@ghostwriter/core";
+import {
+  createPostgresAgentProposalRepository,
+  createPostgresAgentRunRepository,
+  createPostgresCanvasRepository,
+  createPostgresCanvasSceneCreationUnitOfWork,
+  createPostgresCaptureAttachmentRepository,
+  createPostgresCaptureDocumentRepository,
+  createPostgresCaptureScenePromotionUnitOfWork,
+  createPostgresContextReceiptRepository,
+  createPostgresProjectRepository,
+  createPostgresSceneDocumentRepository,
+  createPostgresStoryWorkAssignmentRepository,
+  createPostgresStoryWorkAttemptRepository,
+  seedProject,
+  toRepositoryDatabase,
+  user
+} from "@ghostwriter/storage";
+import {
+  createPgliteDatabase,
+  migratePgliteRepositoryDatabase
+} from "@ghostwriter/storage/pglite";
 import {
   createSeededBackendApp,
   fakeBackendAuth,
   testBackendClosers,
-  TEST_BACKEND_ORIGIN
+  TEST_BACKEND_ORIGIN,
+  TEST_BACKEND_SESSION
 } from "./test-backend-app.js";
 import {
   applyCharacterStoryWorkRequestSchema,
@@ -20,8 +80,14 @@ import {
   submitStoryWorkRequestSchema,
   previewStructureStoryWorkRequestSchema,
   applyStructureStoryWorkRequestSchema,
-  editStructureStoryWorkReviewRequestSchema
+  editStructureStoryWorkReviewRequestSchema,
+  recoverActiveStoryWorkAttemptRequestSchema,
+  createStoryWorkCoordinationRequestSchema,
+  continueStoryWorkCoordinationStepRequestSchema
 } from "./story-work-api-contract.js";
+import { createApp } from "./app.js";
+import type { AuthGateway } from "./auth.js";
+import { createTestAgentProviderRuntime } from "./agent-provider-runtime.js";
 import type { StoryWorkApiRuntime } from "./story-work-api.js";
 import { createTestProviderKekRuntimeConfig } from "./provider-kek-config.js";
 import { buildStoryCheckHermeticCandidatesOutput } from "./story-check-hermetic-candidates.js";
@@ -29,11 +95,16 @@ import { buildStoryStructureHermeticCandidatesOutput } from "./story-structure-h
 
 const assignmentPath =
   `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/story-work/assignments`;
+const coordinationPath =
+  `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/story-work/coordinations`;
 const selectedSceneId = "scene-arrival-at-bellwether";
 const crossChapterContextSceneId = "scene-future-call";
 const signalBookId = "book-signal-at-bellwether";
 const lowTideChapterId = "chapter-low-tide";
 const canvasPath = `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/canvas`;
+const RECOVERY_OWNER = accountId(TEST_BACKEND_SESSION.account.id);
+const RECOVERY_STARTED_AT = "2026-09-13T18:00:00.000Z";
+const RECOVERY_RECEIPT_HASH = instructionContentHash("a".repeat(64));
 
 function sceneCreateApplyBody(
   assignment: Readonly<{
@@ -136,6 +207,368 @@ function outlineAssignmentRequest(overrides: Record<string, unknown> = {}) {
 
 function hermeticStructureCandidateOutput(inputText: string) {
   return buildStoryStructureHermeticCandidatesOutput(inputText);
+}
+
+type RecoveryTaskKind = "character" | "scene" | "check" | "outline";
+
+function recoveryDestination(taskKind: RecoveryTaskKind) {
+  if (taskKind === "character") {
+    return {
+      kind: "story-knowledge" as const,
+      storyKnowledgeId: storyKnowledgeId("knowledge-recovery-target"),
+      operation: "create" as const
+    };
+  }
+  if (taskKind === "outline") {
+    return {
+      kind: "book" as const,
+      bookId: bookId(signalBookId),
+      operation: "update" as const
+    };
+  }
+  if (taskKind === "check") {
+    return {
+      kind: "scene" as const,
+      sceneId: sceneId(selectedSceneId),
+      operation: "assess" as const
+    };
+  }
+  return {
+    kind: "scene" as const,
+    sceneId: sceneId("scene-recovery-create-target"),
+    operation: "create" as const
+  };
+}
+
+function recoveryWorkflowId(taskKind: RecoveryTaskKind) {
+  if (taskKind === "character") return CHARACTER_STORY_WORK_WORKFLOW_ID;
+  if (taskKind === "scene") return SCENE_STORY_WORK_WORKFLOW_ID;
+  if (taskKind === "check") return STORY_CHECK_CONTINUITY_WORKFLOW_ID;
+  return STORY_WORK_STRUCTURE_WORKFLOW_ID;
+}
+
+async function createStoryWorkRecoveryHarness(
+  auth: AuthGateway = fakeBackendAuth(),
+  options?: Readonly<{ now?: () => string; archived?: boolean }>
+) {
+  const { db, close } = createPgliteDatabase();
+  testBackendClosers.push(close);
+  await migratePgliteRepositoryDatabase(db);
+  await db.insert(user).values({
+    id: TEST_BACKEND_SESSION.account.id,
+    name: TEST_BACKEND_SESSION.account.name,
+    email: TEST_BACKEND_SESSION.account.email,
+    emailVerified: true
+  });
+  const repositoryDatabase = toRepositoryDatabase(db);
+  const repository = createPostgresProjectRepository(repositoryDatabase);
+  const sceneDocuments = createPostgresSceneDocumentRepository(repositoryDatabase);
+  const captureDocuments = createPostgresCaptureDocumentRepository(repositoryDatabase);
+  const captureAttachmentsRepository =
+    createPostgresCaptureAttachmentRepository(repositoryDatabase);
+  const objectStorage = createMemoryCaptureObjectStorage();
+  const canvases = createPostgresCanvasRepository(repositoryDatabase);
+  const fixture = options?.archived
+    ? {
+        ...BELLWETHER_FIXTURE,
+        project: {
+          ...BELLWETHER_FIXTURE.project,
+          archivedAt: "2026-09-13T17:00:00.000Z"
+        }
+      }
+    : BELLWETHER_FIXTURE;
+  await seedProject(repository, fixture);
+  await repository.transaction((writer) => {
+    writer.insertProjectMembership(
+      createProjectMembership({
+        projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+        accountId: RECOVERY_OWNER,
+        role: "owner",
+        createdAt: RECOVERY_STARTED_AT
+      })
+    );
+  });
+  let nextId = 0;
+  const ids = {
+    create: (kind: string) => {
+      nextId += 1;
+      return `${kind}-recovery-${nextId}`;
+    }
+  };
+  const clock = {
+    now: options?.now ?? (() => "2026-09-13T18:05:00.000Z")
+  };
+  const services = createGhostwriterServices({ projects: repository, ids, clock });
+  const writing = createSceneWritingServices({
+    projects: repository,
+    sceneDocuments,
+    ids,
+    clock
+  });
+  const captures = createCaptureServices({
+    projects: repository,
+    captureDocuments,
+    ids,
+    clock
+  });
+  const captureAttachments = createCaptureAttachmentServices({
+    projects: repository,
+    captureDocuments,
+    attachments: captureAttachmentsRepository,
+    objectStorage,
+    ids,
+    clock
+  });
+  const capturePromotions = createCapturePromotionServices({
+    projects: repository,
+    captureDocuments,
+    canvases,
+    promotion: createPostgresCaptureScenePromotionUnitOfWork(repositoryDatabase),
+    ids,
+    clock
+  });
+  const canvas = createCanvasServices({
+    projects: repository,
+    canvases,
+    sceneDocuments,
+    sceneCreation: createPostgresCanvasSceneCreationUnitOfWork(repositoryDatabase),
+    ids,
+    clock
+  });
+  const reader = createBookReaderServices({
+    projects: repository,
+    sceneDocuments,
+    canvases
+  });
+  const identity = createIdentityServices({
+    profiles: createMemoryWriterProfileRepository(),
+    clock
+  });
+  const agentProvider = createTestAgentProviderRuntime({
+    db: repositoryDatabase,
+    projects: repository,
+    captureDocuments,
+    ids,
+    clock,
+    kekConfig: createTestProviderKekRuntimeConfig(),
+    capturePromotions,
+    sceneDocuments
+  });
+  const assignments = createPostgresStoryWorkAssignmentRepository(repositoryDatabase);
+  const attempts = createPostgresStoryWorkAttemptRepository(repositoryDatabase);
+  const runs = createPostgresAgentRunRepository(repositoryDatabase);
+  const proposals = createPostgresAgentProposalRepository(repositoryDatabase);
+  const receipts = createPostgresContextReceiptRepository(repositoryDatabase);
+  const app = createApp({
+    services,
+    writing,
+    captures,
+    captureAttachments,
+    capturePromotions,
+    canvas,
+    reader,
+    identity,
+    agentProvider,
+    auth,
+    allowedOrigins: [TEST_BACKEND_ORIGIN],
+    objectStorage
+  });
+  return {
+    app,
+    repository,
+    assignments,
+    attempts,
+    runs,
+    proposals,
+    receipts,
+    repositoryDatabase,
+    clock,
+    projectRecords: fixture
+  };
+}
+
+async function seedRunningRecoveryAssignment(
+  harness: Awaited<ReturnType<typeof createStoryWorkRecoveryHarness>>,
+  taskKind: RecoveryTaskKind,
+  assignmentKey: string
+) {
+  const assignmentId = storyWorkAssignmentId(`assignment-recovery-${assignmentKey}`);
+  const runId = agentRunId(`run-recovery-${assignmentKey}`);
+  const receiptId = contextReceiptId(`receipt-recovery-${assignmentKey}`);
+  const destination = recoveryDestination(taskKind);
+  const sources =
+    taskKind === "check"
+      ? [
+          {
+            kind: "scene" as const,
+            sceneId: sceneId(selectedSceneId),
+            projectVersion: harness.projectRecords.project.version,
+            workingVersion: 1,
+            contentHash: sceneContentHash("b".repeat(64))
+          }
+        ]
+      : [
+          {
+            kind: "project" as const,
+            projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+            projectVersion: harness.projectRecords.project.version
+          }
+        ];
+  const assignment = createStoryWorkAssignment({
+    id: assignmentId,
+    projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+    initiatorAccountId: RECOVERY_OWNER,
+    version: 1,
+    taskKind,
+    brief: `Recover ${taskKind} story work.`,
+    constraints: "Use selected sources only.",
+    doneWhen: "Generation completes or is recovered.",
+    sources,
+    destination,
+    provider: "openai",
+    model: "gpt-4.1",
+    status: "brief-ready",
+    steps: [{ id: `${taskKind}-step`, title: `${taskKind} step`, dependencies: [] }],
+    results: [],
+    idempotencyKey: `recovery-${assignmentKey}`,
+    createdAt: RECOVERY_STARTED_AT,
+    updatedAt: RECOVERY_STARTED_AT
+  });
+  await harness.assignments.create({
+    assignment,
+    requestFingerprint: instructionContentHash("c".repeat(64))
+  });
+  const receiptInsert = await harness.receipts.insertImmutable(
+    Object.freeze({
+      id: receiptId,
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+      workflowId: recoveryWorkflowId(taskKind),
+      workflowVersion: "2026-09-12",
+      layers: [],
+      resources: [],
+      excludedContextClasses: [
+        "publishing-profile",
+        "attachments",
+        "canvas",
+        "manuscript",
+        "credentials",
+        "unrelated-project-resources"
+      ] as const,
+      provider: "openai",
+      model: "gpt-4.1",
+      maxOutputTokens: 2_000,
+      wallClockSeconds: 60,
+      toolCount: 0,
+      egressClass: "openai-responses",
+      outputSchemaId:
+        taskKind === "character"
+          ? "character-create-v2"
+          : taskKind === "scene"
+            ? "scene-draft-v1"
+            : taskKind === "check"
+              ? "story-check-findings-v1"
+              : STORY_STRUCTURE_SCHEMA_ID,
+      ...(destination.kind === "story-knowledge"
+        ? {
+            targetStoryKnowledgeId: destination.storyKnowledgeId,
+            primaryTarget: {
+              kind: "story-knowledge" as const,
+              id: destination.storyKnowledgeId
+            }
+          }
+        : destination.kind === "book"
+          ? {
+              primaryTarget: {
+                kind: "book" as const,
+                id: destination.bookId
+              }
+            }
+          : {
+              primaryTarget: {
+                kind: "scene" as const,
+                id: destination.sceneId
+              }
+            }),
+      receiptHash: RECOVERY_RECEIPT_HASH,
+      createdAt: RECOVERY_STARTED_AT
+    })
+  );
+  expect(receiptInsert.ok).toBe(true);
+  const queuedRun = createQueuedAgentRun({
+    id: runId,
+    projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+    initiatorAccountId: RECOVERY_OWNER,
+    workflowId: recoveryWorkflowId(taskKind),
+    workflowVersion: "2026-09-12",
+    provider: "openai",
+    model: "gpt-4.1",
+    receiptId,
+    receiptHash: RECOVERY_RECEIPT_HASH,
+    status: "queued",
+    createdAt: RECOVERY_STARTED_AT,
+    updatedAt: RECOVERY_STARTED_AT
+  });
+  await harness.runs.create(queuedRun);
+  const runningRun = createAgentRun({
+    ...queuedRun,
+    status: "running",
+    updatedAt: "2026-09-13T18:00:30.000Z"
+  });
+  await harness.runs.transition({
+    runId,
+    expectedStatus: "queued",
+    next: runningRun
+  });
+  const attempt = createStoryWorkAttempt({
+    assignmentId,
+    projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+    initiatorAccountId: RECOVERY_OWNER,
+    runId,
+    version: 1,
+    kind: "initial",
+    sourceMode: "submitted-snapshot",
+    instruction: assignment.brief,
+    idempotencyKey: `attempt-recovery-${assignmentKey}`,
+    requestFingerprint: instructionContentHash("d".repeat(64)),
+    createdAt: RECOVERY_STARTED_AT
+  });
+  await harness.attempts.create({ attempt });
+  const runningAssignment = startStoryWorkAttempt({
+    assignment,
+    expectedVersion: 1,
+    runId,
+    updatedAt: "2026-09-13T18:00:10.000Z"
+  });
+  const runningUpdate = await harness.assignments.compareAndSet({
+    accountId: RECOVERY_OWNER,
+    projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+    assignmentId,
+    expectedVersion: 1,
+    next: runningAssignment
+  });
+  expect(runningUpdate.ok).toBe(true);
+  return {
+    assignmentId,
+    runId,
+    runningAssignment,
+    runningRun,
+    attempt,
+    recoverPath: `${assignmentPath}/${assignmentId}/recover`
+  };
+}
+
+function recoverBody(
+  expectedAssignmentVersion: number,
+  runId: string,
+  action: "cancel" | "mark-interrupted",
+  extra: Record<string, unknown> = {}
+) {
+  return {
+    expectedAssignmentVersion,
+    runId,
+    action,
+    ...extra
+  };
 }
 
 async function withOutlineHermeticApp() {
@@ -429,6 +862,8 @@ describe("story work API contract", () => {
     expectTypeOf<StoryWorkApiRuntime>().toHaveProperty("checkReview");
     expectTypeOf<StoryWorkApiRuntime>().toHaveProperty("structureGeneration");
     expectTypeOf<StoryWorkApiRuntime>().toHaveProperty("structureApply");
+    expectTypeOf<StoryWorkApiRuntime>().toHaveProperty("coordinationUnitOfWork");
+    expectTypeOf<StoryWorkApiRuntime>().toHaveProperty("coordinations");
   });
 
   it("strictly validates outline submit, preview, and apply contracts", () => {
@@ -589,6 +1024,21 @@ describe("story work routes", () => {
     const detailBody = await detail.json();
     expect(detail.status, JSON.stringify(detailBody)).toBe(200);
     expect(detailBody).toEqual({ assignment: firstBody.assignment });
+  });
+
+  it("does not stamp MCP origin on first-party assignment create", async () => {
+    const { app } = await createSeededBackendApp(undefined, {
+      kekConfig: createTestProviderKekRuntimeConfig()
+    });
+    const submitted = await app.request(
+      assignmentPath,
+      mutation(
+        assignmentRequest({ idempotencyKey: `first-party-origin-${Date.now()}` })
+      )
+    );
+    expect(submitted.status).toBe(201);
+    const body = await submitted.json();
+    expect(body.assignment.origin).toBeUndefined();
   });
 
   it("does not disclose assignments or projects across accounts", async () => {
@@ -3182,5 +3632,755 @@ describe("story work routes", () => {
       })
     );
     expect(renamed.status).toBe(200);
+  });
+});
+
+describe("story work recovery API", () => {
+  it("cancels an active character assignment with exact replay and stable projections", async () => {
+    const harness = await createStoryWorkRecoveryHarness();
+    const seeded = await seedRunningRecoveryAssignment(harness, "character", "character-full");
+    const projectBefore = await harness.repository.getProject(BELLWETHER_FIXTURE_PROJECT_ID);
+    const proposalsBefore = await harness.proposals.listByProject(
+      BELLWETHER_FIXTURE_PROJECT_ID
+    );
+    const canvasBeforeResponse = await harness.app.request(canvasPath);
+    const canvasBeforeBody = await canvasBeforeResponse.json();
+
+    const detailBefore = await harness.app.request(
+      `${assignmentPath}/${seeded.assignmentId}`
+    );
+    expect(detailBefore.status).toBe(200);
+    const detailBeforeBody = await detailBefore.json();
+    expect(detailBeforeBody.recovery).toMatchObject({
+      status: "active-or-interrupted",
+      runId: seeded.runId,
+      expectedAssignmentVersion: 2,
+      actions: ["cancel", "mark-interrupted"]
+    });
+    expect(detailBeforeBody.recovery).not.toHaveProperty("idempotencyKey");
+
+    const canceled = await harness.app.request(
+      seeded.recoverPath,
+      mutation(recoverBody(2, seeded.runId, "cancel"))
+    );
+    expect(canceled.status).toBe(200);
+    const canceledBody = await canceled.json();
+    expect(canceledBody).toMatchObject({
+      replayed: false,
+      assignment: { status: "canceled", version: 3, latestAttemptId: seeded.runId },
+      attempt: { runId: seeded.runId },
+      run: {
+        status: "failed",
+        terminalDiagnosticCode: "run-canceled",
+        id: seeded.runId
+      }
+    });
+
+    const replay = await harness.app.request(
+      seeded.recoverPath,
+      mutation(recoverBody(2, seeded.runId, "cancel"))
+    );
+    expect(replay.status).toBe(200);
+    const replayBody = await replay.json();
+    expect(replayBody.replayed).toBe(true);
+    expect(replayBody.assignment).toEqual(canceledBody.assignment);
+    expect(replayBody.run).toEqual(canceledBody.run);
+
+    const detailAfter = await harness.app.request(
+      `${assignmentPath}/${seeded.assignmentId}`
+    );
+    const detailAfterBody = await detailAfter.json();
+    expect(detailAfterBody.recovery).toBeUndefined();
+    expect(detailAfterBody.assignment.status).toBe("canceled");
+
+    const projectAfter = await harness.repository.getProject(BELLWETHER_FIXTURE_PROJECT_ID);
+    const proposalsAfter = await harness.proposals.listByProject(
+      BELLWETHER_FIXTURE_PROJECT_ID
+    );
+    expect(projectAfter?.version).toBe(projectBefore?.version);
+    expect(proposalsAfter).toEqual(proposalsBefore);
+    const canvasAfterBody = await (
+      await harness.app.request(canvasPath)
+    ).json();
+    expect(canvasBeforeBody.board.version).toBe(canvasAfterBody.board.version);
+  });
+
+  it.each(["cancel", "mark-interrupted"] as const)(
+    "replays %s when the server clock advances without rewriting stored completedAt",
+    async (action) => {
+      const clockTimes = [
+        "2026-09-13T18:05:00.000Z",
+        "2026-09-13T18:10:00.000Z",
+        "2026-09-13T18:15:00.000Z"
+      ] as const;
+      let clockCalls = 0;
+      const harness = await createStoryWorkRecoveryHarness(undefined, {
+        now: () => clockTimes[Math.min(clockCalls++, clockTimes.length - 1)]!
+      });
+      const seeded = await seedRunningRecoveryAssignment(
+        harness,
+        "character",
+        `advancing-clock-${action}`
+      );
+      const projectBefore = await harness.repository.getProject(BELLWETHER_FIXTURE_PROJECT_ID);
+      const proposalsBefore = await harness.proposals.listByProject(
+        BELLWETHER_FIXTURE_PROJECT_ID
+      );
+
+      const first = await harness.app.request(
+        seeded.recoverPath,
+        mutation(recoverBody(2, seeded.runId, action))
+      );
+      expect(first.status).toBe(200);
+      const firstBody = await first.json();
+      expect(firstBody.replayed).toBe(false);
+      expect(firstBody.run.completedAt).toBe(clockTimes[0]);
+
+      const replay = await harness.app.request(
+        seeded.recoverPath,
+        mutation(recoverBody(2, seeded.runId, action))
+      );
+      expect(replay.status).toBe(200);
+      const replayBody = await replay.json();
+      expect(replayBody.replayed).toBe(true);
+      expect(replayBody.run.completedAt).toBe(firstBody.run.completedAt);
+      expect(replayBody.run.completedAt).not.toBe(clockTimes[1]);
+      expect(replayBody.assignment).toEqual(firstBody.assignment);
+      expect(replayBody.attempt).toEqual(firstBody.attempt);
+      expect(replayBody.run).toEqual(firstBody.run);
+
+      const competingAction = action === "cancel" ? "mark-interrupted" : "cancel";
+      const competing = await harness.app.request(
+        seeded.recoverPath,
+        mutation(recoverBody(2, seeded.runId, competingAction))
+      );
+      expect(competing.status).toBe(409);
+      await expect(competing.json()).resolves.toMatchObject({
+        code: "STORY_WORK_RECOVERY_ACTION_CONFLICT"
+      });
+
+      const projectAfter = await harness.repository.getProject(BELLWETHER_FIXTURE_PROJECT_ID);
+      const proposalsAfter = await harness.proposals.listByProject(
+        BELLWETHER_FIXTURE_PROJECT_ID
+      );
+      expect(projectAfter?.version).toBe(projectBefore?.version);
+      expect(proposalsAfter).toEqual(proposalsBefore);
+      expect(
+        (
+          await harness.assignments.get({
+            accountId: RECOVERY_OWNER,
+            projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+            assignmentId: seeded.assignmentId
+          })
+        )?.version
+      ).toBe(firstBody.assignment.version);
+    }
+  );
+
+  it.each(["scene", "check", "outline"] as const)(
+    "marks interrupted for %s task kinds independently of character recovery",
+    async (taskKind) => {
+      const harness = await createStoryWorkRecoveryHarness();
+      const seeded = await seedRunningRecoveryAssignment(
+        harness,
+        taskKind,
+        `${taskKind}-mark`
+      );
+      const response = await harness.app.request(
+        seeded.recoverPath,
+        mutation(recoverBody(2, seeded.runId, "mark-interrupted"))
+      );
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.assignment.status).toBe("failed");
+      expect(body.run.terminalDiagnosticCode).toBe("client-interrupted");
+    }
+  );
+
+  it("returns 422 for strict recover bodies and refuses unknown fields", async () => {
+    const harness = await createStoryWorkRecoveryHarness();
+    const seeded = await seedRunningRecoveryAssignment(harness, "character", "strict-body");
+    const extraField = await harness.app.request(
+      seeded.recoverPath,
+      mutation(recoverBody(2, seeded.runId, "cancel", { completedAt: RECOVERY_STARTED_AT }))
+    );
+    expect(extraField.status).toBe(422);
+    await expect(extraField.json()).resolves.toMatchObject({
+      code: "INVALID_REQUEST"
+    });
+    expect(recoverActiveStoryWorkAttemptRequestSchema.safeParse({ action: "cancel" }).success).toBe(
+      false
+    );
+  });
+
+  it("maps transition conflicts and hides foreign assignments", async () => {
+    const harness = await createStoryWorkRecoveryHarness();
+    const seeded = await seedRunningRecoveryAssignment(harness, "character", "conflicts");
+    const wrongVersion = await harness.app.request(
+      seeded.recoverPath,
+      mutation(recoverBody(1, seeded.runId, "cancel"))
+    );
+    expect(wrongVersion.status).toBe(409);
+    await expect(wrongVersion.json()).resolves.toMatchObject({
+      code: "STORY_WORK_RECOVERY_TRANSITION_CONFLICT"
+    });
+
+    const wrongRun = await harness.app.request(
+      seeded.recoverPath,
+      mutation(recoverBody(2, "run-recovery-missing", "cancel"))
+    );
+    expect(wrongRun.status).toBe(409);
+    await expect(wrongRun.json()).resolves.toMatchObject({
+      code: "STORY_WORK_RECOVERY_TRANSITION_CONFLICT"
+    });
+
+    const foreignHarness = await createStoryWorkRecoveryHarness(
+      fakeBackendAuth({
+        ...TEST_BACKEND_SESSION,
+        account: {
+          ...TEST_BACKEND_SESSION.account,
+          id: "account-recovery-foreign"
+        }
+      })
+    );
+    const foreign = await foreignHarness.app.request(
+      seeded.recoverPath,
+      mutation(recoverBody(2, seeded.runId, "cancel"))
+    );
+    expect(foreign.status).toBe(404);
+    await expect(foreign.json()).resolves.toMatchObject({
+      code: "STORY_WORK_ASSIGNMENT_NOT_FOUND"
+    });
+  });
+
+  it("refuses competing recovery actions and allows archived cleanup", async () => {
+    const harness = await createStoryWorkRecoveryHarness();
+    const seeded = await seedRunningRecoveryAssignment(harness, "character", "competing");
+    await harness.app.request(
+      seeded.recoverPath,
+      mutation(recoverBody(2, seeded.runId, "cancel"))
+    );
+    const competing = await harness.app.request(
+      seeded.recoverPath,
+      mutation(recoverBody(2, seeded.runId, "mark-interrupted"))
+    );
+    expect(competing.status).toBe(409);
+    await expect(competing.json()).resolves.toMatchObject({
+      code: "STORY_WORK_RECOVERY_ACTION_CONFLICT"
+    });
+
+    const archivedHarness = await createStoryWorkRecoveryHarness(undefined, { archived: true });
+    const archivedSeed = await seedRunningRecoveryAssignment(
+      archivedHarness,
+      "character",
+      "archived"
+    );
+    const archivedCancel = await archivedHarness.app.request(
+      archivedSeed.recoverPath,
+      mutation(recoverBody(2, archivedSeed.runId, "cancel"))
+    );
+    expect(archivedCancel.status).toBe(200);
+    expect((await archivedCancel.json()).assignment.status).toBe("canceled");
+  });
+
+  it("reloads assignment, attempt, and run after recovery without leaking inconsistent running state", async () => {
+    const harness = await createStoryWorkRecoveryHarness();
+    const seeded = await seedRunningRecoveryAssignment(harness, "character", "reload");
+    await harness.runs.transition({
+      runId: seeded.runId,
+      expectedStatus: "running",
+      next: {
+        ...seeded.runningRun,
+        status: "failed",
+        terminalDiagnosticCode: "provider-timeout",
+        completedAt: "2026-09-13T18:04:00.000Z",
+        updatedAt: "2026-09-13T18:04:00.000Z"
+      }
+    });
+    const inconsistent = await harness.app.request(
+      `${assignmentPath}/${seeded.assignmentId}`
+    );
+    expect(inconsistent.status).toBe(200);
+    const inconsistentBody = await inconsistent.json();
+    expect(inconsistentBody.recovery?.status).toBe("refresh-required");
+    expect(inconsistentBody.recovery?.actions).toEqual(["cancel", "mark-interrupted"]);
+  });
+
+  it("shows client-interrupted terminal diagnostics without a recovery projection", async () => {
+    const harness = await createStoryWorkRecoveryHarness();
+    const seeded = await seedRunningRecoveryAssignment(harness, "character", "terminal");
+    await harness.app.request(
+      seeded.recoverPath,
+      mutation(recoverBody(2, seeded.runId, "mark-interrupted"))
+    );
+    const detail = await harness.app.request(`${assignmentPath}/${seeded.assignmentId}`);
+    const detailBody = await detail.json();
+    expect(detailBody.recovery).toBeUndefined();
+    expect(detailBody.run).toMatchObject({
+      status: "failed",
+      terminalDiagnosticCode: "client-interrupted"
+    });
+  });
+
+  it("fences late provider completion after recovery", async () => {
+    const harness = await createStoryWorkRecoveryHarness();
+    const seeded = await seedRunningRecoveryAssignment(harness, "character", "late-provider");
+    await harness.app.request(
+      seeded.recoverPath,
+      mutation(recoverBody(2, seeded.runId, "cancel"))
+    );
+    const generation = createRepositoryCharacterStoryWorkGenerationExecutor({
+      projects: harness.repository,
+      assignments: harness.assignments,
+      attempts: harness.attempts,
+      receipts: harness.receipts,
+      runs: harness.runs,
+      proposals: harness.proposals
+    });
+    const terminalRun = buildStoryWorkRecoveryTerminalRun(
+      seeded.runningRun,
+      "cancel",
+      "2026-09-13T18:02:00.000Z"
+    );
+    const terminalAssignment = buildStoryWorkRecoveryTerminalAssignment(
+      seeded.runningAssignment,
+      {
+        expectedAssignmentVersion: 2,
+        runId: seeded.runId,
+        action: "cancel",
+        completedAt: "2026-09-13T18:02:00.000Z"
+      }
+    );
+    await expect(
+      generation.finishWithoutArtifact({
+        accountId: RECOVERY_OWNER,
+        projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+        expectedAssignmentVersion: 2,
+        expectedAttemptVersion: 1,
+        expectedRunStatus: "running",
+        terminalRun,
+        terminalAssignment
+      })
+    ).rejects.toBeInstanceOf(CharacterStoryWorkGenerationConflictError);
+  });
+
+  it("keeps existing story-work list routes healthy", async () => {
+    const harness = await createStoryWorkRecoveryHarness();
+    await seedRunningRecoveryAssignment(harness, "character", "list-regression");
+    const listed = await harness.app.request(assignmentPath);
+    expect(listed.status).toBe(200);
+    const body = await listed.json();
+    expect(body.assignments.some((assignment: { status: string }) => assignment.status === "running")).toBe(
+      true
+    );
+  });
+});
+
+function coordinationCreateBody(overrides: Record<string, unknown> = {}) {
+  return {
+    expectedProjectVersion: 1,
+    idempotencyKey: "coordination-create-1",
+    title: "Harbor draft with continuity check",
+    scene: {
+      title: "Draft harbor scene",
+      brief: "Draft a coordinated harbor scene for the Bellwether arrival.",
+      constraints: "Keep canon intact.",
+      doneWhen: "A scene draft is ready for review.",
+      model: "gpt-4.1",
+      sceneIds: [selectedSceneId]
+    },
+    check: {
+      title: "Continuity check",
+      brief: "Check the draft against surrounding canon.",
+      constraints: "Ground findings in supplied scenes.",
+      doneWhen: "Findings are ready for writer review.",
+      model: "gpt-4.1",
+      surroundingSceneIds: [crossChapterContextSceneId]
+    },
+    ...overrides
+  };
+}
+
+async function createCoordinationHarness() {
+  let sceneCalls = 0;
+  const sceneProvider = createFakeStructuredCompletionProvider((input) => {
+    sceneCalls += 1;
+    return {
+      output: {
+        schemaId: "scene-draft-v1",
+        prose: "The coordinated harbor draft opens on the extinguished beacon.",
+        sourceSceneIds: sourceSceneIdsFromPrompt(input.inputText)
+      }
+    };
+  });
+  const harness = await createSeededBackendApp(undefined, {
+    kekConfig: createTestProviderKekRuntimeConfig(),
+    openAiCompletionProviderFactory: () => sceneProvider
+  });
+  await harness.app.request(
+    "/api/me/provider/openai",
+    mutation({ apiKey: "sk-coordination-story-work-test-key-123456" }, "PUT")
+  );
+  await prepareBellwetherSceneHead(harness.app);
+  const contextScenePath =
+    `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/scenes/${crossChapterContextSceneId}`;
+  expect((await harness.app.request(`${contextScenePath}/workspace`)).status).toBe(200);
+  expect(
+    (
+      await harness.app.request(`${contextScenePath}/lease`, {
+        method: "POST",
+        headers: { origin: TEST_BACKEND_ORIGIN }
+      })
+    ).status
+  ).toBe(200);
+  return { ...harness, sceneProviderCalls: () => sceneCalls };
+}
+
+describe("story work coordinations API", () => {
+  it("does not stamp MCP origin on first-party coordination create", async () => {
+    const { app } = await createCoordinationHarness();
+    const created = await app.request(
+      coordinationPath,
+      mutation(
+        coordinationCreateBody({ idempotencyKey: `coordination-origin-${randomUUID()}` })
+      )
+    );
+    expect(created.status).toBe(201);
+    const body = await created.json();
+    expect(body.coordination.origin).toBeUndefined();
+    expect(body.rootAssignment.origin).toBeUndefined();
+  });
+
+  it("creates a scene-draft coordination with a blocked check and no provider spend", async () => {
+    let providerCalls = 0;
+    const provider = createFakeStructuredCompletionProvider(() => {
+      providerCalls += 1;
+      return {
+        output: {
+          schemaId: "scene-draft-v1",
+          prose: "Unused.",
+          sourceSceneIds: []
+        }
+      };
+    });
+    const { app } = await createSeededBackendApp(undefined, {
+      kekConfig: createTestProviderKekRuntimeConfig(),
+      openAiCompletionProviderFactory: () => provider
+    });
+    await prepareBellwetherSceneHead(app);
+    const contextScenePath =
+      `/api/projects/${BELLWETHER_FIXTURE_PROJECT_ID}/scenes/${crossChapterContextSceneId}`;
+    expect((await app.request(`${contextScenePath}/workspace`)).status).toBe(200);
+    expect(
+      (
+        await app.request(`${contextScenePath}/lease`, {
+          method: "POST",
+          headers: { origin: TEST_BACKEND_ORIGIN }
+        })
+      ).status
+    ).toBe(200);
+    const created = await app.request(coordinationPath, mutation(coordinationCreateBody()));
+    const createdBody = await created.json();
+    expect(created.status, JSON.stringify(createdBody)).toBe(201);
+    expect(createdBody.replayed).toBe(false);
+    expect(createdBody.rootAssignment).toMatchObject({
+      taskKind: "scene",
+      status: "brief-ready"
+    });
+    expect(createdBody.projection.steps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "scene-draft", state: "ready" }),
+        expect.objectContaining({ kind: "proposal-continuity-check", state: "blocked" })
+      ])
+    );
+    expect(providerCalls).toBe(0);
+    expect(createdBody.rootAssignment.currentArtifact).toBeUndefined();
+  });
+
+  it("replays coordination create and refuses idempotency key/body conflicts", async () => {
+    const { app } = await createCoordinationHarness();
+    const first = await app.request(
+      coordinationPath,
+      mutation(coordinationCreateBody({ idempotencyKey: "coordination-replay" }))
+    );
+    const firstBody = await first.json();
+    expect(first.status).toBe(201);
+    const replay = await app.request(
+      coordinationPath,
+      mutation(coordinationCreateBody({ idempotencyKey: "coordination-replay" }))
+    );
+    const replayBody = await replay.json();
+    expect(replay.status).toBe(200);
+    expect(replayBody.replayed).toBe(true);
+    expect(replayBody.coordination.id).toBe(firstBody.coordination.id);
+    expect(replayBody.rootAssignment.id).toBe(firstBody.rootAssignment.id);
+    const conflict = await app.request(
+      coordinationPath,
+      mutation(
+        coordinationCreateBody({
+          idempotencyKey: "coordination-replay",
+          title: "Changed coordination title"
+        })
+      )
+    );
+    expect(conflict.status).toBe(409);
+    await expect(conflict.json()).resolves.toMatchObject({
+      code: "STORY_WORK_COORDINATION_CREATE_IDEMPOTENCY_CONFLICT"
+    });
+  });
+
+  it("lists and reloads coordination detail for the owner", async () => {
+    const { app } = await createCoordinationHarness();
+    const created = await app.request(
+      coordinationPath,
+      mutation(coordinationCreateBody({ idempotencyKey: "coordination-list" }))
+    );
+    const createdBody = await created.json();
+    const listed = await app.request(coordinationPath);
+    expect(listed.status).toBe(200);
+    const listedBody = await listed.json();
+    expect(listedBody.coordinations).toHaveLength(1);
+    expect(listedBody.coordinations[0]?.coordination.id).toBe(createdBody.coordination.id);
+    const detail = await app.request(
+      `${coordinationPath}/${createdBody.coordination.id}`
+    );
+    expect(detail.status).toBe(200);
+    const detailBody = await detail.json();
+    expect(detailBody.projection.version).toBe(1);
+    expect(detailBody.childAssignmentSummaries).toEqual([
+      expect.objectContaining({
+        taskKind: "scene",
+        status: "brief-ready"
+      })
+    ]);
+  });
+
+  it("binds a continuity check after the root artifact is ready", async () => {
+    const { app } = await createCoordinationHarness();
+    const created = await app.request(
+      coordinationPath,
+      mutation(coordinationCreateBody({ idempotencyKey: "coordination-bind" }))
+    );
+    const createdBody = await created.json();
+    const checkStep = createdBody.coordination.steps.find(
+      (step: { kind: string }) => step.kind === "proposal-continuity-check"
+    );
+    const generated = await app.request(
+      `${assignmentPath}/${createdBody.rootAssignment.id}/attempts`,
+      mutation({
+        expectedAssignmentVersion: 1,
+        kind: "initial",
+        sourceMode: "submitted-snapshot",
+        instruction: coordinationCreateBody().scene.brief,
+        idempotencyKey: "coordination-bind-root-attempt"
+      })
+    );
+    expect(generated.status).toBe(201);
+    const generatedBody = await generated.json();
+    const artifact = generatedBody.state.assignment.currentArtifact;
+    const bound = await app.request(
+      `${coordinationPath}/${createdBody.coordination.id}/steps/${checkStep.stepId}/continue`,
+      mutation({
+        expectedCoordinationVersion: 1,
+        expectedUpstreamArtifact: artifact
+      })
+    );
+    const boundBody = await bound.json();
+    expect(bound.status, JSON.stringify(boundBody)).toBe(201);
+    expect(boundBody.checkAssignment).toMatchObject({
+      taskKind: "check",
+      status: "brief-ready"
+    });
+    expect(boundBody.projection.steps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "proposal-continuity-check", state: "ready" })
+      ])
+    );
+    const checkAttempt = await app.request(
+      `${assignmentPath}/${boundBody.checkAssignment.id}/attempts`,
+      mutation({
+        expectedAssignmentVersion: 1,
+        kind: "initial",
+        sourceMode: "submitted-snapshot",
+        instruction: coordinationCreateBody().check.brief,
+        idempotencyKey: "coordination-bind-check-attempt"
+      })
+    );
+    expect(checkAttempt.status).toBe(201);
+  });
+
+  it("replays continue binds and refuses wrong artifact or version", async () => {
+    const { app } = await createCoordinationHarness();
+    const created = await app.request(
+      coordinationPath,
+      mutation(coordinationCreateBody({ idempotencyKey: "coordination-continue-replay" }))
+    );
+    const createdBody = await created.json();
+    const checkStep = createdBody.coordination.steps.find(
+      (step: { kind: string }) => step.kind === "proposal-continuity-check"
+    );
+    const generated = await app.request(
+      `${assignmentPath}/${createdBody.rootAssignment.id}/attempts`,
+      mutation({
+        expectedAssignmentVersion: 1,
+        kind: "initial",
+        sourceMode: "submitted-snapshot",
+        instruction: coordinationCreateBody().scene.brief,
+        idempotencyKey: "coordination-continue-replay-root"
+      })
+    );
+    const artifact = (await generated.json()).state.assignment.currentArtifact;
+    const continueBody = {
+      expectedCoordinationVersion: 1,
+      expectedUpstreamArtifact: artifact
+    };
+    const bound = await app.request(
+      `${coordinationPath}/${createdBody.coordination.id}/steps/${checkStep.stepId}/continue`,
+      mutation(continueBody)
+    );
+    expect(bound.status).toBe(201);
+    const replay = await app.request(
+      `${coordinationPath}/${createdBody.coordination.id}/steps/${checkStep.stepId}/continue`,
+      mutation(continueBody)
+    );
+    expect(replay.status).toBe(200);
+    const wrongArtifact = await app.request(
+      `${coordinationPath}/${createdBody.coordination.id}/steps/${checkStep.stepId}/continue`,
+      mutation({
+        expectedCoordinationVersion: 2,
+        expectedUpstreamArtifact: {
+          ...artifact,
+          artifactVersion: artifact.artifactVersion + 1
+        }
+      })
+    );
+    expect(wrongArtifact.status).toBe(409);
+    await expect(wrongArtifact.json()).resolves.toMatchObject({
+      code: "STORY_WORK_COORDINATION_TRANSITION_CONFLICT"
+    });
+  });
+
+  it("returns 422 for strict coordination bodies", async () => {
+    const { app } = await createCoordinationHarness();
+    const extraField = await app.request(
+      coordinationPath,
+      mutation({ ...coordinationCreateBody(), provider: "openai" })
+    );
+    expect(extraField.status).toBe(422);
+    expect(createStoryWorkCoordinationRequestSchema.safeParse({ title: "x" }).success).toBe(
+      false
+    );
+    expect(continueStoryWorkCoordinationStepRequestSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("hides foreign coordinations and refuses stale project version on create", async () => {
+    const { app } = await createCoordinationHarness();
+    const created = await app.request(
+      coordinationPath,
+      mutation(coordinationCreateBody({ idempotencyKey: "coordination-foreign" }))
+    );
+    const createdBody = await created.json();
+    const foreignApp = (
+      await createSeededBackendApp(
+        fakeBackendAuth({
+          ...TEST_BACKEND_SESSION,
+          account: { ...TEST_BACKEND_SESSION.account, id: "account-coordination-foreign" }
+        })
+      )
+    ).app;
+    const foreignDetail = await foreignApp.request(
+      `${coordinationPath}/${createdBody.coordination.id}`
+    );
+    expect(foreignDetail.status).toBe(404);
+    const staleProject = await app.request(
+      coordinationPath,
+      mutation(coordinationCreateBody({ expectedProjectVersion: 99, idempotencyKey: "stale" }))
+    );
+    expect(staleProject.status).toBe(409);
+    await expect(staleProject.json()).resolves.toMatchObject({
+      code: "PROJECT_VERSION_CONFLICT"
+    });
+  });
+
+  it("allows only one successful continue bind under concurrent requests", async () => {
+    const { app } = await createCoordinationHarness();
+    const created = await app.request(
+      coordinationPath,
+      mutation(coordinationCreateBody({ idempotencyKey: "coordination-concurrent-continue" }))
+    );
+    const createdBody = await created.json();
+    const checkStep = createdBody.coordination.steps.find(
+      (step: { kind: string }) => step.kind === "proposal-continuity-check"
+    );
+    const generated = await app.request(
+      `${assignmentPath}/${createdBody.rootAssignment.id}/attempts`,
+      mutation({
+        expectedAssignmentVersion: 1,
+        kind: "initial",
+        sourceMode: "submitted-snapshot",
+        instruction: coordinationCreateBody().scene.brief,
+        idempotencyKey: "coordination-concurrent-root"
+      })
+    );
+    const artifact = (await generated.json()).state.assignment.currentArtifact;
+    const continueBody = {
+      expectedCoordinationVersion: 1,
+      expectedUpstreamArtifact: artifact
+    };
+    const path = `${coordinationPath}/${createdBody.coordination.id}/steps/${checkStep.stepId}/continue`;
+    const [first, second] = await Promise.all([
+      app.request(path, mutation(continueBody)),
+      app.request(path, mutation(continueBody))
+    ]);
+    const statuses = [first.status, second.status].sort();
+    expect(statuses[0]).toBe(201);
+    expect([200, 409]).toContain(statuses[1]);
+    const listed = await app.request(coordinationPath);
+    const coordinations = (await listed.json()).coordinations;
+    expect(
+      coordinations.flatMap((entry: { childAssignmentSummaries: { taskKind: string }[] }) =>
+        entry.childAssignmentSummaries.filter((summary) => summary.taskKind === "check")
+      )
+    ).toHaveLength(1);
+  });
+
+  it("refuses continue while the root step is still brief-ready", async () => {
+    const { app } = await createCoordinationHarness();
+    const created = await app.request(
+      coordinationPath,
+      mutation(coordinationCreateBody({ idempotencyKey: "coordination-blocked-continue" }))
+    );
+    const createdBody = await created.json();
+    const checkStep = createdBody.coordination.steps.find(
+      (step: { kind: string }) => step.kind === "proposal-continuity-check"
+    );
+    const blocked = await app.request(
+      `${coordinationPath}/${createdBody.coordination.id}/steps/${checkStep.stepId}/continue`,
+      mutation({
+        expectedCoordinationVersion: 1,
+        expectedUpstreamArtifact: {
+          proposalId: "proposal-missing",
+          artifactVersion: 1,
+          contentHash: instructionContentHash("f".repeat(64))
+        }
+      })
+    );
+    expect(blocked.status).toBe(409);
+    await expect(blocked.json()).resolves.toMatchObject({
+      code: "STORY_WORK_COORDINATION_DEPENDENCY_CONFLICT"
+    });
+  });
+
+  it("keeps character assignment routes healthy after coordination create", async () => {
+    const { app } = await createCoordinationHarness();
+    await app.request(
+      coordinationPath,
+      mutation(coordinationCreateBody({ idempotencyKey: "coordination-character-regression" }))
+    );
+    const character = await app.request(
+      assignmentPath,
+      mutation(assignmentRequest({ idempotencyKey: "coordination-regression-character" }))
+    );
+    expect(character.status).toBe(201);
   });
 });

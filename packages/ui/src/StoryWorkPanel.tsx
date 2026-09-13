@@ -7,9 +7,14 @@ import type {
   StoryWorkArtifactPointer,
   StoryWorkAssignment,
   StoryWorkAssignmentId,
+  StoryWorkCoordinationId,
   StoryWorkTaskKind
 } from "@ghostwriter/core";
 import { storyCheckSourceScopeHint } from "./story-check-review.js";
+import {
+  storyWorkSceneCoordinationFollowUpCopy,
+  validateStoryWorkCoordinatedCheckFields
+} from "./story-work-coordination-review.js";
 import {
   sanitizeStoryWorkRevisePrefill,
   shouldApplyStoryWorkPanelPrefill,
@@ -25,6 +30,10 @@ export const STORY_WORK_HEADING_NATIVE_ID = "story-work-heading";
 
 export function storyWorkAssignmentButtonNativeId(id: StoryWorkAssignmentId): string {
   return `story-work-assignment-${encodeURIComponent(id)}`;
+}
+
+export function storyWorkCoordinationButtonNativeId(id: StoryWorkCoordinationId): string {
+  return `story-work-coordination-${encodeURIComponent(id)}`;
 }
 const TASK_LABELS: Record<StoryWorkTaskKind, string> = {
   character: "New character", scene: "New scene", outline: "Outline", chapter: "Chapter",
@@ -65,13 +74,33 @@ export type SubmitStoryWorkBriefCheckProposal = SubmitStoryWorkBriefBase &
 export type SubmitStoryWorkBriefOutline = SubmitStoryWorkBriefBase &
   Readonly<{ taskKind: "outline"; targetBookId: BookId }>;
 
+export type SubmitStoryWorkBriefCoordinatedCheck = Readonly<{
+  brief: string;
+  constraints: string;
+  doneWhen: string;
+}>;
+
+export type SubmitStoryWorkBriefScene = SubmitStoryWorkBriefBase &
+  Readonly<{
+    taskKind: "scene";
+    coordinatedCheck?: SubmitStoryWorkBriefCoordinatedCheck;
+  }>;
+
 export type SubmitStoryWorkBrief =
   | (SubmitStoryWorkBriefBase & Readonly<{ taskKind: "revise"; targetSceneId: SceneId }>)
   | SubmitStoryWorkBriefCheckApplied
   | SubmitStoryWorkBriefCheckProposal
   | SubmitStoryWorkBriefOutline
+  | SubmitStoryWorkBriefScene
   | (SubmitStoryWorkBriefBase &
-      Readonly<{ taskKind: Exclude<StoryWorkTaskKind, "revise" | "check" | "outline"> }>);
+      Readonly<{ taskKind: Exclude<StoryWorkTaskKind, "revise" | "check" | "outline" | "scene"> }>);
+
+export type StoryWorkCoordinationCardSummary = Readonly<{
+  coordinationId: StoryWorkCoordinationId;
+  title: string;
+  statusLabel: string;
+  detail: string;
+}>;
 
 export type StoryWorkOutlineBookOption = Readonly<{
   bookId: BookId;
@@ -123,9 +152,13 @@ export type StoryWorkPanelProps = Readonly<{
   proposalCheckTargets?: readonly StoryWorkProposalCheckTarget[];
   prefill?: StoryWorkPanelRevisePrefill;
   assignments: readonly StoryWorkAssignment[];
+  coordinationSummaries?: readonly StoryWorkCoordinationCardSummary[];
+  coordinationsLoading?: boolean;
+  coordinationsError?: string;
   loading?: boolean;
   error?: string;
   onSubmit(input: SubmitStoryWorkBrief): Promise<void>;
+  onOpenCoordination?(coordinationId: StoryWorkCoordinationId): void;
   onOpenAssignment(id: StoryWorkAssignmentId): void;
   onRefresh(): void;
   onBackToChat(): void;
@@ -152,6 +185,10 @@ export function StoryWorkPanel(props: StoryWorkPanelProps) {
     )
   );
   const [proposalSearch, setProposalSearch] = useState("");
+  const [followWithContinuityCheck, setFollowWithContinuityCheck] = useState(false);
+  const [checkBrief, setCheckBrief] = useState("");
+  const [checkConstraints, setCheckConstraints] = useState("");
+  const [checkDoneWhen, setCheckDoneWhen] = useState("");
   const sourcesEdited = useRef(false);
   const targetEdited = useRef(false);
   const outlineBookEdited = useRef(false);
@@ -239,6 +276,14 @@ export function StoryWorkPanel(props: StoryWorkPanelProps) {
       return resolveDefaultOutlineBookId(books, props.selectedOutlineBookId);
     });
   }, [taskKind, props.outlineBooks, props.selectedOutlineBookId]);
+  useEffect(() => {
+    if (taskKind !== "scene") {
+      setFollowWithContinuityCheck(false);
+      setCheckBrief("");
+      setCheckConstraints("");
+      setCheckDoneWhen("");
+    }
+  }, [taskKind]);
   useEffect(() => {
     if (taskKind !== "revise" && taskKind !== "check") {
       targetEdited.current = false;
@@ -328,6 +373,14 @@ export function StoryWorkPanel(props: StoryWorkPanelProps) {
     taskKind !== "outline" ||
     (targetOutlineBookId !== undefined &&
       outlineBooks.some((book) => book.bookId === targetOutlineBookId));
+  const coordinatedCheckValidation = validateStoryWorkCoordinatedCheckFields({
+    enabled: taskKind === "scene" && followWithContinuityCheck,
+    fields: {
+      brief: checkBrief,
+      constraints: checkConstraints,
+      doneWhen: checkDoneWhen
+    }
+  });
   const canSubmit =
     props.supportedTaskKinds.includes(taskKind) &&
     brief.trim().length > 0 &&
@@ -340,6 +393,7 @@ export function StoryWorkPanel(props: StoryWorkPanelProps) {
     checkProposalTargetActive &&
     checkSourcesValid &&
     outlineTargetActive &&
+    coordinatedCheckValidation.valid &&
     !submitting;
 
   async function submit() {
@@ -397,6 +451,24 @@ export function StoryWorkPanel(props: StoryWorkPanelProps) {
           model: chosenModel.id as AgentModelId,
           sceneIds
         };
+      } else if (taskKind === "scene") {
+        payload = {
+          taskKind: "scene",
+          brief,
+          constraints,
+          doneWhen,
+          model: chosenModel.id as AgentModelId,
+          sceneIds,
+          ...(followWithContinuityCheck
+            ? {
+                coordinatedCheck: Object.freeze({
+                  brief: checkBrief,
+                  constraints: checkConstraints,
+                  doneWhen: checkDoneWhen
+                })
+              }
+            : {})
+        };
       } else {
         payload = {
           taskKind,
@@ -405,7 +477,7 @@ export function StoryWorkPanel(props: StoryWorkPanelProps) {
           doneWhen,
           model: chosenModel.id as AgentModelId,
           sceneIds
-        };
+        } as SubmitStoryWorkBrief;
       }
       await props.onSubmit(payload);
       sourcesEdited.current = false;
@@ -415,6 +487,10 @@ export function StoryWorkPanel(props: StoryWorkPanelProps) {
       setBrief("");
       setConstraints("");
       setDoneWhen("");
+      setFollowWithContinuityCheck(false);
+      setCheckBrief("");
+      setCheckConstraints("");
+      setCheckDoneWhen("");
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -527,6 +603,23 @@ export function StoryWorkPanel(props: StoryWorkPanelProps) {
         }} />)}</View>
         {props.scenes.length > visibleTargetScenes.length ? <Text style={styles.hint}>Showing up to 20 matching scenes. Search to find others.</Text> : null}
       </> : null}
+      {taskKind === "scene" ? <>
+        <Text style={styles.label}>Continuity follow-up</Text>
+        <CheckboxChoice
+          label="Follow this draft with a continuity check"
+          description={storyWorkSceneCoordinationFollowUpCopy()}
+          selected={followWithContinuityCheck}
+          disabled={submitting}
+          onPress={() => setFollowWithContinuityCheck((current) => !current)}
+        />
+        {followWithContinuityCheck ? <>
+          <Text style={styles.hint}>Selected source scenes above become bounded surrounding context for the check. The scene draft brief stays separate.</Text>
+          <Field label="Check brief" value={checkBrief} onChange={setCheckBrief} limit={20000} disabled={submitting} />
+          <Field label="Check constraints" value={checkConstraints} onChange={setCheckConstraints} limit={8000} disabled={submitting} />
+          <Field label="Check done when" value={checkDoneWhen} onChange={setCheckDoneWhen} limit={4000} disabled={submitting} />
+          {!coordinatedCheckValidation.valid && (checkBrief.trim() || checkConstraints.trim() || checkDoneWhen.trim()) ? coordinatedCheckValidation.errors.map((entry) => <Text key={entry} accessibilityRole="alert" style={styles.error}>{entry}</Text>) : null}
+        </> : null}
+      </> : null}
       {taskKind === "outline" ? <>
         <Text style={styles.label}>Structure destination</Text>
         <Text style={styles.hint}>Choose the active book whose chapter and scene placeholders will be proposed. Source scenes below are optional context only.</Text>
@@ -561,6 +654,18 @@ export function StoryWorkPanel(props: StoryWorkPanelProps) {
       <Button label={submitting ? "Starting assignment…" : "Start assignment"} disabled={!canSubmit} selected onPress={() => { void submit(); }} />
       {taskKind === "outline" && !outlineTargetActive && brief.trim() && constraints.trim() && doneWhen.trim() && chosenModel !== undefined ? <Text style={styles.hint}>Choose an active structure destination book before starting.</Text> : null}
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+      <View style={styles.header}>
+        <Text accessibilityRole="header" style={styles.label}>Coordinated work</Text>
+        <Button label="Refresh coordinated work" disabled={props.coordinationsLoading} onPress={props.onRefresh} />
+      </View>
+      {props.coordinationsLoading ? <Text accessibilityLiveRegion="polite" style={styles.hint}>Loading coordinated work…</Text> : null}
+      {props.coordinationsError ? <Text accessibilityRole="alert" style={styles.error}>{props.coordinationsError}</Text> : null}
+      {!props.coordinationsLoading && !props.coordinationsError && (props.coordinationSummaries ?? []).length === 0 ? <Text style={styles.hint}>Scene drafts chained with continuity checks appear here after you start coordinated story work.</Text> : null}
+      {(props.coordinationSummaries ?? []).map((entry) => <Pressable key={entry.coordinationId} accessibilityRole="button" accessibilityLabel={`${entry.title} · ${entry.statusLabel} · ${entry.detail}`} nativeID={storyWorkCoordinationButtonNativeId(entry.coordinationId)} disabled={props.onOpenCoordination === undefined} onPress={() => props.onOpenCoordination?.(entry.coordinationId)} style={styles.assignment}>
+        <Text style={styles.label}>{entry.title} · {entry.statusLabel}</Text>
+        <Text style={styles.body} numberOfLines={3}>{entry.detail}</Text>
+        <Text style={styles.hint}>{props.onOpenCoordination ? "Open coordinated story work" : "Coordinated story work"}</Text>
+      </Pressable>)}
       <View style={styles.header}><Text accessibilityRole="header" style={styles.label}>Assignments</Text><Button label="Refresh assignments" disabled={props.loading} onPress={props.onRefresh} /></View>
       {props.loading ? <Text accessibilityLiveRegion="polite" style={styles.hint}>Loading assignments…</Text> : null}
       {props.error ? <Text accessibilityRole="alert" style={styles.error}>{props.error}</Text> : null}
@@ -583,6 +688,12 @@ function Button({ label, onPress, disabled = false, selected = false }: Readonly
 function RadioChoice({ label, description, selected, disabled, onPress }: Readonly<{ label: string; description: string; selected: boolean; disabled: boolean; onPress(): void }>) {
   return <Pressable accessibilityRole="radio" accessibilityLabel={label} accessibilityState={{ checked: selected, disabled }} disabled={disabled} onPress={onPress} style={[styles.radio, selected && styles.selected]}>
     <Text style={styles.buttonText}>{selected ? "● " : ""}{label}</Text>
+    <Text style={styles.hint}>{description}</Text>
+  </Pressable>;
+}
+function CheckboxChoice({ label, description, selected, disabled, onPress }: Readonly<{ label: string; description: string; selected: boolean; disabled: boolean; onPress(): void }>) {
+  return <Pressable accessibilityRole="checkbox" accessibilityLabel={label} accessibilityState={{ checked: selected, disabled }} disabled={disabled} onPress={onPress} style={[styles.radio, selected && styles.selected]}>
+    <Text style={styles.buttonText}>{selected ? "☑ " : "☐ "}{label}</Text>
     <Text style={styles.hint}>{description}</Text>
   </Pressable>;
 }

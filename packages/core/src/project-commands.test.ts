@@ -54,7 +54,9 @@ const ids = () =>
     agentProposal: [],
     storyCheckFinding: [],
     storyStructureOperation: [],
-    mcpGrant: []
+    mcpGrant: [],
+    storyWorkCoordination: [],
+    storyWorkCoordinationStep: []
   });
 
 async function setup() {

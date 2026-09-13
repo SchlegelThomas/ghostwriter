@@ -79,6 +79,11 @@ export function registerMcpGrantRoutes(
         accountId: accountId(authSession.account.id),
         projectId: projectId(context.req.param("projectId")),
         captureIds: parsed.data.captureIds,
+        sceneIds: parsed.data.sceneIds,
+        bookIds: parsed.data.bookIds,
+        assignmentIds: parsed.data.assignmentIds,
+        coordinationIds: parsed.data.coordinationIds,
+        allowProjectStructureRead: parsed.data.allowProjectStructureRead,
         tools: parsed.data.tools,
         expiresAt: parsed.data.expiresAt
       });

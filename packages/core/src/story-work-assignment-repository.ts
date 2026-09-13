@@ -1,6 +1,7 @@
 import type { InstructionContentHash } from "./agent-domain.js";
 import type { ProjectId } from "./domain.js";
 import type { AccountId } from "./identity.js";
+import type { McpGrantId } from "./mcp-grants.js";
 import type {
   StoryWorkAssignment,
   StoryWorkAssignmentId,
@@ -48,6 +49,12 @@ export interface StoryWorkAssignmentRepository {
     accountId: AccountId;
     projectId: ProjectId;
     options?: StoryWorkAssignmentListOptions;
+  }>): Promise<readonly StoryWorkAssignment[]>;
+  listByMcpGrantOrigin(input: Readonly<{
+    accountId: AccountId;
+    projectId: ProjectId;
+    originMcpGrantId: McpGrantId;
+    options?: Readonly<{ limit?: number }>;
   }>): Promise<readonly StoryWorkAssignment[]>;
   create(input: Readonly<{
     assignment: StoryWorkAssignment;

@@ -273,5 +273,97 @@ Structure batches advance project metadata once. Exact apply replay returns the 
 `projectVersion`, optional Canvas scene/object IDs) before freshness checks or reallocation.
 Conflicts roll back every effect. Memory and Postgres implementations share the same contract.
 
-First-party HTTP/UI bindings and hermetic provider fixtures are implemented locally; scoped MCP
-parity for structure remains CP6. Multi-step coordination remains CP5.
+First-party HTTP/UI bindings and hermetic provider fixtures are implemented locally. Multi-step
+coordination (CP5) and scoped MCP read/propose parity (CP6) are complete locally; CP7 AC10 browser
+acceptance is next.
+
+### Resume and multi-step coordination (CP5, accepted contract 2026-09-13)
+
+Each assignment still owns exactly one task kind, destination, attempt/proposal lineage and
+apply domain. Do not repurpose assignment `steps[]` as a mutable multi-kind progress log or
+merge unrelated kinds into one row.
+
+Add a project-owned `StoryWorkCoordination` control-plane aggregate (CP5b migration): stable
+coordination/step IDs, bounded typed step definitions, optional materialized child assignment
+IDs/results, explicit artifact-ready and applied-revision dependencies, create idempotency/
+fingerprint, and monotonic version. It stores orchestration and provenance only; child status
+projects from canonical assignment rows. Deferred step-to-child binding is CAS-protected on
+coordination version.
+
+Execution stays foreground-only: reload reconciles read-only truth; writers explicitly
+Continue, Resume or Retry. Independent ready proposal steps may run concurrently only within
+one connected foreground action; shared project/scene/Canvas mutation and apply stay in
+existing atomic UOWs and human review gates.
+
+Initial coordinated chain: scene-draft assignment, then a continuity check of its exact
+proposal artifact after an artifact-ready dependency (blocked until that artifact exists;
+both existing review surfaces remain gates). Applied-revision dependencies reuse exact scene
+results per CP3 target modes.
+
+**CP5a (complete locally, no migration):** `POST …/assignments/:id/recover` with
+`expectedAssignmentVersion`, `runId`, and `cancel` | `mark-interrupted`. Atomic **run +
+assignment** transition; **attempt rows stay immutable/incomplete** (status completion pairs
+with result artifacts). Cancel ⇒ `run-canceled` + canceled assignment; mark ⇒
+`client-interrupted` + failed assignment. Late-provider fencing. Idempotent replay on run +
+action + prior expected assignment version. GET detail may project active-or-interrupted or
+refresh-required recovery truth without automatic provider poll. UI Refresh/Cancel/Mark;
+explicit retry uses the attempt route with a new caller idempotency key — recovery never
+retries generation. Capability registry records `story-work.recovery.read` and
+`story-work.recovery.manage` with CP6 MCP exceptions.
+
+**CP5b (complete locally):** pure core coordination domain, memory/Postgres repositories,
+migration `0029_material_rachel_grey.sql` (checked in; not production-deployed), atomic
+create/bind UOW (replay before ID allocation, all-or-nothing rollback), and HTTP under
+`/story-work/coordinations`. v1 create accepts one scene root and one check (domain graph 1–7
+deferred checks). Create is zero-provider and zero-canon; continue bind materializes a
+brief-ready proposal-draft check with exact artifact-ready dependency; child starts use existing
+attempt routes. List/detail read projections. **CP5c (complete locally):** foreground client
+driver/UI and hermetic browser scene-draft → artifact-ready continuity-check chain; explicit
+Start/Continue/Start check/Open reviews; no reload auto-spend. Capability registry records
+`story-work.coordination.read` and `story-work.coordination.manage` with CP6 exceptions.
+**CP5d (complete locally):** parent coherence review, recovery-replay regression fix (idempotent
+replay must not compare fresh server run `completedAt`; same run/action/version replays stored
+outcome; competing actions conflict), hermetic browser full coordinated chain, final
+`pnpm verify` (1,823 tests passed / 3 skipped). Refuse foreign/nonrunning/stale runs, concurrent
+completion races, competing recovery actions, bad dependencies, reload auto-spend, partial child
+rollback failures, and parallel apply in the same version domain.
+
+Initial chain: exact **proposal artifact** dependency for the continuity check (scene apply not
+required). **CP5 v1 / AC6:** artifact-ready proposal dependency and explicit child recover
+(cancel/mark) satisfy dependency-waiting and cancellation for the first chain. **Post-CP5
+deferrals (not CP5 blockers):** applied-revision dependency variant; API/UI fan-out for 2–7
+concurrent ready checks; coordination-level cancel HTTP/UI (domain cancel and child recover exist);
+reusable workflow templates and unattended background workers (refused in CP5). One coordination
+record per explicit ad-hoc writer-started flow until templates ship.
+
+Plan contract: [cp5-coordination-contract.md](../../plans/active/2026-09-12-agent-story-workflow/cp5-coordination-contract.md).
+PRODUCT/API/ARCHITECTURE/OPERATIONS document local CP5 behavior (not production-deployed).
+Epic remains active; CP6 scoped MCP parity is complete locally; CP7 AC10 follows.
+
+### Scoped MCP parity (CP6, complete locally 2026-09-13)
+
+CP6 closes capability-registry **read/propose** bindings for story-work under ADR 0011 grants.
+External scope is **read/status + propose only**; review/edit/reject/apply, recovery
+manage/cancel, credentials, grant admin, and canonical commands stay first-party permanently.
+
+**Grants:** extended allowlists (`sceneIds`, `bookIds`, `assignmentIds`, `coordinationIds`,
+`allowProjectStructureRead`); Capture-only grants remain backward compatible; story-only and mixed
+grants supported. MCP-created assignments/coordinations record origin `{ kind: "mcp", grantId }`
+(migration `0030`); child assignments inherit; list/read filters allowlisted ∪ grant-origin via
+indexed repositories; bridge DTOs strip recovery manage hints.
+
+**Tools (closed 15-tool enum):** grant discover; three Capture tools; list/get story-work; typed
+submit for character, new-scene, check, structure; structure preview; coordination list/get/create/
+continue (continue requires same grant origin). Each submit creates and starts one foreground
+attempt; create/continue coordination does not auto-start children.
+
+**Transport:** local/test stdio bridge (`GHOSTWRITER_ENABLE_LOCAL_MCP_BRIDGE=1`, `/local-mcp/v1/*`);
+fixture navigator only under `GHOSTWRITER_MCP_FIXTURE=1`. Not production remote OAuth. Hermetic stdio
+walkthrough recorded; final verify 1,914 tests / 3 skipped.
+
+**Explicit deferrals:** production remote MCP deploy, last-used audit table, owner mint UI,
+project-wide navigator, revision/update scene MCP tools.
+
+Plan:
+[cp6-mcp-parity-contract.md](../../plans/active/2026-09-12-agent-story-workflow/cp6-mcp-parity-contract.md).
+**Next:** CP7 AC10 original-story acceptance (Playwright gated).

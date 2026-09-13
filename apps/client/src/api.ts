@@ -19,9 +19,13 @@ import type {
   StoryStructureProposalV1,
   StoryStructureStoryWorkReviewResult,
   StructureStoryWorkApplyResult,
+  RecoverActiveStoryWorkAttemptResult,
   StoryWorkAssignment,
   StoryWorkAttempt,
   StoryWorkArtifactPointer,
+  StoryWorkCoordination,
+  StoryWorkCoordinationProjection,
+  StoryWorkCoordinationStepId,
   BookId,
   BookReaderProjection,
   CanvasBoard,
@@ -2333,6 +2337,27 @@ export async function getCharacterVisualDownload(input: Readonly<{
   );
 }
 
+type StoryWorkRecoveryActions = readonly ["cancel", "mark-interrupted"];
+
+export type StoryWorkRecoveryAction = StoryWorkRecoveryActions[number];
+
+export type StoryWorkRecoveryProjection = Readonly<
+  | {
+      status: "active-or-interrupted";
+      runId: string;
+      expectedAssignmentVersion: number;
+      actions: StoryWorkRecoveryActions;
+      message: string;
+    }
+  | {
+      status: "refresh-required";
+      runId?: string;
+      expectedAssignmentVersion: number;
+      actions: StoryWorkRecoveryActions;
+      message: string;
+    }
+>;
+
 export type StoryWorkDetailResponse = Readonly<{
   assignment: StoryWorkAssignment;
   proposal?: AgentProposal;
@@ -2340,6 +2365,7 @@ export type StoryWorkDetailResponse = Readonly<{
   receipt?: ContextReceipt;
   attempt?: StoryWorkAttempt;
   checkFreshness?: StoryCheckStoredPayloadFreshness;
+  recovery?: StoryWorkRecoveryProjection;
 }>;
 
 function storyWorkPath(projectId: string, suffix = ""): string {
@@ -2353,6 +2379,20 @@ export async function listStoryWorkAssignments(projectId: string): Promise<reado
 
 export function getStoryWorkAssignment(projectId: string, assignmentId: string): Promise<StoryWorkDetailResponse> {
   return requestJson(storyWorkPath(projectId, `/${encodeURIComponent(assignmentId)}`));
+}
+
+export function recoverActiveStoryWorkAttempt(input: Readonly<{
+  projectId: string;
+  assignmentId: string;
+  expectedAssignmentVersion: number;
+  runId: string;
+  action: StoryWorkRecoveryAction;
+}>): Promise<RecoverActiveStoryWorkAttemptResult> {
+  const { projectId, assignmentId, expectedAssignmentVersion, runId, action } = input;
+  return requestJson(
+    storyWorkPath(projectId, `/${encodeURIComponent(assignmentId)}/recover`),
+    jsonRequest("POST", { expectedAssignmentVersion, runId, action })
+  );
 }
 
 export function createCharacterStoryWorkAssignment(input: Readonly<{
@@ -2660,5 +2700,119 @@ export function applyStructureStoryWork(input: Readonly<{
   return requestJson(
     storyWorkPath(projectId, `/${encodeURIComponent(assignmentId)}/apply`),
     jsonRequest("POST", body)
+  );
+}
+
+export type CreateStoryWorkCoordinationSceneStepRequest = Readonly<{
+  title: string;
+  brief: string;
+  constraints: string;
+  doneWhen: string;
+  model: string;
+  sceneIds: readonly string[];
+}>;
+
+export type CreateStoryWorkCoordinationCheckStepRequest = Readonly<{
+  title: string;
+  brief: string;
+  constraints: string;
+  doneWhen: string;
+  model: string;
+  surroundingSceneIds: readonly string[];
+}>;
+
+export type CreateStoryWorkCoordinationRequest = Readonly<{
+  expectedProjectVersion: number;
+  idempotencyKey: string;
+  title: string;
+  scene: CreateStoryWorkCoordinationSceneStepRequest;
+  check: CreateStoryWorkCoordinationCheckStepRequest;
+}>;
+
+export type ContinueStoryWorkCoordinationStepRequest = Readonly<{
+  expectedCoordinationVersion: number;
+  expectedUpstreamArtifact: StoryWorkArtifactPointer;
+}>;
+
+export type StoryWorkCoordinationChildAssignmentSummary = Readonly<{
+  stepId: StoryWorkCoordinationStepId;
+  assignmentId: StoryWorkAssignment["id"];
+  taskKind: StoryWorkAssignment["taskKind"];
+  status: StoryWorkAssignment["status"];
+}>;
+
+export type StoryWorkCoordinationDetailResponse = Readonly<{
+  coordination: StoryWorkCoordination;
+  projection: StoryWorkCoordinationProjection;
+  rootAssignment: StoryWorkAssignment;
+  childAssignmentSummaries: readonly StoryWorkCoordinationChildAssignmentSummary[];
+}>;
+
+export type CreateStoryWorkCoordinationResult = Readonly<{
+  replayed: boolean;
+  coordination: StoryWorkCoordination;
+  projection: StoryWorkCoordinationProjection;
+  rootAssignment: StoryWorkAssignment;
+}>;
+
+export type ContinueStoryWorkCoordinationStepResult = Readonly<{
+  replayed: boolean;
+  coordination: StoryWorkCoordination;
+  projection: StoryWorkCoordinationProjection;
+  rootAssignment: StoryWorkAssignment;
+  checkAssignment: StoryWorkAssignment;
+}>;
+
+export type ListStoryWorkCoordinationsResponse = Readonly<{
+  coordinations: readonly StoryWorkCoordinationDetailResponse[];
+}>;
+
+function storyWorkCoordinationPath(projectId: string, suffix = ""): string {
+  return `/api/projects/${encodeURIComponent(projectId)}/story-work/coordinations${suffix}`;
+}
+
+export function createStoryWorkCoordination(
+  input: Readonly<{ projectId: string } & CreateStoryWorkCoordinationRequest>
+): Promise<CreateStoryWorkCoordinationResult> {
+  const { projectId, ...body } = input;
+  return requestJson(storyWorkCoordinationPath(projectId), jsonRequest("POST", body));
+}
+
+export function listStoryWorkCoordinations(
+  projectId: string
+): Promise<ListStoryWorkCoordinationsResponse> {
+  return requestJson(storyWorkCoordinationPath(projectId));
+}
+
+export function getStoryWorkCoordination(
+  projectId: string,
+  coordinationId: string
+): Promise<StoryWorkCoordinationDetailResponse> {
+  return requestJson(
+    storyWorkCoordinationPath(projectId, `/${encodeURIComponent(coordinationId)}`)
+  );
+}
+
+export function continueStoryWorkCoordinationStep(
+  input: Readonly<{
+    projectId: string;
+    coordinationId: string;
+    stepId: string;
+  }> &
+    ContinueStoryWorkCoordinationStepRequest
+): Promise<ContinueStoryWorkCoordinationStepResult> {
+  const {
+    projectId,
+    coordinationId,
+    stepId,
+    expectedCoordinationVersion,
+    expectedUpstreamArtifact
+  } = input;
+  return requestJson(
+    storyWorkCoordinationPath(
+      projectId,
+      `/${encodeURIComponent(coordinationId)}/steps/${encodeURIComponent(stepId)}/continue`
+    ),
+    jsonRequest("POST", { expectedCoordinationVersion, expectedUpstreamArtifact })
   );
 }

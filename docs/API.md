@@ -136,20 +136,39 @@ agent routes below; attachments remain separate private object references.
 
 ### MCP grants (propose-only)
 
-Owners mint project-scoped opaque grant tokens for external MCP clients. Grants carry Capture and
-tool allowlists, expiry, and revocation. Tokens are returned once on create; only a SHA-256 hash is
-stored. Missing, expired, revoked, and unauthorized grant access share non-disclosing `404 NOT_FOUND`.
+Owners mint project-scoped opaque grant tokens for external MCP clients. Grants carry closed-enum
+`tools`, resource allowlists, expiry, and revocation. Tokens are returned once on create; only a
+SHA-256 hash is stored. Missing, expired, revoked, wrong-project, disallowed-tool, and
+out-of-allowlist resource access share non-disclosing `404 NOT_FOUND`.
 
 - `GET /api/projects/{projectId}/mcp-grants` lists grant summaries for the project (no token material).
-- `POST /api/projects/{projectId}/mcp-grants` accepts `captureIds`, `tools` (closed enum of Capture
-  reflection MCP tools), and `expiresAt`, then returns `{ grant, token }`.
+- `POST /api/projects/{projectId}/mcp-grants` accepts `captureIds`, `sceneIds`, `bookIds`,
+  `assignmentIds`, `coordinationIds`, `allowProjectStructureRead`, `tools` (closed enum — up to 15
+  grant tools: `ghostwriter_get_grant`, three Capture reflection tools, eleven story-work tools),
+  and `expiresAt`, then returns `{ grant, token }`. Capture-only grants remain backward compatible;
+  story-only and mixed grants validate tool/resource pairing at mint time.
 - `DELETE /api/projects/{projectId}/mcp-grants/{grantId}` revokes a grant.
 
-External MCP tools under a grant may discover the grant, read one granted Capture plain summary,
-assemble a Capture reflection receipt, and propose via the same core preview+start path as the UI.
-They cannot apply proposals, read credentials, mutate grants, or enumerate unauthorized projects.
-Production remote MCP OAuth remains later; local/tests inject grant services with
-`GHOSTWRITER_MCP_GRANT_TOKEN` or an in-process runtime.
+External MCP clients under a grant may discover the grant, read allowlisted Captures, submit Capture
+reflection proposals, and (when story-work tools are granted) list/get filtered story-work
+assignments and coordinations, submit typed character/scene/check/structure work (each creating one
+foreground attempt), preview structure without writes, and create/continue coordinations without
+auto-starting child attempts. Bridge assignment detail exposes recovery **read** projections only
+(manage actions are not available externally). Scene submit is **new-scene** only; coordination
+**continue** requires the coordination to share the token's MCP grant origin (allowlisted foreign
+coordinations are read-only).
+
+They cannot apply proposals, open human review routes, recover/cancel assignments, read credentials,
+mutate grants, enumerate projects, or invoke canonical manuscript/Canvas commands.
+
+**Local/test bridge (CP6, not production remote OAuth):** when
+`GHOSTWRITER_ENABLE_LOCAL_MCP_BRIDGE=1`, the backend exposes Bearer-authenticated
+`/local-mcp/v1/*` routes outside the session cookie API (grant metadata, Capture read/receipt/propose,
+filtered story-work list/detail, typed submits, structure preview, coordination list/detail/create/continue).
+Stdio MCP uses `GHOSTWRITER_MCP_API_URL` + `GHOSTWRITER_MCP_GRANT_TOKEN` for bridge mode, or
+`GHOSTWRITER_MCP_FIXTURE=1` for the fixture navigator only; half-configured modes fail clearly.
+Migration `0030_curly_korg.sql` adds grant allowlist columns and assignment/coordination MCP origin
+FK/indexes (checked in; not production-deployed). Production remote MCP OAuth remains later.
 
 ### Capture attachments
 
@@ -590,6 +609,42 @@ and Canvas keep their own versions.
   `bookId`, `projectVersion`, optional `canvasPlacedSceneId`/`canvasObjectId`). Exact replay returns
   the stored result without a second version increment. Stale project, Canvas, artifact or incomplete
   selection applies nothing. Structure apply never writes scene prose.
+- **Recovery (CP5a, local):** `GET /assignments/:id` may include read-only recovery projections
+  (`active-or-interrupted`, `refresh-required`) when generation is active or outcome is uncertain.
+  It does not poll providers or guess age. `POST /assignments/:id/recover` accepts strict
+  `expectedAssignmentVersion`, `runId`, and `action` (`cancel` | `mark-interrupted`). It atomically
+  transitions the active run and assignment; attempt rows remain immutable/incomplete. Cancel marks
+  the run failed (`run-canceled`) and the assignment canceled; mark interrupted marks the run failed
+  (`client-interrupted`) and the assignment failed. Late provider completion is fenced. Exact replay
+  matches run + action + prior expected assignment version and replays the stored run outcome
+  (including timestamps) without comparing a freshly read server `completedAt`; competing actions
+  conflict. Foreign or archived-project scope uses the same nondisclosing errors as other story-work
+  routes. Recovery does not retry generation; writers start a new attempt with a fresh idempotency
+  key when retrying explicitly.
+
+- **Coordination (CP5, complete locally):** multi-step foreground orchestration under
+  `/story-work/coordinations`. Domain graph allows one materialized scene-draft root and 1–7
+  deferred artifact-ready continuity checks; **v1 HTTP and UI accept exactly one check** in the
+  strict create body (concurrent ready checks remain open).
+- `POST /coordinations` with `expectedProjectVersion`, `idempotencyKey`, coordination `title`, nested
+  `scene` (title, brief, constraints, doneWhen, model, selected context `sceneIds`) and `check`
+  (title, brief, constraints, doneWhen, model, `surroundingSceneIds`). Creates coordination plus a
+  **brief-ready** root scene-draft assignment and a deferred check step. **Zero provider and zero
+  canon** on create. Exact replay returns stored coordination + root assignment without reallocation.
+- `GET /coordinations` lists project coordinations with derived step status projections.
+  `GET /coordinations/:coordinationId` returns one coordination detail with the same projections.
+- `POST /coordinations/:coordinationId/steps/:stepId/continue` with
+  `expectedCoordinationVersion` and `expectedUpstreamArtifact` binds a deferred check to a new
+  **brief-ready** proposal-draft continuity assignment when the upstream **artifact-ready**
+  dependency is satisfied. Bind does not start a provider; writers use existing assignment attempt
+  routes to Start scene / Start check explicitly.
+- Coordination stores orchestration metadata only. **Applied-revision** dependencies,
+  multi-check create/bind fan-out in v1 HTTP/UI, and coordination-level **cancel** routes remain
+  post-CP5 deferrals (child assignment recover/cancel from CP5a satisfies v1 cancellation).
+  Migration `0029` is checked in; not production-deployed.
 
 These are first-party human review/apply routes. They do not grant external MCP clients direct
-canonical-write authority. MCP bindings remain the later CP6 checkpoint.
+canonical-write authority. Scoped MCP read/propose bindings for story-work (CP6, local) use the
+closed grant tool enum and local bridge; review/apply/recovery manage remain first-party. Capability
+registry records concrete MCP tool bindings for granted read/propose surfaces with permanent
+exceptions on review, apply, recovery manage, grant admin, credentials, and canonical mutation.

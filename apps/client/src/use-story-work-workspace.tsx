@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, Text } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import {
   canonicalJsonStringify,
   validateCharacterCreateV2,
@@ -14,6 +14,8 @@ import {
   type StoryStructureOperationId,
   type StoryWorkAssignment,
   type StoryWorkAssignmentId,
+  type StoryWorkCoordinationId,
+  type StoryWorkCoordinationStepProjection,
   type StoryWorkTaskKind
 } from "@ghostwriter/core";
 import {
@@ -22,15 +24,22 @@ import {
   STORY_WORK_HEADING_NATIVE_ID,
   StoryCheckReview,
   StoryStructureReview,
+  StoryWorkCoordinationReview,
   StoryWorkPanel,
+  buildStoryWorkCoordinationReviewStepView,
+  storyWorkCoordinationReviewActionLabel,
   ghostwriterTheme,
   storyWorkAssignmentButtonNativeId,
+  storyWorkCoordinationButtonNativeId,
   type SceneReviewApplyRequest,
   type SceneReviewDestination,
   type SceneStoryWorkRevisionPrefill,
   type StoryStructureReviewPreviewBinding,
   type StoryWorkOutlineBookOption,
   type StoryWorkPanelRevisePrefill,
+  type StoryWorkCoordinationCardSummary,
+  type StoryWorkCoordinationReviewStepActionKind,
+  type StoryWorkCoordinationReviewStepViewModel,
   type SubmitStoryWorkBrief,
   type WorkspaceAvailableModel
 } from "@ghostwriter/ui";
@@ -50,14 +59,19 @@ import {
   applySceneStoryWork,
   applyStructureStoryWork,
   GhostwriterApiError,
+  recoverActiveStoryWorkAttempt,
   completeStoryCheckReview,
+  continueStoryWorkCoordinationStep,
   createCharacterStoryWorkAssignment,
   createCheckStoryWorkAssignment,
   createOutlineStoryWorkAssignment,
   createSceneStoryWorkAssignment,
+  createStoryWorkCoordination,
   getProject,
   getStoryWorkAssignment,
+  getStoryWorkCoordination,
   listStoryWorkAssignments,
+  listStoryWorkCoordinations,
   openStoryCheckReview,
   previewStoryStructureStoryWork,
   resolveStoryCheckFinding,
@@ -70,8 +84,33 @@ import {
   startStoryStructureAttempt,
   type ApplySceneStoryWorkCanvasPlacement,
   type ApplyStructureStoryWorkCanvasPlacement,
-  type StoryWorkDetailResponse
+  type StoryWorkCoordinationDetailResponse,
+  type StoryWorkDetailResponse,
+  type StoryWorkRecoveryAction
 } from "./api.js";
+import {
+  buildStoryWorkCoordinationCheckAttemptInput,
+  buildStoryWorkCoordinationCreateInput,
+  buildStoryWorkCoordinationRootAttemptInput,
+  deriveStoryWorkCoordinationReloadAutoAction,
+  deriveStoryWorkCoordinationStepAction,
+  presentStoryWorkCoordinationCard,
+  releaseStoryWorkCoordinationContinue,
+  reloadStoryWorkCoordinationWorkspaceDetail,
+  storyWorkCoordinationContinueSemanticFingerprint,
+  storyWorkCoordinationTransitionConflictRequiresDetailRefresh,
+  tryAcquireStoryWorkCoordinationContinue,
+  StoryWorkCoordinationCreateInputError,
+  type StoryWorkCoordinationStepAction,
+  type StoryWorkCoordinationWorkspaceState
+} from "./story-work-coordination-workspace.js";
+import {
+  messageForStoryWorkRecoveryFailure,
+  presentStoryWorkReloadRecovery,
+  storyWorkNonReviewableStatusLine,
+  storyWorkRecoverySuccessMessage,
+  storyWorkReloadRecoveryShowsRetry
+} from "./story-work-recovery-presentation.js";
 import {
   buildCheckStoryWorkCreateInput,
   buildProposalCheckTargets,
@@ -225,6 +264,124 @@ function suggestedSceneTitleFromBrief(brief: string): string | undefined {
   return line.length > 80 ? `${line.slice(0, 77)}…` : line;
 }
 
+const COORDINATION_STRUCTURAL_TITLE = "Scene + continuity check";
+const COORDINATION_SCENE_STEP_TITLE = "Draft scene";
+const COORDINATION_CHECK_STEP_TITLE = "Check proposal";
+
+function coordinationChildAssignmentMap(
+  detail: StoryWorkCoordinationDetailResponse,
+  extra?: ReadonlyMap<StoryWorkAssignmentId, StoryWorkAssignment>
+): ReadonlyMap<StoryWorkAssignmentId, StoryWorkAssignment> {
+  const map = new Map<StoryWorkAssignmentId, StoryWorkAssignment>();
+  map.set(detail.rootAssignment.id, detail.rootAssignment);
+  if (extra !== undefined) {
+    for (const [id, assignment] of extra) map.set(id, assignment);
+  }
+  return map;
+}
+
+function coordinationStepCheckBound(
+  detail: StoryWorkCoordinationDetailResponse,
+  stepProjection: StoryWorkCoordinationStepProjection
+): boolean {
+  if (stepProjection.kind !== "proposal-continuity-check") return false;
+  const definition = detail.coordination.steps.find((entry) => entry.stepId === stepProjection.stepId);
+  if (
+    definition?.kind === "proposal-continuity-check" &&
+    definition.binding !== undefined
+  ) {
+    return true;
+  }
+  return detail.childAssignmentSummaries.some((entry) => entry.stepId === stepProjection.stepId);
+}
+
+function coordinationStepAssignmentStatus(
+  detail: StoryWorkCoordinationDetailResponse,
+  stepProjection: StoryWorkCoordinationStepProjection,
+  childMap: ReadonlyMap<StoryWorkAssignmentId, StoryWorkAssignment>
+): StoryWorkAssignment["status"] | undefined {
+  if (stepProjection.kind === "scene-draft") return detail.rootAssignment.status;
+  if (stepProjection.state === "blocked") return undefined;
+  if (
+    stepProjection.state === "ready" &&
+    stepProjection.kind === "proposal-continuity-check" &&
+    stepProjection.resolvedDependency !== undefined
+  ) {
+    return undefined;
+  }
+  const assignmentId = stepProjection.assignmentId;
+  if (assignmentId === undefined) {
+    return detail.childAssignmentSummaries.find((entry) => entry.stepId === stepProjection.stepId)
+      ?.status;
+  }
+  return (
+    childMap.get(assignmentId)?.status ??
+    detail.childAssignmentSummaries.find((entry) => entry.stepId === stepProjection.stepId)?.status
+  );
+}
+
+function clientCoordinationActionKind(
+  action: StoryWorkCoordinationStepAction
+): StoryWorkCoordinationReviewStepActionKind | undefined {
+  if (action.kind === "none") return undefined;
+  return action.kind;
+}
+
+function buildCoordinationReviewSteps(
+  detail: StoryWorkCoordinationDetailResponse,
+  extraAssignments?: ReadonlyMap<StoryWorkAssignmentId, StoryWorkAssignment>
+): readonly StoryWorkCoordinationReviewStepViewModel[] {
+  const childMap = coordinationChildAssignmentMap(detail, extraAssignments);
+  return Object.freeze(
+    detail.projection.steps.map((stepProjection) => {
+      const clientAction = deriveStoryWorkCoordinationStepAction({
+        detail,
+        stepProjection,
+        childAssignmentsById: childMap
+      });
+      const assignmentStatus = coordinationStepAssignmentStatus(
+        detail,
+        stepProjection,
+        childMap
+      );
+      const continueCheckReady =
+        stepProjection.state === "ready" &&
+        stepProjection.kind === "proposal-continuity-check" &&
+        stepProjection.resolvedDependency !== undefined;
+      const view = buildStoryWorkCoordinationReviewStepView(
+        Object.freeze({
+          stepId: stepProjection.stepId,
+          title: stepProjection.title,
+          kind: stepProjection.kind,
+          state: stepProjection.state,
+          ...(stepProjection.state === "blocked"
+            ? { blockedReasons: stepProjection.reasons }
+            : {}),
+          ...(assignmentStatus === undefined ? {} : { assignmentStatus }),
+          ...(continueCheckReady ? { continueCheckReady: true } : {}),
+          ...(coordinationStepCheckBound(detail, stepProjection)
+            ? { checkBound: true }
+            : {})
+        })
+      );
+      const expectedKind = clientCoordinationActionKind(clientAction);
+      if (expectedKind !== undefined && view.action?.kind !== expectedKind) {
+        return Object.freeze({
+          ...view,
+          action: Object.freeze({
+            kind: expectedKind,
+            label: storyWorkCoordinationReviewActionLabel(expectedKind)
+          })
+        });
+      }
+      if (expectedKind === undefined) {
+        return Object.freeze({ ...view, action: undefined });
+      }
+      return view;
+    })
+  );
+}
+
 function sceneReviewDestination(
   project: ProjectNavigator,
   assignment: StoryWorkAssignment,
@@ -302,9 +459,32 @@ export function useStoryWorkWorkspace(input: Readonly<{
   const applyStructureRequest = useRef<{ fingerprint: string; key: string } | undefined>(undefined);
   const returnFocusTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [operationPending, setOperationPending] = useState(false);
+  const [recoveryNotice, setRecoveryNotice] = useState<string>();
   const [structurePreviewCache, setStructurePreviewCache] = useState<
     Readonly<{ scopeKey: string; binding: StoryStructureReviewPreviewBinding }> | undefined
   >(undefined);
+  const [coordinations, setCoordinations] = useState<
+    readonly StoryWorkCoordinationDetailResponse[]
+  >([]);
+  const [coordinationsLoading, setCoordinationsLoading] = useState(false);
+  const [coordinationsError, setCoordinationsError] = useState<string>();
+  const [coordinationDetail, setCoordinationDetail] = useState<
+    StoryWorkCoordinationDetailResponse | undefined
+  >(undefined);
+  const [coordinationReviewOpen, setCoordinationReviewOpen] = useState(false);
+  const [coordinationMessage, setCoordinationMessage] = useState<string>();
+  const [coordinationError, setCoordinationError] = useState<string>();
+  const [coordinationChildAssignments, setCoordinationChildAssignments] = useState<
+    ReadonlyMap<StoryWorkAssignmentId, StoryWorkAssignment>
+  >(new Map());
+  const coordinationCreateRequest = useRef<
+    { fingerprint: string; key: string; coordinationId?: StoryWorkCoordinationId } | undefined
+  >(undefined);
+  const coordinationAttemptKeys = useRef<
+    Map<string, Readonly<{ fingerprint: string; key: string }>>
+  >(new Map());
+  const coordinationWorkspaceRef = useRef<StoryWorkCoordinationWorkspaceState>({});
+  const pendingCoordinationFocusRef = useRef<StoryWorkCoordinationId | undefined>(undefined);
 
   function clearStructurePreviewBinding() {
     setStructurePreviewCache(undefined);
@@ -332,12 +512,29 @@ export function useStoryWorkWorkspace(input: Readonly<{
     openSequence.current += 1;
     cancelReturnFocus();
     const assignmentId = detail?.assignment.id;
+    const coordinationFocusId = pendingCoordinationFocusRef.current;
+    pendingCoordinationFocusRef.current = undefined;
     const epoch = scopeEpoch.current;
     setReviewOpen(false);
+    if (coordinationFocusId !== undefined) {
+      void loadCoordinationDetail(coordinationFocusId, {
+        openReview: false,
+        clearAttemptKeys: true,
+        manageBusy: false
+      });
+    }
     if (!restoreFocus) return;
     returnFocusTimer.current = setTimeout(() => {
       returnFocusTimer.current = undefined;
       if (scopeEpoch.current !== epoch) return;
+      if (
+        coordinationFocusId !== undefined &&
+        focusVisibleStoryWorkTarget(
+          storyWorkCoordinationButtonNativeId(coordinationFocusId)
+        )
+      ) {
+        return;
+      }
       if (
         assignmentId !== undefined &&
         focusVisibleStoryWorkTarget(storyWorkAssignmentButtonNativeId(assignmentId))
@@ -346,10 +543,47 @@ export function useStoryWorkWorkspace(input: Readonly<{
     }, 30);
   }
 
+  function closeCoordinationReview(restoreFocus = false) {
+    if (operationPending) return;
+    cancelReturnFocus();
+    const coordinationId = coordinationDetail?.coordination.id;
+    const epoch = scopeEpoch.current;
+    setCoordinationReviewOpen(false);
+    if (!restoreFocus || coordinationId === undefined) return;
+    returnFocusTimer.current = setTimeout(() => {
+      returnFocusTimer.current = undefined;
+      if (scopeEpoch.current !== epoch) return;
+      focusVisibleStoryWorkTarget(storyWorkCoordinationButtonNativeId(coordinationId));
+    }, 30);
+  }
+
+  function resetCoordinationAttemptKeys() {
+    coordinationAttemptKeys.current = new Map();
+  }
+
+  function coordinationAttemptKey(
+    assignmentId: StoryWorkAssignmentId,
+    fingerprint: string
+  ): string {
+    const current = coordinationAttemptKeys.current.get(assignmentId);
+    if (current?.fingerprint !== fingerprint) {
+      coordinationAttemptKeys.current.set(
+        assignmentId,
+        Object.freeze({ fingerprint, key: crypto.randomUUID() })
+      );
+    }
+    return coordinationAttemptKeys.current.get(assignmentId)!.key;
+  }
+
+  function clearCoordinationAttemptKey(assignmentId: StoryWorkAssignmentId) {
+    coordinationAttemptKeys.current.delete(assignmentId);
+  }
+
   useEffect(() => {
     cancelReturnFocus();
     setProjectRefreshError(undefined); retryRequest.current = undefined;
     setPanelOpen(false); setAssignments([]); setDetail(undefined); setReviewOpen(false); setReviewDirty(false); setError(undefined);
+    setRecoveryNotice(undefined);
     setRequestedKnowledgeId(undefined); submitRequest.current = undefined; revisionRequest.current = undefined;
     applyCharacterRequest.current = undefined; applySceneRequest.current = undefined;
     applyStructureRequest.current = undefined;
@@ -357,6 +591,18 @@ export function useStoryWorkWorkspace(input: Readonly<{
     setRevisePrefill(undefined);
     setSceneReviewRevisionPrefill(undefined);
     clearStructurePreviewBinding();
+    setCoordinations([]);
+    setCoordinationsLoading(false);
+    setCoordinationsError(undefined);
+    setCoordinationDetail(undefined);
+    setCoordinationReviewOpen(false);
+    setCoordinationMessage(undefined);
+    setCoordinationError(undefined);
+    setCoordinationChildAssignments(new Map());
+    coordinationCreateRequest.current = undefined;
+    coordinationWorkspaceRef.current = {};
+    resetCoordinationAttemptKeys();
+    pendingCoordinationFocusRef.current = undefined;
     openSequence.current += 1; setOperationPending(false);
     return cancelReturnFocus;
   }, [scopeKey]);
@@ -369,10 +615,347 @@ export function useStoryWorkWorkspace(input: Readonly<{
     if (!projectId) return;
     const scope = scopeEpoch.current;
     setLoading(true);
-    try { const next = await listStoryWorkAssignments(projectId); if (scope === scopeEpoch.current) { setAssignments(next); setError(undefined); } }
-    catch (cause) { if (scope === scopeEpoch.current) setError(cause instanceof Error ? cause.message : "Assignments could not be loaded."); }
-    finally { if (scope === scopeEpoch.current) setLoading(false); }
+    setCoordinationsLoading(true);
+    try {
+      const [nextAssignments, nextCoordinations] = await Promise.all([
+        listStoryWorkAssignments(projectId),
+        listStoryWorkCoordinations(projectId)
+      ]);
+      if (scope === scopeEpoch.current) {
+        setAssignments(nextAssignments);
+        setCoordinations(nextCoordinations.coordinations);
+        setError(undefined);
+        setCoordinationsError(undefined);
+        resetCoordinationAttemptKeys();
+      }
+    } catch (cause) {
+      if (scope === scopeEpoch.current) {
+        const message =
+          cause instanceof Error ? cause.message : "Story work could not be loaded.";
+        setError(message);
+        setCoordinationsError(message);
+      }
+    } finally {
+      if (scope === scopeEpoch.current) {
+        setLoading(false);
+        setCoordinationsLoading(false);
+      }
+    }
   }, [projectId]);
+
+  function applyCoordinationDetailState(
+    next: StoryWorkCoordinationDetailResponse,
+    options?: Readonly<{ openReview?: boolean; clearAttemptKeys?: boolean }>
+  ) {
+    const reloadAction = deriveStoryWorkCoordinationReloadAutoAction(
+      coordinationWorkspaceRef.current,
+      next
+    );
+    if (reloadAction.kind !== "none") {
+      throw new Error("Reloaded coordinated story work cannot start an action automatically.");
+    }
+    coordinationWorkspaceRef.current = reloadStoryWorkCoordinationWorkspaceDetail(
+      coordinationWorkspaceRef.current,
+      next
+    );
+    if (options?.clearAttemptKeys !== false) resetCoordinationAttemptKeys();
+    setCoordinationDetail(next);
+    setCoordinationChildAssignments(new Map());
+    upsert(next.rootAssignment);
+    setCoordinations((current) => {
+      const without = current.filter(
+        (entry) => entry.coordination.id !== next.coordination.id
+      );
+      return Object.freeze([next, ...without]);
+    });
+    if (options?.openReview) {
+      openSequence.current += 1;
+      setReviewOpen(false);
+      setCoordinationReviewOpen(true);
+    }
+  }
+
+  function handleCoordinationUnavailable(coordinationId: StoryWorkCoordinationId) {
+    setCoordinationReviewOpen(false);
+    setCoordinationDetail(undefined);
+    setCoordinations((current) =>
+      current.filter((entry) => entry.coordination.id !== coordinationId)
+    );
+    setCoordinationError(
+      "This coordinated story work is unavailable. Refresh story work and try again."
+    );
+  }
+
+  async function fetchAndApplyCoordinationDetail(
+    coordinationId: StoryWorkCoordinationId,
+    options?: Readonly<{ openReview?: boolean; clearAttemptKeys?: boolean }>
+  ) {
+    if (!projectId) return;
+    const scope = scopeEpoch.current;
+    const next = await getStoryWorkCoordination(projectId, coordinationId);
+    if (scope !== scopeEpoch.current) return;
+    applyCoordinationDetailState(next, options);
+  }
+
+  async function loadCoordinationDetail(
+    coordinationId: StoryWorkCoordinationId,
+    options?: Readonly<{
+      openReview?: boolean;
+      clearAttemptKeys?: boolean;
+      manageBusy?: boolean;
+    }>
+  ) {
+    if (!projectId || (options?.manageBusy !== false && operationPending)) return;
+    const scope = scopeEpoch.current;
+    if (options?.manageBusy !== false) setOperationPending(true);
+    setCoordinationError(undefined);
+    try {
+      await fetchAndApplyCoordinationDetail(coordinationId, options);
+    } catch (cause) {
+      if (scope !== scopeEpoch.current) return;
+      if (cause instanceof GhostwriterApiError && cause.status === 404) {
+        handleCoordinationUnavailable(coordinationId);
+        return;
+      }
+      setCoordinationError(
+        cause instanceof Error
+          ? cause.message
+          : "Coordinated story work could not be loaded."
+      );
+    } finally {
+      if (options?.manageBusy !== false && scope === scopeEpoch.current) {
+        setOperationPending(false);
+      }
+    }
+  }
+
+  async function openCoordination(coordinationId: StoryWorkCoordinationId) {
+    if (reviewDirty || operationPending) return;
+    setCoordinationMessage(undefined);
+    await loadCoordinationDetail(coordinationId, { openReview: true });
+  }
+
+  async function refreshCoordinationDetailOnly() {
+    const coordinationId = coordinationDetail?.coordination.id;
+    if (!projectId || coordinationId === undefined || operationPending) return;
+    const scope = scopeEpoch.current;
+    setOperationPending(true);
+    setCoordinationError(undefined);
+    try {
+      await fetchAndApplyCoordinationDetail(coordinationId, { clearAttemptKeys: true });
+      if (scope === scopeEpoch.current) {
+        setCoordinationMessage("Coordination details refreshed.");
+      }
+    } catch (cause) {
+      if (scope !== scopeEpoch.current) return;
+      if (cause instanceof GhostwriterApiError && cause.status === 404) {
+        handleCoordinationUnavailable(coordinationId);
+        return;
+      }
+      throw cause;
+    } finally {
+      if (scope === scopeEpoch.current) setOperationPending(false);
+    }
+  }
+
+  async function runCoordinationStepAction(
+    stepId: string,
+    kind: StoryWorkCoordinationReviewStepActionKind
+  ) {
+    if (!projectId || !coordinationDetail || operationPending) return;
+    const scope = scopeEpoch.current;
+    const stepProjection = coordinationDetail.projection.steps.find(
+      (entry) => entry.stepId === stepId
+    );
+    if (stepProjection === undefined) {
+      setCoordinationError("Refresh coordination details before trying again.");
+      return;
+    }
+    const childMap = coordinationChildAssignmentMap(
+      coordinationDetail,
+      coordinationChildAssignments
+    );
+    const clientAction = deriveStoryWorkCoordinationStepAction({
+      detail: coordinationDetail,
+      stepProjection,
+      childAssignmentsById: childMap
+    });
+    const clientKind = clientCoordinationActionKind(clientAction);
+    if (clientKind !== kind) {
+      setCoordinationError("Refresh coordination details before trying again.");
+      return;
+    }
+
+    if (
+      kind === "open-root-review" ||
+      kind === "open-check-review" ||
+      kind === "recover-child" ||
+      kind === "retry-child"
+    ) {
+      if (
+        clientAction.kind !== "open-root-review" &&
+        clientAction.kind !== "open-check-review" &&
+        clientAction.kind !== "recover-child" &&
+        clientAction.kind !== "retry-child"
+      ) {
+        return;
+      }
+      const assignmentId = clientAction.assignmentId;
+      pendingCoordinationFocusRef.current = coordinationDetail.coordination.id;
+      setCoordinationReviewOpen(false);
+      setCoordinationMessage(undefined);
+      setCoordinationError(undefined);
+      await openAssignment(assignmentId, { fromCoordination: true });
+      return;
+    }
+
+    setOperationPending(true);
+    setCoordinationMessage(undefined);
+    setCoordinationError(undefined);
+    try {
+      if (kind === "start-root") {
+        if (clientAction.kind !== "start-root") return;
+        const fingerprint = JSON.stringify({
+          coordinationId: coordinationDetail.coordination.id,
+          assignmentId: clientAction.assignmentId,
+          version: coordinationDetail.rootAssignment.version
+        });
+        const attemptKey = coordinationAttemptKey(clientAction.assignmentId, fingerprint);
+        const started = await startSceneStoryWorkAttempt(
+          buildStoryWorkCoordinationRootAttemptInput({
+            projectId,
+            rootAssignment: coordinationDetail.rootAssignment,
+            callerIdempotencyKey: attemptKey
+          })
+        );
+        if (scope !== scopeEpoch.current) return;
+        upsert(started.state.assignment);
+        clearCoordinationAttemptKey(clientAction.assignmentId);
+        await fetchAndApplyCoordinationDetail(coordinationDetail.coordination.id, {
+          openReview: true,
+          clearAttemptKeys: false
+        });
+        return;
+      }
+
+      if (kind === "continue-check") {
+        if (clientAction.kind !== "continue-check") return;
+        const fingerprint = storyWorkCoordinationContinueSemanticFingerprint({
+          coordinationId: coordinationDetail.coordination.id,
+          stepId: clientAction.stepId,
+          expectedCoordinationVersion: clientAction.request.expectedCoordinationVersion,
+          expectedUpstreamArtifact: clientAction.request.expectedUpstreamArtifact
+        });
+        const acquired = tryAcquireStoryWorkCoordinationContinue(
+          coordinationWorkspaceRef.current,
+          fingerprint
+        );
+        if (!acquired.accepted) return;
+        coordinationWorkspaceRef.current = acquired.next;
+        try {
+          const continued = await continueStoryWorkCoordinationStep({
+            projectId,
+            coordinationId: coordinationDetail.coordination.id,
+            stepId: clientAction.stepId,
+            ...clientAction.request
+          });
+          if (scope !== scopeEpoch.current) return;
+          coordinationWorkspaceRef.current = releaseStoryWorkCoordinationContinue(
+            coordinationWorkspaceRef.current,
+            fingerprint
+          );
+          upsert(continued.rootAssignment);
+          upsert(continued.checkAssignment);
+          setCoordinationChildAssignments((current) => {
+            const map = new Map(current);
+            map.set(continued.checkAssignment.id, continued.checkAssignment);
+            return map;
+          });
+          await fetchAndApplyCoordinationDetail(coordinationDetail.coordination.id, {
+            openReview: true,
+            clearAttemptKeys: false
+          });
+          if (scope !== scopeEpoch.current) return;
+          setCoordinationMessage(
+            continued.replayed
+              ? "Continuity check was already bound to the upstream proposal."
+              : "Continuity check bound to the upstream proposal. Start it when you are ready."
+          );
+        } catch (cause) {
+          coordinationWorkspaceRef.current = releaseStoryWorkCoordinationContinue(
+            coordinationWorkspaceRef.current,
+            fingerprint
+          );
+          if (scope !== scopeEpoch.current) return;
+          if (storyWorkCoordinationTransitionConflictRequiresDetailRefresh(cause)) {
+            await fetchAndApplyCoordinationDetail(coordinationDetail.coordination.id, {
+              openReview: true,
+              clearAttemptKeys: false
+            });
+            if (scope === scopeEpoch.current) {
+              setCoordinationError(
+                `${cause.message} Refresh coordination and try again.`
+              );
+            }
+            return;
+          }
+          throw cause;
+        }
+        return;
+      }
+
+      if (kind === "start-check") {
+        if (clientAction.kind !== "start-check") return;
+        let checkAssignment = coordinationChildAssignments.get(clientAction.assignmentId);
+        if (checkAssignment === undefined) {
+          const loaded = await getStoryWorkAssignment(projectId, clientAction.assignmentId);
+          if (scope !== scopeEpoch.current) return;
+          checkAssignment = loaded.assignment;
+          setCoordinationChildAssignments((current) => {
+            const map = new Map(current);
+            map.set(checkAssignment!.id, checkAssignment!);
+            return map;
+          });
+        }
+        const fingerprint = JSON.stringify({
+          coordinationId: coordinationDetail.coordination.id,
+          assignmentId: checkAssignment.id,
+          version: checkAssignment.version
+        });
+        const attemptKey = coordinationAttemptKey(checkAssignment.id, fingerprint);
+        const started = await startStoryCheckAttempt(
+          buildStoryWorkCoordinationCheckAttemptInput({
+            projectId,
+            checkAssignment,
+            callerIdempotencyKey: attemptKey
+          }) as Parameters<typeof startStoryCheckAttempt>[0]
+        );
+        if (scope !== scopeEpoch.current) return;
+        upsert(started.state.assignment);
+        setCoordinationChildAssignments((current) => {
+          const map = new Map(current);
+          map.set(started.state.assignment.id, started.state.assignment);
+          return map;
+        });
+        clearCoordinationAttemptKey(checkAssignment.id);
+        await fetchAndApplyCoordinationDetail(coordinationDetail.coordination.id, {
+          openReview: true,
+          clearAttemptKeys: false
+        });
+        return;
+      }
+    } catch (cause) {
+      if (scope === scopeEpoch.current) {
+        setCoordinationError(
+          cause instanceof Error
+            ? cause.message
+            : "The coordination action could not be completed."
+        );
+      }
+    } finally {
+      if (scope === scopeEpoch.current) setOperationPending(false);
+    }
+  }
 
   useEffect(() => { if (panelOpen) void refresh(); }, [panelOpen, refresh]);
 
@@ -405,11 +988,77 @@ export function useStoryWorkWorkspace(input: Readonly<{
     return reviewSceneStoryWork({ projectId, assignmentId: id, expectedAssignmentVersion: assignment.version, artifact, action: "open" });
   }
 
-  async function openAssignment(id: StoryWorkAssignmentId) {
-    if (!projectId || reviewDirty || operationPending) return;
+  async function refreshAssignmentDetail(assignmentId: StoryWorkAssignmentId) {
+    if (!projectId || operationPending) return;
+    const scope = scopeEpoch.current;
+    setOperationPending(true);
+    setError(undefined);
+    try {
+      const next = await getStoryWorkAssignment(projectId, assignmentId);
+      if (scope !== scopeEpoch.current) return;
+      retryRequest.current = undefined;
+      setDetail(next);
+      upsert(next.assignment);
+      setRecoveryNotice(undefined);
+    } catch (cause) {
+      if (scope === scopeEpoch.current) {
+        setError(cause instanceof Error ? cause.message : "The assignment could not be refreshed.");
+      }
+    } finally {
+      if (scope === scopeEpoch.current) setOperationPending(false);
+    }
+  }
+
+  async function recoverStoryWork(action: StoryWorkRecoveryAction) {
+    if (!projectId || !detail?.assignment || operationPending) return;
+    const recovery = detail.recovery;
+    if (recovery?.status !== "active-or-interrupted") return;
+    const scope = scopeEpoch.current;
+    setOperationPending(true);
+    setError(undefined);
+    try {
+      const result = await recoverActiveStoryWorkAttempt({
+        projectId,
+        assignmentId: detail.assignment.id,
+        expectedAssignmentVersion: recovery.expectedAssignmentVersion,
+        runId: recovery.runId,
+        action
+      });
+      if (scope !== scopeEpoch.current) return;
+      retryRequest.current = undefined;
+      setDetail({
+        ...detail,
+        assignment: result.assignment,
+        attempt: result.attempt,
+        run: result.run,
+        recovery: undefined
+      });
+      upsert(result.assignment);
+      setRecoveryNotice(storyWorkRecoverySuccessMessage(action, result.replayed));
+    } catch (cause) {
+      if (scope === scopeEpoch.current) {
+        setError(messageForStoryWorkRecoveryFailure(cause));
+      }
+    } finally {
+      if (scope === scopeEpoch.current) setOperationPending(false);
+    }
+  }
+
+  async function openAssignment(
+    id: StoryWorkAssignmentId,
+    options: Readonly<{ fromCoordination?: boolean }> = {}
+  ) {
+    if (
+      !projectId ||
+      reviewDirty ||
+      operationPending ||
+      (coordinationReviewOpen && options.fromCoordination !== true)
+    ) return;
     const scope = scopeEpoch.current;
     const sequence = ++openSequence.current;
     setError(undefined);
+    setRecoveryNotice(undefined);
+    retryRequest.current = undefined;
     try {
       let next = await getStoryWorkAssignment(projectId, id);
       if (scope !== scopeEpoch.current || sequence !== openSequence.current) return;
@@ -429,6 +1078,71 @@ export function useStoryWorkWorkspace(input: Readonly<{
   async function submit(brief: SubmitStoryWorkBrief) {
     if (!input.project) throw new Error("Open a project before starting story work.");
     const scope = scopeEpoch.current;
+
+    if (brief.taskKind === "scene" && brief.coordinatedCheck !== undefined) {
+      const createFingerprint = JSON.stringify({ projectId: input.project.id, ...brief });
+      if (coordinationCreateRequest.current?.fingerprint !== createFingerprint) {
+        coordinationCreateRequest.current = {
+          fingerprint: createFingerprint,
+          key: crypto.randomUUID()
+        };
+      }
+      const createRequest = coordinationCreateRequest.current;
+      setOperationPending(true);
+      setCoordinationError(undefined);
+      setCoordinationMessage(undefined);
+      try {
+        const availableSceneIds = new Set(
+          input.project.books
+            .filter((book) => book.archivedAt === undefined)
+            .flatMap((book) => [
+              ...book.parts.flatMap((part) =>
+                part.chapters.flatMap((chapter) => chapter.scenes)
+              ),
+              ...book.unassignedScenes
+            ])
+            .filter((scene) => scene.archivedAt === undefined)
+            .map((scene) => scene.id)
+        );
+        const createInput = buildStoryWorkCoordinationCreateInput({
+          project: input.project,
+          model: brief.model,
+          sceneIds: brief.sceneIds,
+          form: Object.freeze({
+            coordinationTitle: COORDINATION_STRUCTURAL_TITLE,
+            sceneTitle: COORDINATION_SCENE_STEP_TITLE,
+            sceneBrief: brief.brief,
+            sceneConstraints: brief.constraints,
+            sceneDoneWhen: brief.doneWhen,
+            checkTitle: COORDINATION_CHECK_STEP_TITLE,
+            checkBrief: brief.coordinatedCheck.brief,
+            checkConstraints: brief.coordinatedCheck.constraints,
+            checkDoneWhen: brief.coordinatedCheck.doneWhen
+          }),
+          idempotencyKey: createRequest.key,
+          availableSceneIds
+        });
+        const created = await createStoryWorkCoordination(createInput);
+        if (scope !== scopeEpoch.current) return;
+        upsert(created.rootAssignment);
+        createRequest.coordinationId = created.coordination.id;
+        await fetchAndApplyCoordinationDetail(created.coordination.id, { openReview: true });
+        if (scope !== scopeEpoch.current) return;
+        coordinationCreateRequest.current = undefined;
+        submitRequest.current = undefined;
+      } catch (cause) {
+        if (scope === scopeEpoch.current) {
+          if (cause instanceof StoryWorkCoordinationCreateInputError) throw cause;
+          throw cause instanceof Error
+            ? cause
+            : new Error("Coordinated story work could not be created.");
+        }
+      } finally {
+        if (scope === scopeEpoch.current) setOperationPending(false);
+      }
+      return;
+    }
+
     const fingerprint = JSON.stringify({ projectId: input.project.id, ...brief });
     if (submitRequest.current?.fingerprint !== fingerprint) submitRequest.current = { fingerprint, key: crypto.randomUUID(), attemptKey: crypto.randomUUID() };
     const request = submitRequest.current;
@@ -459,7 +1173,10 @@ export function useStoryWorkWorkspace(input: Readonly<{
             targetSceneId: brief.targetSceneId
           });
         } else if (brief.taskKind === "scene") {
-          created = await createSceneStoryWorkAssignment({ ...shared, taskKind: "scene" });
+          created = await createSceneStoryWorkAssignment({
+            ...shared,
+            taskKind: "scene"
+          });
         } else if (brief.taskKind === "outline") {
           created = await createOutlineStoryWorkAssignment(
             buildOutlineStoryWorkCreateInput(input.project, brief, request.key)
@@ -804,9 +1521,32 @@ export function useStoryWorkWorkspace(input: Readonly<{
         : undefined,
     [input.project, input.selectedSceneId]
   );
+  const coordinationSummaries = useMemo((): readonly StoryWorkCoordinationCardSummary[] => {
+    return Object.freeze(
+      coordinations.map((entry) => {
+        const card = presentStoryWorkCoordinationCard({
+          title: entry.coordination.title,
+          projection: entry.projection
+        });
+        return Object.freeze({
+          coordinationId: entry.coordination.id,
+          title: card.title,
+          statusLabel: card.status,
+          detail: entry.rootAssignment.brief
+        });
+      })
+    );
+  }, [coordinations]);
+  const coordinationReviewSteps = useMemo(
+    () =>
+      coordinationDetail === undefined
+        ? Object.freeze([])
+        : buildCoordinationReviewSteps(coordinationDetail, coordinationChildAssignments),
+    [coordinationDetail, coordinationChildAssignments]
+  );
   const panel = input.project ? <StoryWorkPanel key={scopeKey} open={panelOpen} projectTitle={input.project.title} supportedTaskKinds={["character", "scene", "outline", "revise", "check"]} models={input.models} selectedModel={input.model}
-    selectedSceneId={input.selectedSceneId} scenes={scenes} outlineBooks={outlineBooks} selectedOutlineBookId={selectedOutlineBookId} proposalCheckTargets={proposalCheckTargets} prefill={revisePrefill} assignments={assignments} loading={loading} error={error}
-    onSubmit={submit} onOpenAssignment={(id) => { void openAssignment(id); }} onRefresh={() => { void refresh(); }} onBackToChat={() => { openSequence.current += 1; setPanelOpen(false); }} onOpenSettings={input.onOpenSettings} /> : null;
+    selectedSceneId={input.selectedSceneId} scenes={scenes} outlineBooks={outlineBooks} selectedOutlineBookId={selectedOutlineBookId} proposalCheckTargets={proposalCheckTargets} prefill={revisePrefill} assignments={assignments} coordinationSummaries={coordinationSummaries} coordinationsLoading={coordinationsLoading} coordinationsError={coordinationsError} loading={loading} error={error}
+    onSubmit={submit} onOpenCoordination={(id) => { void openCoordination(id); }} onOpenAssignment={(id) => { void openAssignment(id); }} onRefresh={() => { void refresh(); }} onBackToChat={() => { openSequence.current += 1; setPanelOpen(false); setCoordinationReviewOpen(false); }} onOpenSettings={input.onOpenSettings} /> : null;
 
   const assignment = detail?.assignment;
   const characterArtifact = detail?.proposal?.outputSchemaId === "character-create-v2" && assignment?.currentArtifact ? {
@@ -1339,12 +2079,82 @@ export function useStoryWorkWorkspace(input: Readonly<{
         : null
       : null;
 
-  const review = characterReview ?? sceneReview ?? structureReview ?? checkReview ?? (reviewOpen && assignment && projectId ? <ScrollView contentContainerStyle={{ padding: 24, gap: 14 }}>
-    <Text accessibilityRole="header" style={{ fontFamily: ghostwriterTheme.fonts.story, fontSize: 26 }}>{storyWorkTaskLabel(assignment.taskKind)} assignment</Text>
+  const coordinationReview =
+    coordinationReviewOpen && coordinationDetail && projectId ? (
+      <StoryWorkCoordinationReview
+        key={coordinationDetail.coordination.id}
+        coordinationTitle={coordinationDetail.coordination.title}
+        coordinationStatusLabel={
+          presentStoryWorkCoordinationCard({
+            title: coordinationDetail.coordination.title,
+            projection: coordinationDetail.projection
+          }).status
+        }
+        coordinationVersion={coordinationDetail.projection.version}
+        steps={coordinationReviewSteps}
+        busy={operationPending}
+        error={coordinationError}
+        message={coordinationMessage}
+        onAction={(stepId, kind) => {
+          void runCoordinationStepAction(stepId, kind);
+        }}
+        onRefresh={() => {
+          void refreshCoordinationDetailOnly();
+        }}
+        onClose={() => {
+          closeCoordinationReview(true);
+        }}
+      />
+    ) : null;
+
+  const reloadRecovery =
+    reviewOpen && assignment
+      ? presentStoryWorkReloadRecovery({
+          assignmentStatus: assignment.status,
+          recovery: detail?.recovery,
+          runId: detail?.run?.id
+        })
+      : undefined;
+  const nonReviewableStatusLine =
+    assignment !== undefined
+      ? storyWorkNonReviewableStatusLine({
+          assignmentStatus: assignment.status,
+          terminalDiagnosticCode: detail?.run?.terminalDiagnosticCode
+        })
+      : "";
+  const showStoryWorkRetry =
+    assignment !== undefined &&
+    storyWorkReloadRecoveryShowsRetry({
+      assignmentStatus: assignment.status,
+      terminalDiagnosticCode: detail?.run?.terminalDiagnosticCode
+    });
+
+  const review =
+    coordinationReview ??
+    characterReview ??
+    sceneReview ??
+    structureReview ??
+    checkReview ??
+    (reviewOpen && assignment && projectId ? <ScrollView contentContainerStyle={{ padding: 24, paddingTop: 40, gap: 14 }}>
+    <Text accessibilityRole="header" style={{ fontFamily: ghostwriterTheme.fonts.story, fontSize: 26, lineHeight: 36 }}>{storyWorkTaskLabel(assignment.taskKind)} assignment</Text>
     <Text>{assignment.brief}</Text><Text>Constraints: {assignment.constraints}</Text><Text>Done when: {assignment.doneWhen}</Text><Text>Status: {assignment.status}</Text>
     {detail?.attempt?.kind === "revision" ? <Text>Revision request: {detail.attempt.instruction}</Text> : null}
-    <Text>{detail?.run?.terminalDiagnosticCode ?? "No reviewable artifact is available yet."}</Text>
-    {["brief-ready", "failed", "canceled", "stale"].includes(assignment.status) ? <Pressable accessibilityRole="button" disabled={operationPending} onPress={() => {
+    {reloadRecovery ? <View accessibilityLabel="Generation recovery" style={{ gap: 10 }}>
+      <Text>{reloadRecovery.message}</Text>
+      {reloadRecovery.technicalRunId ? <Text style={{ fontFamily: ghostwriterTheme.fonts.ui, fontSize: 12, color: ghostwriterTheme.colors.muted }}>Run ID: {reloadRecovery.technicalRunId}</Text> : null}
+      <Pressable accessibilityRole="button" disabled={operationPending || !reloadRecovery.actions.refresh} onPress={() => { void refreshAssignmentDetail(assignment.id); }}>
+        <Text>{operationPending ? "Working…" : "Refresh status"}</Text>
+      </Pressable>
+      {reloadRecovery.actions.cancel ? <Pressable accessibilityRole="button" accessibilityHint={reloadRecovery.cancelAccessibilityHint} disabled={operationPending} onPress={() => { void recoverStoryWork("cancel"); }}>
+        <Text>Cancel generation</Text>
+      </Pressable> : null}
+      {reloadRecovery.actions.markInterrupted ? <Pressable accessibilityRole="button" disabled={operationPending} onPress={() => { void recoverStoryWork("mark-interrupted"); }}>
+        <Text style={{ color: ghostwriterTheme.colors.red, fontFamily: ghostwriterTheme.fonts.uiMedium }}>Mark interrupted</Text>
+      </Pressable> : null}
+    </View> : null}
+    {!reloadRecovery ? <Text>{nonReviewableStatusLine}</Text> : null}
+    {recoveryNotice ? <Text accessibilityLiveRegion="polite" accessibilityRole="alert">{recoveryNotice}</Text> : null}
+    {showStoryWorkRetry ? <Pressable accessibilityRole="button" disabled={operationPending} onPress={() => {
       if (operationPending) return;
       setOperationPending(true);
       const scope = scopeEpoch.current;
@@ -1397,7 +2207,7 @@ export function useStoryWorkWorkspace(input: Readonly<{
         .finally(() => { if (scope === scopeEpoch.current) setOperationPending(false); });
     }}><Text>{operationPending ? "Working…" : assignment.status === "brief-ready" ? "Start this assignment" : "Try another generation"}</Text></Pressable> : null}
     {error ? <Text accessibilityRole="alert">{error}</Text> : null}
-    <Pressable accessibilityRole="button" onPress={() => { void openAssignment(assignment.id); }}><Text>Refresh assignment</Text></Pressable>
+    <Pressable accessibilityRole="button" disabled={operationPending} onPress={() => { void refreshAssignmentDetail(assignment.id); }}><Text>Refresh assignment</Text></Pressable>
     <Pressable accessibilityRole="button" onPress={() => closeReview(true)}><Text>Back to story</Text></Pressable>
   </ScrollView> : null);
 

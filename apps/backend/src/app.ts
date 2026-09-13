@@ -123,6 +123,7 @@ import { registerNextActionCoachRoutes } from "./next-action-coach-routes.js";
 import { registerStoryKnowledgeCreateRoutes } from "./story-knowledge-create-routes.js";
 import { registerCatalogPlaybookRoutes } from "./catalog-playbook-routes.js";
 import { registerStoryWorkRoutes } from "./story-work-api.js";
+import { registerLocalMcpBridgeRoutes } from "./local-mcp-bridge-routes.js";
 import type { createToolLoopProvider } from "@ghostwriter/ai";
 import {
   mapAgentGuidanceRouteError,
@@ -155,6 +156,8 @@ export type BackendDependencies = Readonly<{
    * `GHOSTWRITER_DEMO_SEED=0`. When omitted, the route is treated as disabled.
    */
   demoSeed?: Readonly<{ enabled: boolean }>;
+  /** Local/test grant-token bridge for MCP stdio parity. Default off. */
+  localMcpBridge?: Readonly<{ enabled: boolean }>;
 }>;
 
 const readerSpeakRequestSchema = z.object({
@@ -371,6 +374,11 @@ export function createApp(dependencies: BackendDependencies): Hono<BackendEnviro
   );
 
   app.get("/health", (context) => context.json({ status: "ok" }));
+
+  registerLocalMcpBridgeRoutes(app, {
+    enabled: dependencies.localMcpBridge?.enabled === true,
+    agentProvider: dependencies.agentProvider
+  });
 
   app.on(["GET", "POST"], "/api/auth/*", (context) =>
     dependencies.auth.handler(context.req.raw)

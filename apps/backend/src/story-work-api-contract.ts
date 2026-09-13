@@ -8,6 +8,8 @@ import {
   SCENE_VARIANT_NAME_MAX_LENGTH,
   STORY_STRUCTURE_MAX_OPERATIONS,
   STORY_STRUCTURE_SCHEMA_ID,
+  STORY_WORK_COORDINATION_MAX_SURROUNDING_SCENES,
+  STORY_WORK_COORDINATION_TITLE_MAX,
   isAgentModelId,
   validateStoryStructureProposalV1
 } from "@ghostwriter/core";
@@ -609,6 +611,64 @@ export const storyWorkAssignmentListQuerySchema = z
   })
   .strict();
 
+export const recoverActiveStoryWorkAttemptRequestSchema = z
+  .object({
+    expectedAssignmentVersion: positiveVersion,
+    runId: id,
+    action: z.enum(["cancel", "mark-interrupted"])
+  })
+  .strict();
+
+const coordinationWriterFields = {
+  brief: exactWriterText(20_000),
+  constraints: exactWriterText(8_000),
+  doneWhen: exactWriterText(4_000),
+  model: z.string().trim().refine(isAgentModelId, "Unsupported model.")
+} as const;
+
+const createStoryWorkCoordinationSceneStepSchema = z
+  .object({
+    title: exactWriterText(STORY_WORK_COORDINATION_TITLE_MAX),
+    ...coordinationWriterFields,
+    sceneIds: z.array(id).max(SCENE_DRAFT_V1_MAX_SOURCE_SCENES)
+  })
+  .strict()
+  .refine((body) => new Set(body.sceneIds).size === body.sceneIds.length, {
+    path: ["sceneIds"],
+    message: "Selected scene IDs must be unique."
+  });
+
+const createStoryWorkCoordinationCheckStepSchema = z
+  .object({
+    title: exactWriterText(STORY_WORK_COORDINATION_TITLE_MAX),
+    ...coordinationWriterFields,
+    surroundingSceneIds: z
+      .array(id)
+      .max(STORY_WORK_COORDINATION_MAX_SURROUNDING_SCENES)
+  })
+  .strict()
+  .refine((body) => new Set(body.surroundingSceneIds).size === body.surroundingSceneIds.length, {
+    path: ["surroundingSceneIds"],
+    message: "Surrounding scene IDs must be unique."
+  });
+
+export const createStoryWorkCoordinationRequestSchema = z
+  .object({
+    expectedProjectVersion: positiveVersion,
+    idempotencyKey: id,
+    title: exactWriterText(STORY_WORK_COORDINATION_TITLE_MAX),
+    scene: createStoryWorkCoordinationSceneStepSchema,
+    check: createStoryWorkCoordinationCheckStepSchema
+  })
+  .strict();
+
+export const continueStoryWorkCoordinationStepRequestSchema = z
+  .object({
+    expectedCoordinationVersion: positiveVersion,
+    expectedUpstreamArtifact: storyWorkArtifactSchema
+  })
+  .strict();
+
 export type SubmitCharacterStoryWorkRequest = z.infer<
   typeof submitCharacterStoryWorkRequestSchema
 >;
@@ -659,4 +719,120 @@ export type EditStructureStoryWorkReviewRequest = z.infer<
 >;
 export type ApplyStructureStoryWorkRequest = z.infer<
   typeof applyStructureStoryWorkRequestSchema
+>;
+export type RecoverActiveStoryWorkAttemptRequest = z.infer<
+  typeof recoverActiveStoryWorkAttemptRequestSchema
+>;
+export type CreateStoryWorkCoordinationRequest = z.infer<
+  typeof createStoryWorkCoordinationRequestSchema
+>;
+export type ContinueStoryWorkCoordinationStepRequest = z.infer<
+  typeof continueStoryWorkCoordinationStepRequestSchema
+>;
+
+const localMcpBridgeSubmissionBase = z
+  .object({
+    expectedProjectVersion: positiveVersion,
+    assignmentIdempotencyKey: id,
+    attemptIdempotencyKey: id,
+    brief: exactWriterText(20_000),
+    constraints: exactWriterText(8_000),
+    doneWhen: exactWriterText(4_000),
+    sceneIds: z.array(id).max(SCENE_DRAFT_V1_MAX_SOURCE_SCENES),
+    model: z.string().trim().refine(isAgentModelId, "Unsupported model.")
+  })
+  .strict();
+
+export const localMcpBridgeCharacterSubmitRequestSchema = uniqueSelectedScenes(
+  localMcpBridgeSubmissionBase
+);
+
+export const localMcpBridgeSceneSubmitRequestSchema = uniqueSelectedScenes(
+  localMcpBridgeSubmissionBase
+    .extend({
+      captureId: id.optional()
+    })
+    .strict()
+);
+
+const localMcpBridgeCheckSubmitBase = localMcpBridgeSubmissionBase
+  .extend({
+    specialist: z.literal("continuity"),
+    targetSceneId: id
+  })
+  .strict();
+
+export const localMcpBridgeAppliedSceneCheckSubmitRequestSchema =
+  uniqueSelectedScenes(
+    localMcpBridgeCheckSubmitBase
+      .extend({
+        checkMode: z.literal("applied-scene")
+      })
+      .strict()
+  );
+
+export const localMcpBridgeProposalDraftCheckSubmitRequestSchema =
+  uniqueSelectedScenes(
+    localMcpBridgeCheckSubmitBase
+      .extend({
+        checkMode: z.literal("proposal-draft"),
+        sourceAssignmentId: id,
+        sourceArtifact: storyWorkArtifactSchema
+      })
+      .strict()
+      .superRefine((body, context) => {
+        if (body.sceneIds.includes(body.targetSceneId)) {
+          context.addIssue({
+            code: "custom",
+            message: "Proposal-draft checks must not include the assess scene in sceneIds.",
+            path: ["sceneIds"]
+          });
+        }
+      })
+  );
+
+export const localMcpBridgeCheckSubmitRequestSchema = z.discriminatedUnion(
+  "checkMode",
+  [
+    localMcpBridgeAppliedSceneCheckSubmitRequestSchema,
+    localMcpBridgeProposalDraftCheckSubmitRequestSchema
+  ]
+);
+
+export const localMcpBridgeStructureSubmitRequestSchema = uniqueSelectedScenes(
+  localMcpBridgeSubmissionBase
+    .extend({
+      targetBookId: id
+    })
+    .strict()
+);
+
+export type LocalMcpBridgeCharacterSubmitRequest = z.infer<
+  typeof localMcpBridgeCharacterSubmitRequestSchema
+>;
+export type LocalMcpBridgeSceneSubmitRequest = z.infer<
+  typeof localMcpBridgeSceneSubmitRequestSchema
+>;
+export type LocalMcpBridgeAppliedSceneCheckSubmitRequest = z.infer<
+  typeof localMcpBridgeAppliedSceneCheckSubmitRequestSchema
+>;
+export type LocalMcpBridgeProposalDraftCheckSubmitRequest = z.infer<
+  typeof localMcpBridgeProposalDraftCheckSubmitRequestSchema
+>;
+export type LocalMcpBridgeCheckSubmitRequest = z.infer<
+  typeof localMcpBridgeCheckSubmitRequestSchema
+>;
+export type LocalMcpBridgeStructureSubmitRequest = z.infer<
+  typeof localMcpBridgeStructureSubmitRequestSchema
+>;
+
+export const localMcpBridgeStructurePreviewRequestSchema =
+  previewStructureStoryWorkRequestSchema
+    .extend({
+      assignmentId: id
+    })
+    .strict();
+
+export type LocalMcpBridgeStructurePreviewRequest = z.infer<
+  typeof localMcpBridgeStructurePreviewRequestSchema
 >;

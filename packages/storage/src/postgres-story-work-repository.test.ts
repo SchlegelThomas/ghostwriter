@@ -14,16 +14,21 @@ import {
   createStoryWorkAttempt,
   finishStoryWorkAttemptWithoutArtifact,
   instructionContentHash,
+  projectId,
   recordAppliedStoryWorkAssignmentFromUnitOfWork,
   recordReviewedStoryWorkAssignment,
   sceneContentHash,
   startStoryWorkAttempt,
   storyKnowledgeId,
   storyWorkAssignmentId,
+  mcpGrantId,
+  createMcpGrantRecord,
+  mcpGrantTokenHash,
   type ContextReceipt,
   type StoryWorkAssignment,
   type StoryWorkAttempt
 } from "@ghostwriter/core";
+import { eq, sql } from "drizzle-orm";
 import { toRepositoryDatabase } from "./client.js";
 import { createPgliteDatabase, migratePgliteRepositoryDatabase } from "./pglite.js";
 import {
@@ -35,8 +40,9 @@ import {
   createPostgresStoryWorkAssignmentRepository,
   createPostgresStoryWorkAttemptRepository
 } from "./postgres-story-work-repository.js";
+import { createPostgresMcpGrantRepository } from "./postgres-mcp-grant-repository.js";
 import { seedProject } from "./seed.js";
-import { user } from "./schema.js";
+import { mcpGrants, user } from "./schema.js";
 
 const OWNER = accountId("account-story-work-postgres-owner");
 const FOREIGN = accountId("account-story-work-postgres-foreign");
@@ -618,5 +624,318 @@ describe("postgres story work repositories", () => {
         limit: 1
       })
     ).resolves.toMatchObject([{ runId: RUN_ID, version: 2 }]);
+  });
+});
+
+async function expectForeignKeyViolation(promise: Promise<unknown>) {
+  await expect(promise).rejects.toSatisfy((error) => isForeignKeyViolation(error));
+}
+
+function isForeignKeyViolation(error: unknown): boolean {
+  if (postgresErrorCode(error) === "23503") return true;
+  const parts: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 8; depth += 1) {
+    if (current instanceof Error) {
+      parts.push(current.message);
+      current = current.cause;
+      continue;
+    }
+    if (typeof current === "string") {
+      parts.push(current);
+      break;
+    }
+    break;
+  }
+  const text = parts.join(" ");
+  return text.includes("23503") || /foreign key constraint/i.test(text);
+}
+
+function postgresErrorCode(error: unknown): string | undefined {
+  let current: unknown = error;
+  for (let depth = 0; depth < 8; depth += 1) {
+    if (
+      typeof current === "object" &&
+      current !== null &&
+      "code" in current &&
+      typeof (current as { code: unknown }).code === "string"
+    ) {
+      return (current as { code: string }).code;
+    }
+    if (current instanceof Error) {
+      const match = current.message.match(/\b(23\d{3})\b/u);
+      if (match !== null) return match[1];
+    }
+    current =
+      typeof current === "object" && current !== null && "cause" in current
+        ? (current as { cause: unknown }).cause
+        : undefined;
+    if (current === undefined) break;
+  }
+  return undefined;
+}
+
+describe("postgres story work assignment MCP origin", () => {
+  const GRANT_ID = mcpGrantId("mcp-grant-story-work-origin-postgres");
+  const ORIGIN = Object.freeze({ kind: "mcp" as const, grantId: GRANT_ID });
+  const OTHER_GRANT = mcpGrantId("mcp-grant-story-work-origin-other");
+
+  function originAssignment(
+    overrides: Partial<StoryWorkAssignment> = {}
+  ): StoryWorkAssignment {
+    return assignment({
+      id: storyWorkAssignmentId("assignment-story-work-origin-postgres"),
+      idempotencyKey: "assignment-story-work-origin-key",
+      origin: ORIGIN,
+      ...overrides
+    });
+  }
+
+  async function setupWithGrant() {
+    const context = await setup();
+    const grants = createPostgresMcpGrantRepository(toRepositoryDatabase(context.db));
+    expect(
+      await grants.insert(
+        createMcpGrantRecord({
+          id: GRANT_ID,
+          accountId: OWNER,
+          projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+          captureIds: [],
+          sceneIds: [BELLWETHER_FIXTURE.scenes[0]!.id],
+          bookIds: [],
+          assignmentIds: [],
+          coordinationIds: [],
+          tools: ["ghostwriter_get_grant", "ghostwriter_list_story_work"],
+          allowProjectStructureRead: true,
+          tokenHash: mcpGrantTokenHash("9".repeat(64)),
+          tokenHint: "…rigin",
+          expiresAt: "2026-08-01T00:00:00.000Z",
+          createdAt: NOW,
+          updatedAt: NOW
+        })
+      )
+    ).toMatchObject({ ok: true });
+    expect(
+      await grants.insert(
+        createMcpGrantRecord({
+          id: OTHER_GRANT,
+          accountId: OWNER,
+          projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+          captureIds: [],
+          sceneIds: [BELLWETHER_FIXTURE.scenes[0]!.id],
+          bookIds: [],
+          assignmentIds: [],
+          coordinationIds: [],
+          tools: ["ghostwriter_get_grant"],
+          allowProjectStructureRead: true,
+          tokenHash: mcpGrantTokenHash("8".repeat(64)),
+          tokenHint: "…ther",
+          expiresAt: "2026-08-01T00:00:00.000Z",
+          createdAt: NOW,
+          updatedAt: NOW
+        })
+      )
+    ).toMatchObject({ ok: true });
+    return { ...context, grants };
+  }
+
+  it("roundtrips MCP origin on create, get, list, and idempotent replay", async () => {
+    const { assignments } = await setupWithGrant();
+    const created = originAssignment();
+    await expect(
+      assignments.create({
+        assignment: created,
+        requestFingerprint: REQUEST_FINGERPRINT
+      })
+    ).resolves.toMatchObject({ ok: true, created: true, assignment: { origin: ORIGIN } });
+
+    await expect(
+      assignments.get({
+        accountId: OWNER,
+        projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+        assignmentId: created.id
+      })
+    ).resolves.toMatchObject({ origin: ORIGIN });
+
+    const rows = await assignments.listByProject({
+      accountId: OWNER,
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID
+    });
+    expect(rows[0]?.origin).toEqual(ORIGIN);
+
+    await expect(
+      assignments.create({
+        assignment: created,
+        requestFingerprint: REQUEST_FINGERPRINT
+      })
+    ).resolves.toMatchObject({ ok: true, created: false, assignment: { origin: ORIGIN } });
+  });
+
+  it("indexes origin grant for scoped listing queries", async () => {
+    const { assignments } = await setupWithGrant();
+    const created = originAssignment();
+    await assignments.create({
+      assignment: created,
+      requestFingerprint: REQUEST_FINGERPRINT
+    });
+    const listed = await assignments.listByMcpGrantOrigin({
+      accountId: OWNER,
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+      originMcpGrantId: GRANT_ID
+    });
+    expect(listed.map((row) => row.id)).toEqual([created.id]);
+  });
+
+  it("lists MCP grant origin rows without project-page truncation and empty cross-scope", async () => {
+    const { assignments } = await setupWithGrant();
+    const oldOriginId = storyWorkAssignmentId("assignment-origin-postgres-old");
+    await assignments.create({
+      assignment: originAssignment({
+        id: oldOriginId,
+        idempotencyKey: "assignment-origin-postgres-old",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        createdAt: "2026-01-01T00:00:00.000Z"
+      }),
+      requestFingerprint: instructionContentHash("b".repeat(64))
+    });
+    for (let index = 1; index <= 150; index += 1) {
+      await assignments.create({
+        assignment: assignment({
+          id: storyWorkAssignmentId(`assignment-origin-noise-${index}`),
+          idempotencyKey: `assignment-origin-noise-${index}`,
+          updatedAt: new Date(Date.UTC(2026, 9, 12, 12, 0, index)).toISOString()
+        }),
+        requestFingerprint: instructionContentHash(
+          String.fromCharCode(97 + (index % 6)).repeat(64)
+        )
+      });
+    }
+    await assignments.create({
+      assignment: originAssignment({
+        id: storyWorkAssignmentId("assignment-origin-postgres-foreign-account"),
+        initiatorAccountId: FOREIGN,
+        idempotencyKey: "assignment-origin-postgres-foreign-account"
+      }),
+      requestFingerprint: instructionContentHash("d".repeat(64))
+    });
+    await assignments.create({
+      assignment: originAssignment({
+        id: storyWorkAssignmentId("assignment-origin-postgres-other-grant"),
+        idempotencyKey: "assignment-origin-postgres-other-grant",
+        origin: { kind: "mcp", grantId: OTHER_GRANT }
+      }),
+      requestFingerprint: instructionContentHash("e".repeat(64))
+    });
+
+    const listed = await assignments.listByMcpGrantOrigin({
+      accountId: OWNER,
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+      originMcpGrantId: GRANT_ID
+    });
+    expect(listed.map((row) => row.id)).toEqual([oldOriginId]);
+    expect(listed.every((row) => row.initiatorAccountId === OWNER)).toBe(true);
+    expect(
+      listed.some(
+        (row) =>
+          row.id === storyWorkAssignmentId("assignment-origin-postgres-foreign-account")
+      )
+    ).toBe(false);
+    expect(
+      listed.some(
+        (row) => row.id === storyWorkAssignmentId("assignment-origin-postgres-other-grant")
+      )
+    ).toBe(false);
+  });
+
+  it("rejects compare-and-set origin changes and blocks grant delete while referenced", async () => {
+    const { db, assignments, grants } = await setupWithGrant();
+    const created = originAssignment();
+    await assignments.create({
+      assignment: created,
+      requestFingerprint: REQUEST_FINGERPRINT
+    });
+    const running = startStoryWorkAttempt({
+      assignment: created,
+      expectedVersion: 1,
+      runId: RUN_ID,
+      updatedAt: "2026-09-12T18:01:00.000Z"
+    });
+    await expect(
+      assignments.compareAndSet({
+        accountId: OWNER,
+        projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+        assignmentId: created.id,
+        expectedVersion: 1,
+        next: running
+      })
+    ).resolves.toMatchObject({ ok: true, assignment: { origin: ORIGIN } });
+
+    const tampered = createStoryWorkAssignment({
+      ...running,
+      version: 3,
+      origin: { kind: "mcp", grantId: OTHER_GRANT },
+      updatedAt: "2026-09-12T18:02:00.000Z"
+    });
+    await expect(
+      assignments.compareAndSet({
+        accountId: OWNER,
+        projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+        assignmentId: created.id,
+        expectedVersion: 2,
+        next: tampered
+      })
+    ).resolves.toEqual({ ok: false, reason: "version-conflict" });
+
+    await expectForeignKeyViolation(
+      db.delete(mcpGrants).where(eq(mcpGrants.id, GRANT_ID))
+    );
+
+    expect(
+      await grants.revoke({
+        id: GRANT_ID,
+        projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+        revokedAt: "2026-09-12T18:03:00.000Z",
+        updatedAt: "2026-09-12T18:03:00.000Z"
+      })
+    ).toMatchObject({ ok: true });
+
+    await expect(
+      assignments.get({
+        accountId: OWNER,
+        projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+        assignmentId: created.id
+      })
+    ).resolves.toMatchObject({ origin: ORIGIN });
+  });
+
+  it("does not enforce cross-project origin parity at the database layer", async () => {
+    const { db, assignments } = await setupWithGrant();
+
+    const foreignProject = projectId("project-story-work-origin-foreign");
+    await db.execute(sql`
+      INSERT INTO projects (id, title, created_at, version)
+      VALUES (${foreignProject}, 'Foreign', ${NOW}, 1)
+    `);
+
+    const crossProjectAssignment = createStoryWorkAssignment({
+      ...originAssignment(),
+      id: storyWorkAssignmentId("assignment-story-work-origin-cross-project"),
+      projectId: foreignProject,
+      idempotencyKey: "assignment-story-work-origin-cross-project",
+      origin: { kind: "mcp", grantId: OTHER_GRANT }
+    });
+
+    await expect(
+      assignments.create({
+        assignment: crossProjectAssignment,
+        requestFingerprint: REQUEST_FINGERPRINT
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      assignment: {
+        projectId: foreignProject,
+        origin: { kind: "mcp", grantId: OTHER_GRANT }
+      }
+    });
   });
 });

@@ -9,6 +9,11 @@ import {
 const RESERVED_SCENE = "scene-reserved-harbor-draft";
 const DRAFT_PROSE =
   "Draft harbor prose for a scene not yet in the manuscript.";
+const AC10_DISCOVERY_PROSE =
+  "In the vault she unfolded the brass letter; the looped hand was not Mira's own signature, and the margin held no warning about roots.";
+const AC10_BRASS_LETTER_CLAIM =
+  "The discovery scene changes the brass letter's author from Mira and drops the earlier root warning.";
+const HERMETIC_GENERIC_CLAIM = "Hermetic continuity note for local validation.";
 
 /** Mirrors compileStoryCheckContinuity inputText resource sections for proposal-draft. */
 function compilerProposalDraftInputText(
@@ -53,6 +58,32 @@ describe("story check hermetic candidates", () => {
       storyCheckHermeticQuoteFromProviderText(providerText)
     );
     expect(anchor?.quote).toBe(DRAFT_PROSE.slice(0, 24));
+    expect(output.findings[0]?.claim).toBe(
+      'Supplied target text includes: "Draft harbor prose for a scene not yet in the manuscript.".'
+    );
+  });
+
+  it("uses the AC10 brass-letter claim when authorship and root-warning cues appear", () => {
+    const inputText = compilerProposalDraftInputText(AC10_DISCOVERY_PROSE);
+    const output = buildStoryCheckHermeticCandidatesOutput(inputText);
+    expect(output.findings[0]?.claim).toBe(AC10_BRASS_LETTER_CLAIM);
+    const quote = output.findings[0]?.anchors[0]?.quote;
+    expect(quote).toBeDefined();
+    expect(AC10_DISCOVERY_PROSE).toContain(quote!);
+  });
+
+  it("falls back to the generic claim when target and brief text are absent", () => {
+    const inputText = [
+      "=== ASSESS SCENE ID (exact) ===",
+      RESERVED_SCENE,
+      "=== CHECK TARGET MODE (exact) ===",
+      "proposal-draft",
+      "=== CHECK TARGET: scene-draft proposal (see proposal-artifact story resource) ===",
+      "=== STORY RESOURCE 1: story-context (untrusted story data) ===",
+      "{}"
+    ].join("\n");
+    const output = buildStoryCheckHermeticCandidatesOutput(inputText);
+    expect(output.findings[0]?.claim).toBe(HERMETIC_GENERIC_CLAIM);
   });
 
   it("extracts applied-scene target prose from the canonical head marker", () => {
@@ -86,5 +117,6 @@ describe("story check hermetic candidates", () => {
     expect(extractStoryCheckHermeticTargetProviderText(inputText)).toBeUndefined();
     const output = buildStoryCheckHermeticCandidatesOutput(inputText);
     expect(output.findings[0]?.anchors[0]).toEqual({ sceneId: RESERVED_SCENE });
+    expect(output.findings[0]?.claim).toBe(HERMETIC_GENERIC_CLAIM);
   });
 });

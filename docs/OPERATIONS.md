@@ -18,7 +18,7 @@ database with Drizzle migrations, a Node/Hono service, and a database branch per
 | Browser API | Cloudflare Pages Function → Fly.io | Same-origin `/api/*` keeps auth cookies first-party and streams to the fixed backend |
 | Mobile builds (later) | Expo EAS free tier | ~30 builds/month free; EAS Update for OTA fixes |
 | Desktop distribution (later) | GitHub Releases | electron-builder artifacts attached by Actions, free |
-| MCP server | Runs locally (stdio) | Fixture navigator by default; scoped grant tools use injectable grant services / optional `GHOSTWRITER_MCP_GRANT_TOKEN` for local parity. Production remote MCP OAuth remains later. |
+| MCP server | Runs locally (stdio) | Grant bridge mode: `GHOSTWRITER_MCP_API_URL` + `GHOSTWRITER_MCP_GRANT_TOKEN` with backend `GHOSTWRITER_ENABLE_LOCAL_MCP_BRIDGE=1` (default off). Fixture navigator only when `GHOSTWRITER_MCP_FIXTURE=1`. Half/mixed modes fail clearly. Production remote MCP OAuth remains later. |
 
 Expected future costs are Lakebase/Fly usage beyond their available tiers and Apple's $99/yr
 developer account once iOS device/TestFlight builds start. Cloudflare Pages is used in
@@ -470,9 +470,34 @@ Grounded continuity checks reuse migrations 0027/0028 and the existing JSON prop
 columns; no CP3 migration is added. Outline/structure work (CP4) likewise adds no migration beyond
 `0028`: trusted `story-structure-proposal-v1` artifacts live in existing proposal/assignment JSON,
 while canonical effects use project metadata, scene-document genesis initialization and optional
-Canvas stores inside the same transactional patterns as scene apply. The hermetic backend returns
-`story_check_findings_candidates_v1` and structure proposal candidates only when
-`GHOSTWRITER_E2E=1` and still reports Providers: hermetic fake. Live-provider acceptance remains
-separately gated. Provider calls stay outside database transactions; generation begin/completion,
-immutable review, structure preview (read-only), and atomic apply/replay use the same rollback
+Canvas stores inside the same transactional patterns as scene apply.
+
+**CP5a recovery (local)** adds no migration: cancel/mark-interrupted uses existing assignment,
+attempt, and agent-run tables inside transactional recovery UOWs. **CP5b coordination** adds
+checked-in migration `0029_material_rachel_grey.sql` after `0028`: `story_work_coordinations`
+(parent orchestration row with immutable JSON step definitions, version, status, idempotency key,
+fingerprint) and `story_work_coordination_step_bindings` (assignment FK, resolved dependency,
+unique per coordination/step and per coordination/assignment). Project delete cascades;
+bound assignments restrict delete. Hermetic PGlite and PR copy-on-write branches apply this
+migration in CI; **production has not run it** and follows the normal merge/migrate workflow
+when the epic ships. **CP5 (local, complete):** create/bind UOW, backend
+`/story-work/coordinations`, client coordination UI, coherence review, recovery-replay regression
+fix, hermetic browser full chain, and final `pnpm verify` (1,823 tests / 3 skipped) on
+`feat/agent-story-workflow` (uncommitted atop `6cc0455`). Post-CP5 product gaps (applied-revision
+dependency, multi-check API/UI, coordination cancel route) are documented deferrals before
+production rollout. **CP6 (local, complete):** migration `0030_curly_korg.sql` after `0029` adds MCP
+grant allowlist columns and story-work MCP origin FK/indexes; flag-gated `/local-mcp/v1/*` bridge;
+hermetic stdio walkthrough and final `pnpm verify` (1,914 tests / 3 skipped) on uncommitted
+`feat/agent-story-workflow` atop `6cc0455`. **Neither `0029` nor `0030` is production-deployed.**
+**CP7** AC10 original-story browser acceptance is **in progress** (see
+`plans/active/2026-09-12-agent-story-workflow/cp7-original-story-acceptance.md`); epic not complete.
+Local hermetic backend on `:8787` may hold the walkthrough project in in-memory PGlite — **restarting
+the process clears that browser-visible state**; serve the latest static web export on `:8081` after
+Reader pagination fixes before rechecking chapters in the browser.
+
+The hermetic backend returns `story_check_findings_candidates_v1` and structure proposal
+candidates only when `GHOSTWRITER_E2E=1`, seeds CP5a recovery fixtures without starting providers,
+and still reports Providers: hermetic fake. Live-provider acceptance remains separately gated.
+Provider calls stay outside database transactions; generation begin/completion, immutable review,
+structure preview (read-only), recovery transitions, and atomic apply/replay use the same rollback
 patterns as character, scene and check story work.

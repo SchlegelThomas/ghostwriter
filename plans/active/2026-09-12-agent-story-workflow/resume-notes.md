@@ -1,24 +1,59 @@
 # Resume here — 2026-09-13
 
-## Current frontier — read this first (September 13, verified checkpoint)
+## Current frontier — read this first (September 13, CP7 in progress)
+
 This section supersedes older chronological notes below.
 
-- **CP1b–CP3:** character, scene and grounded continuity-check loops are implemented and browser-verified locally (see record log).
-- **CP4 complete locally (browser-verified hermetic):** Agent → Develop story → **Outline** on one active book. Provider emits bounded candidates; server lowers to trusted `story-structure-proposal-v1` with immutable part/chapter/scene/operation IDs, dependency graph and semantic review edits. Pure preview runs through the project-command kernel (one final project version, empty genesis for new scenes, narrative-anchor impact, known check staleness — no provider rerun). Apply is one atomic memory/Postgres UOW with exact replay/rollback; durable result kind `story-structure` stores `resolvedOperationIds`, `createdSceneIds`, `bookId`, `projectVersion`, optional Canvas scene/object IDs; reload retains acknowledgment.
-- **CP4 browser acceptance:** three chapters/objectives + Opening/Middle/Turn placeholders; human objective edit saved; invalid dependency selection refused with explicit add-required; preview 4→7; one v1→v2 apply; three empty genesis scenes; optional Opening Canvas card x120/y80 240×160; spine 24; reload kept version/card/Open first scene/Draft Opening V1 0 words. Second proposal at v2; human Opening intent advanced project to v3; preview refused `expected 2/current 3`; apply disabled (no second structure).
-- **CP4 browser repairs:** resolved operation order follows dependencies (not ID sort); all hermetic objectives visible; Canvas chooser human labels; durable result reload gap fixed.
-- **Final verification:** post-browser-repair `pnpm verify` passed typecheck, lint, 17 routing checks and **1,680 tests** across 208 passing files; 1 file/3 tests skipped. `git diff --check` and IDE diagnostics are clean.
-- **Persistence:** no migration beyond CP2 `0028`; structure uses existing proposal/assignment JSON + project/scene/Canvas stores.
-- **First next action:** CP5 — dependency-aware multi-step coordination, idempotent submit/apply, reload reconciliation, interruption/cancel/retry. CP6 MCP parity audit and CP7 AC10 original-story walkthrough remain deferred.
-- **Runtime:** static export localhost:8081; hermetic PGlite :8787, migration 0028, fake OpenAI, `GHOSTWRITER_E2E_LIVE_OPENAI=0`. No live provider, Playwright, push, PR, merge or deployment unless authorized.
-- **Git:** last committed checkpoint `50aa1cf`; CP2–CP4 work may be uncommitted — inspect `git status` on `feat/agent-story-workflow`.
+- **CP1b–CP4:** character, scene, grounded checks and outline/structure loops implemented and browser-verified locally (see record log). CP4 baseline commit **`6cc0455`**.
+- **CP5 — complete locally (uncommitted atop `6cc0455`):** [`cp5-coordination-contract.md`](cp5-coordination-contract.md), migration **`0029`**, record log CP5d. Not production-deployed.
+- **CP6 — complete locally (uncommitted atop `6cc0455`):** [`cp6-mcp-parity-contract.md`](cp6-mcp-parity-contract.md) — 15 closed bridge tools, flag-gated **`/local-mcp/v1/*`**, migration **`0030`**, hermetic stdio walkthrough. Final **`pnpm verify`**: **1,914** tests / 3 skipped. Not production-deployed.
+- **CP7 — in progress (AC10 original-story browser):** see [`cp7-original-story-acceptance.md`](cp7-original-story-acceptance.md). Cumulative **`pnpm verify`** passed: **1,922 tests / 3 skipped**, **230 files / 1 skipped**, typecheck/lint/17 routing green. **Epic not complete.**
+
+### Clockwork Orchard walkthrough (browser, UI-only)
+
+- New project **The Clockwork Orchard** / book **The Brass Harvest** — no API or manual IDs.
+- Character **Elian Voss** — proposal edited (motive/wound/voice), applied; Explorer Story knowledge shows Elian.
+- Structure **The Brass Season:** chapters *The Letter* / *The Forecast* / *Under the Engine*; scenes **The Brass Letter**, **Rot in the Gears**, **The Map Beneath Harvest**; Mira payoff intentionally open; Explorer **3 scenes**.
+- Acknowledged prose in all three scenes via **Draft UI**.
+- Deliberate contradiction in **Rot:** letter author **Elian**, **root warning omitted**; applied check on Rot + source **The Brass Letter** — Fresh, exact scope/heads, one anchored finding; **hermetic claim was generic** (gap until content-sensitive helper + recheck).
+- Revision from finding handoff: exact brief, revision restored **Mira authorship + root warning**, kept oil map; **Replace working Draft**; check **stale** (expected).
+- Canvas Map spine **3 scenes**; note **“Open thread · Where is Mira?”** in all three scopes — reload preserved title/body/inclusions; Draft→Canvas same Map; **390×844** inspector shows thread.
+- **Reader defects found/fixed in UI:** short chapters shared spread 0; tab switch left **The Letter** header and concatenated chapters — **chapter-scoped pagination** fixed; rebuild on **:8081** verified **Forecast** shows **Rot only**. **Blank verso** “no acknowledged prose” — unit fixed; **browser recheck pending**. **Under the Engine** Reader pass **pending**.
+- **Code repair (uncommitted):** hermetic finding helper now content-sensitive for authorship/root-warning (**exact substring anchor**); focused tests green — **restart backend or fresh process** needed before browser claim recheck (live **:8787** may still load old module).
+
+### CP7 still open
+
+1. Browser recheck **specific** continuity claim after backend reload.
+2. Reader **blank verso** post-fix browser check.
+3. Reader **Under the Engine** chapter tab/spreads.
+4. Finding **resolution/complete** state if contract requires after revision apply.
+5. Wide + narrow AC10 screenshots/coherence; present outcome to Thomas.
+6. **No Playwright** until user-verified complete epic.
+
+### Branch and runtime
+
+- **Branch:** `feat/agent-story-workflow` — CP5+CP6+CP7 repairs **uncommitted atop `6cc0455`**; no push/PR/deploy unless authorized.
+- **Backend:** bridge-capable hermetic **`:8787`** — **in-memory PGlite holds the walkthrough project**; **restart wipes browser data**.
+- **Frontend:** static **`http://localhost:8081`** (latest Reader bundle).
+- **Viewport at handoff:** **390×844** Canvas inspector. **No live provider.**
+
+### Exact next
+
+1. Browser: continuity check claim recheck (restart backend only if needed for new hermetic module — accept data loss).
+2. Browser Reader: blank verso + **Under the Engine**.
+3. Browser: wide/narrow AC10 closure; update [`cp7-original-story-acceptance.md`](cp7-original-story-acceptance.md) checkboxes and evidence paths.
+4. Update record log and WHERE-I-LEFT-OFF; do **not** mark epic or CP7 done until Thomas accepts AC10.
+
+---
 
 ## Earlier implementation notes (chronological; current frontier above wins)
 
 ## Authorization and status
-User authorized the ENTIRE epic and continuing implementation; explicitly requests durable handoff for a cheaper model. Branch `feat/agent-story-workflow`. Last stable local commit `edeb4f1`. Preserve all subsequent uncommitted work. No push, PR, merge, deployment, live provider call, or Playwright authorization. Do not declare the epic complete after character work.
+User authorized the ENTIRE epic and continuing implementation; explicitly requests durable handoff for a cheaper model. Branch `feat/agent-story-workflow`. Last stable local commit `6cc0455` (CP4); CP5+CP6+CP7 work uncommitted. No push, PR, merge, deployment, live provider call, or Playwright authorization. Epic remains active; **CP7 acceptance in progress**.
 
 Read `plan.html`, `record-log.html`, ADR0018 and the feature-delivery skill. Codex mapping: Luna medium narrow research, Sol medium implementation, Sol high dense contracts. Use one writer per shared domain. Parent owns real-browser acceptance.
+
+*(Older CP0–CP4 chronological notes preserved below for archaeology; do not treat stale “next step” lines as current.)*
 
 ## Verified baseline
 `edeb4f1`: Canvas scope/discovery, geometry/history/personal return, shared manual Canvas/Draft story context, character contract prerequisites. Full pnpm verify: 1257 tests passed, 155 files passed, 1 file/3 tests skipped; typecheck/lint and 17 routing checks green. Log `/tmp/ghostwriter-foundations-full-verify.log`. Full epic/responsive acceptance remains open.
@@ -35,12 +70,7 @@ UI entry: Agent -> Develop story. Files StoryWorkPanel.tsx, CharacterStoryWorkRe
 Latest resumed evidence: four focused client/review files passed all 15 tests on 2026-09-13; git diff --check green. Frontend rebuild command: `EXPO_PUBLIC_API_URL=http://localhost:8787 pnpm --filter client exec expo export --platform web --output-dir /tmp/ghostwriter-story-preview` (workspace name is client, not @ghostwriter/client). Build log /tmp/ghostwriter-story-preview-build.log.
 
 ## Exact next steps
-1. Storage is stable: storage-handoff.md records 42 tests/7 files, core/storage types/lint, migration no-drift. Backend final signal still pending. Full pnpm verify running in session76605, log /tmp/ghostwriter-cp1b-resume-verify.log; do not claim passing until finished.
-2. Static export completed successfully with latest UI fixes: AppEntry-ef64c61588009c61f9a9a551cc6a60f5.js. No rebuild needed unless sources change.
-3. Restart disposable backend ONLY once stable, with GHOSTWRITER_E2E=1 GHOSTWRITER_CANVAS_CAPACITY=1 PORT=8787 E2E_APP_ORIGIN=http://localhost:8081 GHOSTWRITER_E2E_SEED_OPENAI_KEY=hermetic-story-test-key pnpm --filter @ghostwriter/backend exec tsx src/e2e-server.ts. Confirm liveProviders=false and fake completion AND model listing injected. Never enable real credentials. Restart resets demo PGlite, which is expected.
-4. Browser walkthrough on original project: empty selected sources -> character brief -> generate -> open review -> revise exact instruction -> edit full field -> save -> Add to Cast -> exact dossier -> reload. Test stale sources/refusal and refresh/retry states. Fake provider returns Mara Venn harbor pilot; no model-quality claim.
-5. Verify wide/narrow/keyboard focus/dirty behavior; save and reopen screenshots in evidence. Full pnpm verify and diff check, update docs and commit coherent CP1b only after evidence.
-6. Continue CP2 scenes, CP3 cohesion/completeness, CP4 structure, CP5 coordination, CP6 MCP parity, CP7 original three-scene story walkthrough, according to plan. Then user complete-outcome verification gates Playwright.
+*(Superseded — see current frontier: CP7 AC10 browser acceptance.)*
 
 ## Local runtime / browser caveats
 Static frontend http://localhost:8081 served from /tmp/ghostwriter-story-preview by Python (old session17792). Backend old session26200 runs pre-CP1b code; logs /tmp/ghostwriter-story-backend.log. Docs http://127.0.0.1:8090. Recheck processes rather than trusting session IDs. Live Lakebase endpoint disabled; do not change infrastructure.

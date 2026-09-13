@@ -109,7 +109,11 @@ On `feat/capture-to-story-agents`, writers can Capture first and integrate with 
   book, or project target; they remain noncanonical and require explicit owner Apply or Reject
   (ADR 0014);
 - project-scoped MCP grants can read granted Captures and submit Capture-reflection proposals into
-  the same Inbox; external clients cannot apply canon or retrieve credentials.
+  the same Inbox; when story-work tools are granted, external clients can also list/get filtered
+  assignments and coordinations and submit typed character, new-scene, check, and structure work
+  (one foreground attempt each) plus structure preview and coordination create/continue without
+  auto-starting children — all propose-only under explicit allowlists; external clients cannot apply
+  canon, manage recovery, review/apply, or retrieve credentials.
 
 Agents still never silent-write canon. Mockups 5.0, ADR 0010, and ADR 0011 govern the design.
 Repository verification is green. Real-browser founder acceptance, live R2/KEK provisioning on
@@ -256,7 +260,23 @@ select a dependency-complete operation subset, preview manuscript and assessment
 once. Structure apply creates empty scene documents only — no agent prose — and may place at most one
 new scene card on Canvas while all selected placeholders join the manuscript spine. Stale project or
 board versions apply nothing; a second structure batch is blocked after canon moves on. Durable
-results survive reload with the same acknowledgment. This is local hermetic workflow acceptance,
-not live-model quality or a production release. Multi-step coordination (CP5), MCP parity (CP6),
-character/dialogue completeness checks beyond continuity, and the full original-story walkthrough
-(CP7) remain in progress under the active epic.
+results survive reload with the same acknowledgment. When generation is active or the provider
+outcome is uncertain after reload, story work shows honest recovery copy with Refresh (re-read
+only), Cancel generation, and Mark interrupted; those actions never silently retry or spend.
+Canceled and interrupted assignments offer explicit retry with a new attempt. **Coordinated work
+(CP5, complete locally):** from New scene, writers may optionally **Follow with continuity check**
+using separate check brief, constraints, and done condition. A **Coordinated work** list survives
+reload; step copy distinguishes **Brief ready**, **Draft ready**, **Awaiting review**, and
+**Applied to story** / **Review complete**. The center offers explicit **Start scene**,
+**Continue** (bind when the scene proposal artifact satisfies the dependency — no provider on
+bind), **Start check**, and **Open reviews** — never automatic provider spend on entry or reload
+(reload helpers assert no auto action). Scene apply and check review use the same human gates as
+standalone story work. The first chain depends on the **exact proposal artifact**, not applied
+prose; per-step **Cancel** / **Mark interrupted** (child recover) covers writer cancellation for
+v1. **Known limits (post-CP5, not v1 bugs):** applied-scene / applied-revision dependency mode;
+starting multiple ready checks from one coordination in the UI; a single control to cancel an entire
+coordination; saved multi-step templates or background continuation after disconnect. Local hermetic
+acceptance only — not live-model quality or production (migrations `0029`/`0030` not deployed).
+**CP6 (local):** scoped story-work MCP read/propose parity via extended grants and local/test stdio
+bridge; production remote MCP OAuth, owner mint UI for new allowlists, and project-wide external
+navigator remain future work. **Next:** full original-story walkthrough (CP7). Epic remains active.

@@ -5,12 +5,17 @@ import {
   applySceneStoryWork,
   applyStructureStoryWork,
   completeStoryCheckReview,
+  continueStoryWorkCoordinationStep,
   createCharacterStoryWorkAssignment,
   createCheckStoryWorkAssignment,
   createOutlineStoryWorkAssignment,
   createSceneStoryWorkAssignment,
+  createStoryWorkCoordination,
   getStoryWorkAssignment,
+  getStoryWorkCoordination,
+  listStoryWorkCoordinations,
   GhostwriterApiError,
+  recoverActiveStoryWorkAttempt,
   openStoryCheckReview,
   previewStoryStructureStoryWork,
   resolveStoryCheckFinding,
@@ -444,6 +449,365 @@ describe("story work transport", () => {
       expect(parsed).not.toHaveProperty("accountId");
       expect(parsed).not.toHaveProperty("appliedAt");
     }
+  });
+
+  it("posts strict recover bodies for cancel and mark-interrupted without server fields", async () => {
+    const recoverResponse = {
+      replayed: false,
+      assignment: { id: "assignment", status: "canceled", version: 3 },
+      attempt: { runId: "run-recovery-one", completedAt: "2026-09-13T18:00:00.000Z" },
+      run: { id: "run-recovery-one", status: "canceled" }
+    };
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(recoverResponse), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            replayed: true,
+            assignment: { id: "assignment", status: "failed", version: 4 },
+            attempt: { runId: "run-recovery-one", completedAt: "2026-09-13T18:01:00.000Z" },
+            run: { id: "run-recovery-one", status: "failed" }
+          }),
+          { status: 200 }
+        )
+      );
+    vi.stubGlobal("fetch", fetch);
+    const cancel = await recoverActiveStoryWorkAttempt({
+      projectId: "project",
+      assignmentId: "assignment",
+      expectedAssignmentVersion: 2,
+      runId: "run-recovery-one",
+      action: "cancel"
+    });
+    expect(fetch.mock.calls[0]?.[0]).toContain("/assignments/assignment/recover");
+    const cancelBody = JSON.parse(fetch.mock.calls[0]?.[1].body);
+    expect(cancelBody).toEqual({
+      expectedAssignmentVersion: 2,
+      runId: "run-recovery-one",
+      action: "cancel"
+    });
+    expect(cancelBody).not.toHaveProperty("completedAt");
+    expect(cancelBody).not.toHaveProperty("idempotencyKey");
+    expect(cancel).toEqual(recoverResponse);
+
+    const marked = await recoverActiveStoryWorkAttempt({
+      projectId: "project",
+      assignmentId: "assignment",
+      expectedAssignmentVersion: 3,
+      runId: "run-recovery-one",
+      action: "mark-interrupted"
+    });
+    expect(JSON.parse(fetch.mock.calls[1]?.[1].body)).toEqual({
+      expectedAssignmentVersion: 3,
+      runId: "run-recovery-one",
+      action: "mark-interrupted"
+    });
+    expect(marked.replayed).toBe(true);
+  });
+
+  it("propagates recovery conflicts without retrying the POST", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "STORY_WORK_RECOVERY_TRANSITION_CONFLICT",
+          error: "The story work assignment changed before this recovery action completed."
+        }),
+        { status: 409 }
+      )
+    );
+    vi.stubGlobal("fetch", fetch);
+    await expect(
+      recoverActiveStoryWorkAttempt({
+        projectId: "project",
+        assignmentId: "assignment",
+        expectedAssignmentVersion: 1,
+        runId: "run-recovery-one",
+        action: "cancel"
+      })
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "STORY_WORK_RECOVERY_TRANSITION_CONFLICT"
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry recover transport on network failure", async () => {
+    const fetch = vi.fn().mockRejectedValue(new TypeError("Network request failed"));
+    vi.stubGlobal("fetch", fetch);
+    await expect(
+      recoverActiveStoryWorkAttempt({
+        projectId: "project",
+        assignmentId: "assignment",
+        expectedAssignmentVersion: 2,
+        runId: "run-recovery-one",
+        action: "cancel"
+      })
+    ).rejects.toThrow();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces optional recovery projection on story work detail", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          assignment: { id: "assignment-running", status: "running", version: 5 },
+          recovery: {
+            status: "active-or-interrupted",
+            runId: "run-recovery-active",
+            expectedAssignmentVersion: 5,
+            actions: ["cancel", "mark-interrupted"],
+            message:
+              "Generation is still active or the provider outcome is uncertain. Cancel the run or mark it interrupted after reload."
+          },
+          run: { id: "run-recovery-active", status: "running" },
+          attempt: { runId: "run-recovery-active" }
+        }),
+        { status: 200 }
+      )
+    );
+    vi.stubGlobal("fetch", fetch);
+    const detail = await getStoryWorkAssignment("project", "assignment-running");
+    expect(detail.recovery).toMatchObject({
+      status: "active-or-interrupted",
+      runId: "run-recovery-active",
+      expectedAssignmentVersion: 5,
+      actions: ["cancel", "mark-interrupted"]
+    });
+  });
+
+  it("surfaces refresh-required recovery without mandatory runId on story work detail", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          assignment: { id: "assignment-stale", status: "running", version: 6 },
+          recovery: {
+            status: "refresh-required",
+            expectedAssignmentVersion: 6,
+            actions: ["cancel", "mark-interrupted"],
+            message:
+              "Story work changed while this page was open. Refresh assignment details before canceling or marking interrupted."
+          }
+        }),
+        { status: 200 }
+      )
+    );
+    vi.stubGlobal("fetch", fetch);
+    const detail = await getStoryWorkAssignment("project", "assignment-stale");
+    expect(detail.recovery).toEqual({
+      status: "refresh-required",
+      expectedAssignmentVersion: 6,
+      actions: ["cancel", "mark-interrupted"],
+      message:
+        "Story work changed while this page was open. Refresh assignment details before canceling or marking interrupted."
+    });
+  });
+
+  it("posts strict coordination create bodies without server-only fields", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          replayed: false,
+          coordination: { id: "coordination-1", version: 1 },
+          projection: { version: 1, steps: [] },
+          rootAssignment: { id: "assignment-root", taskKind: "scene", status: "brief-ready" }
+        }),
+        { status: 201 }
+      )
+    );
+    vi.stubGlobal("fetch", fetch);
+    await createStoryWorkCoordination({
+      projectId: "project/coordination",
+      expectedProjectVersion: 2,
+      idempotencyKey: "coordination-create-1",
+      title: "Harbor draft with continuity check",
+      scene: {
+        title: "Draft harbor scene",
+        brief: " Draft a coordinated harbor scene. ",
+        constraints: "Keep canon intact.",
+        doneWhen: "A scene draft is ready for review.",
+        model: "gpt-4.1",
+        sceneIds: ["scene-context"]
+      },
+      check: {
+        title: "Continuity check",
+        brief: " Check the draft against surrounding canon. ",
+        constraints: "Ground findings in supplied scenes.",
+        doneWhen: "Findings are ready for writer review.",
+        model: "gpt-4.1",
+        surroundingSceneIds: ["scene-other"]
+      }
+    });
+    expect(fetch.mock.calls[0]?.[0]).toContain(
+      "project%2Fcoordination/story-work/coordinations"
+    );
+    const body = JSON.parse(fetch.mock.calls[0]?.[1].body);
+    expect(body).toEqual({
+      expectedProjectVersion: 2,
+      idempotencyKey: "coordination-create-1",
+      title: "Harbor draft with continuity check",
+      scene: {
+        title: "Draft harbor scene",
+        brief: " Draft a coordinated harbor scene. ",
+        constraints: "Keep canon intact.",
+        doneWhen: "A scene draft is ready for review.",
+        model: "gpt-4.1",
+        sceneIds: ["scene-context"]
+      },
+      check: {
+        title: "Continuity check",
+        brief: " Check the draft against surrounding canon. ",
+        constraints: "Ground findings in supplied scenes.",
+        doneWhen: "Findings are ready for writer review.",
+        model: "gpt-4.1",
+        surroundingSceneIds: ["scene-other"]
+      }
+    });
+    expect(body).not.toHaveProperty("provider");
+    expect(body).not.toHaveProperty("taskKind");
+  });
+
+  it("lists and loads coordination detail envelopes", async () => {
+    const detail = {
+      coordination: { id: "coordination-1", version: 1, title: "Coordination" },
+      projection: { version: 1, overallStatus: "active", steps: [] },
+      rootAssignment: { id: "assignment-root", taskKind: "scene", status: "brief-ready" },
+      childAssignmentSummaries: [
+        { stepId: "step-scene", assignmentId: "assignment-root", taskKind: "scene", status: "brief-ready" }
+      ]
+    };
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ coordinations: [detail] }), { status: 200 })
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify(detail), { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    const listed = await listStoryWorkCoordinations("project");
+    expect(listed.coordinations).toHaveLength(1);
+    expect(listed.coordinations[0]?.coordination.id).toBe("coordination-1");
+    const loaded = await getStoryWorkCoordination("project", "coordination-1");
+    expect(loaded.childAssignmentSummaries[0]?.taskKind).toBe("scene");
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls[1]?.[0]).toContain("/coordinations/coordination-1");
+  });
+
+  it("continues a coordination step with exact version and artifact only", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          replayed: true,
+          coordination: { id: "coordination-1", version: 2 },
+          projection: { version: 2, steps: [] },
+          rootAssignment: { id: "assignment-root" },
+          checkAssignment: { id: "assignment-check", taskKind: "check", status: "brief-ready" }
+        }),
+        { status: 200 }
+      )
+    );
+    vi.stubGlobal("fetch", fetch);
+    await continueStoryWorkCoordinationStep({
+      projectId: "project",
+      coordinationId: "coordination-1",
+      stepId: "step-check",
+      expectedCoordinationVersion: 1,
+      expectedUpstreamArtifact: pointer
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetch.mock.calls[0]?.[1].body)).toEqual({
+      expectedCoordinationVersion: 1,
+      expectedUpstreamArtifact: pointer
+    });
+    expect(JSON.parse(fetch.mock.calls[0]?.[1].body)).not.toHaveProperty("idempotencyKey");
+  });
+
+  it("propagates coordination route conflicts without retrying transport", async () => {
+    const cases = [
+      ["STORY_WORK_COORDINATION_CREATE_IDEMPOTENCY_CONFLICT", 409],
+      ["PROJECT_VERSION_CONFLICT", 409],
+      ["STORY_WORK_COORDINATION_TRANSITION_CONFLICT", 409],
+      ["STORY_WORK_COORDINATION_DEPENDENCY_CONFLICT", 409]
+    ] as const;
+    for (const [code, status] of cases) {
+      const fetch = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ code, error: "Conflict." }), { status })
+      );
+      vi.stubGlobal("fetch", fetch);
+      await expect(
+        createStoryWorkCoordination({
+          projectId: "project",
+          expectedProjectVersion: 1,
+          idempotencyKey: "coordination-create-1",
+          title: "Title",
+          scene: {
+            title: "Scene",
+            brief: "Brief",
+            constraints: "Constraints",
+            doneWhen: "Done",
+            model: "gpt-4.1",
+            sceneIds: ["scene-a"]
+          },
+          check: {
+            title: "Check",
+            brief: "Brief",
+            constraints: "Constraints",
+            doneWhen: "Done",
+            model: "gpt-4.1",
+            surroundingSceneIds: []
+          }
+        })
+      ).rejects.toMatchObject({ status, code });
+      expect(fetch).toHaveBeenCalledTimes(1);
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("surfaces coordination not-found on detail without a second fetch", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ code: "STORY_WORK_ASSIGNMENT_NOT_FOUND", error: "Not found." }), {
+        status: 404
+      })
+    );
+    vi.stubGlobal("fetch", fetch);
+    await expect(getStoryWorkCoordination("project", "missing")).rejects.toMatchObject({
+      status: 404,
+      code: "STORY_WORK_ASSIGNMENT_NOT_FOUND"
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses strict coordination bodies with 422 and does not retry", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ code: "INVALID_REQUEST", error: "Invalid request." }), {
+        status: 422
+      })
+    );
+    vi.stubGlobal("fetch", fetch);
+    await expect(
+      continueStoryWorkCoordinationStep({
+        projectId: "project",
+        coordinationId: "coordination-1",
+        stepId: "step-check",
+        expectedCoordinationVersion: 1,
+        expectedUpstreamArtifact: pointer
+      })
+    ).rejects.toMatchObject({ status: 422 });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry coordination continue transport on network failure", async () => {
+    const fetch = vi.fn().mockRejectedValue(new TypeError("Network request failed"));
+    vi.stubGlobal("fetch", fetch);
+    await expect(
+      continueStoryWorkCoordinationStep({
+        projectId: "project",
+        coordinationId: "coordination-1",
+        stepId: "step-check",
+        expectedCoordinationVersion: 1,
+        expectedUpstreamArtifact: pointer
+      })
+    ).rejects.toThrow();
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it("surfaces optional check freshness on story work detail", async () => {

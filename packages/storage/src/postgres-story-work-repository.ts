@@ -5,6 +5,7 @@ import {
   accountId,
   agentRunId,
   canonicalJsonStringify,
+  assertStoryWorkAssignmentOriginImmutable,
   createStoryWorkAssignment,
   createStoryWorkAttempt,
   instructionContentHash,
@@ -12,6 +13,7 @@ import {
   storyWorkAssignmentId,
   storyWorkAssignmentRequestFingerprint,
   storyWorkAttemptIdempotencyKey,
+  mcpGrantId,
   type CompareAndSetStoryWorkAssignmentOutcome,
   type CompareAndSetStoryWorkAttemptOutcome,
   type CreateStoryWorkAssignmentOutcome,
@@ -25,11 +27,41 @@ import { and, desc, eq } from "drizzle-orm";
 import type { RepositoryDatabase } from "./client.js";
 import { storyWorkAssignments, storyWorkAttempts } from "./schema.js";
 
+function assignmentOriginFromRow(
+  row: typeof storyWorkAssignments.$inferSelect
+): StoryWorkAssignment["origin"] {
+  if (row.originKind === null && row.originMcpGrantId === null) {
+    return undefined;
+  }
+  return Object.freeze({
+    kind: "mcp" as const,
+    grantId: mcpGrantId(row.originMcpGrantId!)
+  });
+}
+
+function assignmentOriginToRow(
+  origin: StoryWorkAssignment["origin"]
+): Pick<
+  typeof storyWorkAssignments.$inferInsert,
+  "originKind" | "originMcpGrantId"
+> {
+  if (origin === undefined) {
+    return { originKind: null, originMcpGrantId: null };
+  }
+  return {
+    originKind: origin.kind,
+    originMcpGrantId: origin.grantId
+  };
+}
+
 const STORED_ASSIGNMENT_INVALID = "Stored story work assignment is invalid.";
 const STORED_ATTEMPT_INVALID = "Stored story work attempt is invalid.";
 type AssignmentGetInput = Parameters<StoryWorkAssignmentRepository["get"]>[0];
 type AssignmentListInput = Parameters<
   StoryWorkAssignmentRepository["listByProject"]
+>[0];
+type AssignmentOriginListInput = Parameters<
+  StoryWorkAssignmentRepository["listByMcpGrantOrigin"]
 >[0];
 type AssignmentIdempotencyInput = Parameters<
   StoryWorkAssignmentRepository["getByIdempotencyKey"]
@@ -67,6 +99,7 @@ function assignmentFromRow(
   row: typeof storyWorkAssignments.$inferSelect
 ): StoryWorkAssignment {
   try {
+    const origin = assignmentOriginFromRow(row);
     return createStoryWorkAssignment({
       id: storyWorkAssignmentId(row.id),
       projectId: projectId(row.projectId),
@@ -111,7 +144,8 @@ function assignmentFromRow(
           }),
       idempotencyKey: row.idempotencyKey,
       createdAt: row.createdAt,
-      updatedAt: row.updatedAt
+      updatedAt: row.updatedAt,
+      ...(origin === undefined ? {} : { origin })
     });
   } catch {
     throw new Error(STORED_ASSIGNMENT_INVALID);
@@ -150,7 +184,8 @@ function assignmentToRow(
       requestFingerprint
     ),
     createdAt: candidate.createdAt,
-    updatedAt: candidate.updatedAt
+    updatedAt: candidate.updatedAt,
+    ...assignmentOriginToRow(candidate.origin)
   };
 }
 
@@ -242,6 +277,30 @@ export function createPostgresStoryWorkAssignmentRepository(
       return Object.freeze(rows.map(assignmentFromRow));
     },
 
+    async listByMcpGrantOrigin(input: AssignmentOriginListInput) {
+      const limit = boundedLimit(
+        input.options?.limit,
+        STORY_WORK_ASSIGNMENT_LIST_MAX,
+        "Story work assignment"
+      );
+      const rows = await db
+        .select()
+        .from(storyWorkAssignments)
+        .where(
+          and(
+            eq(storyWorkAssignments.originMcpGrantId, input.originMcpGrantId),
+            eq(storyWorkAssignments.projectId, input.projectId),
+            eq(storyWorkAssignments.initiatorAccountId, input.accountId)
+          )
+        )
+        .orderBy(
+          desc(storyWorkAssignments.updatedAt),
+          desc(storyWorkAssignments.id)
+        )
+        .limit(limit);
+      return Object.freeze(rows.map(assignmentFromRow));
+    },
+
     async create(
       input: AssignmentCreateInput
     ): Promise<CreateStoryWorkAssignmentOutcome> {
@@ -299,6 +358,11 @@ export function createPostgresStoryWorkAssignmentRepository(
       let next: StoryWorkAssignment;
       try {
         next = createStoryWorkAssignment(input.next);
+      } catch {
+        return { ok: false, reason: "version-conflict" };
+      }
+      try {
+        assertStoryWorkAssignmentOriginImmutable(current, next);
       } catch {
         return { ok: false, reason: "version-conflict" };
       }

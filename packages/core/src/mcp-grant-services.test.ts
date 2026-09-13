@@ -1,10 +1,12 @@
 import { validateSceneDocumentV1 } from "@ghostwriter/editor";
 import { describe, expect, it } from "vitest";
+import { DomainValidationError } from "./domain.js";
 import type { AsyncHashPort } from "./agent-domain.js";
 import { createAgentFoundationServices } from "./agent-foundation-services.js";
 import { createAgentGuidanceServices } from "./agent-guidance-services.js";
 import {
   createCaptureReflectionServices,
+  type CaptureReflectionServices,
   type CaptureReflectionStructuredCompletionProvider
 } from "./capture-reflection-services.js";
 import {
@@ -27,18 +29,33 @@ import { createMemoryCaptureDocumentRepository } from "./memory-capture-document
 import { createMemoryContextReceiptRepository } from "./memory-context-receipt-repository.js";
 import { createMemoryMcpGrantRepository } from "./memory-mcp-grant-repository.js";
 import { createMemoryProjectRepository } from "./memory-project-repository.js";
+import { createMemoryStoryWorkAssignmentRepository } from "./memory-story-work-assignment-repository.js";
+import { createMemoryStoryWorkCoordinationRepository } from "./memory-story-work-coordination-repository.js";
 import { BELLWETHER_FIXTURE, BELLWETHER_FIXTURE_PROJECT_ID } from "./fixtures.js";
 import {
   createMcpGrantServices,
+  type McpGrantCaptureReflectionProviderFactory,
   type McpGrantServices
 } from "./mcp-grant-services.js";
 import {
-  MCP_GRANT_TOOL_NAMES,
+  MCP_GRANT_CAPTURE_TOOL_NAMES,
   McpGrantCaptureDeniedError,
   McpGrantNotFoundError,
+  McpGrantResourceDeniedError,
   McpGrantToolDeniedError,
+  mcpGrantId,
   type McpGrantTokenPort
 } from "./mcp-grants.js";
+import {
+  createStoryWorkAssignment,
+  storyWorkAssignmentId
+} from "./story-work-assignment.js";
+import {
+  createStoryWorkCoordination,
+  storyWorkCoordinationId,
+  storyWorkCoordinationStepId
+} from "./story-work-coordination.js";
+import { bookId, sceneId } from "./domain.js";
 import type { DomainIdKind, IdGenerator } from "./project-repository.js";
 
 const OWNER = accountId("account-mcp-grant-owner");
@@ -202,15 +219,27 @@ function createFakeProvider(): CaptureReflectionStructuredCompletionProvider {
   });
 }
 
+type CaptureReflectionCallMetrics = Readonly<{
+  previewCalls: number;
+  startCalls: number;
+  lastPreviewReceiptId?: string;
+  lastStartReceiptId?: string;
+}>;
+
 function createHarness(): Readonly<{
   services: McpGrantServices;
-  captureReflection: ReturnType<typeof createCaptureReflectionServices>;
+  captureReflection: CaptureReflectionServices;
+  captureReflectionMetrics: CaptureReflectionCallMetrics;
   captureDocuments: ReturnType<typeof createMemoryCaptureDocumentRepository>;
+  storyWorkAssignments: ReturnType<typeof createMemoryStoryWorkAssignmentRepository>;
+  storyWorkCoordinations: ReturnType<typeof createMemoryStoryWorkCoordinationRepository>;
 }> {
   const receipts = createMemoryContextReceiptRepository();
   const runs = createMemoryAgentRunRepository();
   const proposals = createMemoryAgentProposalRepository();
   const captureDocuments = createMemoryCaptureDocumentRepository();
+  const storyWorkAssignments = createMemoryStoryWorkAssignmentRepository();
+  const storyWorkCoordinations = createMemoryStoryWorkCoordinationRepository();
   const grants = createMemoryMcpGrantRepository();
   const projects = createMemoryProjectRepository(
     [BELLWETHER_FIXTURE],
@@ -251,7 +280,7 @@ function createHarness(): Readonly<{
     ids,
     clock
   });
-  const captureReflection = createCaptureReflectionServices({
+  const captureReflectionBase = createCaptureReflectionServices({
     projects,
     captureDocuments,
     receipts,
@@ -261,16 +290,45 @@ function createHarness(): Readonly<{
     ids,
     clock
   });
+  const captureReflectionMetrics = {
+    previewCalls: 0,
+    startCalls: 0,
+    lastPreviewReceiptId: undefined as string | undefined,
+    lastStartReceiptId: undefined as string | undefined
+  };
+  const captureReflection: CaptureReflectionServices = {
+    ...captureReflectionBase,
+    async preview(input) {
+      captureReflectionMetrics.previewCalls += 1;
+      const receipt = await captureReflectionBase.preview(input);
+      captureReflectionMetrics.lastPreviewReceiptId = receipt.id;
+      return receipt;
+    },
+    async start(input) {
+      captureReflectionMetrics.startCalls += 1;
+      captureReflectionMetrics.lastStartReceiptId = input.receiptId;
+      return captureReflectionBase.start(input);
+    }
+  };
   const services = createMcpGrantServices({
     projects,
     grants,
     captureDocuments,
     captureReflection,
+    storyWorkAssignments,
+    storyWorkCoordinations,
     tokens: createTestTokenPort(hashPort),
     ids,
     clock
   });
-  return { services, captureReflection, captureDocuments };
+  return {
+    services,
+    captureReflection,
+    captureReflectionMetrics,
+    captureDocuments,
+    storyWorkAssignments,
+    storyWorkCoordinations
+  };
 }
 
 describe("MCP grant services", () => {
@@ -281,7 +339,7 @@ describe("MCP grant services", () => {
       accountId: OWNER,
       projectId: BELLWETHER_FIXTURE_PROJECT_ID,
       captureIds: [CAPTURE],
-      tools: [...MCP_GRANT_TOOL_NAMES],
+      tools: ["ghostwriter_get_grant", ...MCP_GRANT_CAPTURE_TOOL_NAMES],
       expiresAt: "2026-08-01T00:00:00.000Z"
     });
     expect(created.token.length).toBeGreaterThanOrEqual(24);
@@ -329,7 +387,7 @@ describe("MCP grant services", () => {
       accountId: OWNER,
       projectId: BELLWETHER_FIXTURE_PROJECT_ID,
       captureIds: [CAPTURE],
-      tools: [...MCP_GRANT_TOOL_NAMES],
+      tools: ["ghostwriter_get_grant", ...MCP_GRANT_CAPTURE_TOOL_NAMES],
       expiresAt: "2026-08-01T00:00:00.000Z"
     });
 
@@ -338,7 +396,12 @@ describe("MCP grant services", () => {
       id: created.grant.id,
       projectId: BELLWETHER_FIXTURE_PROJECT_ID,
       captureIds: [CAPTURE],
-      tools: [...MCP_GRANT_TOOL_NAMES].sort(),
+      sceneIds: [],
+      bookIds: [],
+      assignmentIds: [],
+      coordinationIds: [],
+      allowProjectStructureRead: false,
+      tools: ["ghostwriter_get_grant", ...MCP_GRANT_CAPTURE_TOOL_NAMES].sort(),
       expiresAt: "2026-08-01T00:00:00.000Z"
     });
 
@@ -371,6 +434,95 @@ describe("MCP grant services", () => {
     expect(listed).toHaveLength(1);
     expect(listed[0]?.id).toBe(proposed.proposal.id);
     expect(listed[0]?.status).toBe("ready");
+  });
+
+  it("proposes capture reflection with an internal receipt factory without assemble/read tools", async () => {
+    const harness = createHarness();
+    await seedCapture(harness.captureDocuments);
+    const created = await harness.services.createGrant({
+      accountId: OWNER,
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+      captureIds: [CAPTURE],
+      tools: ["ghostwriter_get_grant", "ghostwriter_propose_capture_reflection"],
+      expiresAt: "2026-08-01T00:00:00.000Z"
+    });
+
+    let factoryCalls = 0;
+    let factoryReceiptId: string | undefined;
+    const createProvider: McpGrantCaptureReflectionProviderFactory = async (receipt) => {
+      factoryCalls += 1;
+      factoryReceiptId = receipt.id;
+      expect(receipt.workflowId).toBe("scene-partner.capture-reflection");
+      expect(receipt.resources[0]).toMatchObject({
+        resourceClass: "capture",
+        captureId: CAPTURE
+      });
+      return createFakeProvider();
+    };
+
+    const proposed = await harness.services.proposeCaptureReflectionUnderToken({
+      token: created.token,
+      captureId: CAPTURE,
+      createProvider
+    });
+    expect(proposed.kind).toBe("ready");
+    expect(harness.captureReflectionMetrics.previewCalls).toBe(1);
+    expect(harness.captureReflectionMetrics.startCalls).toBe(1);
+    expect(factoryCalls).toBe(1);
+    expect(factoryReceiptId).toBe(harness.captureReflectionMetrics.lastPreviewReceiptId);
+    expect(harness.captureReflectionMetrics.lastStartReceiptId).toBe(
+      harness.captureReflectionMetrics.lastPreviewReceiptId
+    );
+
+    await expect(
+      harness.services.assembleCaptureReflectionContextUnderToken({
+        token: created.token,
+        captureId: CAPTURE
+      })
+    ).rejects.toBeInstanceOf(McpGrantToolDeniedError);
+  });
+
+  it("rejects invalid provider modes and denies bad captures before the factory runs", async () => {
+    const harness = createHarness();
+    await seedCapture(harness.captureDocuments);
+    const created = await harness.services.createGrant({
+      accountId: OWNER,
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+      captureIds: [CAPTURE],
+      tools: ["ghostwriter_get_grant", "ghostwriter_propose_capture_reflection"],
+      expiresAt: "2026-08-01T00:00:00.000Z"
+    });
+
+    await expect(
+      harness.services.proposeCaptureReflectionUnderToken({
+        token: created.token,
+        captureId: CAPTURE,
+        provider: createFakeProvider(),
+        createProvider: async () => createFakeProvider()
+      } as never)
+    ).rejects.toBeInstanceOf(DomainValidationError);
+
+    await expect(
+      harness.services.proposeCaptureReflectionUnderToken({
+        token: created.token,
+        captureId: CAPTURE
+      } as never)
+    ).rejects.toBeInstanceOf(DomainValidationError);
+
+    const previewCallsBefore = harness.captureReflectionMetrics.previewCalls;
+    let factoryCalled = false;
+    await expect(
+      harness.services.proposeCaptureReflectionUnderToken({
+        token: created.token,
+        captureId: OTHER_CAPTURE,
+        createProvider: async () => {
+          factoryCalled = true;
+          return createFakeProvider();
+        }
+      })
+    ).rejects.toBeInstanceOf(McpGrantCaptureDeniedError);
+    expect(factoryCalled).toBe(false);
+    expect(harness.captureReflectionMetrics.previewCalls).toBe(previewCallsBefore);
   });
 
   it("non-discloses missing, revoked, and unauthorized capture/tool access", async () => {
@@ -412,5 +564,122 @@ describe("MCP grant services", () => {
     await expect(
       harness.services.getGrantUnderToken(created.token)
     ).rejects.toBeInstanceOf(McpGrantNotFoundError);
+  });
+
+  it("creates story-work grants without captures and enforces access under token", async () => {
+    const harness = createHarness();
+    const explicitAssignment = storyWorkAssignmentId("assignment-grant-explicit");
+    const foreignAssignment = storyWorkAssignmentId("assignment-grant-foreign");
+    const explicitCoordination = storyWorkCoordinationId("coordination-grant-explicit");
+    const scene = sceneId("scene-arrival-at-bellwether");
+    const book = bookId("book-signal-at-bellwether");
+
+    const assignmentBase = {
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+      initiatorAccountId: OWNER,
+      version: 1,
+      taskKind: "character" as const,
+      brief: "Brief",
+      constraints: "Constraints",
+      doneWhen: "Done",
+      sources: [
+        { kind: "project" as const, projectId: BELLWETHER_FIXTURE_PROJECT_ID, projectVersion: 1 }
+      ],
+      destination: {
+        kind: "story-knowledge" as const,
+        storyKnowledgeId: "knowledge-mara-venn" as never,
+        operation: "create" as const
+      },
+      provider: "openai" as const,
+      model: "gpt-4.1" as never,
+      status: "brief-ready" as const,
+      steps: [{ id: "step-1", title: "Step", dependencies: [] }],
+      results: [],
+      idempotencyKey: "idem-explicit",
+      createdAt: NOW,
+      updatedAt: NOW
+    };
+    await harness.storyWorkAssignments.create({
+      assignment: createStoryWorkAssignment({
+        ...assignmentBase,
+        id: explicitAssignment
+      }),
+      requestFingerprint: "f".repeat(64) as never
+    });
+    await harness.storyWorkAssignments.create({
+      assignment: createStoryWorkAssignment({
+        ...assignmentBase,
+        id: foreignAssignment,
+        idempotencyKey: "idem-foreign",
+        origin: { kind: "mcp", grantId: mcpGrantId("grant-other") }
+      }),
+      requestFingerprint: "e".repeat(64) as never
+    });
+    await harness.storyWorkCoordinations.create({
+      coordination: createStoryWorkCoordination({
+        id: explicitCoordination,
+        projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+        initiatorAccountId: OWNER,
+        version: 1,
+        title: "Coordination",
+        status: "active",
+        steps: [
+          {
+            kind: "scene-draft",
+            stepId: storyWorkCoordinationStepId("coord-step-scene"),
+            title: "Draft",
+            assignmentId: explicitAssignment
+          },
+          {
+            kind: "proposal-continuity-check",
+            stepId: storyWorkCoordinationStepId("coord-step-check"),
+            title: "Check",
+            dependencies: [
+              {
+                stepId: storyWorkCoordinationStepId("coord-step-scene"),
+                requiredState: "artifact-ready"
+              }
+            ],
+            deferred: {
+              brief: "Brief",
+              constraints: "Constraints",
+              doneWhen: "Done",
+              model: "gpt-4.1" as never
+            }
+          }
+        ],
+        idempotencyKey: "coord-idem",
+        createdAt: NOW,
+        updatedAt: NOW
+      }),
+      requestFingerprint: "c".repeat(64) as never
+    });
+
+    const created = await harness.services.createGrant({
+      accountId: OWNER,
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+      sceneIds: [scene],
+      bookIds: [book],
+      assignmentIds: [explicitAssignment],
+      coordinationIds: [explicitCoordination],
+      allowProjectStructureRead: true,
+      tools: ["ghostwriter_get_grant", "ghostwriter_list_story_work"],
+      expiresAt: "2026-08-01T00:00:00.000Z"
+    });
+    expect(created.grant.captureIds).toEqual([]);
+
+    const record = await harness.services.resolveActiveGrantRecordFromToken(
+      created.token
+    );
+    await harness.services.assertAssignmentReadableUnderGrant({
+      record,
+      assignmentId: explicitAssignment
+    });
+    await expect(
+      harness.services.assertAssignmentReadableUnderGrant({
+        record,
+        assignmentId: foreignAssignment
+      })
+    ).rejects.toBeInstanceOf(McpGrantResourceDeniedError);
   });
 });

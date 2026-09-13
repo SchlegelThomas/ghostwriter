@@ -53,6 +53,10 @@ import { createTestProviderKekRuntimeConfig } from "./provider-kek-config.js";
 import type { ScenePartnerImageGenerator } from "./scene-partner-routes.js";
 import { createCanvasCapacityFixture } from "@ghostwriter/storage/capacity-fixture";
 import { seedHermeticHarryPotter } from "./hermetic-seed.js";
+import {
+  e2eHermeticWriterAccountId,
+  seedE2eHermeticStoryWorkRecoveryFixture
+} from "./story-work-recovery-hermetic-fixture.js";
 
 if (process.env.GHOSTWRITER_E2E !== "1") {
   throw new Error("The hermetic E2E server requires GHOSTWRITER_E2E=1.");
@@ -175,6 +179,13 @@ await seedHermeticHarryPotter({
 });
 console.log(
   "Hermetic seed: Harry Potter series + character portraits ready for E2E writer."
+);
+const e2eStoryWorkRecovery = await seedE2eHermeticStoryWorkRecoveryFixture({
+  db: repositoryDatabase,
+  ownerAccountId: e2eHermeticWriterAccountId()
+});
+console.log(
+  `Hermetic seed: CP5a story-work recovery fixture — brief "${e2eStoryWorkRecovery.brief}", assignment ${e2eStoryWorkRecovery.assignmentId}, run ${e2eStoryWorkRecovery.runId}, project ${e2eStoryWorkRecovery.projectId}.`
 );
 // Explicitly opt-in, disposable data for direct-browser capacity acceptance.
 if (process.env.GHOSTWRITER_CANVAS_CAPACITY === "1") {
@@ -446,6 +457,9 @@ const app = createApp({
   allowedOrigins: [appOrigin],
   objectStorage,
   demoSeed: { enabled: process.env.GHOSTWRITER_DEMO_SEED !== "0" },
+  ...(process.env.GHOSTWRITER_ENABLE_LOCAL_MCP_BRIDGE === "1"
+    ? { localMcpBridge: { enabled: true } }
+    : {}),
   ...(liveProviders ? {} : { scenePartnerGenerateImage: hermeticFakeImage })
 });
 const server = serve({ fetch: app.fetch, port }, (info) => {
