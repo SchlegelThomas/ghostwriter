@@ -1,6 +1,6 @@
 # 0018: Story work assignments and artifact review
 
-- Status: proposed — awaiting epic acceptance; no implementation authority yet
+- Status: accepted — 2026-09-12 user approved the epic; implementation in progress
 - Date: 2026-09-12
 - Plan: [Develop a story with agents](../../plans/active/2026-09-12-agent-story-workflow/plan.html)
 - Extends: ADR 0011 (context/proposals/grants), ADR 0014 (entity drafts)
@@ -12,7 +12,7 @@ The current Agent panel can submit jobs, create proposals, and seed Scene Partne
 but does not preserve a complete assignment or coordinate downstream checks on actual results.
 A brief-open event is not a written scene, and a catalog memo without prose is not a story check.
 
-## Proposed decision
+## Decision
 
 Persist project-owned assignments with work kind, writer brief, stable scope/destination IDs,
 context receipt references, bounded steps/dependencies, attempt identities, and proposal/result
@@ -55,12 +55,12 @@ Provider errors and deterministic guidance must remain distinguishable from gene
 
 Requires assignment persistence, attempt/version contracts, bounded context queries, typed structure
 proposals/findings, migration tests, and UI review/resume states. Does not change canonical version
-domains or require a new queue vendor. Thomas must accept recoverability, approval granularity,
-context/spend boundaries and MCP transport scope before implementation. Until then ADRs 0011/0014/0016
-remain the accepted behavior. Update the ADR index and architecture/product/API/operations docs
+domains or require a new queue vendor. Thomas accepted the epic and its recoverability, approval granularity, context/spend and MCP
+transport boundaries on 2026-09-12. Existing behavior remains as documented until each checkpoint
+is implemented and verified. Update the ADR index and architecture/product/API/operations docs
 when accepted and as each checkpoint ships.
 
-## Proposed extension — connected story spine (2026-09-12 review)
+## Accepted extension — connected story spine (2026-09-12 review)
 
 The user identified Canvas/writing integration and maintaining the main story spine as a central
 missing outcome. Deliver a shared narrative-context projection early, before agent-specific loops.
@@ -82,7 +82,7 @@ precise effect and preserves history; no automatic downstream rewrite. Canvas re
 spatial. Assignment/context/MCP projections share this model with the existing human-apply ceiling.
 No new store, automatic whole-book score, or hidden synchronization authority is introduced.
 
-## Canvas foundation review — proposed clarifications (2026-09-12)
+## Canvas foundation review — accepted clarifications (2026-09-12)
 
 The thorough pre-approval audit adds CP0a/CP0b before narrative work. Current scoped visibility
 is graph-derived, so objects created inside a chapter can disappear. Introduce explicit board
@@ -107,4 +107,32 @@ event sourcing or conflate board restore with prose/intent restore.
 Bound history and graph/context reads after profiling a realistic many-scene/link/scope fixture.
 No performance budget is claimed as measured until CP0b records it. Canvas/spine/history MCP reads
 and typed proposals require explicit grants/bindings; current registry exceptions are not parity.
-These decisions remain proposed with the epic; the audit is not authorization to implement.
+Thomas authorized implementation of the full epic after reviewing the audit on 2026-09-12.
+
+## Foundation implementation contract (in progress)
+
+Canvas create/place accepts an optional typed scope and writes its initial scope placement in the
+same board transaction. Only a placement marked `membership: "explicit"` grants direct visibility without a narrative
+edge. Legacy placements remain geometry-only: add a nullable membership column with no backfill.
+Geometry updates preserve a preexisting marker without inventing membership. Existing graph-derived
+related-object visibility is preserved for compatibility. New scope targets
+must resolve within the authorized project; stale historical placements remain inspectable at project
+level rather than blocking unrelated edits. Completed geometry uses setScopePlacement for one
+expected-board-version commit, including project scope.
+
+Undo traverses writer actions: command and explicit restore add an action, Undo removes the latest
+action, and exhaustion refuses without mutation. Audit snapshots remain append-only. No implicit
+Redo is introduced. This reconciles the actual snapshot-based store with ADR0007’s earlier guarded
+inverse wording; it does not introduce event sourcing or restore manuscript prose. Historical Undo
+compatibility and bounded history traversal remain required before CP0b is complete.
+
+### Undo provenance and bounded traversal
+
+CP0b replaces reconstruction from the entire audit list with explicit restore provenance on new
+Undo/restore revisions. Each new revision records the source revision restored; normal commands
+retain their parent revision. Undo resolves the current logical state and its predecessor through
+these references, preserving physical audit ancestry and exact snapshots. Old Undo records lacking
+provenance form a deliberate boundary: new actions can still be undone to that saved state, while
+traversal beyond an ambiguous legacy Undo refuses with a link to history instead of guessing. No
+old snapshot is deleted or rewritten. This also enables bounded public history pages without an
+unbounded list read for ordinary commands or Undo.

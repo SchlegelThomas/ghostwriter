@@ -468,3 +468,13 @@ Canvas board/history/preference reads and command/restore/scene-handoff writes a
 registered with backend bindings and explicit MCP authorization exceptions.
 These exceptions preserve the human/agent authority contract rather than silently granting a
 fixture process owner authority.
+
+### Canvas scope creation (story workflow foundation)
+
+Canvas `canvas.object.create` / `canvas.object.place` accept optional
+`scope: { scopeKind: "project" | "chapter" | "scene", scopeId?: string }`.
+Project scope has no ID; chapter and scene scopes require an existing authorized-project target.
+The object and its initial scoped geometry persist in one expected-Canvas-version command.
+Create-scene-from-Canvas accepts the same optional `canvas.scope` in its existing atomic handoff.
+`canvas.object.setScopePlacement` also validates newly targeted scopes and serves complete geometry
+updates (position plus size) without two racing writes. No endpoint bypasses owner authorization.

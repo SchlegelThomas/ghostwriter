@@ -317,3 +317,14 @@ and a platform-agnostic core remain non-negotiable. Server-authoritative online-
 state is an explicit exception to the repository's earlier local-first direction, recorded by ADR
 0002 and reflected in `AGENTS.md`. Do not introduce a second canonical store or imply offline
 editing without a later accepted plan and ADR.
+
+## Story workflow foundation changes (2026-09-12, in progress)
+
+[ADR 0018](adr/0018-story-work-assignments-and-review.md) is accepted for the story workflow epic.
+Canvas inspection is distinct from the active writing scene. Create/place commands can atomically
+include an initial typed scope placement in the same board version transaction; invalid new scope
+references are refused. Scope placement grants visibility independently of a story edge, with legacy
+graph visibility preserved during compatibility work. Scoped geometry uses one completed command;
+Undo traverses writer actions while retaining append-only audit snapshots. Full checkpoint acceptance,
+assignment persistence and narrative context are still in progress; this section does not claim the
+entire ADR is implemented.

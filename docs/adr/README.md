@@ -3,6 +3,10 @@
 ADRs preserve decisions whose consequences outlive the feature that introduced them. They are
 short, immutable records: amend only factual errors; supersede a decision with a new ADR.
 
+## Current story workflow decision
+
+- [0018: Story work assignments and artifact review](0018-story-work-assignments-and-review.md) — accepted; implementation in progress.
+
 ## Create or update an ADR when
 
 - choosing or replacing a foundational technology, runtime, persistence model, sync model, or AI provider;

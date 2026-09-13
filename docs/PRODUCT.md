@@ -241,3 +241,11 @@ and hermetic fakes exist locally). Product copy must not imply those later outco
 Novel writing and multi-book storytelling lead the product. Screenplay-specific formatting,
 writers' rooms, publishing integrations, studios, licensing, audience discovery, commerce,
 and a marketplace remain later expansions. Each receives its own accepted plan before build.
+
+## Story-agent epic — Canvas foundations in progress (2026-09-12)
+
+Canvas inspection can select a different scene while the active Draft stays open; Open Draft/Split
+is explicit navigation. Search includes unplaced manuscript scenes. Scoped creation stays visible
+in its chapter, and the reading spine can show the chapter or whole story. Phone Canvas uses the
+ordered view and a scrollable inspector sheet. Consecutive Undo walks back through writer actions.
+The broader story-spine and agent-development workflow remains in progress under the active epic.

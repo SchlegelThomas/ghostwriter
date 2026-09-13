@@ -1,6 +1,16 @@
 # Checkpoint working notes
 
-Planning only. Canvas audit complete; CP0a scope/discovery/selection and CP0b geometry/history/recovery precede CP1a connected Canvas/Draft spine. All implementation remains unstarted pending Thomas’s approval. Fill this frame before delegating implementation.
+Implementation authorized 2026-09-12. CP0a/CP0b foundation slice in progress.
+
+- Outcome: inspect Canvas without replacing Draft; create visible chapter objects; find unplaced scenes; consistent scoped geometry; predictable consecutive Undo.
+- Refusals: unknown/foreign scope, stale board version, archived target; no canonical prose writes from Canvas inspection or Undo.
+- Domain: same canonical scene/knowledge IDs, board version for placement/geometry/history, independent scene lease/version. Scope placement explicitly grants visibility; legacy graph inclusion is currently preserved and requires compatibility review before CP0a acceptance.
+- Binding: core CanvasCommand adds optional scope to create/place; existing relational placement table persists within the same board transaction; strict backend accepts typed scope; UI sets current scope. No new store/migration for this additive contract.
+- History: reconstruct action stack from append-only ordered revision reasons. Normal command/explicit restore pushes, Undo pops; exhausted stack refuses without mutation. No Redo introduced; snapshot restore stays explicit. Older pre-fix Undo sequences require documented compatibility treatment before CP0b completion.
+- Delegation: Sol/medium and Sol/high agents all failed before edits due workspace credits. Parent continues locally under user’s explicit continue instruction; no model success claim.
+- Checks: focused existing + new scope/search/Undo tests, client typecheck, direct browser, affected backend/storage, then pnpm verify. Playwright remains gated on complete-outcome user verification.
+- Parent still owns: all checkpoint acceptance, scope legacy independence/recovery, complete narrow/focus behavior, new-scene atomic scope handoff, persistence and browser evidence; remaining epic CP1–CP7 untouched.
+ Fill this frame before delegating implementation.
 
 # Feature checkpoint template
 
