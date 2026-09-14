@@ -134,6 +134,24 @@ export function fittedCanvasCardSize(
   };
 }
 
+/** Intrinsic minimum bounds for usable card chrome, independent of saved size. */
+export function minimumCanvasCardSize(
+  object: Pick<CanvasObject, "width" | "height" | "kind" | "label">,
+  options: CanvasCardFitOptions & Readonly<{ displayLabel?: string }> = {}
+): Readonly<{ width: number; height: number }> {
+  return fittedCanvasCardSize(
+    {
+      ...object,
+      width: 1,
+      height: 1,
+      ...(options.displayLabel === undefined
+        ? {}
+        : { label: options.displayLabel })
+    },
+    options
+  );
+}
+
 export function needsCanvasCardFit(
   current: Readonly<{ width: number; height: number }>,
   fitted: Readonly<{ width: number; height: number }>,
@@ -216,6 +234,30 @@ export type LiveCanvasGeometry = Readonly<{
   width: number;
   height: number;
 }>;
+
+/**
+ * Bounds actually painted on the spatial Canvas. These bounds drive cards,
+ * relationship endpoints, and pointer hit testing; saved bounds remain on the
+ * original object until the writer explicitly resizes it.
+ */
+export function displayCanvasObject(
+  object: CanvasObject,
+  live: LiveCanvasGeometry | undefined,
+  options: CanvasCardFitOptions & Readonly<{ displayLabel?: string }> = {}
+): CanvasObject {
+  const geometry = withLiveCanvasGeometry(object, live);
+  const fitted = fittedCanvasCardSize(
+    options.displayLabel === undefined
+      ? geometry
+      : { ...geometry, label: options.displayLabel },
+    options
+  );
+  return {
+    ...geometry,
+    width: Math.max(geometry.width, fitted.width),
+    height: Math.max(geometry.height, fitted.height)
+  };
+}
 
 /** Overlay optimistic drag/resize geometry onto a board object for rendering. */
 export function withLiveCanvasGeometry<

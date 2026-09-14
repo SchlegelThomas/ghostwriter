@@ -34,7 +34,7 @@ export type CanvasScreenFrame = Readonly<{
 
 export type CanvasOutlineItem = Readonly<{
   object: CanvasObject;
-  authorityLabel: "Confirmed" | "Provisional fixture";
+  authorityLabel: "Confirmed" | "Provisional";
   stateLabel: "Active" | "Archived" | "Dismissed";
   positionLabel: string;
   orderLabel?: string;
@@ -166,6 +166,68 @@ export function searchCanvasObjects(
       .filter((value): value is string => value !== undefined)
       .some((value) => value.toLocaleLowerCase().includes(normalized))
   );
+}
+
+/** Keep canonical names recognizable even when a card has a spatial annotation. */
+export function canvasObjectTitle(object: CanvasObject, project: ProjectNavigator): string {
+  if (object.sceneId !== undefined) {
+    for (const book of project.books) {
+      const scene = [...book.parts.flatMap(part => part.chapters.flatMap(chapter => chapter.scenes)), ...book.unassignedScenes]
+        .find(scene => scene.id === object.sceneId);
+      if (scene !== undefined) return scene.title;
+    }
+  }
+  return project.storyKnowledge.find(k => k.id === object.storyKnowledgeId)?.label ?? object.label;
+}
+
+export type CanvasSearchResult = Readonly<{
+  archived?: boolean;
+  key: string;
+  label: string;
+  object?: CanvasObject;
+  sceneId?: SceneId;
+  knowledgeId?: ProjectNavigatorKnowledge["id"];
+}>;
+
+/** Search canonical records as well as spatial annotations, without creating cards. */
+export function searchCanvasStory(
+  project: ProjectNavigator,
+  objects: readonly CanvasObject[],
+  query: string,
+  options: Readonly<{ includeArchived?: boolean }> = {}
+): readonly CanvasSearchResult[] {
+  const term = query.trim().toLocaleLowerCase();
+  if (!term) return [];
+  const scenes = project.books.filter(b => options.includeArchived || b.archivedAt === undefined).flatMap(b => [
+    ...b.parts.flatMap(p => p.chapters.flatMap(c => c.scenes)), ...b.unassignedScenes
+  ].map(scene => b.archivedAt === undefined ? scene : { ...scene, archivedAt: b.archivedAt }));
+  const active = objects.filter(o => (options.includeArchived || o.archivedAt === undefined) && o.dismissedAt === undefined &&
+    (o.sceneId === undefined || scenes.some(scene => scene.id === o.sceneId && (options.includeArchived || scene.archivedAt === undefined))) &&
+    (o.storyKnowledgeId === undefined || project.storyKnowledge.some(k => k.id === o.storyKnowledgeId && (options.includeArchived || k.archivedAt === undefined))));
+  const results = new Map<string, CanvasSearchResult>();
+  for (const object of searchCanvasObjects(active, query)) {
+    results.set(object.id, { key: object.id, label: canvasObjectTitle(object, project), object,
+      ...(object.archivedAt !== undefined || scenes.some(scene => scene.id === object.sceneId && scene.archivedAt !== undefined) || project.storyKnowledge.some(k => k.id === object.storyKnowledgeId && k.archivedAt !== undefined) ? { archived: true } : {}) });
+  }
+  for (const scene of scenes) {
+    if ((!options.includeArchived && scene.archivedAt !== undefined) || !scene.title.toLocaleLowerCase().includes(term)) continue;
+    const object = active.find(o => o.sceneId === scene.id);
+    results.set(object?.id ?? scene.id, {
+      key: object?.id ?? scene.id, label: scene.title, sceneId: scene.id,
+      ...(scene.archivedAt !== undefined || object?.archivedAt !== undefined ? { archived: true } : {}),
+      ...(object === undefined ? {} : { object })
+    });
+  }
+  for (const knowledge of project.storyKnowledge) {
+    if ((!options.includeArchived && knowledge.archivedAt !== undefined) || !knowledge.label.toLocaleLowerCase().includes(term)) continue;
+    const object = active.find(o => o.storyKnowledgeId === knowledge.id);
+    results.set(object?.id ?? knowledge.id, {
+      key: object?.id ?? knowledge.id, label: knowledge.label, knowledgeId: knowledge.id,
+      ...(knowledge.archivedAt !== undefined || object?.archivedAt !== undefined ? { archived: true } : {}),
+      ...(object === undefined ? {} : { object })
+    });
+  }
+  return [...results.values()];
 }
 
 export function canvasChapterAggregates(
@@ -427,6 +489,8 @@ export function canvasHistoryLabel(revision: CanvasRevisionMetadata): string {
       return "Object resized";
     case "canvas.object.setScopePlacement":
       return "Scope placement updated";
+    case "canvas.object.setScopeMembership":
+      return "Explicit scope inclusion updated";
     case "canvas.object.archive":
       return "Object archived";
     case "canvas.object.restore":
@@ -490,7 +554,7 @@ export function projectCanvasOutline(
         authorityLabel:
           object.authority === "confirmed"
             ? ("Confirmed" as const)
-            : ("Provisional fixture" as const),
+            : ("Provisional" as const),
         stateLabel:
           object.dismissedAt !== undefined
             ? ("Dismissed" as const)

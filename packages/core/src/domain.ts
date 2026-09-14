@@ -6,6 +6,7 @@ export type PartId = BrandedId<"PartId">;
 export type ChapterId = BrandedId<"ChapterId">;
 export type SceneId = BrandedId<"SceneId">;
 export type StoryKnowledgeId = BrandedId<"StoryKnowledgeId">;
+export type NarrativeBeatId = BrandedId<"NarrativeBeatId">;
 export type EditionId = BrandedId<"EditionId">;
 export type RevisionId = BrandedId<"RevisionId">;
 export type SceneVariantId = BrandedId<"SceneVariantId">;
@@ -101,6 +102,10 @@ export function sceneId(value: string): SceneId {
 
 export function storyKnowledgeId(value: string): StoryKnowledgeId {
   return createId(value, "StoryKnowledgeId");
+}
+
+export function narrativeBeatId(value: string): NarrativeBeatId {
+  return createId(value, "NarrativeBeatId");
 }
 
 export function editionId(value: string): EditionId {
@@ -656,6 +661,34 @@ export type StoryKnowledgeLink = Readonly<{
   kind: StoryKnowledgeLinkKind;
 }>;
 
+export const STORY_NARRATIVE_MAX_BEATS = 1_500;
+export const STORY_NARRATIVE_MAX_BEAT_DEPENDENCIES = 100;
+
+export type NarrativeBeatRole =
+  | "setup"
+  | "development"
+  | "payoff"
+  | "consequence";
+
+export type NarrativeThreadResolution =
+  | "open"
+  | "intentionally-open"
+  | "resolved";
+
+export type NarrativeBeat = Readonly<{
+  id: NarrativeBeatId;
+  sceneId: SceneId;
+  role: NarrativeBeatRole;
+  summary: string;
+  dependsOnBeatIds: readonly NarrativeBeatId[];
+  archivedAt?: string;
+}>;
+
+export type StoryThreadNarrative = Readonly<{
+  resolution: NarrativeThreadResolution;
+  beats: readonly NarrativeBeat[];
+}>;
+
 export type StoryKnowledge = Readonly<{
   id: StoryKnowledgeId;
   projectId: ProjectId;
@@ -668,6 +701,7 @@ export type StoryKnowledge = Readonly<{
   aliases?: readonly string[];
   characterSheet?: CharacterSheet;
   visuals?: readonly CharacterVisual[];
+  narrative?: StoryThreadNarrative;
   archivedAt?: string;
 }>;
 
@@ -676,6 +710,122 @@ function createStoryKnowledgeLink(input: StoryKnowledgeLink): StoryKnowledgeLink
     toId: input.toId,
     kind: input.kind
   });
+}
+
+const NARRATIVE_BEAT_ROLES = new Set<NarrativeBeatRole>([
+  "setup",
+  "development",
+  "payoff",
+  "consequence"
+]);
+
+const NARRATIVE_THREAD_RESOLUTIONS = new Set<NarrativeThreadResolution>([
+  "open",
+  "intentionally-open",
+  "resolved"
+]);
+
+function createNarrativeBeat(input: NarrativeBeat): NarrativeBeat {
+  if (!NARRATIVE_BEAT_ROLES.has(input.role)) {
+    throw new DomainValidationError(
+      "INVALID_CRAFT",
+      `Narrative beat "${input.id}" has an invalid role.`
+    );
+  }
+  if (input.dependsOnBeatIds.length > STORY_NARRATIVE_MAX_BEAT_DEPENDENCIES) {
+    throw new DomainValidationError(
+      "VALUE_TOO_LONG",
+      `Narrative beat "${input.id}" is limited to ${STORY_NARRATIVE_MAX_BEAT_DEPENDENCIES} dependencies.`
+    );
+  }
+  assertUniqueReferences(
+    input.dependsOnBeatIds,
+    `Narrative beat "${input.id}" dependencies`
+  );
+  const archivedAt =
+    input.archivedAt === undefined
+      ? undefined
+      : requireText(input.archivedAt, "Narrative beat archive time");
+  return Object.freeze({
+    id: input.id,
+    sceneId: input.sceneId,
+    role: input.role,
+    summary: requireText(input.summary, "Narrative beat summary"),
+    dependsOnBeatIds: freezeList(input.dependsOnBeatIds),
+    ...(archivedAt === undefined ? {} : { archivedAt })
+  });
+}
+
+function assertNarrativeDependencies(
+  beats: readonly NarrativeBeat[],
+  label: string
+): void {
+  const byId = new Map(beats.map((beat) => [beat.id, beat]));
+  for (const beat of beats) {
+    for (const dependencyId of beat.dependsOnBeatIds) {
+      if (dependencyId === beat.id) {
+        throw new DomainValidationError(
+          "UNKNOWN_REFERENCE",
+          `${label} beat "${beat.id}" cannot depend on itself.`
+        );
+      }
+      if (!byId.has(dependencyId)) {
+        throw new DomainValidationError(
+          "UNKNOWN_REFERENCE",
+          `${label} beat "${beat.id}" references unknown same-thread dependency "${dependencyId}".`
+        );
+      }
+    }
+  }
+
+  const visiting = new Set<NarrativeBeatId>();
+  const visited = new Set<NarrativeBeatId>();
+  const visit = (id: NarrativeBeatId): void => {
+    if (visited.has(id)) return;
+    if (visiting.has(id)) {
+      throw new DomainValidationError(
+        "INVALID_CRAFT",
+        `${label} contains a narrative dependency cycle at beat "${id}".`
+      );
+    }
+    visiting.add(id);
+    for (const dependencyId of byId.get(id)?.dependsOnBeatIds ?? []) {
+      visit(dependencyId);
+    }
+    visiting.delete(id);
+    visited.add(id);
+  };
+  for (const beat of beats) visit(beat.id);
+}
+
+export function createStoryThreadNarrative(
+  input: StoryThreadNarrative
+): StoryThreadNarrative {
+  if (!NARRATIVE_THREAD_RESOLUTIONS.has(input.resolution)) {
+    throw new DomainValidationError(
+      "INVALID_CRAFT",
+      "Story thread has an invalid narrative resolution."
+    );
+  }
+  if (input.beats.length === 0) {
+    throw new DomainValidationError(
+      "EMPTY_VALUE",
+      "A mapped story thread must contain at least one narrative beat."
+    );
+  }
+  if (input.beats.length > STORY_NARRATIVE_MAX_BEATS) {
+    throw new DomainValidationError(
+      "VALUE_TOO_LONG",
+      `A story thread is limited to ${STORY_NARRATIVE_MAX_BEATS} narrative beats.`
+    );
+  }
+  const beats = freezeList(input.beats.map(createNarrativeBeat));
+  assertUniqueReferences(
+    beats.map((beat) => beat.id),
+    "Story thread narrative beats"
+  );
+  assertNarrativeDependencies(beats, "Story thread narrative");
+  return Object.freeze({ resolution: input.resolution, beats });
 }
 
 export function createStoryKnowledge(input: StoryKnowledge): StoryKnowledge {
@@ -727,6 +877,16 @@ export function createStoryKnowledge(input: StoryKnowledge): StoryKnowledge {
       `Story knowledge "${input.id}" visuals`
     );
   }
+  if (input.narrative !== undefined && input.kind !== "thread") {
+    throw new DomainValidationError(
+      "INVALID_CRAFT",
+      "Only thread story knowledge can contain a narrative map."
+    );
+  }
+  const narrative =
+    input.narrative === undefined
+      ? undefined
+      : createStoryThreadNarrative(input.narrative);
 
   return Object.freeze({
     id: input.id,
@@ -740,6 +900,7 @@ export function createStoryKnowledge(input: StoryKnowledge): StoryKnowledge {
     ...(aliases === undefined ? {} : { aliases }),
     ...(characterSheet === undefined ? {} : { characterSheet }),
     ...(visuals === undefined ? {} : { visuals }),
+    ...(narrative === undefined ? {} : { narrative }),
     ...(archivedAt === undefined ? {} : { archivedAt })
   });
 }
@@ -807,6 +968,11 @@ function assertUniqueIds(records: ProjectRecords): void {
     ...records.books.map((book) => ["book", book.id] as const),
     ...records.scenes.map((scene) => ["scene", scene.id] as const),
     ...records.storyKnowledge.map((knowledge) => ["story knowledge", knowledge.id] as const),
+    ...records.storyKnowledge.flatMap((knowledge) =>
+      (knowledge.narrative?.beats ?? []).map(
+        (beat) => ["narrative beat", beat.id] as const
+      )
+    ),
     ...records.editions.map((edition) => ["edition", edition.id] as const),
     ...records.books.flatMap((book) =>
       book.manuscript.parts.flatMap((part) => [
@@ -872,6 +1038,15 @@ export function validateProjectRecords(records: ProjectRecords): void {
   const knowledgeById = new Map(
     records.storyKnowledge.map((knowledge) => [knowledge.id, knowledge])
   );
+  const narrativeBeats = records.storyKnowledge.flatMap(
+    (knowledge) => knowledge.narrative?.beats ?? []
+  );
+  if (narrativeBeats.length > STORY_NARRATIVE_MAX_BEATS) {
+    throw new DomainValidationError(
+      "VALUE_TOO_LONG",
+      `A project is limited to ${STORY_NARRATIVE_MAX_BEATS} narrative beats.`
+    );
+  }
 
   assertExactReferenceSet(
     project.bookIds,
@@ -949,6 +1124,15 @@ export function validateProjectRecords(records: ProjectRecords): void {
         throw new DomainValidationError(
           "UNKNOWN_REFERENCE",
           `Story knowledge "${knowledge.id}" references unknown knowledge "${link.toId}".`
+        );
+      }
+    }
+
+    for (const beat of knowledge.narrative?.beats ?? []) {
+      if (!sceneById.has(beat.sceneId)) {
+        throw new DomainValidationError(
+          "UNKNOWN_REFERENCE",
+          `Narrative beat "${beat.id}" references unknown scene "${beat.sceneId}".`
         );
       }
     }

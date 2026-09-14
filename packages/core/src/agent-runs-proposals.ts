@@ -27,6 +27,14 @@ import type { WorkPlanV1 } from "./work-plan-v1.js";
 import { validateWorkPlanV1 } from "./work-plan-v1.js";
 import type { StoryKnowledgeCreateV1 } from "./story-knowledge-create-v1.js";
 import { validateStoryKnowledgeCreateV1 } from "./story-knowledge-create-v1.js";
+import type { CharacterCreateV2 } from "./character-create-v2.js";
+import { validateCharacterCreateV2 } from "./character-create-v2.js";
+import type { SceneDraftV1 } from "./scene-draft-v1.js";
+import { validateSceneDraftV1 } from "./scene-draft-v1.js";
+import type { StoryCheckFindingsV1 } from "./story-check-findings-v1.js";
+import { validateStoryCheckFindingsV1 } from "./story-check-findings-v1.js";
+import type { StoryStructureProposalV1 } from "./story-structure-proposal-v1.js";
+import { validateStoryStructureProposalV1 } from "./story-structure-proposal-v1.js";
 import {
   agentProposalListPreviewFromPayload,
   type AgentProposalListPreview
@@ -50,6 +58,10 @@ export type AgentProposalPayload =
   | NextActionV1
   | WorkPlanV1
   | StoryKnowledgeCreateV1
+  | CharacterCreateV2
+  | SceneDraftV1
+  | StoryCheckFindingsV1
+  | StoryStructureProposalV1
   | CraftPartnerPayload;
 
 export const AGENT_FOUNDATION_LIST_MAX = 100;
@@ -95,6 +107,7 @@ export const AGENT_RUN_TERMINAL_DIAGNOSTIC_CODES = Object.freeze([
   "provider-malformed-output",
   "provider-unavailable",
   "run-canceled",
+  "client-interrupted",
   "context-stale",
   "internal-failure"
 ] as const);
@@ -629,6 +642,18 @@ export function validateAgentProposalPayload(
   }
   if (outputSchemaId === "story-knowledge-create-v1") {
     return validateStoryKnowledgeCreateV1(payload);
+  }
+  if (outputSchemaId === "character-create-v2") {
+    return validateCharacterCreateV2(payload);
+  }
+  if (outputSchemaId === "scene-draft-v1") {
+    return validateSceneDraftV1(payload);
+  }
+  if (outputSchemaId === "story-check-findings-v1") {
+    return validateStoryCheckFindingsV1(payload);
+  }
+  if (outputSchemaId === "story-structure-proposal-v1") {
+    return validateStoryStructureProposalV1(payload);
   }
   return validateCraftPartnerPayload(outputSchemaId, payload);
 }

@@ -1,0 +1,2 @@
+ALTER TABLE "story_knowledge" ADD COLUMN "narrative" jsonb;--> statement-breakpoint
+ALTER TABLE "story_knowledge" ADD CONSTRAINT "story_knowledge_narrative_thread_object_check" CHECK ("story_knowledge"."narrative" is null or ("story_knowledge"."kind" = 'thread' and jsonb_typeof("story_knowledge"."narrative") = 'object'));

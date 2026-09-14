@@ -18,7 +18,7 @@ database with Drizzle migrations, a Node/Hono service, and a database branch per
 | Browser API | Cloudflare Pages Function → Fly.io | Same-origin `/api/*` keeps auth cookies first-party and streams to the fixed backend |
 | Mobile builds (later) | Expo EAS free tier | ~30 builds/month free; EAS Update for OTA fixes |
 | Desktop distribution (later) | GitHub Releases | electron-builder artifacts attached by Actions, free |
-| MCP server | Runs locally (stdio) | Fixture navigator by default; scoped grant tools use injectable grant services / optional `GHOSTWRITER_MCP_GRANT_TOKEN` for local parity. Production remote MCP OAuth remains later. |
+| MCP server | Runs locally (stdio) | Grant bridge mode: `GHOSTWRITER_MCP_API_URL` + `GHOSTWRITER_MCP_GRANT_TOKEN` with backend `GHOSTWRITER_ENABLE_LOCAL_MCP_BRIDGE=1` (default off). Fixture navigator only when `GHOSTWRITER_MCP_FIXTURE=1`. Half/mixed modes fail clearly. Production remote MCP OAuth remains later. |
 
 Expected future costs are Lakebase/Fly usage beyond their available tiers and Apple's $99/yr
 developer account once iOS device/TestFlight builds start. Cloudflare Pages is used in
@@ -417,3 +417,87 @@ gh workflow run ops-fly-r2-secrets.yml -f generate_kek=false
 | "provision public media / R2" | `./scripts/public-media/provision-public-bucket.sh` then sync / `ops-fly-r2-secrets` |
 | "release desktop build" (later) | tag push → Actions → GitHub Release |
 | "push a mobile update" (later) | `eas update` |
+
+## Story workflow Canvas foundations (implementation in progress)
+
+Migration 0023 adds nullable explicit scope membership without backfilling legacy placements.
+Existing geometry-only rows keep their prior behavior. Undo provenance is additive and historical
+snapshots remain intact; ambiguous old Undo records require explicit history review. These local
+changes have not been deployed. Apply migrations through the normal branch/CI workflow.
+
+The opt-in capacity probe runs entirely in a disposable in-memory PGlite database:
+`pnpm --filter @ghostwriter/storage exec tsx src/canvas-capacity-profile.ts`. It reports hardware,
+payload and timings for 1,000 objects, 1,500 links, scoped geometry and 200 serialized writes.
+It does not connect to production or establish network/browser frame performance.
+
+For direct-browser acceptance using the same fixture, start the existing isolated backend with
+`GHOSTWRITER_E2E=1 GHOSTWRITER_CANVAS_CAPACITY=1 PORT=8787 E2E_APP_ORIGIN=http://localhost:8081 pnpm --filter @ghostwriter/backend exec tsx src/e2e-server.ts`.
+The opt-in Capacity novel has 201 Canvas revisions and belongs only to the hermetic writer.
+It is discarded with the in-memory backend and never seeds the normal backend.
+
+#### Story workflow migration 0025
+
+`0025_even_radioactive_man.sql` adds nullable thread narrative JSONB to story knowledge.
+Existing records remain NULL; no causal beats are inferred or backfilled. Normal project
+CAS transactions persist the aggregate. Apply through the standard migration process;
+local hermetic tests exercise empty/legacy migration and round-trip preservation.
+
+#### Story workflow migration 0026
+
+The personal Canvas preference migration adds independent CAS and a bounded scope-view
+JSONB map to the existing preference row. Legacy x/y/zoom/selected-object values are
+backfilled into the project scope; no historical child camera is inferred. Old clients keep
+the legacy columns in sync. Empty/legacy migration, stale writes and account isolation are
+covered by focused repository tests. This is UI return state, never canonical story content.
+
+
+### Story-work assignment migration (ADR 0018)
+
+Migration `0027_premium_randall.sql` adds assignment and attempt persistence. It stores
+request keys/fingerprints and original/current artifact pointers independently of canonical story
+metadata. Attempt source mode distinguishes submitted snapshots from explicitly refreshed revisions.
+Generation, review and apply use transactional UOWs; provider network calls remain outside database
+transactions. The migration has been checked from empty and prior local schemas; production follows
+the existing migration/deployment workflow and has not been run for this epic.
+
+Migration `0028_condemned_rogue.sql` adds paired nullable apply-request identity fields to
+assignments. Legacy rows retain null values; the database rejects half-populated pairs. This
+supports exact scene-apply replay across a lost response without creating another scene or revision.
+Local migration, reload and immutable-CAS tests pass. The first-party scene apply workflow is
+implemented locally; this migration has not been run against production.
+
+Grounded continuity checks reuse migrations 0027/0028 and the existing JSON proposal/receipt
+columns; no CP3 migration is added. Outline/structure work (CP4) likewise adds no migration beyond
+`0028`: trusted `story-structure-proposal-v1` artifacts live in existing proposal/assignment JSON,
+while canonical effects use project metadata, scene-document genesis initialization and optional
+Canvas stores inside the same transactional patterns as scene apply.
+
+**CP5a recovery (local)** adds no migration: cancel/mark-interrupted uses existing assignment,
+attempt, and agent-run tables inside transactional recovery UOWs. **CP5b coordination** adds
+checked-in migration `0029_material_rachel_grey.sql` after `0028`: `story_work_coordinations`
+(parent orchestration row with immutable JSON step definitions, version, status, idempotency key,
+fingerprint) and `story_work_coordination_step_bindings` (assignment FK, resolved dependency,
+unique per coordination/step and per coordination/assignment). Project delete cascades;
+bound assignments restrict delete. Hermetic PGlite and PR copy-on-write branches apply this
+migration in CI; **production has not run it** and follows the normal merge/migrate workflow
+when the epic ships. **CP5 (local, complete):** create/bind UOW, backend
+`/story-work/coordinations`, client coordination UI, coherence review, recovery-replay regression
+fix, hermetic browser full chain, and final `pnpm verify` (1,823 tests / 3 skipped) on
+`feat/agent-story-workflow` (uncommitted atop `6cc0455`). Post-CP5 product gaps (applied-revision
+dependency, multi-check API/UI, coordination cancel route) are documented deferrals before
+production rollout. **CP6 (local, complete):** migration `0030_curly_korg.sql` after `0029` adds MCP
+grant allowlist columns and story-work MCP origin FK/indexes; flag-gated `/local-mcp/v1/*` bridge;
+hermetic stdio walkthrough and final `pnpm verify` (1,914 tests / 3 skipped) on uncommitted
+`feat/agent-story-workflow` atop `6cc0455`. **Neither `0029` nor `0030` is production-deployed.**
+**CP7** AC10 original-story browser acceptance is **in progress** (see
+`plans/active/2026-09-12-agent-story-workflow/cp7-original-story-acceptance.md`); epic not complete.
+Local hermetic backend on `:8787` may hold the walkthrough project in in-memory PGlite — **restarting
+the process clears that browser-visible state**; serve the latest static web export on `:8081` after
+Reader pagination fixes before rechecking chapters in the browser.
+
+The hermetic backend returns `story_check_findings_candidates_v1` and structure proposal
+candidates only when `GHOSTWRITER_E2E=1`, seeds CP5a recovery fixtures without starting providers,
+and still reports Providers: hermetic fake. Live-provider acceptance remains separately gated.
+Provider calls stay outside database transactions; generation begin/completion, immutable review,
+structure preview (read-only), recovery transitions, and atomic apply/replay use the same rollback
+patterns as character, scene and check story work.

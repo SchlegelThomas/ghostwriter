@@ -4,6 +4,7 @@ import {
   type CanvasObject
 } from "@ghostwriter/core";
 import { describe, expect, it } from "vitest";
+import { displayCanvasObject } from "./canvas-chrome.js";
 import {
   CANVAS_TOOL_DEFINITIONS,
   canvasBoardCursor,
@@ -198,5 +199,25 @@ describe("objectAtScreenPoint", () => {
         110
       )?.id
     ).toBe(candidate.id);
+  });
+
+  it("hits fitted painted bounds when passed display geometry", () => {
+    const authored = object("canvas-object-fitted-hit", {
+      width: 40,
+      height: 40
+    });
+    const displayed = displayCanvasObject(authored, undefined, {
+      zoom: 1
+    });
+
+    expect(displayed.width).toBeGreaterThan(authored.width);
+    expect(
+      objectAtScreenPoint(
+        [displayed],
+        viewport,
+        authored.width + 20,
+        authored.height / 2
+      )?.id
+    ).toBe(authored.id);
   });
 });

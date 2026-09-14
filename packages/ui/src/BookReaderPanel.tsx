@@ -1,17 +1,11 @@
 import type {
   BookReaderChapter,
+  BookReaderPage,
   BookReaderProjection,
   BookReaderSceneEntry,
-  BookReaderSceneLink,
-  ChapterId,
-  SceneId
+  BookReaderSceneLink
 } from "@ghostwriter/core";
-import {
-  bookReaderChapterStartSpreadIndex,
-  bookReaderSpreadIndexForScene,
-  buildBookReaderSpreads,
-  paginateBookReaderProjection
-} from "@ghostwriter/core";
+import { buildBookReaderSpreads, paginateBookReaderProjection } from "@ghostwriter/core";
 import type { SceneBlockV1, SceneInlineNodeV1 } from "@ghostwriter/editor";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -22,6 +16,16 @@ import {
   useWindowDimensions,
   View
 } from "react-native";
+import {
+  bookReaderProjectionForWideChapter,
+  resolveWideReaderInitialChapterId,
+  resolveWideReaderSpreadIndex,
+  shouldShowWideReaderEmptySceneMessage,
+  WIDE_READER_EMPTY_SCENE_MESSAGE,
+  wideReaderSpreadSceneLinks,
+  wideReaderSpreadSpeechText,
+  type WideReaderChapterId
+} from "./book-reader-panel-wide.js";
 import { ghostwriterTheme } from "./theme.js";
 
 const { colors, fonts } = ghostwriterTheme;
@@ -105,9 +109,7 @@ function BlockView({ block }: Readonly<{ block: SceneBlockV1 }>) {
 function PageContent({ blocks }: Readonly<{ blocks: readonly SceneBlockV1[] }>) {
   if (blocks.length === 0) {
     return (
-      <Text style={styles.emptyPage}>
-        This scene has no acknowledged prose yet.
-      </Text>
+      <Text style={styles.emptyPage}>{WIDE_READER_EMPTY_SCENE_MESSAGE}</Text>
     );
   }
   return (
@@ -116,6 +118,26 @@ function PageContent({ blocks }: Readonly<{ blocks: readonly SceneBlockV1[] }>) 
         <BlockView block={block} key={`${block.attrs.id}-${index}`} />
       ))}
     </>
+  );
+}
+
+function WideSpreadPageBody({ page }: Readonly<{ page?: BookReaderPage }>) {
+  if (page === undefined) {
+    return (
+      <View
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={styles.blankSpreadPage}
+      />
+    );
+  }
+  if (shouldShowWideReaderEmptySceneMessage(page)) {
+    return (
+      <Text style={styles.emptyPage}>{WIDE_READER_EMPTY_SCENE_MESSAGE}</Text>
+    );
+  }
+  return (
+    <PageContent blocks={page.blocks.map((entry) => entry.block)} />
   );
 }
 
@@ -147,25 +169,6 @@ function LinksRail({
       )}
     </View>
   );
-}
-
-function sceneLinksForSpread(
-  projection: BookReaderProjection,
-  spreadIndex: number,
-  pages: ReturnType<typeof paginateBookReaderProjection>
-): readonly BookReaderSceneLink[] {
-  const spread = buildBookReaderSpreads(pages)[spreadIndex];
-  const sceneIds = new Set<SceneId>();
-  for (const page of [spread?.left, spread?.right]) {
-    if (page === undefined) continue;
-    for (const block of page.blocks) sceneIds.add(block.sceneId);
-  }
-  const links: BookReaderSceneLink[] = [];
-  for (const scene of projection.scenes) {
-    if (!sceneIds.has(scene.sceneId)) continue;
-    links.push(...scene.links);
-  }
-  return links;
 }
 
 function VoiceControls({
@@ -293,27 +296,74 @@ function WideReader({
   onStopSpeak?(): void;
   onConfigureVoice?(): void;
 }>) {
-  const pages = useMemo(
-    () => paginateBookReaderProjection(projection),
-    [projection]
-  );
-  const spreads = useMemo(() => buildBookReaderSpreads(pages), [pages]);
-  const [spreadIndex, setSpreadIndex] = useState(() =>
-    projection.pinSceneId === undefined
-      ? 0
-      : bookReaderSpreadIndexForScene(pages, projection.pinSceneId)
-  );
   const [linksVisible, setLinksVisible] = useState(false);
   const [selectedChapterId, setSelectedChapterId] = useState<
-    ChapterId | "unassigned" | undefined
-  >(projection.chapters[0]?.id);
-  const spread = spreads[spreadIndex] ?? spreads[0];
-  const links = sceneLinksForSpread(projection, spreadIndex, pages);
-  const speechText = useMemo(() => {
-    const left = (spread?.left?.blocks ?? []).map((entry) => entry.block);
-    const right = (spread?.right?.blocks ?? []).map((entry) => entry.block);
-    return blocksToSpeechText([...left, ...right]);
-  }, [spread]);
+    WideReaderChapterId | undefined
+  >(() => resolveWideReaderInitialChapterId(projection));
+  const [spreadIndex, setSpreadIndex] = useState(() =>
+    resolveWideReaderSpreadIndex(projection, resolveWideReaderInitialChapterId(projection), {
+      preferPin: true
+    })
+  );
+  const chapterProjection = useMemo(
+    () =>
+      selectedChapterId === undefined
+        ? projection
+        : bookReaderProjectionForWideChapter(projection, selectedChapterId),
+    [projection, selectedChapterId]
+  );
+  const pages = useMemo(
+    () => paginateBookReaderProjection(chapterProjection),
+    [chapterProjection]
+  );
+  const spreads = useMemo(() => buildBookReaderSpreads(pages), [pages]);
+  const clampedSpreadIndex = Math.min(
+    Math.max(0, spreadIndex),
+    Math.max(0, spreads.length - 1)
+  );
+  const spread = spreads[clampedSpreadIndex] ?? spreads[0];
+  const links = useMemo(
+    () => wideReaderSpreadSceneLinks(projection, selectedChapterId, clampedSpreadIndex),
+    [projection, selectedChapterId, clampedSpreadIndex]
+  );
+  const speechText = useMemo(
+    () => wideReaderSpreadSpeechText(projection, selectedChapterId, clampedSpreadIndex),
+    [projection, selectedChapterId, clampedSpreadIndex]
+  );
+
+  const pinSceneIdRef = useRef(projection.pinSceneId);
+  useEffect(() => {
+    setSelectedChapterId((current) => {
+      if (
+        current !== undefined &&
+        projection.chapters.some((chapter) => chapter.id === current)
+      ) {
+        return current;
+      }
+      return resolveWideReaderInitialChapterId(projection);
+    });
+  }, [projection]);
+
+  useEffect(() => {
+    setSpreadIndex((current) =>
+      resolveWideReaderSpreadIndex(projection, selectedChapterId, {
+        spreadIndex: current
+      })
+    );
+  }, [projection, selectedChapterId, spreads.length]);
+
+  useEffect(() => {
+    const pinChanged = pinSceneIdRef.current !== projection.pinSceneId;
+    pinSceneIdRef.current = projection.pinSceneId;
+    if (!pinChanged) return;
+    const chapterId = resolveWideReaderInitialChapterId(projection);
+    setSelectedChapterId(chapterId);
+    setSpreadIndex(
+      resolveWideReaderSpreadIndex(projection, chapterId, {
+        preferPin: projection.pinSceneId !== undefined
+      })
+    );
+  }, [projection.pinSceneId, projection]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -371,7 +421,7 @@ function WideReader({
             key={chapter.id}
             onPress={() => {
               setSelectedChapterId(chapter.id);
-              setSpreadIndex(bookReaderChapterStartSpreadIndex(pages, chapter.id));
+              setSpreadIndex(0);
             }}
             style={[
               styles.chapterTab,
@@ -412,9 +462,7 @@ function WideReader({
         <View style={styles.spreadShell}>
           <View style={styles.spread}>
             <View style={[styles.page, styles.pageLeft]}>
-              <PageContent
-                blocks={(spread?.left?.blocks ?? []).map((entry) => entry.block)}
-              />
+              <WideSpreadPageBody page={spread?.left} />
               <Text style={[styles.pageNumber, styles.pageNumberLeft]}>
                 {spread?.left === undefined ? " " : spread.left.index + 1}
               </Text>
@@ -423,9 +471,7 @@ function WideReader({
               <View style={styles.spineShadow} />
             </View>
             <View style={[styles.page, styles.pageRight]}>
-              <PageContent
-                blocks={(spread?.right?.blocks ?? []).map((entry) => entry.block)}
-              />
+              <WideSpreadPageBody page={spread?.right} />
               <Text style={[styles.pageNumber, styles.pageNumberRight]}>
                 {spread?.right === undefined ? " " : spread.right.index + 1}
               </Text>
@@ -438,24 +484,27 @@ function WideReader({
       <View style={styles.readerFooter}>
         <Pressable
           accessibilityRole="button"
-          disabled={spreadIndex <= 0}
+          disabled={clampedSpreadIndex <= 0}
           onPress={() => setSpreadIndex((current) => Math.max(0, current - 1))}
-          style={[styles.navButton, spreadIndex <= 0 && styles.navButtonDisabled]}
+          style={[
+            styles.navButton,
+            clampedSpreadIndex <= 0 && styles.navButtonDisabled
+          ]}
         >
           <Text style={styles.navButtonText}>Previous</Text>
         </Pressable>
         <Text style={styles.progress}>
-          Spread {spreadIndex + 1} of {spreads.length}
+          Spread {clampedSpreadIndex + 1} of {spreads.length}
         </Text>
         <Pressable
           accessibilityRole="button"
-          disabled={spreadIndex >= spreads.length - 1}
+          disabled={clampedSpreadIndex >= spreads.length - 1}
           onPress={() =>
             setSpreadIndex((current) => Math.min(spreads.length - 1, current + 1))
           }
           style={[
             styles.navButton,
-            spreadIndex >= spreads.length - 1 && styles.navButtonDisabled
+            clampedSpreadIndex >= spreads.length - 1 && styles.navButtonDisabled
           ]}
         >
           <Text style={styles.navButtonText}>Next</Text>
@@ -957,6 +1006,10 @@ const styles = StyleSheet.create({
     fontFamily: fonts.ui,
     fontSize: 12,
     fontStyle: "italic"
+  },
+  blankSpreadPage: {
+    flex: 1,
+    minHeight: 1
   },
   linksRail: {
     backgroundColor: colors.blueSoft,

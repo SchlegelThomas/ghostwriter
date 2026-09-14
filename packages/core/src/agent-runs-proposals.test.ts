@@ -93,6 +93,14 @@ describe("agent run and proposal factories", () => {
     ).toThrow(DomainValidationError);
   });
 
+  it("accepts client-interrupted as a failed-run diagnostic", () => {
+    const run = createAgentRun({
+      ...baseRun("failed"),
+      terminalDiagnosticCode: "client-interrupted"
+    });
+    expect(run.terminalDiagnosticCode).toBe("client-interrupted");
+  });
+
   it("creates ready proposals with validated payload", () => {
     const proposal = createReadyAgentProposal({
       id: agentProposalId("proposal-domain"),

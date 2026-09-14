@@ -256,7 +256,7 @@ describe("capture reflection services", () => {
     });
     expect(receipt.workflowId).toBe("scene-partner.capture-reflection");
     expect(receipt.outputSchemaId).toBe("capture-reflection-v1");
-    expect(receipt.resources[0]?.captureId).toBe(CAPTURE);
+    expect(receipt.resources[0]).toMatchObject({ resourceClass: "capture", captureId: CAPTURE });
     expect(receipt.receiptHash).toMatch(/^[a-f0-9]{64}$/u);
   });
 

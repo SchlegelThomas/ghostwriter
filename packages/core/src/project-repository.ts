@@ -58,6 +58,7 @@ export type DomainIdKind =
   | "scene"
   | "sceneDocumentBlock"
   | "storyKnowledge"
+  | "narrativeBeat"
   | "edition"
   | "revision"
   | "sceneVariant"
@@ -72,7 +73,11 @@ export type DomainIdKind =
   | "contextReceipt"
   | "agentRun"
   | "agentProposal"
-  | "mcpGrant";
+  | "storyCheckFinding"
+  | "storyStructureOperation"
+  | "mcpGrant"
+  | "storyWorkCoordination"
+  | "storyWorkCoordinationStep";
 
 export interface IdGenerator {
   create(kind: DomainIdKind): string;

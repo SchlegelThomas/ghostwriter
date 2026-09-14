@@ -10,6 +10,7 @@ import {
   defineProjectRecords,
   DomainValidationError,
   GHOSTWRITER_CAPABILITIES,
+  MCP_GRANT_TOOL_NAMES,
   projectId,
   PROJECT_COMMAND_CAPABILITIES,
   PROJECT_NAVIGATOR_CAPABILITY,
@@ -17,6 +18,7 @@ import {
   SCENE_WORKSPACE_CAPABILITY,
   SCENE_WRITING_MUTATION_CAPABILITIES,
   sceneId,
+  STORY_WORK_CAPABILITIES,
   type BookId
 } from "./index.js";
 
@@ -150,16 +152,19 @@ describe("multi-book project records", () => {
 });
 
 describe("capability parity registry", () => {
-  it("binds the project navigator query to UI and MCP", () => {
+  it("binds the live project navigator to UI while marking MCP as fixture-only", () => {
     expect(GHOSTWRITER_CAPABILITIES).toContain(PROJECT_NAVIGATOR_CAPABILITY);
     expect(PROJECT_NAVIGATOR_CAPABILITY).toMatchObject({
       access: "read",
       coreUseCase: "getProjectNavigator",
       bindings: {
-        ui: "ManuscriptTree",
-        mcp: "ghostwriter_project_navigator"
+        ui: "ManuscriptTree"
       }
     });
+    expect("mcp" in PROJECT_NAVIGATOR_CAPABILITY.bindings).toBe(false);
+    expect(PROJECT_NAVIGATOR_CAPABILITY.bindings.mcpException).toContain(
+      "fixture-only"
+    );
   });
 
   it("records an explicit MCP security exception for every canonical command", () => {
@@ -219,5 +224,15 @@ describe("capability parity registry", () => {
       "authenticated project authority"
     );
     expect("mcp" in BOOK_READER_CAPABILITY.bindings).toBe(false);
+  });
+
+  it("binds every story-work capability to scoped MCP or an explicit human-authority exception", () => {
+    for (const capability of STORY_WORK_CAPABILITIES) {
+      const { mcp, mcpException } = capability.bindings;
+      expect(Boolean(mcp) !== Boolean(mcpException)).toBe(true);
+      for (const tool of mcp?.match(/ghostwriter_[a-z_]+/gu) ?? []) {
+        expect(MCP_GRANT_TOOL_NAMES).toContain(tool);
+      }
+    }
   });
 });

@@ -1,0 +1,477 @@
+import { describe, expect, it } from "vitest";
+import type { AgentModelId } from "./agent-context-receipt.js";
+import { instructionContentHash } from "./agent-domain.js";
+import {
+  agentProposalId,
+  agentRunId,
+  projectId,
+  sceneId,
+  storyKnowledgeId
+} from "./domain.js";
+import { sceneContentHash } from "./scene-documents.js";
+import { accountId } from "./identity.js";
+import { mcpGrantId } from "./mcp-grants.js";
+import { createMemoryStoryWorkAssignmentRepository } from "./memory-story-work-assignment-repository.js";
+import {
+  createStoryWorkAssignment,
+  recordAppliedStoryWorkAssignmentFromUnitOfWork,
+  recordReviewedStoryWorkAssignment,
+  startStoryWorkAttempt,
+  storyWorkAssignmentId,
+  type StoryWorkAssignment
+} from "./story-work-assignment.js";
+
+const OWNER = accountId("account-owner");
+const STRANGER = accountId("account-stranger");
+const PROJECT = projectId("project-assignments");
+const OTHER_PROJECT = projectId("project-other");
+
+function fingerprint(character: string) {
+  return instructionContentHash(character.repeat(64));
+}
+
+function assignment(index = 1): StoryWorkAssignment {
+  return createStoryWorkAssignment({
+    id: storyWorkAssignmentId(`assignment-${index}`),
+    projectId: PROJECT,
+    initiatorAccountId: OWNER,
+    version: 1,
+    taskKind: "character",
+    brief: `Character brief ${index}`,
+    constraints: "Keep the character grounded in supplied story context.",
+    doneWhen: "A character draft is ready for writer review.",
+    sources: [{ kind: "project", projectId: PROJECT, projectVersion: 1 }],
+    destination: {
+      kind: "story-knowledge",
+      storyKnowledgeId: storyKnowledgeId(`knowledge-${index}`),
+      operation: "create"
+    },
+    provider: "openai",
+    model: "gpt-4.1" as AgentModelId,
+    status: "brief-ready",
+    steps: [{ id: "draft", title: "Draft", dependencies: [] }],
+    results: [],
+    idempotencyKey: `submit-${index}`,
+    createdAt: new Date(Date.UTC(2026, 8, 12, 12, 0, index)).toISOString(),
+    updatedAt: new Date(Date.UTC(2026, 8, 12, 12, 0, index)).toISOString()
+  });
+}
+
+describe("memory story work assignment repository", () => {
+  it("replays only the same scoped idempotent request fingerprint", async () => {
+    const repository = createMemoryStoryWorkAssignmentRepository();
+    const original = assignment();
+    const requestFingerprint = fingerprint("a");
+
+    await expect(
+      repository.create({ assignment: original, requestFingerprint })
+    ).resolves.toMatchObject({ ok: true, created: true });
+    await expect(
+      repository.getByIdempotencyKey({
+        accountId: OWNER,
+        projectId: PROJECT,
+        idempotencyKey: original.idempotencyKey
+      })
+    ).resolves.toEqual({ assignment: original, requestFingerprint });
+    await expect(
+      repository.create({
+        assignment: createStoryWorkAssignment({
+          ...original,
+          id: storyWorkAssignmentId("assignment-replayed-candidate")
+        }),
+        requestFingerprint
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      created: false,
+      assignment: { id: original.id }
+    });
+    await expect(
+      repository.create({
+        assignment: original,
+        requestFingerprint: fingerprint("b")
+      })
+    ).resolves.toEqual({ ok: false, reason: "idempotency-conflict" });
+  });
+
+  it("does not disclose assignments across account or project scopes", async () => {
+    const repository = createMemoryStoryWorkAssignmentRepository();
+    const original = assignment();
+    await repository.create({
+      assignment: original,
+      requestFingerprint: fingerprint("c")
+    });
+
+    await expect(
+      repository.get({ accountId: STRANGER, projectId: PROJECT, assignmentId: original.id })
+    ).resolves.toBeUndefined();
+    await expect(
+      repository.getByIdempotencyKey({
+        accountId: STRANGER,
+        projectId: PROJECT,
+        idempotencyKey: original.idempotencyKey
+      })
+    ).resolves.toBeUndefined();
+    await expect(
+      repository.getByIdempotencyKey({
+        accountId: OWNER,
+        projectId: OTHER_PROJECT,
+        idempotencyKey: original.idempotencyKey
+      })
+    ).resolves.toBeUndefined();
+    await expect(
+      repository.get({ accountId: OWNER, projectId: OTHER_PROJECT, assignmentId: original.id })
+    ).resolves.toBeUndefined();
+    await expect(
+      repository.listByProject({ accountId: STRANGER, projectId: PROJECT })
+    ).resolves.toEqual([]);
+    await expect(
+      repository.compareAndSet({
+        accountId: STRANGER,
+        projectId: PROJECT,
+        assignmentId: original.id,
+        expectedVersion: 1,
+        next: startStoryWorkAttempt({
+          assignment: original,
+          expectedVersion: 1,
+          runId: agentRunId("run-hidden"),
+          updatedAt: "2026-09-12T12:02:00.000Z"
+        })
+      })
+    ).resolves.toEqual({ ok: false, reason: "not-found" });
+  });
+
+  it("uses CAS without mutating saved state after a conflict", async () => {
+    const repository = createMemoryStoryWorkAssignmentRepository();
+    const original = assignment();
+    await repository.create({
+      assignment: original,
+      requestFingerprint: fingerprint("d")
+    });
+    const running = startStoryWorkAttempt({
+      assignment: original,
+      expectedVersion: 1,
+      runId: agentRunId("run-current"),
+      updatedAt: "2026-09-12T12:02:00.000Z"
+    });
+    await expect(
+      repository.compareAndSet({
+        accountId: OWNER,
+        projectId: PROJECT,
+        assignmentId: original.id,
+        expectedVersion: 1,
+        next: running
+      })
+    ).resolves.toMatchObject({ ok: true, assignment: { version: 2 } });
+
+    const staleNext = startStoryWorkAttempt({
+      assignment: original,
+      expectedVersion: 1,
+      runId: agentRunId("run-stale"),
+      updatedAt: "2026-09-12T12:03:00.000Z"
+    });
+    await expect(
+      repository.compareAndSet({
+        accountId: OWNER,
+        projectId: PROJECT,
+        assignmentId: original.id,
+        expectedVersion: 1,
+        next: staleNext
+      })
+    ).resolves.toEqual({ ok: false, reason: "version-conflict" });
+
+    const rewrittenBrief = createStoryWorkAssignment({
+      ...running,
+      version: 3,
+      brief: "A silently replaced brief",
+      updatedAt: "2026-09-12T12:04:00.000Z"
+    });
+    await expect(
+      repository.compareAndSet({
+        accountId: OWNER,
+        projectId: PROJECT,
+        assignmentId: original.id,
+        expectedVersion: 2,
+        next: rewrittenBrief
+      })
+    ).resolves.toEqual({ ok: false, reason: "version-conflict" });
+    await expect(
+      repository.get({ accountId: OWNER, projectId: PROJECT, assignmentId: original.id })
+    ).resolves.toMatchObject({
+      version: 2,
+      status: "running",
+      activeAttemptId: agentRunId("run-current"),
+      latestAttemptId: agentRunId("run-current")
+    });
+  });
+
+  it("persists apply replay identity once and refuses rewriting it", async () => {
+    const repository = createMemoryStoryWorkAssignmentRepository();
+    const pointer = {
+      proposalId: agentProposalId("proposal-applied"),
+      artifactVersion: 1,
+      contentHash: fingerprint("e")
+    };
+    const review = createStoryWorkAssignment({
+      ...assignment(),
+      version: 4,
+      status: "awaiting-review",
+      latestAttemptId: agentRunId("run-applied"),
+      generatedArtifact: pointer,
+      currentArtifact: pointer,
+      updatedAt: "2026-09-12T12:04:00.000Z"
+    });
+    await repository.create({ assignment: review, requestFingerprint: fingerprint("f") });
+    const applied = recordAppliedStoryWorkAssignmentFromUnitOfWork({
+      assignment: review,
+      expectedVersion: 4,
+      artifact: pointer,
+      results: [{
+        kind: "story-knowledge",
+        storyKnowledgeId: storyKnowledgeId("knowledge-1"),
+        projectVersion: 2
+      }],
+      applyRequest: {
+        idempotencyKey: "apply-once",
+        requestFingerprint: fingerprint("9")
+      },
+      updatedAt: "2026-09-12T12:05:00.000Z"
+    });
+    await expect(repository.compareAndSet({
+      accountId: OWNER,
+      projectId: PROJECT,
+      assignmentId: review.id,
+      expectedVersion: 4,
+      next: applied
+    })).resolves.toMatchObject({
+      ok: true,
+      assignment: {
+        applyIdempotencyKey: "apply-once",
+        applyRequestFingerprint: fingerprint("9")
+      }
+    });
+    const rewritten = createStoryWorkAssignment({
+      ...applied,
+      version: 6,
+      applyIdempotencyKey: "apply-rewritten",
+      updatedAt: "2026-09-12T12:06:00.000Z"
+    });
+    await expect(repository.compareAndSet({
+      accountId: OWNER,
+      projectId: PROJECT,
+      assignmentId: review.id,
+      expectedVersion: 5,
+      next: rewritten
+    })).resolves.toEqual({ ok: false, reason: "version-conflict" });
+  });
+
+  it("roundtrips check source, assess destination, reviewed status, and story-check result", async () => {
+    const repository = createMemoryStoryWorkAssignmentRepository();
+    const sceneTarget = sceneId("scene-check-memory");
+    const pointer = {
+      proposalId: agentProposalId("proposal-check-memory"),
+      artifactVersion: 1,
+      contentHash: fingerprint("c")
+    };
+    const check = createStoryWorkAssignment({
+      ...assignment(99),
+      id: storyWorkAssignmentId("assignment-check-memory"),
+      taskKind: "check",
+      brief: "Check continuity.",
+      constraints: "Ground every claim.",
+      doneWhen: "Findings are reviewable.",
+      sources: [
+        {
+          kind: "scene",
+          sceneId: sceneTarget,
+          projectVersion: 1,
+          workingVersion: 2,
+          contentHash: sceneContentHash("c".repeat(64))
+        }
+      ],
+      destination: {
+        kind: "scene",
+        sceneId: sceneTarget,
+        operation: "assess"
+      },
+      status: "awaiting-review",
+      version: 2,
+      generatedArtifact: pointer,
+      currentArtifact: pointer,
+      updatedAt: "2026-09-12T12:04:00.000Z"
+    });
+    await repository.create({
+      assignment: check,
+      requestFingerprint: fingerprint("d")
+    });
+    const reviewed = recordReviewedStoryWorkAssignment({
+      assignment: check,
+      expectedVersion: 2,
+      artifact: pointer,
+      result: {
+        kind: "story-check",
+        proposalId: pointer.proposalId,
+        artifactVersion: pointer.artifactVersion,
+        contentHash: pointer.contentHash,
+        sceneId: sceneTarget
+      },
+      updatedAt: "2026-09-12T12:05:00.000Z"
+    });
+    await expect(
+      repository.compareAndSet({
+        accountId: OWNER,
+        projectId: PROJECT,
+        assignmentId: check.id,
+        expectedVersion: 2,
+        next: reviewed
+      })
+    ).resolves.toMatchObject({ ok: true });
+    await expect(
+      repository.get({ accountId: OWNER, projectId: PROJECT, assignmentId: check.id })
+    ).resolves.toEqual(reviewed);
+  });
+
+  it("keeps project listings bounded and ordered without cross-project rows", async () => {
+    const repository = createMemoryStoryWorkAssignmentRepository();
+    for (let index = 1; index <= 105; index += 1) {
+      const next = assignment(index);
+      const outcome = await repository.create({
+        assignment: next,
+        requestFingerprint: fingerprint((index % 10).toString())
+      });
+      expect(outcome.ok).toBe(true);
+    }
+
+    const defaultPage = await repository.listByProject({
+      accountId: OWNER,
+      projectId: PROJECT
+    });
+    const shortPage = await repository.listByProject({
+      accountId: OWNER,
+      projectId: PROJECT,
+      options: { limit: 2 }
+    });
+    expect(defaultPage).toHaveLength(100);
+    expect(shortPage.map((item) => item.id)).toEqual([
+      storyWorkAssignmentId("assignment-105"),
+      storyWorkAssignmentId("assignment-104")
+    ]);
+  });
+
+  it("roundtrips MCP origin and rejects origin mutation on compare-and-set", async () => {
+    const repository = createMemoryStoryWorkAssignmentRepository();
+    const withOrigin = createStoryWorkAssignment({
+      ...assignment(),
+      origin: { kind: "mcp", grantId: mcpGrantId("grant-assignment-origin") }
+    });
+    await repository.create({
+      assignment: withOrigin,
+      requestFingerprint: fingerprint("b")
+    });
+    await expect(
+      repository.get({
+        accountId: OWNER,
+        projectId: PROJECT,
+        assignmentId: withOrigin.id
+      })
+    ).resolves.toMatchObject({
+      origin: { kind: "mcp", grantId: mcpGrantId("grant-assignment-origin") }
+    });
+
+    const started = startStoryWorkAttempt({
+      assignment: withOrigin,
+      expectedVersion: 1,
+      runId: agentRunId("run-origin"),
+      updatedAt: new Date(Date.UTC(2026, 8, 12, 12, 1, 0)).toISOString()
+    });
+    await expect(
+      repository.compareAndSet({
+        accountId: OWNER,
+        projectId: PROJECT,
+        assignmentId: withOrigin.id,
+        expectedVersion: 1,
+        next: createStoryWorkAssignment({
+          ...started,
+          origin: { kind: "mcp", grantId: mcpGrantId("grant-other") }
+        })
+      })
+    ).resolves.toEqual({ ok: false, reason: "version-conflict" });
+  });
+
+  it("lists MCP grant origin rows without project-page truncation and empty cross-scope", async () => {
+    const repository = createMemoryStoryWorkAssignmentRepository();
+    const grant = mcpGrantId("grant-origin-list");
+    const otherGrant = mcpGrantId("grant-origin-list-other");
+    const oldOriginId = storyWorkAssignmentId("assignment-origin-old");
+    const oldOrigin = createStoryWorkAssignment({
+      ...assignment(1),
+      id: oldOriginId,
+      idempotencyKey: "submit-origin-old",
+      origin: { kind: "mcp", grantId: grant },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z"
+    });
+    await repository.create({
+      assignment: oldOrigin,
+      requestFingerprint: fingerprint("a")
+    });
+    for (let index = 2; index <= 152; index += 1) {
+      await repository.create({
+        assignment: createStoryWorkAssignment({
+          ...assignment(index),
+          id: storyWorkAssignmentId(`assignment-noise-${index}`),
+          idempotencyKey: `submit-noise-${index}`,
+          updatedAt: new Date(Date.UTC(2026, 8, 12, 12, 0, index)).toISOString()
+        }),
+        requestFingerprint: fingerprint((index % 10).toString())
+      });
+    }
+    await repository.create({
+      assignment: createStoryWorkAssignment({
+        ...assignment(999),
+        id: storyWorkAssignmentId("assignment-origin-foreign-project"),
+        projectId: OTHER_PROJECT,
+        sources: [{ kind: "project", projectId: OTHER_PROJECT, projectVersion: 1 }],
+        idempotencyKey: "submit-origin-foreign-project",
+        origin: { kind: "mcp", grantId: grant }
+      }),
+      requestFingerprint: fingerprint("c")
+    });
+    await repository.create({
+      assignment: createStoryWorkAssignment({
+        ...assignment(998),
+        id: storyWorkAssignmentId("assignment-origin-stranger"),
+        initiatorAccountId: STRANGER,
+        idempotencyKey: "submit-origin-stranger",
+        origin: { kind: "mcp", grantId: grant }
+      }),
+      requestFingerprint: fingerprint("d")
+    });
+    await repository.create({
+      assignment: createStoryWorkAssignment({
+        ...assignment(997),
+        id: storyWorkAssignmentId("assignment-origin-wrong-grant"),
+        idempotencyKey: "submit-origin-wrong-grant",
+        origin: { kind: "mcp", grantId: otherGrant }
+      }),
+      requestFingerprint: fingerprint("e")
+    });
+
+    const listed = await repository.listByMcpGrantOrigin({
+      accountId: OWNER,
+      projectId: PROJECT,
+      originMcpGrantId: grant
+    });
+    expect(listed.map((row) => row.id)).toEqual([oldOriginId]);
+    expect(listed.every((row) => row.initiatorAccountId === OWNER)).toBe(true);
+    expect(
+      listed.some((row) => row.id === storyWorkAssignmentId("assignment-origin-foreign-project"))
+    ).toBe(false);
+    expect(
+      listed.some((row) => row.id === storyWorkAssignmentId("assignment-origin-stranger"))
+    ).toBe(false);
+    expect(
+      listed.some((row) => row.id === storyWorkAssignmentId("assignment-origin-wrong-grant"))
+    ).toBe(false);
+  });
+});

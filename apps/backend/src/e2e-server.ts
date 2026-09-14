@@ -2,6 +2,11 @@ import { randomUUID } from "node:crypto";
 import { serve } from "@hono/node-server";
 import {
   accountId,
+  canvasRevisionId,
+  createCanvasRevision,
+  hashCanvasBoard,
+  applyCanvasCommand,
+  createProjectMembership,
   createBookReaderServices,
   createCanvasServices,
   createCaptureServices,
@@ -24,7 +29,8 @@ import {
   createPostgresSceneDocumentRepository,
   createPostgresWriterProfileRepository,
   toRepositoryDatabase,
-  user
+  user,
+  seedProject
 } from "@ghostwriter/storage";
 import {
   createPgliteDatabase,
@@ -32,9 +38,12 @@ import {
 } from "@ghostwriter/storage/pglite";
 import {
   createFakeStructuredCompletionProvider,
+  createFakeToolLoopProvider,
   createProviderAdapter
 } from "@ghostwriter/ai";
 import { createApp } from "./app.js";
+import { buildStoryCheckHermeticCandidatesOutput } from "./story-check-hermetic-candidates.js";
+import { buildStoryStructureHermeticCandidatesOutput } from "./story-structure-hermetic-candidates.js";
 import {
   E2E_PROVIDER_KEY_SEED_SPECS,
   seedProviderKeysFromEnv
@@ -43,7 +52,13 @@ import type { AuthGateway, AuthenticatedSession } from "./auth.js";
 import { createTestAgentProviderRuntime } from "./agent-provider-runtime.js";
 import { createTestProviderKekRuntimeConfig } from "./provider-kek-config.js";
 import type { ScenePartnerImageGenerator } from "./scene-partner-routes.js";
+import { createCanvasCapacityFixture } from "@ghostwriter/storage/capacity-fixture";
+import { buildHermeticWorkspaceChatReply } from "./hermetic-workspace-chat-reply.js";
 import { seedHermeticHarryPotter } from "./hermetic-seed.js";
+import {
+  e2eHermeticWriterAccountId,
+  seedE2eHermeticStoryWorkRecoveryFixture
+} from "./story-work-recovery-hermetic-fixture.js";
 
 if (process.env.GHOSTWRITER_E2E !== "1") {
   throw new Error("The hermetic E2E server requires GHOSTWRITER_E2E=1.");
@@ -167,6 +182,46 @@ await seedHermeticHarryPotter({
 console.log(
   "Hermetic seed: Harry Potter series + character portraits ready for E2E writer."
 );
+const e2eStoryWorkRecovery = await seedE2eHermeticStoryWorkRecoveryFixture({
+  db: repositoryDatabase,
+  ownerAccountId: e2eHermeticWriterAccountId()
+});
+console.log(
+  `Hermetic seed: CP5a story-work recovery fixture — brief "${e2eStoryWorkRecovery.brief}", assignment ${e2eStoryWorkRecovery.assignmentId}, run ${e2eStoryWorkRecovery.runId}, project ${e2eStoryWorkRecovery.projectId}.`
+);
+// Explicitly opt-in, disposable data for direct-browser capacity acceptance.
+if (process.env.GHOSTWRITER_CANVAS_CAPACITY === "1") {
+  const fixture = createCanvasCapacityFixture();
+  await seedProject(projects, fixture.records);
+  await projects.transaction((writer) => {
+    writer.insertProjectMembership(createProjectMembership({
+      projectId: fixture.project, accountId: accountId(account.id),
+      role: "owner", createdAt: fixture.now
+    }));
+  });
+  const hash = await hashCanvasBoard(fixture.initial);
+  let board = await canvases.initialize({
+    board: fixture.initial,
+    revision: createCanvasRevision({
+      id: canvasRevisionId(`canvas_revision_${hash}`), projectId: fixture.project,
+      boardVersion: 1, contentHash: hash, snapshot: fixture.initial,
+      actorAccountId: accountId(account.id), reason: "genesis", createdAt: fixture.now
+    })
+  });
+  for (let i = 0; i < 200; i++) {
+    const mutation = await applyCanvasCommand({
+      board, projectRecords: fixture.records, expectedCanvasVersion: board.version,
+      actorAccountId: accountId(account.id), ids, now: fixture.now,
+      command: {
+        type: "canvas.object.setScopePlacement", objectId: fixture.objects[i]!.id,
+        scopeKind: "chapter", scopeId: `capacity-chapter-${Math.floor(i / 5)}`,
+        x: (i % 5) * 300 + i + 1, y: 12, width: 260, height: 160
+      }
+    });
+    board = await canvases.replace({ mutation, expectedCanvasVersion: board.version });
+  }
+  console.log("Canvas capacity fixture: 100 chapters, 1000 objects, 1500 links, 201 revisions.");
+}
 const captureAttachments = createCaptureAttachmentServices({
   projects,
   captureDocuments,
@@ -206,15 +261,9 @@ const hermeticFakeProvider = createFakeStructuredCompletionProvider((input) => {
     schemaName === "workspace-chat-turn-v1" ||
     schemaName === "workspace_chat_turn_v1"
   ) {
-    const projectLine =
-      input.inputText
-        .split("\n")
-        .find((line) => line.startsWith("Project:"))
-        ?.replace(/^Project:\s*/, "")
-        .trim() ?? "this project";
     return {
       output: {
-        reply: `Here is a propose-only note about ${projectLine}. I used the open manuscript context and will not claim canon was written.`
+        reply: buildHermeticWorkspaceChatReply(input.inputText).reply
       }
     };
   }
@@ -222,9 +271,9 @@ const hermeticFakeProvider = createFakeStructuredCompletionProvider((input) => {
     return {
       output: {
         schemaId: "scene-partner-turn-v1",
-        thinkingSteps: ["Reading idea", "Scanning scenes", "Drafting response"],
+        thinkingSteps: ["Reading the idea", "Finding the pressure", "Drafting a beat"],
         assistantMessage:
-          "I scanned the manuscript and this idea feels ready to become a new scene.",
+          "The idea wants a scene where the pressure is already in the room. Start from the first glance, or from the choice they can't undo?",
         phase: "new-scene",
         matchedSceneId: null,
         proseDraft: "Soft light holds for a breath; the moment waits for the next line.",
@@ -251,6 +300,55 @@ const hermeticFakeProvider = createFakeStructuredCompletionProvider((input) => {
         desire: "Reach the harbor before the tide turns.",
         pressure: "A name spoken too soon.",
         voiceNotes: "Short sentences; salt in the vowels."
+      }
+    };
+  }
+  if (schemaName === "character_create_v2") {
+    return {
+      output: {
+        schemaId: "character-create-v2",
+        name: "Mara Venn",
+        summary:
+          "A harbor pilot who reads danger early and hides how much the old wreck still shapes her choices.",
+        aliases: ["Mara"],
+        characterSheet: {
+          desire: "Guide the crew home without repeating the loss that made her cautious.",
+          pressure: "The safest route conflicts with the promise she made before departure.",
+          voiceNotes: "Precise, restrained, and unexpectedly dry under pressure."
+        }
+      }
+    };
+  }
+  if (schemaName === "story_check_findings_candidates_v1") {
+    return {
+      output: buildStoryCheckHermeticCandidatesOutput(input.inputText)
+    };
+  }
+  if (schemaName === "story_structure_proposal_candidates_v1") {
+    return {
+      output: buildStoryStructureHermeticCandidatesOutput(input.inputText)
+    };
+  }
+  if (schemaName === "scene_draft_v1") {
+    const marker = "=== SELECTED SOURCE SCENE IDS (exact) ===\n";
+    const sourceLine = input.inputText.split(marker)[1]?.split("\n", 1)[0];
+    let sourceSceneIds: string[] = [];
+    if (sourceLine !== undefined) {
+      try {
+        const parsed: unknown = JSON.parse(sourceLine);
+        if (Array.isArray(parsed) && parsed.every((value) => typeof value === "string")) {
+          sourceSceneIds = parsed;
+        }
+      } catch {
+        sourceSceneIds = [];
+      }
+    }
+    return {
+      output: {
+        schemaId: "scene-draft-v1",
+        prose:
+          "The harbor bell sounded once. Mara held the page to the window and read the warning again.",
+        sourceSceneIds
       }
     };
   }
@@ -294,9 +392,27 @@ const liveProviderFactory = (apiKey: string, providerId: ProviderId) =>
   createProviderAdapter({ providerId, apiKey });
 const hermeticProviderFactory = (_apiKey: string, _providerId: ProviderId) =>
   hermeticFakeProvider;
+const hermeticListModelsFactory = () =>
+  Object.freeze({
+    completeStructured: hermeticFakeProvider.completeStructured.bind(
+      hermeticFakeProvider
+    ),
+    validateCredential: hermeticFakeProvider.validateCredential.bind(
+      hermeticFakeProvider
+    ),
+    async listModels() {
+      return Object.freeze([{ id: "gpt-4.1", displayName: "GPT-4.1 (hermetic)" }]);
+    }
+  });
 const providerFactory = liveProviders
   ? liveProviderFactory
   : hermeticProviderFactory;
+
+/** Catalog marks gpt-4.1 as tool-capable; do not send the seeded fake key to OpenAI. */
+const hermeticWorkspaceChatToolLoop = () =>
+  createFakeToolLoopProvider((input) => ({
+    text: buildHermeticWorkspaceChatReply(input.inputText).reply
+  }));
 
 const agentProvider = createTestAgentProviderRuntime({
   db: repositoryDatabase,
@@ -307,6 +423,7 @@ const agentProvider = createTestAgentProviderRuntime({
   kekConfig: createTestProviderKekRuntimeConfig(),
   defaultValidationProviderFactory: providerFactory,
   defaultCompletionProviderFactory: providerFactory,
+  ...(liveProviders ? {} : { listModelsFactory: hermeticListModelsFactory }),
   capturePromotions,
   sceneDocuments
 });
@@ -342,7 +459,15 @@ const app = createApp({
   allowedOrigins: [appOrigin],
   objectStorage,
   demoSeed: { enabled: process.env.GHOSTWRITER_DEMO_SEED !== "0" },
-  ...(liveProviders ? {} : { scenePartnerGenerateImage: hermeticFakeImage })
+  ...(process.env.GHOSTWRITER_ENABLE_LOCAL_MCP_BRIDGE === "1"
+    ? { localMcpBridge: { enabled: true } }
+    : {}),
+  ...(liveProviders
+    ? {}
+    : {
+        scenePartnerGenerateImage: hermeticFakeImage,
+        workspaceChatCreateToolLoopProvider: hermeticWorkspaceChatToolLoop
+      })
 });
 const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(`Ghostwriter hermetic backend listening on port ${info.port}`);

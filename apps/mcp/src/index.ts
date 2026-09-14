@@ -1,11 +1,46 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import {
+  createLocalBridgeClient,
+  LocalBridgeConfigError,
+  resolveLocalBridgeConfigFromEnv
+} from "./local-bridge-client.js";
 import { createGhostwriterMcpServer } from "./server.js";
 
-/**
- * Stdio MCP defaults to the fixture navigator. Optional `GHOSTWRITER_MCP_GRANT_TOKEN`
- * enables grant-authenticated tools only when a grant runtime is injected by a host
- * process or test harness. Production remote MCP auth remains later; v1 proves
- * propose-only Capture reflection parity locally via injectable memory/Postgres deps.
- */
-const server = createGhostwriterMcpServer();
+function stderrLine(message: string): never {
+  console.error(message);
+  process.exit(1);
+}
+
+const fixtureMode = process.env.GHOSTWRITER_MCP_FIXTURE === "1";
+let bridgeConfig;
+try {
+  bridgeConfig = resolveLocalBridgeConfigFromEnv();
+} catch (error) {
+  if (error instanceof LocalBridgeConfigError) {
+    stderrLine(error.message);
+  }
+  throw error;
+}
+
+if (fixtureMode && bridgeConfig !== undefined) {
+  stderrLine(
+    "Ghostwriter MCP stdio cannot combine GHOSTWRITER_MCP_FIXTURE=1 with grant bridge configuration."
+  );
+}
+
+let server;
+if (bridgeConfig !== undefined) {
+  const bridgeClient = createLocalBridgeClient({
+    apiUrl: bridgeConfig.apiUrl,
+    token: bridgeConfig.token
+  });
+  server = createGhostwriterMcpServer({ bridgeClient });
+} else if (fixtureMode) {
+  server = createGhostwriterMcpServer({ fixtureMode: true });
+} else {
+  stderrLine(
+    "Ghostwriter MCP stdio requires GHOSTWRITER_MCP_FIXTURE=1 or grant bridge env (GHOSTWRITER_MCP_API_URL + GHOSTWRITER_MCP_GRANT_TOKEN)."
+  );
+}
+
 await server.connect(new StdioServerTransport());

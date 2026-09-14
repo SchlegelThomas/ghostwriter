@@ -2,7 +2,7 @@ import { validateSceneDocumentV1 } from "@ghostwriter/editor";
 import {
   BELLWETHER_FIXTURE,
   BELLWETHER_FIXTURE_PROJECT_ID,
-  MCP_GRANT_TOOL_NAMES,
+  MCP_GRANT_CAPTURE_TOOL_NAMES,
   accountId,
   captureContentHash,
   captureId,
@@ -23,6 +23,8 @@ import {
   createMemoryProjectAgentInstructionsRepository,
   createMemoryProjectPlaybookRepository,
   createMemoryProjectRepository,
+  createMemoryStoryWorkAssignmentRepository,
+  createMemoryStoryWorkCoordinationRepository,
   createProjectMembership,
   type AsyncHashPort,
   type CaptureReflectionStructuredCompletionProvider,
@@ -245,6 +247,8 @@ async function createGrantHarness() {
     grants,
     captureDocuments,
     captureReflection,
+    storyWorkAssignments: createMemoryStoryWorkAssignmentRepository(),
+    storyWorkCoordinations: createMemoryStoryWorkCoordinationRepository(),
     tokens: createTestTokenPort(hashPort),
     ids,
     clock
@@ -254,7 +258,7 @@ async function createGrantHarness() {
     accountId: OWNER,
     projectId: BELLWETHER_FIXTURE_PROJECT_ID,
     captureIds: [CAPTURE],
-    tools: [...MCP_GRANT_TOOL_NAMES],
+    tools: [...MCP_GRANT_CAPTURE_TOOL_NAMES, "ghostwriter_get_grant"],
     expiresAt: "2026-08-01T00:00:00.000Z"
   });
   return {
@@ -292,14 +296,19 @@ describe("MCP grant tools (memory)", () => {
       expect(names).toContain(ASSEMBLE_CAPTURE_REFLECTION_CONTEXT_TOOL_NAME);
       expect(names).toContain(PROPOSE_CAPTURE_REFLECTION_TOOL_NAME);
 
-      const grant = await client.callTool({
+      const discovered = await client.callTool({
         name: GET_GRANT_TOOL_NAME,
         arguments: {}
       });
-      expect(grant.isError).not.toBe(true);
-      expect(grant.structuredContent).toMatchObject({
+      expect(discovered.isError).not.toBe(true);
+      expect(discovered.structuredContent).toMatchObject({
         projectId: BELLWETHER_FIXTURE_PROJECT_ID,
-        captureIds: [CAPTURE]
+        captureIds: [CAPTURE],
+        sceneIds: [],
+        bookIds: [],
+        assignmentIds: [],
+        coordinationIds: [],
+        allowProjectStructureRead: false
       });
 
       const read = await client.callTool({

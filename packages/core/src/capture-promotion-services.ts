@@ -218,7 +218,7 @@ async function latestRevisionId(
   canvases: CanvasRepository,
   projectId: ProjectId
 ): Promise<CanvasRevisionId | undefined> {
-  return (await canvases.listRevisions(projectId))[0]?.id;
+  return (await canvases.listRevisions(projectId, { limit: 1 }))[0]?.id;
 }
 
 export async function createInitialSceneDocumentStateFromCapture(input: {

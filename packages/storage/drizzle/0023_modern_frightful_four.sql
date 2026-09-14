@@ -1,0 +1,2 @@
+ALTER TABLE "canvas_scope_placements" ADD COLUMN "membership" text;--> statement-breakpoint
+ALTER TABLE "canvas_scope_placements" ADD CONSTRAINT "canvas_scope_placements_membership_check" CHECK ("canvas_scope_placements"."membership" is null or "canvas_scope_placements"."membership" = 'explicit');

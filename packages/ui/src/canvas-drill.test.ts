@@ -15,6 +15,7 @@ import {
   chapterBounds,
   chapterBoundOverlays,
   currentDrillScope,
+  filterObjectsForScope,
   drillBack,
   drillBreadcrumbs,
   drillIntoChapter,
@@ -25,6 +26,7 @@ import {
   interpolateCanvasViewport,
   projectCanvasLensProjection,
   readPrefersReducedMotion,
+  sanitizeCanvasDrillStack,
   sceneDrillScope,
   targetViewportForDrillScope,
   workflowLensLabel
@@ -158,6 +160,83 @@ const board: CanvasBoard = {
 };
 
 describe("canvas drill stack", () => {
+  it("reveals only explicitly scoped placements while preserving legacy geometry", () => {
+    const noteId = canvasObjectId("unlinked-scoped-note");
+    const legacyNoteId = canvasObjectId("legacy-geometry-note");
+    const scopedBoard = { ...board, objects: [
+      ...board.objects,
+      object(noteId, { kind: "note" }),
+      object(legacyNoteId, { kind: "note" })
+    ],
+      scopePlacements: [
+        { objectId: noteId, scopeKind: "chapter" as const, scopeId: secondChapter,
+          membership: "explicit" as const, x: 0, y: 0 },
+        { objectId: legacyNoteId, scopeKind: "chapter" as const,
+          scopeId: secondChapter, x: 20, y: 20 }
+      ]
+    };
+    const scope = { kind: "chapter" as const, bookId: book,
+      partId: navigator.books[0]!.parts[0]!.id, chapterId: secondChapter };
+    const visible = filterObjectsForScope(navigator, scopedBoard, scope).map(o => o.id);
+    expect(visible).toContain(noteId);
+    expect(visible).not.toContain(legacyNoteId);
+    expect(filterObjectsForScope(navigator, scopedBoard, { ...scope, chapterId: chapter }).map(o => o.id)).not.toContain(noteId);
+    expect(scopedBoard.links).toEqual(board.links);
+  });
+
+  it("keeps legacy graph expansion independent from explicit membership", () => {
+    const scope = { kind: "chapter" as const, bookId: book,
+      partId: navigator.books[0]!.parts[0]!.id, chapterId: chapter };
+    expect(filterObjectsForScope(navigator, board, scope).map(o => o.id))
+      .toEqual(expect.arrayContaining([sceneCardOne, beatNote]));
+  });
+
+  it("sanitizes removed chapters and archived scenes to an active trail", () => {
+    const chapterScope = { kind: "chapter" as const, bookId: book,
+      partId: navigator.books[0]!.parts[0]!.id, chapterId: secondChapter };
+    const withoutSecondChapter: ProjectNavigator = {
+      ...navigator,
+      books: navigator.books.map((candidate) => ({
+        ...candidate,
+        parts: candidate.parts.map((part) => ({
+          ...part,
+          chapters: part.chapters.filter((item) => item.id !== secondChapter)
+        }))
+      }))
+    };
+    expect(sanitizeCanvasDrillStack(withoutSecondChapter, [
+      { kind: "project" }, chapterScope
+    ])).toEqual([{ kind: "project" }]);
+
+    const archivedSceneNavigator: ProjectNavigator = {
+      ...navigator,
+      books: navigator.books.map((candidate) => ({
+        ...candidate,
+        parts: candidate.parts.map((part) => ({
+          ...part,
+          chapters: part.chapters.map((item) => ({
+            ...item,
+            scenes: item.scenes.map((scene) =>
+              scene.id === firstScene
+                ? { ...scene, archivedAt: "2026-09-12T00:00:00.000Z" }
+                : scene
+            )
+          }))
+        }))
+      }))
+    };
+    expect(sanitizeCanvasDrillStack(archivedSceneNavigator, [
+      { kind: "project" },
+      { kind: "chapter", bookId: book,
+        partId: navigator.books[0]!.parts[0]!.id, chapterId: chapter },
+      sceneDrillScope(navigator, firstScene)!
+    ])).toEqual([
+      { kind: "project" },
+      { kind: "chapter", bookId: book,
+        partId: navigator.books[0]!.parts[0]!.id, chapterId: chapter }
+    ]);
+  });
+
   it("starts at project scope and drills into chapter then scene", () => {
     const stack = initialDrillStack();
     const chapterScope = {

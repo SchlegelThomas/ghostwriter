@@ -1,15 +1,24 @@
 import {
+  CANVAS_PERSONAL_VIEW_MAX_SCOPES,
   applyCanvasCommand,
+  canvasPersonalScopeKey,
+  createCanvasPersonalScopeView,
+  createCanvasPersonalViewPreference,
   createCanvasViewportPreference,
   createInitialCanvas,
   deriveCanvasReadingOrderSpine,
+  requireCanvasScope,
   restoreCanvasSnapshot,
   CanvasNotFoundError,
   CanvasRevisionNotFoundError,
   CanvasVersionConflictError,
   type CanvasBoard,
+  type CanvasPersonalScopeView,
+  type CanvasPersonalViewPreference,
+  type CanvasScopeRef,
   type CanvasCommand,
   type CanvasReadingOrderSpine,
+  type CanvasRevision,
   type CanvasRevisionMetadata,
   type CanvasViewportPreference
 } from "./canvas.js";
@@ -18,6 +27,7 @@ import type {
   CanvasSceneCreationUnitOfWork
 } from "./canvas-repository.js";
 import {
+  DomainValidationError,
   sceneId,
   type BookId,
   type CanvasObjectId,
@@ -78,6 +88,7 @@ export type CreateSceneFromCanvasInput = Readonly<{
   title: string;
   manuscriptPlacement: CreateSceneFromCanvasPlacement;
   canvas: Readonly<{
+    scope?: CanvasScopeRef;
     x: number;
     y: number;
     width: number;
@@ -98,6 +109,15 @@ export type CreateSceneFromCanvasResult = Readonly<{
   canvas: CanvasWorkspace;
 }>;
 
+export const CANVAS_HISTORY_DEFAULT_LIMIT = 100;
+export const CANVAS_HISTORY_MAX_LIMIT = 100;
+const CANVAS_UNDO_MAX_POINTERS = 100;
+
+export type CanvasHistoryPage = Readonly<{
+  revisions: readonly CanvasRevisionMetadata[];
+  nextBeforeVersion?: number;
+}>;
+
 export type CanvasServices = Readonly<{
   getCanvasWorkspace(input: Readonly<{
     accountId: AccountId;
@@ -112,7 +132,9 @@ export type CanvasServices = Readonly<{
   listCanvasHistory(input: Readonly<{
     accountId: AccountId;
     projectId: ProjectId;
-  }>): Promise<readonly CanvasRevisionMetadata[]>;
+    limit?: number;
+    beforeVersion?: number;
+  }>): Promise<CanvasHistoryPage>;
   restoreCanvasRevision(input: Readonly<{
     accountId: AccountId;
     projectId: ProjectId;
@@ -136,6 +158,17 @@ export type CanvasServices = Readonly<{
     zoom: number;
     selectedObjectId?: CanvasObjectId;
   }>): Promise<CanvasViewportPreference>;
+  getCanvasPersonalViewPreference(input: Readonly<{
+    accountId: AccountId;
+    projectId: ProjectId;
+  }>): Promise<CanvasPersonalViewPreference | undefined>;
+  saveCanvasPersonalViewPreference(input: Readonly<{
+    accountId: AccountId;
+    projectId: ProjectId;
+    expectedPreferenceVersion: number;
+    scopeView: Omit<CanvasPersonalScopeView, "updatedAt">;
+    lastScope: CanvasScopeRef;
+  }>): Promise<CanvasPersonalViewPreference>;
   createSceneFromCanvas(
     input: CreateSceneFromCanvasInput
   ): Promise<CreateSceneFromCanvasResult>;
@@ -171,6 +204,88 @@ async function requireOwnedRecords(
   return records;
 }
 
+function fallbackPersonalScope(
+  scope: CanvasScopeRef,
+  records: ProjectRecords
+): CanvasScopeRef {
+  try {
+    requireCanvasScope(scope, records);
+    return scope;
+  } catch (error) {
+    if (!(error instanceof DomainValidationError) || scope.scopeKind !== "scene") {
+      return { scopeKind: "project" };
+    }
+  }
+  const scene = records.scenes.find((candidate) => candidate.id === scope.scopeId);
+  if (scene === undefined) return { scopeKind: "project" };
+  const book = records.books.find(
+    (candidate) => candidate.id === scene.bookId && candidate.archivedAt === undefined
+  );
+  if (book === undefined) return { scopeKind: "project" };
+  for (const part of book.manuscript.parts) {
+    const chapter = part.chapters.find((candidate) =>
+      candidate.sceneIds.includes(scene.id)
+    );
+    if (chapter !== undefined) {
+      return { scopeKind: "chapter", scopeId: chapter.id };
+    }
+  }
+  return { scopeKind: "project" };
+}
+
+function sanitizePersonalViewReferences(
+  preference: CanvasPersonalViewPreference,
+  records: ProjectRecords,
+  board: CanvasBoard
+): CanvasPersonalViewPreference {
+  const objectIds = new Set(board.objects.map((object) => object.id));
+  const sceneIds = new Set(records.scenes.map((scene) => scene.id));
+  return createCanvasPersonalViewPreference({
+    ...preference,
+    lastScope: fallbackPersonalScope(preference.lastScope, records),
+    scopeViews: preference.scopeViews.map((view) => {
+      const { selectedObjectId, inspectedSceneId, ...rest } = view;
+      return createCanvasPersonalScopeView({
+        ...rest,
+        ...(selectedObjectId !== undefined && objectIds.has(selectedObjectId)
+          ? { selectedObjectId }
+          : {}),
+        ...(inspectedSceneId !== undefined && sceneIds.has(inspectedSceneId)
+          ? { inspectedSceneId }
+          : {})
+      });
+    })
+  });
+}
+
+export function boundedCanvasPersonalScopeViews(
+  views: readonly CanvasPersonalScopeView[],
+  lastScope: CanvasScopeRef
+): readonly CanvasPersonalScopeView[] {
+  if (views.length <= CANVAS_PERSONAL_VIEW_MAX_SCOPES) return views;
+  const currentKey = canvasPersonalScopeKey(lastScope);
+  const removable = views
+    .filter((view) => {
+      const key = canvasPersonalScopeKey(view.scope);
+      return key !== "project" && key !== currentKey;
+    })
+    .sort(
+      (left, right) =>
+        left.updatedAt.localeCompare(right.updatedAt) ||
+        canvasPersonalScopeKey(left.scope).localeCompare(
+          canvasPersonalScopeKey(right.scope)
+        )
+    );
+  const removeKeys = new Set(
+    removable
+      .slice(0, views.length - CANVAS_PERSONAL_VIEW_MAX_SCOPES)
+      .map((view) => canvasPersonalScopeKey(view.scope))
+  );
+  return views.filter(
+    (view) => !removeKeys.has(canvasPersonalScopeKey(view.scope))
+  );
+}
+
 async function getOrInitializeBoard(
   dependencies: CanvasServiceDependencies,
   accountId: AccountId,
@@ -200,7 +315,59 @@ async function latestRevisionId(
   canvases: CanvasRepository,
   projectId: ProjectId
 ): Promise<CanvasRevisionId | undefined> {
-  return (await canvases.listRevisions(projectId))[0]?.id;
+  return (await canvases.listRevisions(projectId, { limit: 1 }))[0]?.id;
+}
+
+type RevisionPointer = Pick<
+  CanvasRevision,
+  | "id"
+  | "projectId"
+  | "boardVersion"
+  | "reason"
+  | "parentRevisionId"
+  | "restoredFromRevisionId"
+>;
+
+type RevisionTraversal = {
+  remaining: number;
+  visited: Set<CanvasRevisionId>;
+};
+
+async function pointedRevision(
+  canvases: CanvasRepository,
+  projectId: ProjectId,
+  revisionId: CanvasRevisionId,
+  traversal: RevisionTraversal
+): Promise<CanvasRevision> {
+  if (traversal.remaining <= 0 || traversal.visited.has(revisionId)) {
+    throw new CanvasRevisionNotFoundError();
+  }
+  traversal.remaining -= 1;
+  traversal.visited.add(revisionId);
+  const revision = await canvases.getRevision(projectId, revisionId);
+  if (revision === undefined) throw new CanvasRevisionNotFoundError();
+  return revision;
+}
+
+async function logicalCanvasRevision(
+  canvases: CanvasRepository,
+  projectId: ProjectId,
+  startingRevision: RevisionPointer,
+  traversal: RevisionTraversal
+): Promise<Readonly<{ revision: RevisionPointer; boundary: boolean }>> {
+  let revision = startingRevision;
+  while (revision.reason === "undo") {
+    if (revision.restoredFromRevisionId === undefined) {
+      return Object.freeze({ revision, boundary: true });
+    }
+    revision = await pointedRevision(
+      canvases,
+      projectId,
+      revision.restoredFromRevisionId,
+      traversal
+    );
+  }
+  return Object.freeze({ revision, boundary: false });
 }
 
 async function restoreRevision(
@@ -322,7 +489,7 @@ export function createCanvasServices(
       });
       return workspace(records, saved);
     },
-    async listCanvasHistory(input): Promise<readonly CanvasRevisionMetadata[]> {
+    async listCanvasHistory(input): Promise<CanvasHistoryPage> {
       await requireOwnedRecords(
         dependencies,
         input.accountId,
@@ -333,7 +500,39 @@ export function createCanvasServices(
         input.accountId,
         input.projectId
       );
-      return dependencies.canvases.listRevisions(input.projectId);
+      const limit = input.limit ?? CANVAS_HISTORY_DEFAULT_LIMIT;
+      if (
+        !Number.isInteger(limit) ||
+        limit < 1 ||
+        limit > CANVAS_HISTORY_MAX_LIMIT
+      ) {
+        throw new DomainValidationError(
+          "INVALID_VERSION",
+          `Canvas history limit must be between 1 and ${CANVAS_HISTORY_MAX_LIMIT}.`
+        );
+      }
+      if (
+        input.beforeVersion !== undefined &&
+        (!Number.isInteger(input.beforeVersion) || input.beforeVersion < 1)
+      ) {
+        throw new DomainValidationError(
+          "INVALID_VERSION",
+          "Canvas history cursor must be a positive integer."
+        );
+      }
+      const page = await dependencies.canvases.listRevisions(input.projectId, {
+        limit: limit + 1,
+        ...(input.beforeVersion === undefined
+          ? {}
+          : { beforeVersion: input.beforeVersion })
+      });
+      const revisions = Object.freeze(page.slice(0, limit));
+      return Object.freeze({
+        revisions,
+        ...(page.length <= limit || revisions.length === 0
+          ? {}
+          : { nextBeforeVersion: revisions[revisions.length - 1]!.boardVersion })
+      });
     },
     restoreCanvasRevision(input): Promise<CanvasWorkspace> {
       return restoreRevision(dependencies, { ...input, reason: "restore" });
@@ -355,12 +554,43 @@ export function createCanvasServices(
           input.expectedCanvasVersion
         );
       }
-      const target = (await dependencies.canvases.listRevisions(input.projectId))
-        .find((revision) => revision.boardVersion < board.version);
-      if (target === undefined) throw new CanvasRevisionNotFoundError();
+      const [head] = await dependencies.canvases.listRevisions(input.projectId, {
+        limit: 1
+      });
+      if (head === undefined || head.boardVersion !== board.version) {
+        throw new CanvasRevisionNotFoundError();
+      }
+      const traversal: RevisionTraversal = {
+        remaining: CANVAS_UNDO_MAX_POINTERS,
+        visited: new Set([head.id])
+      };
+      const logicalCurrent = await logicalCanvasRevision(
+        dependencies.canvases,
+        input.projectId,
+        head,
+        traversal
+      );
+      if (
+        logicalCurrent.boundary ||
+        logicalCurrent.revision.parentRevisionId === undefined
+      ) {
+        throw new CanvasRevisionNotFoundError();
+      }
+      const predecessor = await pointedRevision(
+        dependencies.canvases,
+        input.projectId,
+        logicalCurrent.revision.parentRevisionId,
+        traversal
+      );
+      const target = await logicalCanvasRevision(
+        dependencies.canvases,
+        input.projectId,
+        predecessor,
+        traversal
+      );
       return restoreRevision(dependencies, {
         ...input,
-        revisionId: target.id,
+        revisionId: target.revision.id,
         reason: "undo"
       });
     },
@@ -381,11 +611,8 @@ export function createCanvasServices(
         input.accountId,
         input.projectId
       );
-      const board = await getOrInitializeBoard(
-        dependencies,
-        input.accountId,
-        input.projectId
-      );
+      const board = await dependencies.canvases.getBoard(input.projectId);
+      if (board === undefined) throw new CanvasNotFoundError();
       if (
         input.selectedObjectId !== undefined &&
         !board.objects.some((object) => object.id === input.selectedObjectId)
@@ -405,6 +632,102 @@ export function createCanvasServices(
           updatedAt: dependencies.clock.now()
         })
       );
+    },
+    async getCanvasPersonalViewPreference(input) {
+      const records = await requireOwnedRecords(
+        dependencies,
+        input.accountId,
+        input.projectId
+      );
+      const preference = await dependencies.canvases.getPersonalViewPreference(
+        input.projectId,
+        input.accountId
+      );
+      if (preference === undefined) return undefined;
+      const board = await dependencies.canvases.getBoard(input.projectId);
+      if (board === undefined) return undefined;
+      return sanitizePersonalViewReferences(preference, records, board);
+    },
+    async saveCanvasPersonalViewPreference(input) {
+      if (
+        !Number.isSafeInteger(input.expectedPreferenceVersion) ||
+        input.expectedPreferenceVersion < 0
+      ) {
+        throw new DomainValidationError(
+          "INVALID_VERSION",
+          "Expected Canvas preference version must be a non-negative integer."
+        );
+      }
+      const records = await requireOwnedRecords(
+        dependencies,
+        input.accountId,
+        input.projectId
+      );
+      requireCanvasScope(input.scopeView.scope, records);
+      requireCanvasScope(input.lastScope, records);
+      const board = await dependencies.canvases.getBoard(input.projectId);
+      if (board === undefined) throw new CanvasNotFoundError();
+      if (
+        input.scopeView.selectedObjectId !== undefined &&
+        !board.objects.some(
+          (object) => object.id === input.scopeView.selectedObjectId
+        )
+      ) {
+        throw new CanvasNotFoundError();
+      }
+      if (
+        input.scopeView.inspectedSceneId !== undefined &&
+        !records.scenes.some(
+          (scene) => scene.id === input.scopeView.inspectedSceneId
+        )
+      ) {
+        throw new CanvasNotFoundError();
+      }
+      const now = dependencies.clock.now();
+      const current = await dependencies.canvases.getPersonalViewPreference(
+        input.projectId,
+        input.accountId
+      );
+      const nextScopeView = createCanvasPersonalScopeView({
+        ...input.scopeView,
+        updatedAt: now
+      });
+      const byScope = new Map(
+        (current?.scopeViews ?? []).map((view) => [
+          canvasPersonalScopeKey(view.scope),
+          view
+        ])
+      );
+      if (!byScope.has("project")) {
+        byScope.set(
+          "project",
+          createCanvasPersonalScopeView({
+            scope: { scopeKind: "project" },
+            viewport: { x: 0, y: 0, zoom: 1 },
+            viewMode: "spatial",
+            inspectorOpen: false,
+            focusToken: "surface",
+            workflowLens: "outline",
+            updatedAt: now
+          })
+        );
+      }
+      byScope.set(canvasPersonalScopeKey(nextScopeView.scope), nextScopeView);
+      const scopeViews = boundedCanvasPersonalScopeViews(
+        [...byScope.values()],
+        input.lastScope
+      );
+      return dependencies.canvases.savePersonalViewPreference({
+        expectedPreferenceVersion: input.expectedPreferenceVersion,
+        preference: createCanvasPersonalViewPreference({
+          projectId: input.projectId,
+          accountId: input.accountId,
+          version: input.expectedPreferenceVersion + 1,
+          lastScope: input.lastScope,
+          scopeViews,
+          updatedAt: now
+        })
+      });
     },
     async createSceneFromCanvas(
       input: CreateSceneFromCanvasInput
@@ -462,6 +785,7 @@ export function createCanvasServices(
         expectedCanvasVersion: input.expectedCanvasVersion,
         command: {
           type: "canvas.object.place",
+          ...(input.canvas.scope === undefined ? {} : { scope: input.canvas.scope }),
           object: {
             kind: "scene-card",
             x: input.canvas.x,

@@ -20,12 +20,15 @@ import type { CaptureContentHash, CaptureDocumentHead } from "./capture-document
 import type { AgentProposalPrimaryTarget } from "./agent-runs-proposals.js";
 import {
   DomainValidationError,
+  type AgentProposalId,
   type CaptureId,
   type ContextReceiptId,
   type ProjectId,
   type SceneId,
   type StoryKnowledgeId
 } from "./domain.js";
+import { validateSceneDraftV1, type SceneDraftV1 } from "./scene-draft-v1.js";
+import type { StoryWorkAssignmentId } from "./story-work-assignment.js";
 import {
   agentEgressClassForProvider,
   assertAgentModelId,
@@ -49,10 +52,46 @@ export const CAPTURE_REFLECTION_MAX_OUTPUT_TOKENS = 1_500;
 
 export const CAPTURE_REFLECTION_WALL_CLOCK_SECONDS = 60;
 
-export type ContextResourceClass = "capture";
+export type ContextResourceClass =
+  | "capture"
+  | "scene-document"
+  | "story-context"
+  | "proposal-artifact";
 
-export type ContextReceiptResource = Readonly<{
-  resourceClass: ContextResourceClass;
+/** Receipt resource for scene-draft assess targets. */
+export type ProposalArtifactContextReceiptResource = Readonly<{
+  resourceClass: "proposal-artifact";
+  projectId: ProjectId;
+  assignmentId: StoryWorkAssignmentId;
+  proposalId: AgentProposalId;
+  sceneId: SceneId;
+  artifactVersion: number;
+  contentHash: InstructionContentHash;
+  inclusionReason: string;
+  providerTextCharCount: number;
+  providerTextHash: InstructionContentHash;
+  fullTextCharCount: number;
+  truncated: boolean;
+}>;
+
+export type ContextReceiptResource =
+  | CaptureContextReceiptResource
+  | import("./story-context-receipt.js").StoryContextReceiptResource
+  | ProposalArtifactContextReceiptResource;
+
+/** Story-check compile inputs exclude Capture resources. */
+export type StoryCheckContextReceiptResource = Exclude<
+  ContextReceiptResource,
+  CaptureContextReceiptResource
+>;
+
+/** Scene/character generation compile inputs exclude proposal assess resources. */
+export type StoryWorkContextReceiptResource =
+  | CaptureContextReceiptResource
+  | import("./story-context-receipt.js").StoryContextReceiptResource;
+
+export type CaptureContextReceiptResource = Readonly<{
+  resourceClass: "capture";
   captureId: CaptureId;
   workingVersion: number;
   contentHash: CaptureContentHash;
@@ -120,9 +159,111 @@ export type AssembleCaptureReflectionResourceInput = Readonly<{
   hashPort: AsyncHashPort;
 }>;
 
+function inclusionReason(value: string): string {
+  if (!value.trim() || value.length > 1_000) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Context inclusion reason must contain 1–1000 characters."
+    );
+  }
+  return value;
+}
+
+export type AssembleProposalArtifactContextResourceInput = Readonly<{
+  projectId: ProjectId;
+  assignmentId: StoryWorkAssignmentId;
+  proposalId: AgentProposalId;
+  sceneId: SceneId;
+  artifactVersion: number;
+  /** Exact StoryWorkArtifactPointer / AgentProposal contentHash for this artifact version. */
+  contentHash: InstructionContentHash | string;
+  draft: SceneDraftV1;
+  providerText: string;
+  fullTextCharCount: number;
+  truncated: boolean;
+  inclusionReason: string;
+  hashPort: AsyncHashPort;
+}>;
+
+/** Trusted receipt resource for scene-draft assess targets; never invokes a provider. */
+export async function assembleProposalArtifactContextResource(
+  input: AssembleProposalArtifactContextResourceInput
+): Promise<
+  Readonly<{
+    providerText: string;
+    resource: ProposalArtifactContextReceiptResource;
+  }>
+> {
+  if (!Number.isSafeInteger(input.artifactVersion) || input.artifactVersion < 1) {
+    throw new DomainValidationError(
+      "INVALID_VERSION",
+      "Proposal artifact version must be a positive integer."
+    );
+  }
+  const draft = validateSceneDraftV1(input.draft);
+  if (input.fullTextCharCount !== draft.prose.length) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Proposal artifact full text length does not match draft prose."
+    );
+  }
+  if (typeof input.providerText !== "string") {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Proposal artifact provider text must be a string."
+    );
+  }
+  if (input.providerText.length > input.fullTextCharCount) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Proposal artifact provider text exceeds full draft prose length."
+    );
+  }
+  const expectedTruncated = input.providerText.length < input.fullTextCharCount;
+  if (input.truncated !== expectedTruncated) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Proposal artifact truncation flag contradicts provider and full text lengths."
+    );
+  }
+  if (!input.truncated && input.providerText !== draft.prose) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Proposal artifact provider text must match draft prose when untruncated."
+    );
+  }
+  if (input.truncated && !draft.prose.startsWith(input.providerText)) {
+    throw new DomainValidationError(
+      "INVALID_AGENT_POLICY",
+      "Proposal artifact provider text must be an exact prefix of draft prose when truncated."
+    );
+  }
+  const contentHash = instructionContentHash(String(input.contentHash));
+  const providerTextHash = instructionContentHash(
+    await input.hashPort.digestSha256Hex(input.providerText)
+  );
+  return Object.freeze({
+    providerText: input.providerText,
+    resource: Object.freeze({
+      resourceClass: "proposal-artifact",
+      projectId: input.projectId,
+      assignmentId: input.assignmentId,
+      proposalId: input.proposalId,
+      sceneId: input.sceneId,
+      artifactVersion: input.artifactVersion,
+      contentHash,
+      inclusionReason: inclusionReason(input.inclusionReason),
+      providerTextCharCount: input.providerText.length,
+      providerTextHash,
+      fullTextCharCount: input.fullTextCharCount,
+      truncated: input.truncated
+    })
+  });
+}
+
 export async function assembleCaptureReflectionResource(
   input: AssembleCaptureReflectionResourceInput
-): Promise<ContextReceiptResource> {
+): Promise<CaptureContextReceiptResource> {
   if (input.captureHead.captureId !== input.assignment.captureId) {
     throw new DomainValidationError(
       "UNKNOWN_REFERENCE",

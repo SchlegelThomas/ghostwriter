@@ -42,10 +42,15 @@ import {
   finalizeCaptureShellActivityOnClose,
   scheduleCaptureFocusRestore,
   drillBack,
+  drillBreadcrumbs,
   drillIntoChapter,
   drillIntoScene,
   drillToScope,
+  canvasDrillScopeKey,
+  currentDrillScope,
   initialDrillStack,
+  sanitizeCanvasDrillStack,
+  sceneDrillScope,
   type CanvasDrillScope,
   type CanvasDrillStack,
   type CanvasWorkflowLens,
@@ -115,7 +120,12 @@ import {
   resolveWorkPlanScenes,
   workPlanFromNextActionV1,
   type WorkPlanJobStripAction,
-  type WorkPlanJobStripJob
+  type WorkPlanJobStripJob,
+  STORY_CONTEXT_DIRTY_NAVIGATION_MESSAGE,
+  createStoryContextDirtySurfaces,
+  hasDirtyStoryContextSurface,
+  setStoryContextSurfaceDirty,
+  type StoryContextSurface
 } from "@ghostwriter/ui";
 import { useFonts } from "expo-font";
 import { useEffect, useMemo, useReducer, useRef, useState, useCallback } from "react";
@@ -131,6 +141,7 @@ import {
   projectScenes,
   sceneDocumentPlainText
 } from "./src/draft-desk.js";
+import { resolveEvidenceFocusAfterOpenScene } from "./src/evidence-focus-navigation.js";
 import {
   StoryCanvasPanel,
   type CanvasPanelMessage
@@ -148,7 +159,7 @@ import {
   getBookReader,
   getCanvasBoard,
   getCanvasHistory,
-  getCanvasPreference,
+  getCanvasPersonalViewPreference,
   getCharacterVisualDownload,
   getCharacterVisualJob,
   getAvailableModels,
@@ -168,7 +179,7 @@ import {
   runCatalogAgent,
   runNextActionCoach,
   restoreCanvasRevision,
-  saveCanvasPreference,
+  saveCanvasPersonalViewPreference,
   saveCaptureDocument,
   sendWorkspaceChat,
   sendWorkspaceChatStream,
@@ -187,7 +198,6 @@ import {
   type CharacterVisualJobOption,
   type CharacterVisualJobStatus,
   type BookReaderResponse,
-  type CanvasPreferenceResponse,
   type CanvasHistoryResponse,
   type CanvasSceneGeometryInput,
   type CanvasScenePlacementInput,
@@ -195,13 +205,33 @@ import {
   type CurrentWriter,
   type WorkspaceChatAttachment
 } from "./src/api.js";
+import { CAPTURE_HANDOFF_CANVAS_GEOMETRY_BOUNDS } from "./src/capture-handoff.js";
+import { useStoryWorkWorkspace } from "./src/use-story-work-workspace.js";
 import { useDictationSpeechRecognition } from "./src/useDictationSpeechRecognition.js";
 import { getSpeechRecognitionConstructor } from "./src/speech-recognition-dictation.js";
 import { executeWorkPlan } from "./src/work-plan-orchestrator.js";
+import { canvasFailureDisposition } from "./src/canvas-model.js";
 import {
-  canvasFailureDisposition,
-  preferredCanvasSceneId
-} from "./src/canvas-model.js";
+  canvasInspectionForObject,
+  canvasInspectionForScene,
+  type CanvasInspection
+} from "./src/canvas-inspection.js";
+import {
+  canvasPersonalScopeViewFromState,
+  canvasInspectionNeedsApply,
+  canvasReturnDrillStack,
+  canvasScopeRefFromDrillScope,
+  canvasScopeViewState,
+  emptyCanvasViewStateSession,
+  hydrateCanvasViewStateSession,
+  retainCanvasScopeViewState,
+  sanitizeCanvasScopeViewState,
+  type CanvasScopeViewState
+} from "./src/canvas-view-state.js";
+import {
+  createCanvasPreferenceSaveQueue,
+  type CanvasPreferenceSaveQueue
+} from "./src/canvas-preference-save-queue.js";
 import {
   acknowledgementForCanvasCommand,
   acknowledgementForProjectCommand,
@@ -277,6 +307,7 @@ type ActiveCharacterVisualJob = Readonly<{
 type ReaderReturnState = Readonly<{
   workspaceMode: ProjectWorkspaceMode;
   selectedSceneId?: SceneId;
+  inspectedCanvasSceneId?: SceneId;
   selectedCanvasObjectId?: CanvasObjectId;
   drillStack: CanvasDrillStack;
   workflowLens: CanvasWorkflowLens;
@@ -406,9 +437,15 @@ export default function App() {
   const [assistOpen, setAssistOpen] = useState(false);
   const [drillStack, setDrillStack] =
     useState<CanvasDrillStack>(initialDrillStack);
+  const drillStackRef = useRef<CanvasDrillStack>(drillStack);
+  drillStackRef.current = drillStack;
+  const canvasViewStateSessionRef = useRef(emptyCanvasViewStateSession());
   const [workflowLens, setWorkflowLens] =
     useState<CanvasWorkflowLens>("outline");
+  const workflowLensRef = useRef<CanvasWorkflowLens>(workflowLens);
+  workflowLensRef.current = workflowLens;
   const [selectedSceneId, setSelectedSceneId] = useState<SceneId>();
+  const [inspectedCanvasSceneId, setInspectedCanvasSceneId] = useState<SceneId>();
   const [chronologySceneIds, setChronologySceneIds] = useState<
     readonly SceneId[]
   >([]);
@@ -417,9 +454,11 @@ export default function App() {
   >({});
   const [canvasWorkspace, setCanvasWorkspace] =
     useState<CanvasWorkspaceResponse>();
-  const [canvasPreference, setCanvasPreference] =
-    useState<CanvasPreferenceResponse | null>();
+  const canvasPreferenceQueueRef = useRef<CanvasPreferenceSaveQueue | undefined>(
+    undefined
+  );
   const canvasPreferenceSaveGenRef = useRef(0);
+  const canvasHistoryLoadGenRef = useRef(0);
   const [recentCanvasActions, setRecentCanvasActions] = useState<
     readonly RecentCanvasAction[]
   >([]);
@@ -429,6 +468,10 @@ export default function App() {
   const [canvasHistoryLoading, setCanvasHistoryLoading] = useState(false);
   const [selectedCanvasObjectId, setSelectedCanvasObjectId] =
     useState<CanvasObjectId>();
+  const selectedCanvasObjectIdRef = useRef<CanvasObjectId | undefined>(undefined);
+  selectedCanvasObjectIdRef.current = selectedCanvasObjectId;
+  const inspectedCanvasSceneIdRef = useRef<SceneId | undefined>(undefined);
+  inspectedCanvasSceneIdRef.current = inspectedCanvasSceneId;
   const [canvasLoading, setCanvasLoading] = useState(false);
   const [canvasBusy, setCanvasBusy] = useState(false);
   const [canvasSaveState, setCanvasSaveState] = useState<
@@ -436,9 +479,48 @@ export default function App() {
   >("saved");
   const [canvasMessage, setCanvasMessage] = useState<CanvasPanelMessage>();
   const [draftMountVersion, setDraftMountVersion] = useState(0);
+  const [evidenceFocusBlockRequest, setEvidenceFocusBlockRequest] = useState<
+    Readonly<{ id: number; sceneId: SceneId; blockId: string }> | undefined
+  >();
+  const evidenceFocusBlockSeqRef = useRef(0);
   const [includeArchived, setIncludeArchived] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const storyWorkDirtyRef = useRef(false);
+  const storyContextDirtySurfacesRef = useRef(
+    createStoryContextDirtySurfaces()
+  );
+  const handleStoryContextDirtyChange = useCallback(
+    (surface: StoryContextSurface, dirty: boolean): void => {
+      storyContextDirtySurfacesRef.current = setStoryContextSurfaceDirty(
+        storyContextDirtySurfacesRef.current,
+        surface,
+        dirty
+      );
+      if (!hasDirtyStoryContextSurface(storyContextDirtySurfacesRef.current)) {
+        setError((current) =>
+          current === STORY_CONTEXT_DIRTY_NAVIGATION_MESSAGE
+            ? undefined
+            : current
+        );
+      }
+    },
+    []
+  );
+  const blockDirtyStoryContextNavigation = useCallback((): boolean => {
+    if (storyWorkDirtyRef.current) {
+      setError("Save or discard the story work review edits before leaving.");
+      return true;
+    }
+    if (!hasDirtyStoryContextSurface(storyContextDirtySurfacesRef.current)) {
+      return false;
+    }
+    setError(STORY_CONTEXT_DIRTY_NAVIGATION_MESSAGE);
+    return true;
+  }, []);
+  const resetStoryContextDirtySurfaces = useCallback((): void => {
+    storyContextDirtySurfacesRef.current = createStoryContextDirtySurfaces();
+  }, []);
   const [saveState, setSaveState] = useState<"saved" | "saving" | "error">(
     "saved"
   );
@@ -486,6 +568,8 @@ export default function App() {
   );
   const [requestOpenAgentPanel, setRequestOpenAgentPanel] = useState(0);
   const [requestFocusDraftScene, setRequestFocusDraftScene] = useState(0);
+  const [requestInsertDraft, setRequestInsertDraft] = useState(0);
+  const [requestInsertDraftText, setRequestInsertDraftText] = useState<string>();
   const autoSuggestionsEnabledRef = useRef(autoSuggestionsEnabled);
   autoSuggestionsEnabledRef.current = autoSuggestionsEnabled;
   const nextActionIdleTimerRef = useRef<
@@ -572,6 +656,7 @@ export default function App() {
   const readerReturnStateRef = useRef<ReaderReturnState | undefined>(undefined);
   const draftPanelRef = useRef<DraftPanelHandle>(null);
   const selectedProjectRef = useRef<ProjectNavigator | undefined>(undefined);
+  const selectedSceneIdRef = useRef<SceneId | undefined>(undefined);
   const toastSequenceRef = useRef(0);
   const toastActionsRef = useRef(
     new Map<string, () => void | Promise<void>>()
@@ -609,6 +694,7 @@ export default function App() {
   const [settingsTab, setSettingsTab] = useState<SettingsFocus>("providers");
 
   function openSettings(focus?: SettingsFocus): void {
+    if (blockDirtyStoryContextNavigation()) return;
     if (focus !== undefined) {
       setSettingsTab(focus);
     }
@@ -705,6 +791,7 @@ export default function App() {
     captureId?: string,
     options?: Readonly<{ readOnly?: boolean }>
   ): void {
+    if (blockDirtyStoryContextNavigation()) return;
     captureReturnStateRef.current = captureReturnStateFromScene(
       selectedSceneId,
       focusTargetFromDocument()
@@ -734,6 +821,7 @@ export default function App() {
 
   async function openInboxWorkspace(): Promise<void> {
     if (inboxOpen) return;
+    if (blockDirtyStoryContextNavigation()) return;
     const draftIsVisible =
       workspaceMode === "draft" || workspaceMode === "split";
     if (draftIsVisible) {
@@ -816,6 +904,7 @@ export default function App() {
     sceneId: SceneId,
     targetMode: "draft" | "split"
   ): Promise<void> {
+    if (blockDirtyStoryContextNavigation()) return;
     const needsDraftPrep =
       workspaceMode === "draft" || workspaceMode === "split";
     if (needsDraftPrep) {
@@ -841,11 +930,8 @@ export default function App() {
     try {
       closeInboxWorkspace();
       setSelectedSceneId(sceneId);
-      setSelectedCanvasObjectId(
-        canvasWorkspace?.board.objects.find(
-          (object) =>
-            object.sceneId === sceneId && object.archivedAt === undefined
-        )?.id
+      applyCanvasInspection(
+        canvasInspectionForScene(canvasWorkspace?.board.objects ?? [], sceneId)
       );
       await changeWorkspaceMode(targetMode);
     } catch (cause) {
@@ -954,6 +1040,18 @@ export default function App() {
   useEffect(() => {
     selectedProjectRef.current = selectedProject;
   }, [selectedProject]);
+
+  useEffect(() => {
+    if (selectedProject === undefined) return;
+    const sanitized = sanitizeCanvasDrillStack(selectedProject, drillStack);
+    if (
+      canvasDrillScopeKey(currentDrillScope(sanitized)) ===
+      canvasDrillScopeKey(currentDrillScope(drillStack))
+    ) {
+      return;
+    }
+    transitionCanvasScope(sanitized);
+  }, [selectedProject?.id, selectedProject?.version, drillStack]);
 
   useEffect(() => {
     const timer = setInterval(
@@ -1348,8 +1446,13 @@ export default function App() {
   }
 
   function resetCanvasState(): void {
+    canvasHistoryLoadGenRef.current += 1;
+    canvasPreferenceSaveGenRef.current += 1;
+    canvasPreferenceQueueRef.current?.dispose();
+    canvasPreferenceQueueRef.current = undefined;
+    canvasViewStateSessionRef.current = emptyCanvasViewStateSession();
+    setInspectedCanvasSceneId(undefined);
     setCanvasWorkspace(undefined);
-    setCanvasPreference(undefined);
     setCanvasHistory(undefined);
     setCanvasHistoryLoading(false);
     setSelectedCanvasObjectId(undefined);
@@ -1362,8 +1465,92 @@ export default function App() {
     setCanvasMessage(undefined);
   }
 
+  function applyCanvasInspection(
+    inspection: CanvasInspection,
+    scope: CanvasDrillScope = currentDrillScope(drillStackRef.current)
+  ): void {
+    inspectedCanvasSceneIdRef.current = inspection.inspectedSceneId;
+    selectedCanvasObjectIdRef.current = inspection.selectedObjectId;
+    setInspectedCanvasSceneId(inspection.inspectedSceneId);
+    setSelectedCanvasObjectId(inspection.selectedObjectId);
+    retainCanvasViewState(scope, {
+      inspectedSceneId: inspection.inspectedSceneId,
+      selectedObjectId: inspection.selectedObjectId
+    });
+  }
+
+  function retainCanvasViewState(
+    scope: CanvasDrillScope,
+    patch: CanvasScopeViewState,
+    lastScope: CanvasDrillScope = currentDrillScope(drillStackRef.current)
+  ): void {
+    const projectId = selectedProjectRef.current?.id;
+    if (projectId === undefined) return;
+    canvasViewStateSessionRef.current = retainCanvasScopeViewState(
+      canvasViewStateSessionRef.current,
+      projectId,
+      canvasDrillScopeKey(scope),
+      patch
+    );
+    const retained = canvasScopeViewState(
+      canvasViewStateSessionRef.current,
+      projectId,
+      canvasDrillScopeKey(scope)
+    );
+    canvasPreferenceQueueRef.current?.enqueue({
+      scopeView: canvasPersonalScopeViewFromState(
+        scope,
+        retained,
+        retained?.workflowLens ?? workflowLensRef.current
+      ),
+      lastScope: canvasScopeRefFromDrillScope(lastScope)
+    });
+  }
+
+  function retainedCanvasViewState(
+    scope: CanvasDrillScope
+  ): CanvasScopeViewState | undefined {
+    const project = selectedProjectRef.current;
+    if (project === undefined) return undefined;
+    return sanitizeCanvasScopeViewState(
+      canvasScopeViewState(
+        canvasViewStateSessionRef.current,
+        project.id,
+        canvasDrillScopeKey(scope)
+      ),
+      canvasWorkspace?.board.objects ?? [],
+      new Set(projectSceneIds(project))
+    );
+  }
+
+  function transitionCanvasScope(nextStack: CanvasDrillStack): boolean {
+    if (blockDirtyStoryContextNavigation()) return false;
+    const departingScope = currentDrillScope(drillStackRef.current);
+    const arrivingScope = currentDrillScope(nextStack);
+    retainCanvasViewState(
+      departingScope,
+      {
+        inspectedSceneId: inspectedCanvasSceneIdRef.current,
+        selectedObjectId: selectedCanvasObjectIdRef.current,
+        workflowLens: workflowLensRef.current
+      },
+      arrivingScope
+    );
+    const retained = retainedCanvasViewState(arrivingScope);
+    inspectedCanvasSceneIdRef.current = retained?.inspectedSceneId;
+    selectedCanvasObjectIdRef.current = retained?.selectedObjectId;
+    setInspectedCanvasSceneId(retained?.inspectedSceneId);
+    setSelectedCanvasObjectId(retained?.selectedObjectId);
+    setWorkflowLens(retained?.workflowLens ?? workflowLensRef.current);
+    drillStackRef.current = nextStack;
+    setDrillStack(nextStack);
+    retainCanvasViewState(arrivingScope, retained ?? {}, arrivingScope);
+    return true;
+  }
+
   function handleError(cause: unknown, fallback: string): void {
     if (cause instanceof GhostwriterApiError && cause.status === 401) {
+      resetStoryContextDirtySurfaces();
       setWriter(undefined);
       setProjects([]);
       setSelectedProject(undefined);
@@ -1444,6 +1631,7 @@ export default function App() {
   }
 
   async function endSession(): Promise<void> {
+    if (blockDirtyStoryContextNavigation()) return;
     setBusy(true);
     setError(undefined);
     try {
@@ -1467,6 +1655,7 @@ export default function App() {
       clearAcknowledgements();
       resetCaptureInboxShell();
       setPhase("signedOut");
+      resetStoryContextDirtySurfaces();
     } catch (cause) {
       handleError(cause, "Ghostwriter could not sign out.");
     } finally {
@@ -1479,6 +1668,7 @@ export default function App() {
     setError(undefined);
     try {
       const opened = await getProject(projectId);
+      resetStoryContextDirtySurfaces();
       clearAcknowledgements();
       setSelectedProject(opened);
       selectedProjectRef.current = opened;
@@ -1501,6 +1691,7 @@ export default function App() {
 
   async function refreshCurrentProject(): Promise<void> {
     if (selectedProject === undefined) return;
+    if (blockDirtyStoryContextNavigation()) return;
     setBusy(true);
     setError(undefined);
     const draftIsVisible =
@@ -2174,6 +2365,7 @@ export default function App() {
   }
 
   async function leaveProject(): Promise<void> {
+    if (blockDirtyStoryContextNavigation()) return;
     setBusy(true);
     setError(undefined);
     await flushCaptureIfOpen();
@@ -2194,6 +2386,7 @@ export default function App() {
     resetCanvasState();
     clearAcknowledgements();
     setPhase("library");
+    resetStoryContextDirtySurfaces();
     setBusy(false);
     void refreshProjects();
   }
@@ -2201,15 +2394,92 @@ export default function App() {
   async function loadCanvas(
     projectId: string,
     acknowledgement?: string
-  ): Promise<void> {
+  ): Promise<boolean> {
+    const accountId = writer?.account.id;
+    if (accountId === undefined) return false;
+    const generation = ++canvasPreferenceSaveGenRef.current;
+    canvasPreferenceQueueRef.current?.dispose();
+    canvasPreferenceQueueRef.current = undefined;
+    const requestedStack = drillStackRef.current;
+    const requestedScope = currentDrillScope(requestedStack);
+    const hasExplicitInspection =
+      requestedScope.kind !== "project" ||
+      inspectedCanvasSceneIdRef.current !== undefined ||
+      selectedCanvasObjectIdRef.current !== undefined;
     setCanvasLoading(true);
     try {
       const [loadedWorkspace, loadedPreference] = await Promise.all([
         getCanvasBoard(projectId),
-        getCanvasPreference(projectId)
+        getCanvasPersonalViewPreference(projectId)
       ]);
+      const project = selectedProjectRef.current;
+      if (
+        generation !== canvasPreferenceSaveGenRef.current ||
+        project?.id !== projectId
+      ) return false;
+      const retainedBeforeLoad = canvasViewStateSessionRef.current;
+      canvasViewStateSessionRef.current = hydrateCanvasViewStateSession(
+        project,
+        loadedPreference,
+        retainedBeforeLoad
+      );
+      const arrivingStack = canvasReturnDrillStack(
+        project,
+        loadedPreference,
+        requestedStack,
+        hasExplicitInspection
+      );
+      const arrivingScope = currentDrillScope(arrivingStack);
+      const arrivingState = sanitizeCanvasScopeViewState(
+        canvasScopeViewState(
+          canvasViewStateSessionRef.current,
+          projectId,
+          canvasDrillScopeKey(arrivingScope)
+        ),
+        loadedWorkspace.board.objects,
+        new Set(projectSceneIds(project))
+      );
+      const queue = createCanvasPreferenceSaveQueue({
+        initialVersion: loadedPreference?.version ?? 0,
+        load: () => getCanvasPersonalViewPreference(projectId),
+        save: (save) =>
+          saveCanvasPersonalViewPreference({
+            projectId,
+            ...save,
+            scopeView: {
+              ...save.scopeView,
+              selectedObjectId: save.scopeView.selectedObjectId ?? null,
+              inspectedSceneId: save.scopeView.inspectedSceneId ?? null
+            }
+          }),
+        isVersionConflict: (cause) =>
+          cause instanceof GhostwriterApiError &&
+          cause.code === "PREFERENCE_VERSION_CONFLICT",
+        onError: (cause) => {
+          if (
+            generation !== canvasPreferenceSaveGenRef.current ||
+            selectedProjectRef.current?.id !== projectId
+          ) return;
+          setCanvasMessage({
+            kind: "error",
+            text:
+              cause instanceof Error
+                ? `Canvas content is safe, but this personal view was not saved: ${cause.message}`
+                : "Canvas content is safe, but this personal view was not saved."
+          });
+        }
+      });
+      canvasPreferenceQueueRef.current = queue;
+      drillStackRef.current = arrivingStack;
+      setDrillStack(arrivingStack);
+      if (!hasExplicitInspection && arrivingState !== undefined) {
+        selectedCanvasObjectIdRef.current = arrivingState.selectedObjectId;
+        inspectedCanvasSceneIdRef.current = arrivingState.inspectedSceneId;
+        setSelectedCanvasObjectId(arrivingState.selectedObjectId);
+        setInspectedCanvasSceneId(arrivingState.inspectedSceneId);
+        setWorkflowLens(arrivingState.workflowLens ?? "outline");
+      }
       setCanvasWorkspace(loadedWorkspace);
-      setCanvasPreference(loadedPreference);
       setCanvasSaveState("saved");
       setCanvasMessage(undefined);
       dismissToast("canvas-conflict");
@@ -2224,22 +2494,26 @@ export default function App() {
           })
         );
       }
-      const preferredObject =
-        loadedPreference?.selectedObjectId === undefined
-          ? undefined
-          : loadedWorkspace.board.objects.find(
-              (object) => object.id === loadedPreference.selectedObjectId
-            );
-      setSelectedCanvasObjectId(preferredObject?.id);
-      const preferredSceneId = preferredCanvasSceneId(
-        loadedWorkspace.board,
-        preferredObject?.id
-      );
-      if (preferredSceneId !== undefined) setSelectedSceneId(preferredSceneId);
+      if (hasExplicitInspection) {
+        retainCanvasViewState(
+          arrivingScope,
+          {
+            inspectedSceneId: inspectedCanvasSceneIdRef.current,
+            selectedObjectId: selectedCanvasObjectIdRef.current,
+            workflowLens: workflowLensRef.current
+          },
+          arrivingScope
+        );
+      }
       if (canvasHistory !== undefined) {
         void loadCanvasHistoryForProject(projectId);
       }
+      return true;
     } catch (cause) {
+      if (
+        generation !== canvasPreferenceSaveGenRef.current ||
+        selectedProjectRef.current?.id !== projectId
+      ) return false;
       if (cause instanceof GhostwriterApiError && cause.status === 401) {
         handleError(cause, "Ghostwriter could not load Story Canvas.");
       } else {
@@ -2265,16 +2539,37 @@ export default function App() {
           })
         );
       }
+      return false;
     } finally {
-      setCanvasLoading(false);
+      if (generation === canvasPreferenceSaveGenRef.current) {
+        setCanvasLoading(false);
+      }
     }
   }
 
-  async function loadCanvasHistoryForProject(projectId: string): Promise<void> {
+  async function loadCanvasHistoryForProject(
+    projectId: string,
+    beforeVersion?: number
+  ): Promise<void> {
+    const generation = ++canvasHistoryLoadGenRef.current;
     setCanvasHistoryLoading(true);
     try {
-      setCanvasHistory(await getCanvasHistory(projectId));
+      const page = await getCanvasHistory(projectId, beforeVersion);
+      if (generation !== canvasHistoryLoadGenRef.current ||
+          selectedProjectRef.current?.id !== projectId) return;
+      setCanvasHistory((current) => beforeVersion === undefined
+        ? page
+        : {
+            ...page,
+            revisions: [
+              ...(current?.revisions ?? []),
+              ...page.revisions.filter((revision) =>
+                !current?.revisions.some((existing) => existing.id === revision.id))
+            ]
+          });
     } catch (cause) {
+      if (generation !== canvasHistoryLoadGenRef.current ||
+          selectedProjectRef.current?.id !== projectId) return;
       if (cause instanceof GhostwriterApiError && cause.status === 401) {
         handleError(cause, "Ghostwriter could not load Canvas history.");
       } else {
@@ -2287,7 +2582,9 @@ export default function App() {
         });
       }
     } finally {
-      setCanvasHistoryLoading(false);
+      if (generation === canvasHistoryLoadGenRef.current) {
+        setCanvasHistoryLoading(false);
+      }
     }
   }
 
@@ -2305,8 +2602,9 @@ export default function App() {
 
   async function changeWorkspaceMode(
     nextMode: ProjectWorkspaceMode
-  ): Promise<void> {
-    if (nextMode === workspaceMode || selectedProject === undefined) return;
+  ): Promise<boolean> {
+    if (nextMode === workspaceMode || selectedProject === undefined) return true;
+    if (blockDirtyStoryContextNavigation()) return false;
     if (inboxOpen) closeInboxWorkspace();
     const draftIsVisible =
       workspaceMode === "draft" || workspaceMode === "split";
@@ -2316,17 +2614,38 @@ export default function App() {
       await prepareCurrentDraftForExit();
       setBusy(false);
     }
-    setWorkspaceMode(nextMode);
     if (
       (nextMode === "canvas" || nextMode === "split") &&
       canvasWorkspace === undefined
     ) {
-      void loadCanvas(selectedProject.id);
+      if (!(await loadCanvas(selectedProject.id))) return false;
     }
+    setWorkspaceMode(nextMode);
+    return true;
   }
 
-  async function selectWorkspaceScene(sceneId: SceneId): Promise<void> {
-    if (sceneId === selectedSceneId) return;
+  async function selectWorkspaceScene(
+    sceneId: SceneId,
+    inspectionScope: CanvasDrillScope = currentDrillScope(drillStack)
+  ): Promise<boolean> {
+    const nextInspection = canvasInspectionForScene(
+      canvasWorkspace?.board.objects ?? [],
+      sceneId
+    );
+    const inspectionChanges = canvasInspectionNeedsApply(
+      {
+        inspectedSceneId: inspectedCanvasSceneIdRef.current,
+        selectedObjectId: selectedCanvasObjectIdRef.current
+      },
+      nextInspection
+    );
+    if (
+      (sceneId !== selectedSceneId || inspectionChanges) &&
+      blockDirtyStoryContextNavigation()
+    ) return false;
+    if (sceneId === selectedSceneId && !inspectionChanges) return true;
+    applyCanvasInspection(nextInspection, inspectionScope);
+    if (sceneId === selectedSceneId) return true;
     if (inboxOpen) closeInboxWorkspace();
     if (workspaceMode === "draft" || workspaceMode === "split") {
       setBusy(true);
@@ -2334,33 +2653,41 @@ export default function App() {
       setBusy(false);
     }
     setSelectedSceneId(sceneId);
-    setSelectedCanvasObjectId(
-      canvasWorkspace?.board.objects.find(
-        (object) =>
-          object.sceneId === sceneId && object.archivedAt === undefined
-      )?.id
-    );
+    return true;
+  }
+
+  async function openStoryContextScene(
+    sceneId: SceneId,
+    targetMode: Extract<ProjectWorkspaceMode, "canvas" | "split">
+  ): Promise<void> {
+    if (selectedProject === undefined) return;
+    if (blockDirtyStoryContextNavigation()) return;
+    const scope = sceneDrillScope(selectedProject, sceneId);
+    if (scope === undefined) return;
+    if (!transitionCanvasScope(drillIntoScene(drillStack, scope))) return;
+    if (!(await selectWorkspaceScene(sceneId, scope))) return;
+    await changeWorkspaceMode(targetMode);
   }
 
   function handleDrillBack(): void {
-    setDrillStack((stack) => drillBack(stack));
+    transitionCanvasScope(drillBack(drillStack));
   }
 
   function handleDrillTo(scope: CanvasDrillScope): void {
-    setDrillStack((stack) => drillToScope(stack, scope));
+    transitionCanvasScope(drillToScope(drillStack, scope));
   }
 
   function handleEnterChapter(
     selection: Extract<ManuscriptSelection, { kind: "chapter" }>
   ): void {
-    setDrillStack((stack) =>
-      drillIntoChapter(stack, {
+    if (!transitionCanvasScope(
+      drillIntoChapter(drillStack, {
         kind: "chapter",
         bookId: selection.bookId,
         partId: selection.partId,
         chapterId: selection.chapterId
       })
-    );
+    )) return;
     if (workspaceMode !== "canvas" && workspaceMode !== "split") {
       void changeWorkspaceMode("canvas");
     }
@@ -2369,7 +2696,7 @@ export default function App() {
   function handleDrillIntoChapter(
     scope: Extract<CanvasDrillScope, { kind: "chapter" }>
   ): void {
-    setDrillStack((stack) => drillIntoChapter(stack, scope));
+    if (!transitionCanvasScope(drillIntoChapter(drillStack, scope))) return;
     if (workspaceMode !== "canvas" && workspaceMode !== "split") {
       void changeWorkspaceMode("canvas");
     }
@@ -2378,18 +2705,19 @@ export default function App() {
   function handleDrillIntoScene(
     scope: Extract<CanvasDrillScope, { kind: "scene" }>
   ): void {
-    setDrillStack((stack) => drillIntoScene(stack, scope));
-    void selectWorkspaceScene(scope.sceneId);
-    // Scene writing takes the full center; plan-draft keeps Canvas+Draft split.
-    if (workflowLens === "plan-draft") {
-      void changeWorkspaceMode("split");
-      return;
-    }
-    void changeWorkspaceMode("draft");
+    void (async () => {
+      if (blockDirtyStoryContextNavigation()) return;
+      if (!transitionCanvasScope(drillIntoScene(drillStack, scope))) return;
+      if (!(await selectWorkspaceScene(scope.sceneId, scope))) return;
+      // Scene writing takes the full center; plan-draft keeps Canvas+Draft split.
+      await changeWorkspaceMode(workflowLens === "plan-draft" ? "split" : "draft");
+    })();
   }
 
   function handleWorkflowLensChange(lens: CanvasWorkflowLens): void {
+    if (lens !== workflowLens && blockDirtyStoryContextNavigation()) return;
     setWorkflowLens(lens);
+    retainCanvasViewState(currentDrillScope(drillStack), { workflowLens: lens });
     if (lens === "plan-draft" && selectedSceneId !== undefined) {
       void changeWorkspaceMode("split");
     }
@@ -2397,6 +2725,7 @@ export default function App() {
 
   async function openReader(): Promise<void> {
     if (selectedProject === undefined || selectedSceneId === undefined) return;
+    if (blockDirtyStoryContextNavigation()) return;
     if (inboxOpen) closeInboxWorkspace();
     const bookId = bookIdForScene(selectedProject, selectedSceneId);
     if (bookId === undefined) {
@@ -2407,6 +2736,7 @@ export default function App() {
     readerReturnStateRef.current = {
       workspaceMode,
       selectedSceneId,
+      inspectedCanvasSceneId,
       selectedCanvasObjectId,
       drillStack,
       workflowLens
@@ -2445,6 +2775,7 @@ export default function App() {
     if (restore === undefined) return;
     setWorkspaceMode(restore.workspaceMode);
     setSelectedSceneId(restore.selectedSceneId);
+    setInspectedCanvasSceneId(restore.inspectedCanvasSceneId);
     setSelectedCanvasObjectId(restore.selectedCanvasObjectId);
     setDrillStack(restore.drillStack);
     setWorkflowLens(restore.workflowLens);
@@ -2889,6 +3220,9 @@ export default function App() {
           ? {}
           : { toolTraces: result.toolTraces }),
         ...(result.workPlan === undefined ? {} : { workPlan: result.workPlan }),
+        ...(selectedSceneId === undefined
+          ? {}
+          : { nextActionSceneId: selectedSceneId }),
         statusLabel: undefined
       });
     } catch (cause) {
@@ -2919,6 +3253,9 @@ export default function App() {
             ...(result.workPlan === undefined
               ? {}
               : { workPlan: result.workPlan }),
+            ...(selectedSceneId === undefined
+              ? {}
+              : { nextActionSceneId: selectedSceneId }),
             statusLabel: undefined
           });
           return;
@@ -3015,20 +3352,29 @@ export default function App() {
     });
   }
 
-  async function handleOpenChatScene(sceneId?: SceneId | string): Promise<void> {
+  async function handleOpenChatScene(
+    sceneId?: SceneId | string,
+    draftProse?: string
+  ): Promise<boolean> {
     const targetSceneId =
       sceneId !== undefined ? toSceneId(sceneId) : selectedSceneId;
-    if (targetSceneId === undefined) return;
+    if (targetSceneId === undefined) return false;
     if (inboxOpen) closeInboxWorkspace();
     // selectWorkspaceScene early-returns when already selected — still must
     // enter Draft so "Open scene" is never a silent no-op.
-    await selectWorkspaceScene(targetSceneId);
+    if (!(await selectWorkspaceScene(targetSceneId))) return false;
     const targetMode = workflowLens === "plan-draft" ? "split" : "draft";
     if (workspaceMode !== targetMode) {
-      await changeWorkspaceMode(targetMode);
+      if (!(await changeWorkspaceMode(targetMode))) return false;
     }
     setWriteComposition("page");
     setRequestFocusDraftScene((current) => current + 1);
+    const prose = draftProse?.trim();
+    if (prose !== undefined && prose.length > 0) {
+      setRequestInsertDraftText(prose);
+      setRequestInsertDraft((current) => current + 1);
+    }
+    return true;
   }
 
   function appendChatStatusMessage(body: string): void {
@@ -3080,16 +3426,19 @@ export default function App() {
   function handleAgentToolkitAction(
     id: AgentToolkitId,
     toolkitSelection: Parameters<typeof resolveAgentToolkitAction>[1]
-  ): void {
+  ): boolean {
     const result = resolveAgentToolkitAction(id, toolkitSelection);
     if (!result.ok) {
       appendChatStatusMessage(result.refusalMessage);
-      return;
+      return false;
+    }
+    if (result.kind === "workspace-scene") {
+      return true;
     }
     if (result.kind === "cover") {
       setCoverReviewBookId(result.bookId);
       appendChatStatusMessage(result.statusMessage);
-      return;
+      return true;
     }
     if (result.deepLink.captureId !== undefined) {
       setInboxSelectedCaptureId(result.deepLink.captureId);
@@ -3097,6 +3446,7 @@ export default function App() {
     setPlansAgentDeepLink(result.deepLink);
     void openInboxWorkspace();
     appendChatStatusMessage(result.statusMessage);
+    return true;
   }
 
   async function handleCatalogAgentRun(
@@ -3342,19 +3692,21 @@ export default function App() {
               : sceneIds[0]
           );
         }
-        const selectedStillExists =
+        if (
           selectedCanvasObjectId !== undefined &&
-          latestCanvas.board.objects.some(
+          !latestCanvas.board.objects.some(
             (object) => object.id === selectedCanvasObjectId
-          );
-        if (!selectedStillExists) setSelectedCanvasObjectId(undefined);
+          )
+        ) {
+          applyCanvasInspection({});
+        }
         setCanvasSaveState("conflict");
         const conflictText =
           disposition === "reload-project-and-board"
             ? "The manuscript changed before this Canvas scene handoff. Ghostwriter created nothing, reloaded both latest views, and left them ready for review."
             : "Story Canvas changed in another request. Ghostwriter applied nothing, reloaded the latest board, and kept the new version ready for review.";
-        // Map notifications live in History — do not duplicate as banner + toast.
-        setCanvasMessage(undefined);
+        // Keep recovery visible at the point of failure as well as in history.
+        setCanvasMessage({ kind: "conflict", text: conflictText });
         setRecentCanvasActions((current) =>
           pushRecentCanvasAction(current, {
             id: nextToastId("canvas-conflict"),
@@ -3373,7 +3725,7 @@ export default function App() {
         return;
       } catch (reloadCause) {
         setCanvasSaveState("error");
-        setCanvasMessage(undefined);
+        setCanvasMessage({ kind: "error", text: "The latest Canvas could not reload. Your attempted change was not applied. Reload the saved Canvas to continue." });
         setRecentCanvasActions((current) =>
           pushRecentCanvasAction(current, {
             id: nextToastId("canvas-save-problem"),
@@ -3393,7 +3745,10 @@ export default function App() {
       }
     }
     setCanvasSaveState("error");
-    setCanvasMessage(undefined);
+    setCanvasMessage({
+      kind: "error",
+      text: cause instanceof Error ? cause.message : "Canvas change was not saved. Review the current board and retry."
+    });
     setRecentCanvasActions((current) =>
       pushRecentCanvasAction(current, {
         id: nextToastId("canvas-save-problem"),
@@ -3465,8 +3820,9 @@ export default function App() {
           (object) => !previousObjectIds.has(object.id)
         );
         if (created !== undefined) {
-          setSelectedCanvasObjectId(created.id);
-          if (created.sceneId !== undefined) setSelectedSceneId(created.sceneId);
+          applyCanvasInspection(
+            canvasInspectionForObject(updated.board.objects, created.id)
+          );
         }
       }
       return true;
@@ -3516,10 +3872,20 @@ export default function App() {
           (object) => object.id === selectedCanvasObjectId
         )
       ) {
-        setSelectedCanvasObjectId(undefined);
+        applyCanvasInspection({});
       }
     } catch (cause) {
-      await handleCanvasFailure(cause);
+      if (cause instanceof GhostwriterApiError && cause.code === "CANVAS_REVISION_NOT_FOUND") {
+        setCanvasSaveState("saved");
+        setCanvasMessage({
+          kind: "error",
+          text: "No earlier action can be safely undone. Nothing changed. Review Canvas history to choose a saved snapshot."
+        });
+        setCanvasHistoryOpen(true);
+        void loadCanvasHistoryForProject(selectedProject.id);
+      } else {
+        await handleCanvasFailure(cause);
+      }
     } finally {
       setCanvasBusy(false);
     }
@@ -3572,7 +3938,7 @@ export default function App() {
           (object) => object.id === selectedCanvasObjectId
         )
       ) {
-        setSelectedCanvasObjectId(undefined);
+        applyCanvasInspection({});
       }
       return true;
     } catch (cause) {
@@ -3595,38 +3961,6 @@ export default function App() {
     }
   }
 
-  async function persistCanvasPreference(input: {
-    x: number;
-    y: number;
-    zoom: number;
-    selectedObjectId?: CanvasObjectId | null;
-  }): Promise<void> {
-    if (selectedProject === undefined) return;
-    if (input.selectedObjectId !== undefined) {
-      setSelectedCanvasObjectId(input.selectedObjectId ?? undefined);
-    }
-    const saveGen = ++canvasPreferenceSaveGenRef.current;
-    try {
-      const saved = await saveCanvasPreference({
-        projectId: selectedProject.id,
-        ...input
-      });
-      // Ignore out-of-order preference responses so a slow save cannot
-      // overwrite a newer pan/zoom the writer already made.
-      if (saveGen !== canvasPreferenceSaveGenRef.current) return;
-      setCanvasPreference(saved);
-    } catch (cause) {
-      if (saveGen !== canvasPreferenceSaveGenRef.current) return;
-      setCanvasMessage({
-        kind: "error",
-        text:
-          cause instanceof Error
-            ? `Canvas content is safe, but this personal view was not saved: ${cause.message}`
-            : "Canvas content is safe, but this personal view was not saved."
-      });
-    }
-  }
-
   async function createStoryboardScene(input: {
     title: string;
     manuscriptPlacement: CanvasScenePlacementInput;
@@ -3645,17 +3979,11 @@ export default function App() {
         expectedCanvasVersion: canvasWorkspace.board.version,
         ...input
       });
-      if (workspaceMode === "split") {
-        await prepareCurrentDraftForExit();
-      }
       setSelectedProject(result.navigator);
       selectedProjectRef.current = result.navigator;
       setCanvasWorkspace(result.canvas);
-      setSelectedSceneId(result.scene.id);
-      setSelectedCanvasObjectId(
-        result.canvas.board.objects.find(
-          (object) => object.sceneId === result.scene.id
-        )?.id
+      applyCanvasInspection(
+        canvasInspectionForScene(result.canvas.board.objects, result.scene.id)
       );
       setCanvasSaveState("saved");
       setCanvasMessage(undefined);
@@ -4086,6 +4414,106 @@ export default function App() {
     );
   }
 
+  selectedSceneIdRef.current = selectedSceneId;
+  const storyWorkSceneCanvasDescriptor = selectedProject === undefined
+    ? undefined
+    : (() => {
+      const trail = drillBreadcrumbs(drillStack, selectedProject);
+      const current = trail[trail.length - 1];
+      if (current === undefined) return undefined;
+      const bounds = CAPTURE_HANDOFF_CANVAS_GEOMETRY_BOUNDS;
+      return Object.freeze({
+        label: current.label,
+        description: `${bounds.defaultWidth}×${bounds.defaultHeight} placement in the current board view.`
+      });
+    })();
+  const storyWork = useStoryWorkWorkspace({
+    project: selectedProject,
+    accountId: writer?.account.id,
+    selectedSceneId,
+    model: chatModel,
+    models: chatAvailableModels,
+    onOpenSettings: () => openSettings("providers"),
+    onProjectChanged: (project) => {
+      if (selectedProjectRef.current?.id !== project.id) return;
+      setSelectedProject(project);
+      selectedProjectRef.current = project;
+      invalidateMetadataUndo();
+    },
+    sceneCanvasDescriptor: storyWorkSceneCanvasDescriptor,
+    storyWorkSceneApply: {
+      prepareUpdateTarget: async (targetSceneId) => {
+        if (selectedSceneIdRef.current !== targetSceneId) {
+          throw new Error("Open the destination scene in Draft before applying this reviewed revision.");
+        }
+        const panel = draftPanelRef.current;
+        if (panel === null) {
+          throw new Error("Open the destination scene in Draft with its editing lease before applying a reviewed revision.");
+        }
+        return panel.prepareStoryWorkApply();
+      },
+      finishUpdate: async () => {
+        await draftPanelRef.current?.finishStoryWorkApply();
+      },
+      prepareCreateCanvasPlacement: async () => {
+        if (selectedProjectRef.current === undefined) {
+          throw new Error("Open a project before placing a scene on Canvas.");
+        }
+        const expectedCanvasVersion = await ensureCanvasVersionForHandoff();
+        if (expectedCanvasVersion === undefined) {
+          throw new Error("Canvas is unavailable for placement right now.");
+        }
+        const bounds = CAPTURE_HANDOFF_CANVAS_GEOMETRY_BOUNDS;
+        const scope = canvasScopeRefFromDrillScope(currentDrillScope(drillStackRef.current));
+        return Object.freeze({
+          expectedCanvasVersion,
+          scope,
+          x: bounds.defaultX,
+          y: bounds.defaultY,
+          width: bounds.defaultWidth,
+          height: bounds.defaultHeight,
+          z: bounds.defaultZ
+        });
+      },
+      refreshCanvas: async () => {
+        const project = selectedProjectRef.current;
+        if (project === undefined) return;
+        await loadCanvas(project.id);
+      },
+      openScene: (sceneId) => {
+        void handleOpenChatScene(sceneId);
+      }
+    },
+    storyWorkNavigation: {
+      openScene: async ({ sceneId, blockId }) => {
+        const targetSceneId = toSceneId(sceneId);
+        const navigationOpened = await handleOpenChatScene(sceneId);
+        const resolved = resolveEvidenceFocusAfterOpenScene({
+          blockId,
+          navigationOpened,
+          projectOpen: selectedProjectRef.current !== undefined,
+          targetSceneId,
+          nextRequestId: evidenceFocusBlockSeqRef.current + 1,
+        });
+        if (resolved.kind === "clear") {
+          setEvidenceFocusBlockRequest(undefined);
+          return;
+        }
+        if (resolved.kind === "noop") {
+          return;
+        }
+        evidenceFocusBlockSeqRef.current = resolved.request.id;
+        setEvidenceFocusBlockRequest(resolved.request);
+      },
+      openStoryIntent: ({ sceneId, storyKnowledgeId }) => {
+        if (sceneId === undefined) return;
+        void storyKnowledgeId;
+        void openStoryContextScene(sceneId, "split");
+      }
+    }
+  });
+  storyWorkDirtyRef.current = storyWork.dirty || storyWork.pending;
+
   if (!fontsLoaded && fontError === null) {
     return (
       <View
@@ -4214,6 +4642,14 @@ export default function App() {
         chatCapabilities={GHOSTWRITER_CAPABILITIES}
         chatMessages={chatMessages}
         chatMode={chatMode}
+        renderStoryWorkAgent={storyWork.panel}
+        storyWorkOpen={storyWork.panelOpen}
+        renderStoryWorkReview={storyWork.review}
+        storyWorkDirty={storyWork.dirty || storyWork.pending}
+        onOpenStoryWork={storyWork.open}
+        onCloseStoryWorkReview={storyWork.closeReview}
+        requestOpenStoryKnowledgeId={storyWork.requestedKnowledgeId}
+        onStoryKnowledgeOpened={storyWork.clearRequestedKnowledge}
         chatModel={chatModel}
         chatEffort={chatEffort}
         autoSuggestionsEnabled={autoSuggestionsEnabled}
@@ -4371,11 +4807,15 @@ export default function App() {
         onDrillTo={handleDrillTo}
         onEnterChapter={handleEnterChapter}
         onModeChange={(mode) => void changeWorkspaceMode(mode)}
+        onOpenStoryContextScene={(sceneId, mode) =>
+          void openStoryContextScene(sceneId, mode)
+        }
         onOpenReader={() => void openReader()}
         onRefresh={() => void refreshCurrentProject()}
         onSelectedSceneIdChange={(sceneId) => {
           if (sceneId !== undefined) void selectWorkspaceScene(sceneId);
         }}
+        onStoryContextDirtyChange={handleStoryContextDirtyChange}
         onSignOut={() => void endSession()}
         activityHistory={activityHistory}
         activityHistoryOpen={activityHistoryOpen}
@@ -4402,50 +4842,83 @@ export default function App() {
             busy={canvasBusy}
             condensed={workspaceMode === "split"}
             drillStack={drillStack}
+            getScopeViewState={retainedCanvasViewState}
             history={canvasHistory}
             historyLoading={canvasHistoryLoading}
             historyOpen={canvasHistoryOpen}
             loading={canvasLoading}
             message={canvasMessage}
             onCommand={runCanvasCommand}
+            onStoryContextCommand={runCommand}
+            onStoryContextDirtyChange={(dirty) =>
+              handleStoryContextDirtyChange("canvas", dirty)
+            }
             onCreateScene={createStoryboardScene}
+            onDrillTo={handleDrillTo}
             onDrillIntoChapter={handleDrillIntoChapter}
             onDrillIntoScene={handleDrillIntoScene}
             onHistoryOpenChange={setCanvasHistoryOpen}
+            onLoadOlderHistory={() =>
+              canvasHistory?.nextBeforeVersion === undefined
+                ? Promise.resolve()
+                : loadCanvasHistoryForProject(
+                    selectedProject.id, canvasHistory.nextBeforeVersion)
+            }
             onLoadHistory={() =>
               loadCanvasHistoryForProject(selectedProject.id)
             }
-            onPreferenceChange={persistCanvasPreference}
             recentActions={recentCanvasActions}
-            onReload={() =>
-              loadCanvas(
+            onReload={async () => {
+              await loadCanvas(
                 selectedProject.id,
                 "Latest server-acknowledged Canvas loaded for review."
-              )
-            }
+              );
+            }}
             onRestoreRevision={restoreCanvasSnapshot}
-            onSelectObject={setSelectedCanvasObjectId}
+            onSelectObject={(objectId) => {
+              if (
+                objectId !== selectedCanvasObjectId &&
+                blockDirtyStoryContextNavigation()
+              ) return;
+              applyCanvasInspection(
+                canvasInspectionForObject(
+                  canvasWorkspace?.board.objects ?? [],
+                  objectId
+                )
+              );
+            }}
             onOpenDraft={(sceneId) => {
               void (async () => {
-                await selectWorkspaceScene(sceneId);
+                if (!(await selectWorkspaceScene(sceneId))) return;
                 await changeWorkspaceMode("draft");
               })();
             }}
             onOpenSplit={(sceneId) => {
               void (async () => {
-                await selectWorkspaceScene(sceneId);
+                if (!(await selectWorkspaceScene(sceneId))) return;
                 await changeWorkspaceMode("split");
               })();
             }}
-            onSelectScene={(sceneId) => void selectWorkspaceScene(sceneId)}
+            onSelectScene={(sceneId) => {
+              if (
+                sceneId !== inspectedCanvasSceneId &&
+                blockDirtyStoryContextNavigation()
+              ) return;
+              applyCanvasInspection(
+                canvasInspectionForScene(
+                  canvasWorkspace?.board.objects ?? [],
+                  sceneId
+                )
+              );
+            }}
+            onScopeViewStateChange={retainCanvasViewState}
             onUndo={undoLatestCanvasCommand}
-            preference={canvasPreference}
             project={selectedProject}
             saveState={canvasSaveState}
             selectedObjectId={selectedCanvasObjectId}
-            selectedSceneId={selectedSceneId}
+            selectedSceneId={inspectedCanvasSceneId}
             workflowLens={workflowLens}
-            onWorkflowLensChange={setWorkflowLens}
+            onWorkflowLensChange={handleWorkflowLensChange}
             onDrillBack={handleDrillBack}
             workspace={canvasWorkspace}
           />
@@ -4490,11 +4963,16 @@ export default function App() {
               onProblemResolved={dismissToast}
               onProjectCommand={runCommand}
               onWriteCompositionChange={(composition) => {
-                setWriteComposition(composition);
                 const nextMode = workspaceModeForComposition(composition);
-                if (nextMode !== workspaceMode) {
-                  void changeWorkspaceMode(nextMode);
+                if (nextMode === workspaceMode) {
+                  setWriteComposition(composition);
+                  return;
                 }
+                void (async () => {
+                  if (await changeWorkspaceMode(nextMode)) {
+                    setWriteComposition(composition);
+                  }
+                })();
               }}
               onWriteModalityChange={setWriteModality}
               povLabel={context.povLabel}
@@ -4531,6 +5009,16 @@ export default function App() {
                     ? {}
                     : { characterSheet: knowledge.characterSheet })
                 }))}
+              focusBlockRequest={
+                evidenceFocusBlockRequest?.sceneId === scene.id
+                  ? {
+                      id: evidenceFocusBlockRequest.id,
+                      blockId: evidenceFocusBlockRequest.blockId,
+                    }
+                  : undefined
+              }
+              requestInsertDraft={requestInsertDraft}
+              requestInsertDraftText={requestInsertDraftText}
               sceneId={scene.id}
               scenePosition={context.positionLabel}
               sceneSketch={scene.sketch}

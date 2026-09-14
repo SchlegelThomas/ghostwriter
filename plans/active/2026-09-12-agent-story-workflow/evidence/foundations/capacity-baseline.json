@@ -1,0 +1,53 @@
+{
+  "fixture": {
+    "chapters": 100,
+    "scenes": 500,
+    "supportingObjects": 500,
+    "links": 1500,
+    "scopePlacements": 1000,
+    "actions": 200
+  },
+  "runtime": {
+    "node": "v26.5.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M1 Pro",
+    "logicalCpus": 8,
+    "memoryGiB": 16,
+    "adapter": "local PGlite"
+  },
+  "boardBytes": 656502,
+  "finalBoardVersion": 201,
+  "stats": {
+    "coreGeometry": {
+      "samples": 200,
+      "medianMs": 12.244708999991417,
+      "p95Ms": 15.589208999997936,
+      "maxMs": 28.911084000006667
+    },
+    "persistGeometry": {
+      "samples": 200,
+      "medianMs": 472.8341250000012,
+      "p95Ms": 620.184957999998,
+      "maxMs": 789.928917000012
+    },
+    "loadBoard": {
+      "samples": 10,
+      "medianMs": 108.73783299999195,
+      "p95Ms": 113.01400000001013,
+      "maxMs": 113.01400000001013
+    },
+    "historyMetadata": {
+      "samples": 10,
+      "medianMs": 2.191832999989856,
+      "p95Ms": 5.854833999997936,
+      "maxMs": 5.854833999997936
+    },
+    "readingSpine": {
+      "samples": 10,
+      "medianMs": 0.6827499999926658,
+      "p95Ms": 1.0805419999960577,
+      "maxMs": 1.0805419999960577
+    }
+  }
+}

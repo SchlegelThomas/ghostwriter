@@ -20,6 +20,7 @@ import {
   type StoryKnowledgeId,
   type StoryKnowledgeKind,
   type StoryKnowledgeLink,
+  type StoryThreadNarrative,
   validateProjectRecords
 } from "./domain.js";
 
@@ -81,6 +82,7 @@ export type ProjectNavigatorKnowledge = Readonly<{
   aliases?: readonly string[];
   characterSheet?: CharacterSheet;
   visuals?: readonly CharacterVisual[];
+  narrative?: StoryThreadNarrative;
   archivedAt?: string;
 }>;
 
@@ -214,6 +216,14 @@ export function projectNavigatorFromRecords(records: ProjectRecords): ProjectNav
         ...(knowledge.visuals === undefined
           ? {}
           : { visuals: freezeList(knowledge.visuals) }),
+        ...(knowledge.narrative === undefined
+          ? {}
+          : {
+              narrative: Object.freeze({
+                resolution: knowledge.narrative.resolution,
+                beats: freezeList(knowledge.narrative.beats)
+              })
+            }),
         ...(knowledge.archivedAt === undefined
           ? {}
           : { archivedAt: knowledge.archivedAt })

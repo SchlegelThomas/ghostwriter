@@ -8,6 +8,8 @@ import {
   registerMcpGrantTools,
   type McpGrantRuntime
 } from "./grant-tools.js";
+import type { LocalBridgeClient } from "./local-bridge-client.js";
+import { registerStoryWorkGrantBridgeTools } from "./story-work-grant-tools.js";
 
 export const PROJECT_NAVIGATOR_TOOL_NAME = "ghostwriter_project_navigator";
 export type { McpGrantRuntime } from "./grant-tools.js";
@@ -17,6 +19,15 @@ export {
   ASSEMBLE_CAPTURE_REFLECTION_CONTEXT_TOOL_NAME,
   PROPOSE_CAPTURE_REFLECTION_TOOL_NAME
 } from "./grant-tools.js";
+export {
+  MCP_BRIDGE_CAPTURE_TOOL_NAMES,
+  MCP_BRIDGE_STORY_TOOL_NAMES,
+  MCP_BRIDGE_TOOL_NAMES,
+  STORY_WORK_BRIDGE_READ_TOOL_NAMES,
+  STORY_WORK_BRIDGE_TOOL_NAMES
+} from "./story-work-grant-tools.js";
+export { STORY_WORK_BRIDGE_SUBMIT_TOOL_NAMES } from "./story-work-grant-submit-tools.js";
+export { STORY_WORK_BRIDGE_MUTATION_TOOL_NAMES } from "./story-work-grant-mutation-tools.js";
 
 const sceneSchema = z.object({
   id: z.string(),
@@ -229,77 +240,97 @@ function projectNavigatorOutput(): z.infer<typeof projectNavigatorOutputSchema> 
 
 export type CreateGhostwriterMcpServerOptions = Readonly<{
   /**
-   * When provided (tests or env-authenticated local MCP), register scoped grant tools.
-   * Production remote MCP OAuth remains later; v1 proves capability parity locally.
+   * Register the Bellwether fixture navigator. Use only for local fixture stdio or tests.
+   */
+  fixtureMode?: boolean;
+  /**
+   * In-process Capture grant runtime (unit tests and injected hosts).
    */
   grantRuntime?: McpGrantRuntime;
+  /**
+   * HTTP bridge client for grant-scoped story-work read tools (local/test stdio).
+   */
+  bridgeClient?: LocalBridgeClient;
 }>;
+
+function serverInstructions(options: CreateGhostwriterMcpServerOptions): string {
+  if (options.grantRuntime !== undefined) {
+    return "Ghostwriter exposes project-scoped writing capabilities under a server-created MCP grant. External clients may read granted Captures and submit typed proposals; apply remains first-party.";
+  }
+  if (options.bridgeClient !== undefined) {
+    return "Ghostwriter exposes grant-scoped story-work read tools through a local backend bridge. Review, apply, and recovery manage remain first-party.";
+  }
+  return "Ghostwriter exposes project-scoped writing capabilities. This build contains read-only sample data.";
+}
 
 export function createGhostwriterMcpServer(
   options: CreateGhostwriterMcpServerOptions = {}
 ): McpServer {
-  const hasGrantRuntime = options.grantRuntime !== undefined;
   const server = new McpServer(
     { name: "ghostwriter", version: "0.1.0" },
-    {
-      instructions: hasGrantRuntime
-        ? "Ghostwriter exposes project-scoped writing capabilities under a server-created MCP grant. External clients may read granted Captures and submit typed proposals; apply remains first-party."
-        : "Ghostwriter exposes project-scoped writing capabilities. This build contains read-only sample data."
-    }
+    { instructions: serverInstructions(options) }
   );
 
-  server.registerTool(
-    PROJECT_NAVIGATOR_TOOL_NAME,
-    {
-      title: "Read project navigator",
-      description:
-        "Return the ordered books, manuscript scenes, editions, and shared story knowledge for the current sample project.",
-      inputSchema: z.object({
-        projectId: z
-          .string()
-          .optional()
-          .describe("Project ID. Omit it to read the sample project in this build.")
-      }),
-      outputSchema: projectNavigatorOutputSchema,
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false
-      }
-    },
-    async ({ projectId }) => {
-      if (
-        projectId !== undefined &&
-        projectId !== BELLWETHER_FIXTURE_PROJECT_ID
-      ) {
+  if (options.fixtureMode === true) {
+    server.registerTool(
+      PROJECT_NAVIGATOR_TOOL_NAME,
+      {
+        title: "Read project navigator",
+        description:
+          "Return the ordered books, manuscript scenes, editions, and shared story knowledge for the current sample project.",
+        inputSchema: z.object({
+          projectId: z
+            .string()
+            .optional()
+            .describe("Project ID. Omit it to read the sample project in this build.")
+        }),
+        outputSchema: projectNavigatorOutputSchema,
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false
+        }
+      },
+      async ({ projectId }) => {
+        if (
+          projectId !== undefined &&
+          projectId !== BELLWETHER_FIXTURE_PROJECT_ID
+        ) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Project "${projectId}" is not available in this fixture build.`
+              }
+            ]
+          };
+        }
+
+        const output = projectNavigatorOutput();
+
         return {
-          isError: true,
+          structuredContent: output,
           content: [
             {
               type: "text",
-              text: `Project "${projectId}" is not available in this fixture build.`
+              text: JSON.stringify(output)
             }
           ]
         };
       }
-
-      const output = projectNavigatorOutput();
-
-      return {
-        structuredContent: output,
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(output)
-          }
-        ]
-      };
-    }
-  );
+    );
+  }
 
   if (options.grantRuntime !== undefined) {
     registerMcpGrantTools(server, options.grantRuntime);
+  }
+
+  if (options.bridgeClient !== undefined) {
+    registerStoryWorkGrantBridgeTools(server, options.bridgeClient, {
+      includeGetGrant: options.grantRuntime === undefined
+    });
   }
 
   return server;

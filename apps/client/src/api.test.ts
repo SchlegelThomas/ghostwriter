@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { blockId, type SceneDocumentV1 } from "@ghostwriter/editor";
-import { bookId, canvasObjectId, canvasRevisionId, chapterId } from "@ghostwriter/core";
+import {
+  bookId,
+  canvasObjectId,
+  canvasRevisionId,
+  chapterId,
+  sceneId
+} from "@ghostwriter/core";
 import {
   acquireSceneLease,
   compareSceneRevisions,
@@ -11,6 +17,7 @@ import {
   executeCanvasCommand,
   getCanvasBoard,
   getCanvasHistory,
+  getCanvasPersonalViewPreference,
   getCanvasPreference,
   getCapture,
   getSceneHistory,
@@ -29,6 +36,7 @@ import {
   restoreSceneRevision,
   saveCaptureDocument,
   saveCanvasPreference,
+  saveCanvasPersonalViewPreference,
   saveSceneDocument,
   setCaptureArchived,
   signOut,
@@ -569,6 +577,19 @@ describe("Ghostwriter API client", () => {
     );
   });
 
+  it("requests older Canvas history using the exclusive server cursor", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      Response.json({ revisions: [], nextBeforeVersion: 101 })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const page = await getCanvasHistory(sceneScope.projectId, 201);
+    expect(page.nextBeforeVersion).toBe(101);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects/project%20%2F%20draft/canvas/history?beforeVersion=201",
+      expect.objectContaining({ credentials: "include" })
+    );
+  });
+
   it("gets and saves personal Canvas viewport without a board version", async () => {
     const objectId = canvasObjectId("canvas-object-preference");
     const preference = {
@@ -606,6 +627,70 @@ describe("Ghostwriter API client", () => {
           y: -40,
           zoom: 1.25,
           selectedObjectId: objectId
+        }),
+        credentials: "include",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json"
+        },
+        method: "PUT"
+      }
+    );
+  });
+
+  it("gets and CAS-saves a complete scoped Canvas view", async () => {
+    const preference = {
+      projectId: sceneScope.projectId,
+      accountId: "account-writer",
+      version: 3,
+      lastScope: { scopeKind: "scene", scopeId: sceneScope.sceneId },
+      scopeViews: [],
+      updatedAt: "2026-09-12T20:00:00.000Z"
+    } as const;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ preference: null }))
+      .mockResolvedValueOnce(Response.json({ preference }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getCanvasPersonalViewPreference(sceneScope.projectId)
+    ).resolves.toBeNull();
+    await expect(
+      saveCanvasPersonalViewPreference({
+        projectId: sceneScope.projectId,
+        expectedPreferenceVersion: 2,
+        scopeView: {
+          scope: { scopeKind: "scene", scopeId: sceneScope.sceneId },
+          viewport: { x: 30, y: 40, zoom: 1.2 },
+          viewMode: "outline",
+          inspectorOpen: true,
+          focusToken: "search",
+          selectedObjectId: null,
+          inspectedSceneId: sceneId(sceneScope.sceneId),
+          workflowLens: "continuity"
+        },
+        lastScope: { scopeKind: "scene", scopeId: sceneScope.sceneId }
+      })
+    ).resolves.toEqual(preference);
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/projects/project%20%2F%20draft/canvas/view-preference",
+      {
+        body: JSON.stringify({
+          expectedPreferenceVersion: 2,
+          scopeView: {
+            scope: { scopeKind: "scene", scopeId: sceneScope.sceneId },
+            viewport: { x: 30, y: 40, zoom: 1.2 },
+            viewMode: "outline",
+            inspectorOpen: true,
+            focusToken: "search",
+            selectedObjectId: null,
+            inspectedSceneId: sceneScope.sceneId,
+            workflowLens: "continuity"
+          },
+          lastScope: { scopeKind: "scene", scopeId: sceneScope.sceneId }
         }),
         credentials: "include",
         headers: {

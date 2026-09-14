@@ -93,6 +93,7 @@ export async function createSeededBackendApp(
     demoSeed?: Readonly<{ enabled: boolean }>;
     characterVisualPublicMedia?: CharacterVisualPublicMediaConfig;
     workspaceChatCreateToolLoopProvider?: typeof createToolLoopProvider;
+    localMcpBridge?: Readonly<{ enabled: boolean }>;
   }>
 ) {
   const { db, close } = createPgliteDatabase();
@@ -198,6 +199,7 @@ export async function createSeededBackendApp(
   });
 
   return {
+    agentProvider,
     app: createApp({
       services,
       writing,
@@ -229,7 +231,10 @@ export async function createSeededBackendApp(
         : {
             workspaceChatCreateToolLoopProvider:
               options.workspaceChatCreateToolLoopProvider
-          })
+          }),
+      ...(options?.localMcpBridge === undefined
+        ? {}
+        : { localMcpBridge: options.localMcpBridge })
     }),
     objectStorage: objectStorage as ReturnType<typeof createMemoryCaptureObjectStorage>
   };

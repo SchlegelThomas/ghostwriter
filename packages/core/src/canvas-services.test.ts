@@ -8,13 +8,19 @@ import {
   createCanvasBoard,
   createCanvasLink,
   createCanvasObject,
+  createCanvasPersonalViewPreference,
   deriveCanvasReadingOrderSpine,
   CanvasNotFoundError,
+  CanvasPreferenceVersionConflictError,
   CanvasVersionConflictError
 } from "./canvas.js";
-import { createCanvasServices } from "./canvas-services.js";
+import {
+  boundedCanvasPersonalScopeViews,
+  createCanvasServices
+} from "./canvas-services.js";
 import { createMemoryCanvasRepository, createMemoryCanvasSceneCreationUnitOfWork } from "./memory-canvas-repository.js";
 import { createMemoryProjectRepository } from "./memory-project-repository.js";
+import { createProjectCommandServices } from "./project-commands.js";
 import { createMemorySceneDocumentRepository } from "./memory-scene-document-repository.js";
 import {
   canvasLinkId,
@@ -340,7 +346,9 @@ describe("Story Canvas core and memory adapter", () => {
         accountId: OWNER,
         projectId: PROJECT_ID
       })
-    ).resolves.toHaveLength(historyBeforePreference.length);
+    ).resolves.toMatchObject({
+      revisions: { length: historyBeforePreference.revisions.length }
+    });
 
     const undone = await services.undoCanvas({
       accountId: OWNER,
@@ -355,10 +363,444 @@ describe("Story Canvas core and memory adapter", () => {
       accountId: OWNER,
       projectId: PROJECT_ID
     });
-    expect(history[0]).toMatchObject({
+    expect(history.revisions[0]).toMatchObject({
       boardVersion: createdVersion + 1,
-      reason: "undo"
+      reason: "undo",
+      restoredFromRevisionId: expect.any(String)
     });
+  });
+
+  it("persists bounded personal scope views under an independent CAS", async () => {
+    const { services, projects } = setup();
+    let canvas = await services.getCanvasWorkspace({
+      accountId: OWNER,
+      projectId: PROJECT_ID
+    });
+    canvas = await services.executeCanvasCommand({
+      accountId: OWNER,
+      projectId: PROJECT_ID,
+      expectedCanvasVersion: canvas.board.version,
+      command: { type: "canvas.object.create", object: sceneCard() }
+    });
+    const objectId = canvas.board.objects[0]!.id;
+    const initial = await services.saveCanvasPersonalViewPreference({
+      accountId: OWNER,
+      projectId: PROJECT_ID,
+      expectedPreferenceVersion: 0,
+      scopeView: {
+        scope: { scopeKind: "project" },
+        viewport: { x: 10, y: 20, zoom: 1.2 },
+        viewMode: "spatial",
+        inspectorOpen: true,
+        focusToken: "inspector",
+        selectedObjectId: objectId,
+        inspectedSceneId: SCENE_ID,
+        workflowLens: "relationships"
+      },
+      lastScope: { scopeKind: "project" }
+    });
+    expect(initial).toMatchObject({ version: 1, scopeViews: [{ selectedObjectId: objectId }] });
+
+    const scoped = await services.saveCanvasPersonalViewPreference({
+      accountId: OWNER,
+      projectId: PROJECT_ID,
+      expectedPreferenceVersion: 1,
+      scopeView: {
+        scope: { scopeKind: "scene", scopeId: SCENE_ID },
+        viewport: { x: 300, y: -50, zoom: 2 },
+        viewMode: "outline",
+        inspectorOpen: false,
+        focusToken: "search",
+        workflowLens: "continuity"
+      },
+      lastScope: { scopeKind: "scene", scopeId: SCENE_ID }
+    });
+    expect(scoped).toMatchObject({
+      version: 2,
+      lastScope: { scopeKind: "scene", scopeId: SCENE_ID },
+      scopeViews: [{ scope: { scopeKind: "project" } }, { scope: { scopeKind: "scene" } }]
+    });
+    await expect(
+      services.saveCanvasPersonalViewPreference({
+        accountId: OWNER,
+        projectId: PROJECT_ID,
+        expectedPreferenceVersion: 1,
+        scopeView: scoped.scopeViews[1]!,
+        lastScope: scoped.lastScope
+      })
+    ).rejects.toBeInstanceOf(CanvasPreferenceVersionConflictError);
+
+    await services.saveCanvasViewportPreference({
+      accountId: OWNER,
+      projectId: PROJECT_ID,
+      x: 40,
+      y: 50,
+      zoom: 1.5
+    });
+    await expect(
+      services.getCanvasPersonalViewPreference({
+        accountId: OWNER,
+        projectId: PROJECT_ID
+      })
+    ).resolves.toMatchObject({
+      version: 3,
+      scopeViews: [
+        { scope: { scopeKind: "project" }, viewport: { x: 40, y: 50, zoom: 1.5 } },
+        { scope: { scopeKind: "scene" }, viewport: { x: 300, y: -50, zoom: 2 } }
+      ]
+    });
+    await expect(
+      services.getCanvasPersonalViewPreference({
+        accountId: OTHER,
+        projectId: PROJECT_ID
+      })
+    ).rejects.toBeInstanceOf(CanvasNotFoundError);
+    await expect(projects.getProject(PROJECT_ID)).resolves.toMatchObject({ version: 1 });
+    await expect(services.getCanvasWorkspace({ accountId: OWNER, projectId: PROJECT_ID }))
+      .resolves.toMatchObject({ board: { version: 2 } });
+  });
+
+  it("rejects personal preference aggregates beyond the scope bound", () => {
+    expect(() =>
+      createCanvasPersonalViewPreference({
+        projectId: PROJECT_ID,
+        accountId: OWNER,
+        version: 1,
+        lastScope: { scopeKind: "project" },
+        scopeViews: Array.from({ length: 1_025 }, (_, index) => ({
+          scope: index === 0
+            ? { scopeKind: "project" as const }
+            : { scopeKind: "scene" as const, scopeId: `scene-${index}` },
+          viewport: { x: 0, y: 0, zoom: 1 },
+          viewMode: "spatial" as const,
+          inspectorOpen: false,
+          focusToken: "surface" as const,
+          workflowLens: "outline" as const,
+          updatedAt: NOW
+        })),
+        updatedAt: NOW
+      })
+    ).toThrow(/1024 scopes/u);
+  });
+
+  it("evicts the least-recent non-project view while retaining the current scope", () => {
+    const views = Array.from({ length: 1_025 }, (_, index) => ({
+      scope: index === 0
+        ? { scopeKind: "project" as const }
+        : { scopeKind: "scene" as const, scopeId: `scene-${index}` },
+      viewport: { x: 0, y: 0, zoom: 1 },
+      viewMode: "spatial" as const,
+      inspectorOpen: false,
+      focusToken: "surface" as const,
+      workflowLens: "outline" as const,
+      updatedAt: `2026-09-12T20:${String(index).padStart(4, "0")}:00.000Z`
+    }));
+    const bounded = boundedCanvasPersonalScopeViews(views, {
+      scopeKind: "scene",
+      scopeId: "scene-1024"
+    });
+    expect(bounded).toHaveLength(1_024);
+    expect(bounded.some((view) => view.scope.scopeKind === "project")).toBe(true);
+    expect(bounded.some((view) => view.scope.scopeId === "scene-1")).toBe(false);
+    expect(bounded.some((view) => view.scope.scopeId === "scene-1024")).toBe(true);
+  });
+
+  it("falls back from an archived last scene to its active chapter", async () => {
+    const { services, projects, ids } = setup();
+    await services.getCanvasWorkspace({ accountId: OWNER, projectId: PROJECT_ID });
+    await services.saveCanvasPersonalViewPreference({
+      accountId: OWNER,
+      projectId: PROJECT_ID,
+      expectedPreferenceVersion: 0,
+      scopeView: {
+        scope: { scopeKind: "scene", scopeId: SCENE_ID },
+        viewport: { x: 30, y: 40, zoom: 1.1 },
+        viewMode: "spatial",
+        inspectorOpen: false,
+        focusToken: "surface",
+        workflowLens: "outline"
+      },
+      lastScope: { scopeKind: "scene", scopeId: SCENE_ID }
+    });
+    const commands = createProjectCommandServices({
+      projects,
+      ids,
+      clock: { now: () => NOW }
+    });
+    await commands.executeProjectCommand({
+      accountId: OWNER,
+      projectId: PROJECT_ID,
+      expectedVersion: 1,
+      command: { type: "scene.setArchived", sceneId: SCENE_ID, archived: true }
+    });
+
+    await expect(
+      services.getCanvasPersonalViewPreference({
+        accountId: OWNER,
+        projectId: PROJECT_ID
+      })
+    ).resolves.toMatchObject({
+      version: 1,
+      lastScope: { scopeKind: "chapter" },
+      scopeViews: expect.arrayContaining([
+        expect.objectContaining({
+          scope: { scopeKind: "scene", scopeId: SCENE_ID }
+        })
+      ])
+    });
+  });
+
+  it("refuses unavailable scopes and unknown personal inspection references", async () => {
+    const { services } = setup();
+    await services.getCanvasWorkspace({ accountId: OWNER, projectId: PROJECT_ID });
+    const base = {
+      accountId: OWNER,
+      projectId: PROJECT_ID,
+      expectedPreferenceVersion: 0,
+      scopeView: {
+        scope: { scopeKind: "project" as const },
+        viewport: { x: 0, y: 0, zoom: 1 },
+        viewMode: "spatial" as const,
+        inspectorOpen: false,
+        focusToken: "surface" as const,
+        workflowLens: "outline" as const
+      },
+      lastScope: { scopeKind: "project" as const }
+    };
+    await expect(
+      services.saveCanvasPersonalViewPreference({
+        ...base,
+        lastScope: { scopeKind: "scene", scopeId: sceneId("scene-missing") }
+      })
+    ).rejects.toThrow(/scope is unavailable/u);
+    await expect(
+      services.saveCanvasPersonalViewPreference({
+        ...base,
+        scopeView: {
+          ...base.scopeView,
+          selectedObjectId: canvasObjectId("object-missing")
+        }
+      })
+    ).rejects.toBeInstanceOf(CanvasNotFoundError);
+    await expect(
+      services.saveCanvasPersonalViewPreference({
+        ...base,
+        scopeView: {
+          ...base.scopeView,
+          inspectedSceneId: sceneId("scene-missing")
+        }
+      })
+    ).rejects.toBeInstanceOf(CanvasNotFoundError);
+    await expect(
+      services.getCanvasPersonalViewPreference({
+        accountId: OWNER,
+        projectId: PROJECT_ID
+      })
+    ).resolves.toBeUndefined();
+  });
+
+  it("persists explicit scope membership through the memory service with version guards", async () => {
+    const { services } = setup();
+    const actor = { accountId: OWNER, projectId: PROJECT_ID };
+    let canvas = await services.getCanvasWorkspace(actor);
+    canvas = await services.executeCanvasCommand({
+      ...actor,
+      expectedCanvasVersion: canvas.board.version,
+      command: { type: "canvas.object.create", object: note("Membership") }
+    });
+    const objectId = canvas.board.objects[0]!.id;
+    canvas = await services.executeCanvasCommand({
+      ...actor,
+      expectedCanvasVersion: 2,
+      command: {
+        type: "canvas.object.setScopeMembership",
+        objectId,
+        scopeKind: "scene",
+        scopeId: SCENE_ID,
+        member: true
+      }
+    });
+    expect(canvas.board.scopePlacements).toEqual([
+      expect.objectContaining({
+        objectId,
+        scopeKind: "scene",
+        scopeId: SCENE_ID,
+        membership: "explicit",
+        x: 30,
+        y: 40
+      })
+    ]);
+    await expect(
+      services.executeCanvasCommand({
+        ...actor,
+        expectedCanvasVersion: 2,
+        command: {
+          type: "canvas.object.setScopeMembership",
+          objectId,
+          scopeKind: "scene",
+          scopeId: SCENE_ID,
+          member: false
+        }
+      })
+    ).rejects.toBeInstanceOf(CanvasVersionConflictError);
+    canvas = await services.executeCanvasCommand({
+      ...actor,
+      expectedCanvasVersion: canvas.board.version,
+      command: {
+        type: "canvas.object.setScopeMembership",
+        objectId,
+        scopeKind: "scene",
+        scopeId: SCENE_ID,
+        member: false
+      }
+    });
+    expect(canvas.board.scopePlacements[0]).not.toHaveProperty("membership");
+    expect(canvas.board.objects[0]).toMatchObject({ id: objectId, x: 30, y: 40 });
+  });
+
+  it("undoes consecutive actions, keeps audit history, and branches after a new action", async () => {
+    const { services, canvases } = setup();
+    const actor = { accountId: OWNER, projectId: PROJECT_ID };
+    let canvas = await services.getCanvasWorkspace(actor);
+    const create = async (label: string) => {
+      canvas = await services.executeCanvasCommand({ ...actor,
+        expectedCanvasVersion: canvas.board.version,
+        command: { type: "canvas.object.create", object: note(label) }
+      });
+    };
+    const undo = async () => {
+      canvas = await services.undoCanvas({ ...actor, expectedCanvasVersion: canvas.board.version });
+    };
+    await create("First");
+    await create("Second");
+    const secondHead = (await canvases.listRevisions(PROJECT_ID, { limit: 1 }))[0]!;
+    await undo();
+    expect(canvas.board.objects.map(o => o.label)).toEqual(["First"]);
+    const firstUndo = (await canvases.listRevisions(PROJECT_ID, { limit: 1 }))[0]!;
+    expect(firstUndo).toMatchObject({
+      reason: "undo",
+      parentRevisionId: secondHead.id
+    });
+    expect(firstUndo.restoredFromRevisionId).not.toBe(secondHead.id);
+    await create("Replacement");
+    await undo();
+    expect(canvas.board.objects.map(o => o.label)).toEqual(["First"]);
+    await undo();
+    expect(canvas.board.objects).toEqual([]);
+    const version = canvas.board.version;
+    await expect(services.undoCanvas({ ...actor, expectedCanvasVersion: version }))
+      .rejects.toThrow(/revision/iu);
+    expect((await services.getCanvasWorkspace(actor)).board.version).toBe(version);
+    expect((await services.listCanvasHistory(actor)).revisions).toHaveLength(7);
+  });
+
+  it("pages history newest-first with an exclusive version cursor", async () => {
+    const { services } = setup();
+    const actor = { accountId: OWNER, projectId: PROJECT_ID };
+    let canvas = await services.getCanvasWorkspace(actor);
+    for (let index = 0; index < 4; index += 1) {
+      canvas = await services.executeCanvasCommand({
+        ...actor,
+        expectedCanvasVersion: canvas.board.version,
+        command: {
+          type: "canvas.object.create",
+          object: note(`Page ${index}`)
+        }
+      });
+    }
+
+    const first = await services.listCanvasHistory({ ...actor, limit: 2 });
+    expect(first.revisions.map((revision) => revision.boardVersion)).toEqual([5, 4]);
+    expect(first.nextBeforeVersion).toBe(4);
+    const second = await services.listCanvasHistory({
+      ...actor,
+      limit: 2,
+      beforeVersion: first.nextBeforeVersion
+    });
+    expect(second.revisions.map((revision) => revision.boardVersion)).toEqual([3, 2]);
+    expect(second.nextBeforeVersion).toBe(2);
+    const final = await services.listCanvasHistory({
+      ...actor,
+      limit: 2,
+      beforeVersion: second.nextBeforeVersion
+    });
+    expect(final.revisions.map((revision) => revision.boardVersion)).toEqual([1]);
+    expect(final).not.toHaveProperty("nextBeforeVersion");
+    await expect(
+      services.listCanvasHistory({ ...actor, limit: 101 })
+    ).rejects.toThrow(/between 1 and 100/iu);
+    await expect(
+      services.listCanvasHistory({ ...actor, beforeVersion: 0 })
+    ).rejects.toThrow(/positive integer/iu);
+    await expect(
+      services.listCanvasHistory({
+        accountId: OTHER,
+        projectId: PROJECT_ID
+      })
+    ).rejects.toBeInstanceOf(CanvasNotFoundError);
+  });
+
+  it("undoes explicit restores as actions and can restore an Undo snapshot", async () => {
+    const { services, canvases } = setup();
+    const actor = { accountId: OWNER, projectId: PROJECT_ID };
+    let canvas = await services.getCanvasWorkspace(actor);
+    const genesis = (await canvases.listRevisions(PROJECT_ID, { limit: 1 }))[0]!;
+    canvas = await services.executeCanvasCommand({
+      ...actor,
+      expectedCanvasVersion: canvas.board.version,
+      command: { type: "canvas.object.create", object: note("A") }
+    });
+    const revisionA = (await canvases.listRevisions(PROJECT_ID, { limit: 1 }))[0]!;
+    canvas = await services.executeCanvasCommand({
+      ...actor,
+      expectedCanvasVersion: canvas.board.version,
+      command: { type: "canvas.object.create", object: note("B") }
+    });
+    const revisionB = (await canvases.listRevisions(PROJECT_ID, { limit: 1 }))[0]!;
+
+    canvas = await services.restoreCanvasRevision({
+      ...actor,
+      expectedCanvasVersion: canvas.board.version,
+      revisionId: genesis.id
+    });
+    expect(canvas.board.objects).toEqual([]);
+    expect((await canvases.listRevisions(PROJECT_ID, { limit: 1 }))[0]).toMatchObject({
+      reason: "restore",
+      parentRevisionId: revisionB.id,
+      restoredFromRevisionId: genesis.id
+    });
+
+    canvas = await services.undoCanvas({
+      ...actor,
+      expectedCanvasVersion: canvas.board.version
+    });
+    expect(canvas.board.objects.map((object) => object.label)).toEqual(["A", "B"]);
+    const firstUndo = (await canvases.listRevisions(PROJECT_ID, { limit: 1 }))[0]!;
+    expect(firstUndo.restoredFromRevisionId).toBe(revisionB.id);
+    canvas = await services.undoCanvas({
+      ...actor,
+      expectedCanvasVersion: canvas.board.version
+    });
+    expect(canvas.board.objects.map((object) => object.label)).toEqual(["A"]);
+    expect((await canvases.listRevisions(PROJECT_ID, { limit: 1 }))[0])
+      .toMatchObject({ restoredFromRevisionId: revisionA.id });
+
+    canvas = await services.restoreCanvasRevision({
+      ...actor,
+      expectedCanvasVersion: canvas.board.version,
+      revisionId: firstUndo.id
+    });
+    expect(canvas.board.objects.map((object) => object.label)).toEqual(["A", "B"]);
+    expect((await canvases.listRevisions(PROJECT_ID, { limit: 1 }))[0])
+      .toMatchObject({
+        reason: "restore",
+        restoredFromRevisionId: firstUndo.id
+      });
+    canvas = await services.undoCanvas({
+      ...actor,
+      expectedCanvasVersion: canvas.board.version
+    });
+    expect(canvas.board.objects.map((object) => object.label)).toEqual(["A"]);
   });
 
   it("derives a 500+ object spine without changing manuscript authority", () => {
@@ -417,6 +859,10 @@ describe("Story Canvas core and memory adapter", () => {
         position: 1
       },
       canvas: {
+        scope: {
+          scopeKind: "chapter",
+          scopeId: "chapter-low-tide"
+        },
         x: 700,
         y: 300,
         width: 260,
@@ -437,6 +883,13 @@ describe("Story Canvas core and memory adapter", () => {
             expect.objectContaining({
               kind: "scene-card",
               sceneId: result.scene.id
+            })
+          ],
+          scopePlacements: [
+            expect.objectContaining({
+              scopeKind: "chapter",
+              scopeId: "chapter-low-tide",
+              membership: "explicit"
             })
           ]
         }
@@ -461,7 +914,17 @@ describe("Story Canvas core and memory adapter", () => {
           kind: "unassigned",
           bookId: BELLWETHER_FIXTURE.project.bookIds[0]!
         },
-        canvas: { x: 0, y: 0, width: 200, height: 100, z: 1 }
+        canvas: {
+          scope: {
+            scopeKind: "chapter",
+            scopeId: "chapter-low-tide"
+          },
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 100,
+          z: 1
+        }
       })
     ).rejects.toMatchObject({ name: "ProjectVersionConflictError" });
     await expect(projects.listScenes(PROJECT_ID)).resolves.toHaveLength(
@@ -520,7 +983,7 @@ describe("Story Canvas core and memory adapter", () => {
         projectId: PROJECT_ID
       })
     ).resolves.toMatchObject({
-      board: { version: 1, objects: [] }
+      board: { version: 1, objects: [], scopePlacements: [] }
     });
   });
 

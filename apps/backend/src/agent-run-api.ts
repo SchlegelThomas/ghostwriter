@@ -42,7 +42,7 @@ export function contextReceiptResponse(receipt: ContextReceipt) {
       workflowVersion: receipt.workflowVersion,
       layers: receipt.layers,
       resources: receipt.resources.map((resource) =>
-        Object.freeze({
+        resource.resourceClass !== "capture" ? Object.freeze({ ...resource }) : Object.freeze({
           resourceClass: resource.resourceClass,
           captureId: resource.captureId,
           workingVersion: resource.workingVersion,

@@ -21,7 +21,8 @@ export const PROJECT_NAVIGATOR_CAPABILITY = Object.freeze({
   bindings: Object.freeze({
     ui: "ManuscriptTree",
     web: "GET /api/projects/{projectId}/navigator + POST /api/workspace/chat",
-    mcp: "ghostwriter_project_navigator"
+    mcpException:
+      "ghostwriter_project_navigator is explicit fixture-only test data; live project hierarchy is not exposed without a scoped grant."
   })
 }) satisfies GhostwriterCapability;
 
@@ -151,6 +152,27 @@ export const PROJECT_COMMAND_CAPABILITIES: readonly GhostwriterCapability[] =
     )
   ]);
 
+/** Shared intent uses project metadata CAS; external agents may only propose changes. */
+export const STORY_CONTEXT_MUTATION_CAPABILITIES: readonly GhostwriterCapability[] =
+  Object.freeze(([
+    ["scene.updateIntent", "Update shared scene intent", "scene"],
+    ["storyKnowledge.addNarrativeBeat", "Add an authored narrative beat", "project"],
+    ["storyKnowledge.updateNarrativeBeat", "Edit an authored narrative beat", "project"],
+    ["storyKnowledge.setNarrativeBeatArchived", "Archive or restore a narrative beat", "project"],
+    ["storyKnowledge.setNarrativeResolution", "Set a thread's narrative resolution", "project"]
+  ] as const).map(([command, title, scope]) => Object.freeze({
+    id: command,
+    title,
+    access: "apply" as const,
+    scope,
+    coreUseCase: `executeProjectCommand:${command}`,
+    bindings: Object.freeze({
+      ui: "StoryContextCompanion (Draft and Canvas)",
+      web: "POST /api/projects/{projectId}/commands",
+      mcpException: "Canonical intent and narrative changes require explicit first-party human apply; scoped MCP proposal bindings are tracked in the story-workflow epic."
+    })
+  })));
+
 export const SCENE_WORKSPACE_CAPABILITY = Object.freeze({
   id: "scene.workspace.read",
   title: "Read an owned scene writing workspace",
@@ -278,6 +300,17 @@ export const CANVAS_READ_CAPABILITIES: readonly GhostwriterCapability[] =
       })
     }),
     Object.freeze({
+      id: "canvas.personalView.read",
+      title: "Read the writer's Canvas scope return state",
+      access: "read",
+      scope: "project",
+      coreUseCase: "getCanvasPersonalViewPreference",
+      bindings: Object.freeze({
+        web: "GET /api/projects/{projectId}/canvas/view-preference",
+        mcpException: "Personal camera, selection and focus state is account-owned UI state, outside external story grants."
+      })
+    }),
+    Object.freeze({
       id: "canvas.preference.read",
       title: "Read a writer's Story Canvas viewport preference",
       access: "read",
@@ -313,6 +346,17 @@ export const CANVAS_MUTATION_CAPABILITIES: readonly GhostwriterCapability[] =
       bindings: Object.freeze({
         web: "POST /api/projects/{projectId}/canvas/history/restore",
         mcpException: MCP_CANONICAL_MUTATION_EXCEPTION
+      })
+    }),
+    Object.freeze({
+      id: "canvas.personalView.save",
+      title: "Save the writer's Canvas scope return state",
+      access: "apply",
+      scope: "project",
+      coreUseCase: "saveCanvasPersonalViewPreference",
+      bindings: Object.freeze({
+        web: "PUT /api/projects/{projectId}/canvas/view-preference",
+        mcpException: "Personal camera, selection and focus state is account-owned UI state, outside external story grants."
       })
     }),
     Object.freeze({
@@ -796,9 +840,256 @@ export const AGENT_PROPOSAL_APPLY_CAPABILITY = Object.freeze({
   })
 }) satisfies GhostwriterCapability;
 
+const STORY_WORK_HUMAN_REVIEW_EXCEPTION =
+  "Human review and rejection remain first-party authority under ADR 0018.";
+const STORY_WORK_HUMAN_APPLY_EXCEPTION =
+  "Canonical story application requires explicit first-party human approval under ADR 0018.";
+const STORY_WORK_CHECK_ADVISORY_REVIEW_EXCEPTION =
+  "Advisory findings review, resolution, and completion remain first-party authority under ADR 0018; check story work has no canonical apply workflow.";
+
+/** Durable story-work bindings; scoped external proposal access is completed in CP6. */
+export const STORY_WORK_CAPABILITIES: readonly GhostwriterCapability[] = Object.freeze([
+  Object.freeze({
+    id: "story-work.assignment.read",
+    title: "Resume story assignments and their exact results",
+    access: "read",
+    scope: "project",
+    coreUseCase: "StoryWorkAssignmentRepository.get/list",
+    bindings: Object.freeze({
+      ui: "StoryWorkPanel",
+      web:
+        "GET /api/projects/{projectId}/story-work/assignments + GET /api/projects/{projectId}/story-work/assignments/{assignmentId}",
+      mcp: "ghostwriter_list_story_work + ghostwriter_get_story_work"
+    })
+  }),
+  Object.freeze({
+    id: "story-work.character.propose",
+    title: "Develop or revise a character from a retained brief",
+    access: "propose",
+    scope: "project",
+    coreUseCase: "createCharacterStoryWorkGenerationServices",
+    bindings: Object.freeze({
+      ui: "StoryWorkPanel + CharacterStoryWorkReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments (taskKind character) + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/attempts",
+      mcp: "ghostwriter_submit_character_work"
+    })
+  }),
+  Object.freeze({
+    id: "story-work.character.review",
+    title: "Review, edit or reject an exact character artifact",
+    access: "apply",
+    scope: "project",
+    coreUseCase: "executeCharacterStoryWorkReview",
+    bindings: Object.freeze({
+      ui: "CharacterStoryWorkReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/open + PATCH /api/projects/{projectId}/story-work/assignments/{assignmentId}/review + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/reject",
+      mcpException: STORY_WORK_HUMAN_REVIEW_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.character.apply",
+    title: "Add the reviewed character to Cast once",
+    access: "apply",
+    scope: "project",
+    coreUseCase: "validateCharacterStoryWorkApply",
+    bindings: Object.freeze({
+      ui: "CharacterStoryWorkReview",
+      web: "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/apply",
+      mcpException: STORY_WORK_HUMAN_APPLY_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.scene.propose",
+    title: "Draft a new scene or revise an existing scene from a retained brief",
+    access: "propose",
+    scope: "project",
+    coreUseCase: "createSceneStoryWorkGenerationServices",
+    bindings: Object.freeze({
+      ui: "StoryWorkPanel + SceneStoryWorkReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments (taskKind scene|revise) + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/attempts",
+      mcp: "ghostwriter_submit_scene_work (new-scene proposals only)"
+    })
+  }),
+  Object.freeze({
+    id: "story-work.scene.review",
+    title: "Review, edit or reject an exact scene-draft artifact",
+    access: "apply",
+    scope: "project",
+    coreUseCase: "executeSceneStoryWorkReview",
+    bindings: Object.freeze({
+      ui: "SceneStoryWorkReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/open + PATCH /api/projects/{projectId}/story-work/assignments/{assignmentId}/review + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/reject",
+      mcpException: STORY_WORK_HUMAN_REVIEW_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.scene.apply",
+    title: "Apply reviewed scene work to canonical manuscript, variant, or revision history",
+    access: "apply",
+    scope: "project",
+    coreUseCase: "validateSceneStoryWorkApply",
+    bindings: Object.freeze({
+      ui: "SceneStoryWorkReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/apply (mode create-scene|named-variant|apply-revision)",
+      mcpException: STORY_WORK_HUMAN_APPLY_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.structure.propose",
+    title: "Propose typed book structure from a retained outline brief",
+    access: "propose",
+    scope: "project",
+    coreUseCase: "createStoryStructureGenerationServices",
+    bindings: Object.freeze({
+      ui: "StoryWorkPanel + StoryStructureReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments (taskKind outline) + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/attempts",
+      mcp: "ghostwriter_submit_structure_work"
+    })
+  }),
+  Object.freeze({
+    id: "story-work.structure.review",
+    title: "Review, edit or reject an exact typed structure proposal",
+    access: "apply",
+    scope: "project",
+    coreUseCase: "executeStoryStructureStoryWorkReview",
+    bindings: Object.freeze({
+      ui: "StoryStructureReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/open + PATCH /api/projects/{projectId}/story-work/assignments/{assignmentId}/review + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/reject",
+      mcpException: STORY_WORK_HUMAN_REVIEW_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.structure.preview",
+    title: "Preview a dependency-complete structure subset without mutation",
+    access: "read",
+    scope: "project",
+    coreUseCase: "previewStoryStructureProposal",
+    bindings: Object.freeze({
+      ui: "StoryStructureReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/preview",
+      mcp: "ghostwriter_preview_story_structure"
+    })
+  }),
+  Object.freeze({
+    id: "story-work.structure.apply",
+    title: "Atomically apply reviewed structure and optional Canvas placement",
+    access: "apply",
+    scope: "project",
+    coreUseCase: "validateStructureStoryWorkApply",
+    bindings: Object.freeze({
+      ui: "StoryStructureReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/apply (outline structure subset)",
+      mcpException: STORY_WORK_HUMAN_APPLY_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.recovery.read",
+    title: "Read active or uncertain story-work recovery status",
+    access: "read",
+    scope: "project",
+    coreUseCase: "matchesStoryWorkRecoveryReplay",
+    bindings: Object.freeze({
+      ui: "Story work assignment recovery",
+      web:
+        "GET /api/projects/{projectId}/story-work/assignments/{assignmentId} (recovery)",
+      mcp: "ghostwriter_get_story_work (read-only recovery projection)"
+    })
+  }),
+  Object.freeze({
+    id: "story-work.recovery.manage",
+    title: "Cancel or mark an uncertain story-work generation interrupted",
+    access: "apply",
+    scope: "project",
+    coreUseCase: "createRepositoryStoryWorkRecoveryExecutor",
+    bindings: Object.freeze({
+      ui: "Story work assignment recovery",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/recover",
+      mcpException: STORY_WORK_HUMAN_REVIEW_EXCEPTION
+    })
+  }),
+  Object.freeze({
+    id: "story-work.coordination.read",
+    title: "Read durable coordinated story-work dependencies and child status",
+    access: "read",
+    scope: "project",
+    coreUseCase: "projectStoryWorkCoordination",
+    bindings: Object.freeze({
+      ui: "StoryWorkCoordinationReview",
+      web:
+        "GET /api/projects/{projectId}/story-work/coordinations + GET /api/projects/{projectId}/story-work/coordinations/{coordinationId}",
+      mcp:
+        "ghostwriter_list_story_work_coordinations + ghostwriter_get_story_work_coordination"
+    })
+  }),
+  Object.freeze({
+    id: "story-work.coordination.manage",
+    title: "Create and explicitly continue foreground coordinated story work",
+    access: "propose",
+    scope: "project",
+    coreUseCase: "createRepositoryStoryWorkCoordinationExecutor",
+    bindings: Object.freeze({
+      ui: "StoryWorkPanel + StoryWorkCoordinationReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/coordinations + POST /api/projects/{projectId}/story-work/coordinations/{coordinationId}/steps/{stepId}/continue",
+      mcp:
+        "ghostwriter_create_story_work_coordination + ghostwriter_continue_story_work_coordination"
+    })
+  }),
+  Object.freeze({
+    id: "story-work.check.propose",
+    title: "Run a continuity check from a retained brief and selected evidence",
+    access: "propose",
+    scope: "project",
+    coreUseCase: "createStoryCheckGenerationServices",
+    bindings: Object.freeze({
+      ui: "StoryWorkPanel + StoryCheckReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments (taskKind check) + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/attempts",
+      mcp: "ghostwriter_submit_check_work"
+    })
+  }),
+  Object.freeze({
+    id: "story-work.check.freshness.read",
+    title: "Read stored continuity-check evidence freshness for an assignment",
+    access: "read",
+    scope: "project",
+    coreUseCase: "evaluateStoredStoryCheckPayloadFreshness",
+    bindings: Object.freeze({
+      ui: "StoryCheckReview",
+      web: "GET /api/projects/{projectId}/story-work/assignments/{assignmentId} (checkFreshness)",
+      mcp: "ghostwriter_get_story_work (checkFreshness projection)"
+    })
+  }),
+  Object.freeze({
+    id: "story-work.check.review",
+    title: "Open, resolve, or complete noncanonical advisory check findings",
+    access: "apply",
+    scope: "project",
+    coreUseCase: "executeStoryCheckReview",
+    bindings: Object.freeze({
+      ui: "StoryCheckReview",
+      web:
+        "POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/open + PATCH /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/findings/{findingId} + POST /api/projects/{projectId}/story-work/assignments/{assignmentId}/review/complete",
+      mcpException: STORY_WORK_CHECK_ADVISORY_REVIEW_EXCEPTION
+    })
+  })
+]);
+
 export const GHOSTWRITER_CAPABILITIES: readonly GhostwriterCapability[] = Object.freeze([
   PROJECT_NAVIGATOR_CAPABILITY,
   ...PROJECT_COMMAND_CAPABILITIES,
+  ...STORY_CONTEXT_MUTATION_CAPABILITIES,
+  ...STORY_WORK_CAPABILITIES,
   SCENE_WORKSPACE_CAPABILITY,
   ...SCENE_HISTORY_CAPABILITIES,
   ...SCENE_WRITING_MUTATION_CAPABILITIES,

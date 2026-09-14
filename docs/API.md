@@ -136,20 +136,39 @@ agent routes below; attachments remain separate private object references.
 
 ### MCP grants (propose-only)
 
-Owners mint project-scoped opaque grant tokens for external MCP clients. Grants carry Capture and
-tool allowlists, expiry, and revocation. Tokens are returned once on create; only a SHA-256 hash is
-stored. Missing, expired, revoked, and unauthorized grant access share non-disclosing `404 NOT_FOUND`.
+Owners mint project-scoped opaque grant tokens for external MCP clients. Grants carry closed-enum
+`tools`, resource allowlists, expiry, and revocation. Tokens are returned once on create; only a
+SHA-256 hash is stored. Missing, expired, revoked, wrong-project, disallowed-tool, and
+out-of-allowlist resource access share non-disclosing `404 NOT_FOUND`.
 
 - `GET /api/projects/{projectId}/mcp-grants` lists grant summaries for the project (no token material).
-- `POST /api/projects/{projectId}/mcp-grants` accepts `captureIds`, `tools` (closed enum of Capture
-  reflection MCP tools), and `expiresAt`, then returns `{ grant, token }`.
+- `POST /api/projects/{projectId}/mcp-grants` accepts `captureIds`, `sceneIds`, `bookIds`,
+  `assignmentIds`, `coordinationIds`, `allowProjectStructureRead`, `tools` (closed enum — up to 15
+  grant tools: `ghostwriter_get_grant`, three Capture reflection tools, eleven story-work tools),
+  and `expiresAt`, then returns `{ grant, token }`. Capture-only grants remain backward compatible;
+  story-only and mixed grants validate tool/resource pairing at mint time.
 - `DELETE /api/projects/{projectId}/mcp-grants/{grantId}` revokes a grant.
 
-External MCP tools under a grant may discover the grant, read one granted Capture plain summary,
-assemble a Capture reflection receipt, and propose via the same core preview+start path as the UI.
-They cannot apply proposals, read credentials, mutate grants, or enumerate unauthorized projects.
-Production remote MCP OAuth remains later; local/tests inject grant services with
-`GHOSTWRITER_MCP_GRANT_TOKEN` or an in-process runtime.
+External MCP clients under a grant may discover the grant, read allowlisted Captures, submit Capture
+reflection proposals, and (when story-work tools are granted) list/get filtered story-work
+assignments and coordinations, submit typed character/scene/check/structure work (each creating one
+foreground attempt), preview structure without writes, and create/continue coordinations without
+auto-starting child attempts. Bridge assignment detail exposes recovery **read** projections only
+(manage actions are not available externally). Scene submit is **new-scene** only; coordination
+**continue** requires the coordination to share the token's MCP grant origin (allowlisted foreign
+coordinations are read-only).
+
+They cannot apply proposals, open human review routes, recover/cancel assignments, read credentials,
+mutate grants, enumerate projects, or invoke canonical manuscript/Canvas commands.
+
+**Local/test bridge (CP6, not production remote OAuth):** when
+`GHOSTWRITER_ENABLE_LOCAL_MCP_BRIDGE=1`, the backend exposes Bearer-authenticated
+`/local-mcp/v1/*` routes outside the session cookie API (grant metadata, Capture read/receipt/propose,
+filtered story-work list/detail, typed submits, structure preview, coordination list/detail/create/continue).
+Stdio MCP uses `GHOSTWRITER_MCP_API_URL` + `GHOSTWRITER_MCP_GRANT_TOKEN` for bridge mode, or
+`GHOSTWRITER_MCP_FIXTURE=1` for the fixture navigator only; half-configured modes fail clearly.
+Migration `0030_curly_korg.sql` adds grant allowlist columns and assignment/coordination MCP origin
+FK/indexes (checked in; not production-deployed). Production remote MCP OAuth remains later.
 
 ### Capture attachments
 
@@ -334,7 +353,8 @@ another manuscript-order authority.
 - `GET /api/projects/{projectId}/canvas` idempotently initializes and returns `{ board, spine }`.
   The board contains canonical objects, typed links, and optional `scopePlacements` keyed by
   `(objectId, scopeKind, scopeId?)`. Missing placements fall back to each object's global geometry.
-  Scope layouts are interpretive only; manuscript order stays on the tree. The spine is derived at
+  Legacy scope layouts are geometry-only. A placement marked `membership: "explicit"` also
+  grants direct visibility in that scope; manuscript order stays on the tree. The spine is derived at
   read time from canonical book/part/chapter/unassigned scene order.
 - `POST /api/projects/{projectId}/canvas/commands` accepts `expectedCanvasVersion` and one closed
   Canvas command. A completed create/place/update/move/resize/setScopePlacement/archive/restore/
@@ -343,11 +363,15 @@ another manuscript-order authority.
   rewriting object identity; when `scopeKind` is `project`, it also updates global x/y/(optional)
   width/height so the project lens stays a single source. Pointer-move events are not API commands.
 - `GET /api/projects/{projectId}/canvas/history` returns newest-first snapshot metadata without
-  snapshot bodies.
+  snapshot bodies. `limit` defaults to 100 and is bounded to 1–100; optional `beforeVersion` is an
+  exclusive positive board-version cursor. A page returns `revisions` and, when more remain,
+  `nextBeforeVersion`. New Undo/restore metadata includes `restoredFromRevisionId`.
 - `POST /api/projects/{projectId}/canvas/history/restore` accepts `expectedCanvasVersion` and an
   optional `revisionId`. A supplied revision restores that snapshot as a new version/revision;
-  omitting it performs immediate guarded Undo to the preceding snapshot. Existing history is never
-  rewritten.
+  omitting it performs guarded Undo of the latest logical writer action. Commands and explicit
+  restores are actions; Undo records are traversed using provenance. Ambiguous legacy Undo or
+  exhausted/unavailable history refuses without mutation; explicit history review remains available.
+  Existing snapshots are never rewritten, and Canvas restore never restores manuscript prose.
 - `GET /api/projects/{projectId}/canvas/preference` returns the current account's viewport or
   `null`. `PUT /api/projects/{projectId}/canvas/preference` accepts bounded `x`, `y`, `zoom`, and an
   optional `selectedObjectId`. Preferences are per-account and never advance the board version.
@@ -468,3 +492,159 @@ Canvas board/history/preference reads and command/restore/scene-handoff writes a
 registered with backend bindings and explicit MCP authorization exceptions.
 These exceptions preserve the human/agent authority contract rather than silently granting a
 fixture process owner authority.
+
+### Canvas scope creation (story workflow foundation)
+
+Canvas `canvas.object.create` / `canvas.object.place` accept optional
+`scope: { scopeKind: "project" | "chapter" | "scene", scopeId?: string }`.
+Project scope has no ID; chapter and scene scopes require an existing authorized-project target.
+The object and its initial scoped geometry with `membership: "explicit"` persist in one
+expected-Canvas-version command. Existing geometry-only rows are not backfilled; geometry edits
+preserve the marker without inventing membership. Invalid new targets are refused while old
+orphan placements remain inspectable from project Canvas.
+Create-scene-from-Canvas accepts the same optional `canvas.scope` in its existing atomic handoff.
+`canvas.object.setScopePlacement` also validates newly targeted scopes and serves complete geometry
+updates (position plus size) without two racing writes. No endpoint bypasses owner authorization.
+
+`canvas.object.setScopeMembership` accepts `objectId`, the typed scope fields and `member`.
+Adding explicit inclusion requires an active object and active target scope and uses existing
+resolved geometry. Removing inclusion permits historical unavailable scopes and preserves all
+placement geometry, objects and links. Canonical scene membership and legacy graph-related
+visibility can still keep an object visible after its explicit marker is removed. Both operations
+use the normal expected board version; neither changes manuscript membership.
+
+### Shared scene intent and narrative threads
+
+The existing owned-project command endpoint accepts `scene.updateIntent` with a partial
+`patch` of purpose, conflict, turn and openQuestions. Null clears a field; omitted fields
+and the rest of the sketch are preserved. These changes use the project metadata version,
+not the scene document or Canvas board version.
+
+Thread-kind story knowledge supports `storyKnowledge.addNarrativeBeat`,
+`storyKnowledge.updateNarrativeBeat`, `storyKnowledge.setNarrativeBeatArchived`, and
+`storyKnowledge.setNarrativeResolution`. Beats have stable IDs, scene anchors, explicit
+roles and same-thread dependency IDs. Invalid/cyclic references and stale project versions
+refuse without mutation. New anchors must be active; archival retains inspectable references.
+The project navigator returns this canonical optional narrative aggregate. Legacy threads
+without one remain Unmapped; ordinary knowledge links do not imply causality.
+
+Draft and Canvas share these commands through StoryContextCompanion. External canonical
+approval/apply remains unavailable; scoped proposal parity is an open epic checkpoint.
+
+### Personal Canvas return state
+
+`GET /api/projects/:projectId/canvas/view-preference` returns `{ preference }` (null if
+absent). `PUT` accepts `expectedPreferenceVersion` (0 for creation), one full `scopeView`,
+and `lastScope`. Both scopes use `{ scopeKind: "project" | "chapter" | "scene", scopeId? }`.
+A view contains viewport `{x,y,zoom}`, spatial/outline viewMode, inspectorOpen, focusToken
+(surface/inspector/search), workflowLens and optional selectedObjectId/inspectedSceneId
+(null clears a selection). Server timestamps and a new independent preference version are
+returned. This never advances project or Canvas board versions.
+
+A stale write returns `409 PREFERENCE_VERSION_CONFLICT`. Ownership and references are
+validated; invalid saved scene scopes fall back to their active chapter or project. The map
+is capped at 1,024 entries, retaining project/current scope and evicting the oldest other
+view. Legacy `/canvas/preference` remains compatible and advances the same preference CAS
+while updating the project camera. Client queue/hydration acceptance is tracked in the epic.
+
+### Story-work assignments (ADR 0018, implementation in progress)
+
+Character and scene workflows use `/api/projects/:projectId/story-work/assignments` with the
+authenticated project owner. Assignment definitions preserve the original brief, constraints,
+done condition, selected source IDs/revisions, provider/model and server-reserved destination.
+The separate assignment version fences workflow changes; canonical project metadata, scene prose
+and Canvas keep their own versions.
+
+- `POST /assignments` accepts `taskKind` (`character`, `scene`, `revise`, `outline`, or `check`),
+  `idempotencyKey`, `expectedProjectVersion`, `brief`, `constraints`, `doneWhen`, `sceneIds` (zero
+  to 32), and `model`; `revise` additionally requires its distinct `targetSceneId`; `outline`
+  requires `targetBookId` on one active book and does not accept Capture sources; check kinds use
+  the discriminated check submission schema. Scene work may include one active `captureId`. It
+  returns `{assignment,created}`.
+- `GET /assignments?limit=100` returns bounded assignments. `GET /assignments/:id` returns the
+  assignment and available current proposal, latest/active attempt, linked run and context receipt.
+- `POST /assignments/:id/attempts` accepts `expectedAssignmentVersion`, `kind` (`initial` or
+  `revision`), exact `instruction`, optional exact `priorArtifact`, `sourceMode`
+  (`submitted-snapshot` initially; `latest-authorized` for an explicit refresh revision), and `idempotencyKey`. Replayed
+  requests return the same persisted attempt without another provider call.
+- `POST /assignments/:id/review/open`, `PATCH /assignments/:id/review`, and
+  `POST /assignments/:id/review/reject` use `expectedAssignmentVersion` and the exact `artifact`
+  (`proposalId`, `artifactVersion`, `contentHash`). PATCH additionally accepts the complete
+  `character-create-v2`, `scene-draft-v1`, or `story-structure-proposal-v1` payload. Edits produce
+  an immutable replacement proposal and preserve the original generated artifact's lineage.
+  Structure review edits may change semantic fields only; canonical IDs, operation IDs and expected
+  baseline remain server-owned.
+- `POST /assignments/:id/apply` always binds the exact assignment/proposal/artifact tuple.
+  Character apply additionally requires `expectedProjectVersion`. Scene apply requires an
+  `idempotencyKey` and one strict mode: `create-scene` with project/manuscript and optional complete
+  Canvas placement preconditions; `named-variant` with exact scene head plus variant name; or
+  `apply-revision` with the exact scene head. Update requests never accept a lease holder—the
+  backend derives it from the authenticated session. It returns
+  `{replayed,assignment,proposal,result}` only after the atomic write. Exact repeated application
+  creates no duplicate; changed semantics reuse refuses. Changed consumed prose/story context,
+  project/Canvas versions, scene head, lease or variant name applies nothing.
+- `taskKind: check` currently supports specialist `continuity` with an explicit
+  `applied-scene` target or exact `proposal-draft` source assignment/artifact. Check attempts use
+  the same durable start/replay route but persist trusted `story-check-findings-v1` artifacts:
+  provider candidates cannot choose finding IDs, coverage, dependency vectors or review authority.
+  Assignment detail includes read-only `checkFreshness`. `PATCH
+  /assignments/:id/review/findings/:findingId` resolves one exact finding as open, dismissed or
+  deferred; `POST /assignments/:id/review/complete` records noncanonical review completion only
+  while sources remain fresh. Checks have no apply route.
+- `taskKind: outline` uses trusted `story-structure-proposal-v1` with server-allocated operation and
+  entity IDs. Provider candidates cannot choose IDs, apply subsets, or authority.
+- `POST /assignments/:id/review/preview` (outline only) accepts `expectedAssignmentVersion`,
+  `expectedProjectVersion`, the exact structure artifact, and a non-empty unique
+  `selectedOperationIds` list. It returns a pure preview: resolved operation order, manuscript
+  before/after, created/updated scene IDs, empty genesis descriptors, narrative-anchor impact,
+  known check staleness, and optional Canvas effects. Invalid partial selection returns explicit
+  `missingRequired` operation IDs without silently widening the writer's selection. Preview performs
+  no writes and does not rerun providers.
+- Outline apply uses the same `POST /assignments/:id/apply` route with
+  `applyStructureStoryWorkRequestSchema`: exact proposal/artifact preconditions,
+  `expectedProjectVersion`, dependency-complete `selectedOperationIds`, `idempotencyKey`, and
+  optional one new-scene Canvas placement preconditions. One transaction updates project metadata
+  once, initializes empty genesis documents for new scenes, optionally places one Canvas card, and
+  records a durable result of kind `story-structure` (`resolvedOperationIds`, `createdSceneIds`,
+  `bookId`, `projectVersion`, optional `canvasPlacedSceneId`/`canvasObjectId`). Exact replay returns
+  the stored result without a second version increment. Stale project, Canvas, artifact or incomplete
+  selection applies nothing. Structure apply never writes scene prose.
+- **Recovery (CP5a, local):** `GET /assignments/:id` may include read-only recovery projections
+  (`active-or-interrupted`, `refresh-required`) when generation is active or outcome is uncertain.
+  It does not poll providers or guess age. `POST /assignments/:id/recover` accepts strict
+  `expectedAssignmentVersion`, `runId`, and `action` (`cancel` | `mark-interrupted`). It atomically
+  transitions the active run and assignment; attempt rows remain immutable/incomplete. Cancel marks
+  the run failed (`run-canceled`) and the assignment canceled; mark interrupted marks the run failed
+  (`client-interrupted`) and the assignment failed. Late provider completion is fenced. Exact replay
+  matches run + action + prior expected assignment version and replays the stored run outcome
+  (including timestamps) without comparing a freshly read server `completedAt`; competing actions
+  conflict. Foreign or archived-project scope uses the same nondisclosing errors as other story-work
+  routes. Recovery does not retry generation; writers start a new attempt with a fresh idempotency
+  key when retrying explicitly.
+
+- **Coordination (CP5, complete locally):** multi-step foreground orchestration under
+  `/story-work/coordinations`. Domain graph allows one materialized scene-draft root and 1–7
+  deferred artifact-ready continuity checks; **v1 HTTP and UI accept exactly one check** in the
+  strict create body (concurrent ready checks remain open).
+- `POST /coordinations` with `expectedProjectVersion`, `idempotencyKey`, coordination `title`, nested
+  `scene` (title, brief, constraints, doneWhen, model, selected context `sceneIds`) and `check`
+  (title, brief, constraints, doneWhen, model, `surroundingSceneIds`). Creates coordination plus a
+  **brief-ready** root scene-draft assignment and a deferred check step. **Zero provider and zero
+  canon** on create. Exact replay returns stored coordination + root assignment without reallocation.
+- `GET /coordinations` lists project coordinations with derived step status projections.
+  `GET /coordinations/:coordinationId` returns one coordination detail with the same projections.
+- `POST /coordinations/:coordinationId/steps/:stepId/continue` with
+  `expectedCoordinationVersion` and `expectedUpstreamArtifact` binds a deferred check to a new
+  **brief-ready** proposal-draft continuity assignment when the upstream **artifact-ready**
+  dependency is satisfied. Bind does not start a provider; writers use existing assignment attempt
+  routes to Start scene / Start check explicitly.
+- Coordination stores orchestration metadata only. **Applied-revision** dependencies,
+  multi-check create/bind fan-out in v1 HTTP/UI, and coordination-level **cancel** routes remain
+  post-CP5 deferrals (child assignment recover/cancel from CP5a satisfies v1 cancellation).
+  Migration `0029` is checked in; not production-deployed.
+
+These are first-party human review/apply routes. They do not grant external MCP clients direct
+canonical-write authority. Scoped MCP read/propose bindings for story-work (CP6, local) use the
+closed grant tool enum and local bridge; review/apply/recovery manage remain first-party. Capability
+registry records concrete MCP tool bindings for granted read/propose surfaces with permanent
+exceptions on review, apply, recovery manage, grant admin, credentials, and canonical mutation.

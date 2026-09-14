@@ -4,6 +4,8 @@ import {
   McpGrantNotFoundError,
   ProjectAccessDeniedError,
   ProjectArchivedMutationError,
+  StoryWorkAssignmentNotFoundError,
+  StoryWorkCoordinationNotFoundError,
   type McpGrantSummary
 } from "@ghostwriter/core";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -14,6 +16,11 @@ export function mcpGrantSummaryResponse(grant: McpGrantSummary) {
     accountId: grant.accountId,
     projectId: grant.projectId,
     captureIds: grant.captureIds,
+    sceneIds: grant.sceneIds,
+    bookIds: grant.bookIds,
+    assignmentIds: grant.assignmentIds,
+    coordinationIds: grant.coordinationIds,
+    allowProjectStructureRead: grant.allowProjectStructureRead,
     tools: grant.tools,
     tokenHint: grant.tokenHint,
     expiresAt: grant.expiresAt,
@@ -48,6 +55,15 @@ export function mapMcpGrantRouteError(
       body: { error: "Not found.", code: "NOT_FOUND" }
     };
   }
+  if (
+    error instanceof StoryWorkAssignmentNotFoundError ||
+    error instanceof StoryWorkCoordinationNotFoundError
+  ) {
+    return {
+      status: 404,
+      body: { error: "Not found.", code: "NOT_FOUND" }
+    };
+  }
   if (error instanceof ProjectAccessDeniedError) {
     return {
       status: 404,
@@ -65,9 +81,9 @@ export function mapMcpGrantRouteError(
   }
   if (error instanceof DomainValidationError) {
     return {
-      status: 400,
+      status: 422,
       body: {
-        error: "Invalid request.",
+        error: error.message,
         code: error.code
       }
     };

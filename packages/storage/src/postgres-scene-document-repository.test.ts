@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   BELLWETHER_FIXTURE,
   BELLWETHER_FIXTURE_PROJECT_ID,
+  type ApplyDocumentAsRevisionInput,
   accountId,
   createGhostwriterServices,
   createProjectMembership,
@@ -10,7 +11,10 @@ import {
   SceneLeaseExpiredError,
   SceneVariantNameConflictError,
   SceneWorkingVersionConflictError,
-  sceneId
+  revisionId,
+  sceneContentHash,
+  sceneId,
+  sceneLeaseHolderId
 } from "@ghostwriter/core";
 import { toRepositoryDatabase } from "./client.js";
 import { createPgliteDatabase, migratePgliteRepositoryDatabase } from "./pglite.js";
@@ -100,6 +104,13 @@ function documentWith(text: string, id: string) {
       ]
     }
   } as const;
+}
+
+function repositoryDocumentWith(
+  text: string,
+  id: string
+): ApplyDocumentAsRevisionInput["document"] {
+  return documentWith(text, id) as unknown as ApplyDocumentAsRevisionInput["document"];
 }
 
 const scope = {
@@ -443,5 +454,125 @@ describe("postgres scene document repository", () => {
       workingVersion: 2,
       document: documentWith("Batch read", "block-batch")
     });
+  });
+
+  it("applies reviewed agent prose as one immutable revision and head advance", async () => {
+    const { db, sceneDocumentRepository, writing } = await setup();
+    await writing.acquireOrRenewSceneLease({
+      ...scope,
+      sessionId: "session-owner"
+    });
+    const original = await sceneDocumentRepository.getHead(SCENE_ID);
+    if (original === undefined) throw new Error("Expected initialized scene head.");
+    const appliedId = revisionId("revision-postgres-agent-applied");
+    const appliedDocument = repositoryDocumentWith(
+      "Reviewed agent prose",
+      "block-agent-applied"
+    );
+    const appliedHash = sceneContentHash("b".repeat(64));
+
+    const result = await sceneDocumentRepository.applyDocumentAsRevision({
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+      sceneId: SCENE_ID,
+      holderId: sceneLeaseHolderId("session-owner"),
+      expectedWorkingVersion: 1,
+      actorAccountId: OWNER_ACCOUNT_ID,
+      now: "2026-07-12T18:00:30.000Z",
+      revisionId: appliedId,
+      document: appliedDocument,
+      contentHash: appliedHash
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      head: {
+        workingVersion: 2,
+        document: appliedDocument,
+        contentHash: appliedHash,
+        checkpointRevisionId: appliedId
+      },
+      revision: {
+        id: appliedId,
+        parentRevisionId: original.checkpointRevisionId,
+        origin: "agent",
+        reason: "agent-apply"
+      }
+    });
+    expect(await db.select().from(sceneRevisions)).toHaveLength(2);
+    await expect(
+      sceneDocumentRepository.getRevision(original.checkpointRevisionId)
+    ).resolves.toMatchObject({
+      document: original.document,
+      contentHash: original.contentHash,
+      reason: "genesis"
+    });
+
+    await expect(
+      sceneDocumentRepository.applyDocumentAsRevision({
+        projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+        sceneId: SCENE_ID,
+        holderId: sceneLeaseHolderId("session-owner"),
+        expectedWorkingVersion: 2,
+        actorAccountId: OWNER_ACCOUNT_ID,
+        now: "2026-07-12T18:00:40.000Z",
+        revisionId: appliedId,
+        document: repositoryDocumentWith("Must roll back", "block-rollback"),
+        contentHash: sceneContentHash("c".repeat(64))
+      })
+    ).rejects.toBeDefined();
+    await expect(sceneDocumentRepository.getHead(SCENE_ID)).resolves.toMatchObject({
+      workingVersion: 2,
+      document: appliedDocument,
+      checkpointRevisionId: appliedId
+    });
+    expect(await db.select().from(sceneRevisions)).toHaveLength(2);
+  });
+
+  it("refuses agent apply for stale version, wrong holder, and expired lease", async () => {
+    const { db, sceneDocumentRepository, writing } = await setup();
+    await writing.acquireOrRenewSceneLease({
+      ...scope,
+      sessionId: "session-owner"
+    });
+    const base = {
+      projectId: BELLWETHER_FIXTURE_PROJECT_ID,
+      sceneId: SCENE_ID,
+      actorAccountId: OWNER_ACCOUNT_ID,
+      revisionId: revisionId("revision-postgres-agent-refused"),
+      document: repositoryDocumentWith(
+        "Refused agent prose",
+        "block-agent-refused"
+      ),
+      contentHash: sceneContentHash("d".repeat(64))
+    };
+
+    await expect(
+      sceneDocumentRepository.applyDocumentAsRevision({
+        ...base,
+        holderId: sceneLeaseHolderId("session-owner"),
+        expectedWorkingVersion: 2,
+        now: "2026-07-12T18:00:30.000Z"
+      })
+    ).resolves.toEqual({ ok: false, reason: "working-version-conflict" });
+    await expect(
+      sceneDocumentRepository.applyDocumentAsRevision({
+        ...base,
+        holderId: sceneLeaseHolderId("session-other"),
+        expectedWorkingVersion: 1,
+        now: "2026-07-12T18:00:30.000Z"
+      })
+    ).resolves.toEqual({ ok: false, reason: "lease-conflict" });
+    await expect(
+      sceneDocumentRepository.applyDocumentAsRevision({
+        ...base,
+        holderId: sceneLeaseHolderId("session-owner"),
+        expectedWorkingVersion: 1,
+        now: "2026-07-12T18:01:00.000Z"
+      })
+    ).resolves.toEqual({ ok: false, reason: "lease-expired" });
+    await expect(sceneDocumentRepository.getHead(SCENE_ID)).resolves.toMatchObject({
+      workingVersion: 1
+    });
+    expect(await db.select().from(sceneRevisions)).toHaveLength(1);
   });
 });

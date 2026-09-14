@@ -90,6 +90,22 @@ anything that mutates the same canonical rows or version domains.
 Do not run two writers against the same files or version domains. Parent owns synthesis when
 parallel research or delegates return conflicting findings.
 
+## Codex runtime adaptation
+
+When running in Codex, use its native collaboration agents rather than unavailable Cursor pins.
+The user authorized this adaptation for the story-workflow epic on 2026-09-12. Keep the parent
+on analysis, design, integration and acceptance; delegate bounded development with actual model
+and reasoning-effort parameters. Use `gpt-5.6-luna` / medium for narrow research or routine repairs,
+`gpt-5.6-sol` / medium for ordinary implementation, Sol / high for dense contracts, and
+`gpt-6-astra` / high for stubborn or design-sensitive escalation. Record a concrete
+`ESCALATION_REASON` for Astra; never claim Composer, Grok or Opus ran in Codex.
+
+Codex task prompts use exactly one `GHOSTWRITER_ROUTE=codex-luna|codex-sol|codex-astra`
+marker and `GHOSTWRITER_EFFORT=medium|high` matching the actual tool arguments. Cursor hooks and
+pins below remain unchanged for Cursor; these Codex markers are audit metadata for native
+collaboration, not a claim that Cursor hook validation executed. All other checkpoint, ownership,
+verification, human-apply and post-user-verification Playwright gates remain in force.
+
 ## Delegation ladder
 
 Cursor cannot switch the parent model mid-session. Route most development and some validation

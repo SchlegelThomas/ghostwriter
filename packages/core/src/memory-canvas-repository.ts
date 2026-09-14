@@ -1,11 +1,16 @@
 import {
   canvasRevisionMetadata,
+  canvasPersonalScopeKey,
   createCanvasBoard,
+  createCanvasPersonalScopeView,
+  createCanvasPersonalViewPreference,
   createCanvasRevision,
   createCanvasViewportPreference,
   validateCanvasBoardReferences,
+  CanvasPreferenceVersionConflictError,
   CanvasVersionConflictError,
   type CanvasBoard,
+  type CanvasPersonalViewPreference,
   type CanvasRevision,
   type CanvasViewportPreference
 } from "./canvas.js";
@@ -34,6 +39,7 @@ type MemoryCanvasState = {
   boards: Map<string, CanvasBoard>;
   revisions: Map<string, CanvasRevision>;
   preferences: Map<string, CanvasViewportPreference>;
+  personalPreferences: Map<string, CanvasPersonalViewPreference>;
 };
 
 function cloneMemoryCanvasState(state: MemoryCanvasState): MemoryCanvasState {
@@ -51,6 +57,12 @@ function cloneMemoryCanvasState(state: MemoryCanvasState): MemoryCanvasState {
       [...state.preferences].map(([key, preference]) => [
         key,
         createCanvasViewportPreference(preference)
+      ])
+    ),
+    personalPreferences: new Map(
+      [...state.personalPreferences].map(([key, preference]) => [
+        key,
+        createCanvasPersonalViewPreference(preference)
       ])
     )
   };
@@ -81,7 +93,8 @@ export function createMemoryCanvasRepository(): CanvasRepository {
   let state: MemoryCanvasState = {
     boards: new Map(),
     revisions: new Map(),
-    preferences: new Map()
+    preferences: new Map(),
+    personalPreferences: new Map()
   };
   let writeTail: Promise<void> = Promise.resolve();
 
@@ -168,15 +181,36 @@ export function createMemoryCanvasRepository(): CanvasRepository {
         ? undefined
         : createCanvasRevision(revision);
     },
-    async listRevisions(projectId) {
-      return [...state.revisions.values()]
+    async listRevisions(projectId, options) {
+      if (options?.limit !== undefined &&
+          (!Number.isInteger(options.limit) || options.limit < 1)) {
+        throw new DomainValidationError(
+          "INVALID_VERSION",
+          "Canvas revision page size must be a positive integer."
+        );
+      }
+      if (options?.beforeVersion !== undefined &&
+          (!Number.isInteger(options.beforeVersion) || options.beforeVersion < 1)) {
+        throw new DomainValidationError(
+          "INVALID_VERSION",
+          "Canvas revision cursor must be a positive integer."
+        );
+      }
+      const revisions = [...state.revisions.values()]
         .filter((revision) => revision.projectId === projectId)
+        .filter((revision) =>
+          options?.beforeVersion === undefined ||
+          revision.boardVersion < options.beforeVersion
+        )
         .sort(
           (left, right) =>
             right.boardVersion - left.boardVersion ||
             right.createdAt.localeCompare(left.createdAt)
         )
         .map(canvasRevisionMetadata);
+      return options?.limit === undefined
+        ? revisions
+        : revisions.slice(0, options.limit);
     },
     async getViewportPreference(projectId, accountId) {
       const preference = state.preferences.get(
@@ -189,11 +223,81 @@ export function createMemoryCanvasRepository(): CanvasRepository {
     saveViewportPreference(preference): Promise<CanvasViewportPreference> {
       return serialize(() => {
         const validated = createCanvasViewportPreference(preference);
-        state.preferences.set(
-          preferenceKey(validated.projectId, validated.accountId),
-          validated
+        const key = preferenceKey(validated.projectId, validated.accountId);
+        state.preferences.set(key, validated);
+        const current = state.personalPreferences.get(key);
+        const projectView = createCanvasPersonalScopeView({
+          scope: { scopeKind: "project" },
+          viewport: { x: validated.x, y: validated.y, zoom: validated.zoom },
+          viewMode: "spatial",
+          inspectorOpen: false,
+          focusToken: "surface",
+          ...(validated.selectedObjectId === undefined
+            ? {}
+            : { selectedObjectId: validated.selectedObjectId }),
+          workflowLens: "outline",
+          updatedAt: validated.updatedAt
+        });
+        const views = new Map(
+          (current?.scopeViews ?? []).map((view) => [
+            canvasPersonalScopeKey(view.scope),
+            view
+          ])
+        );
+        views.set("project", projectView);
+        state.personalPreferences.set(
+          key,
+          createCanvasPersonalViewPreference({
+            projectId: validated.projectId,
+            accountId: validated.accountId,
+            version: (current?.version ?? 0) + 1,
+            lastScope: current?.lastScope ?? { scopeKind: "project" },
+            scopeViews: [...views.values()],
+            updatedAt: validated.updatedAt
+          })
         );
         return createCanvasViewportPreference(validated);
+      });
+    },
+    async getPersonalViewPreference(projectId, accountId) {
+      const preference = state.personalPreferences.get(
+        preferenceKey(projectId, accountId)
+      );
+      return preference === undefined
+        ? undefined
+        : createCanvasPersonalViewPreference(preference);
+    },
+    savePersonalViewPreference(input): Promise<CanvasPersonalViewPreference> {
+      return serialize(() => {
+        const validated = createCanvasPersonalViewPreference(input.preference);
+        const key = preferenceKey(validated.projectId, validated.accountId);
+        const current = state.personalPreferences.get(key);
+        if (
+          (current?.version ?? 0) !== input.expectedPreferenceVersion ||
+          validated.version !== input.expectedPreferenceVersion + 1
+        ) {
+          throw new CanvasPreferenceVersionConflictError(
+            validated.projectId,
+            input.expectedPreferenceVersion
+          );
+        }
+        state.personalPreferences.set(key, validated);
+        const projectView = validated.scopeViews.find(
+          (view) => canvasPersonalScopeKey(view.scope) === "project"
+        )!;
+        state.preferences.set(
+          key,
+          createCanvasViewportPreference({
+            projectId: validated.projectId,
+            accountId: validated.accountId,
+            ...projectView.viewport,
+            ...(projectView.selectedObjectId === undefined
+              ? {}
+              : { selectedObjectId: projectView.selectedObjectId }),
+            updatedAt: validated.updatedAt
+          })
+        );
+        return createCanvasPersonalViewPreference(validated);
       });
     }
   };

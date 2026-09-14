@@ -1,29 +1,49 @@
 import {
   accountId,
+  bookId,
   createMcpGrantRecord,
   mcpGrantId,
   mcpGrantTokenHash,
   projectId,
+  sceneId,
+  storyWorkAssignmentId,
+  storyWorkCoordinationId,
+  type CaptureId,
+  type InsertMcpGrantOutcome,
   type McpGrantId,
   type McpGrantRecord,
   type McpGrantRepository,
   type McpGrantTokenHash,
   type McpGrantToolName,
   type ProjectId,
-  type InsertMcpGrantOutcome,
-  type RevokeMcpGrantOutcome,
-  type CaptureId
+  type RevokeMcpGrantOutcome
 } from "@ghostwriter/core";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import type { RepositoryDatabase } from "./client.js";
 import { mcpGrants } from "./schema.js";
+
+function readJsonStringArray(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value as readonly string[];
+}
 
 function grantFromRow(row: typeof mcpGrants.$inferSelect): McpGrantRecord {
   return createMcpGrantRecord({
     id: mcpGrantId(row.id),
     accountId: accountId(row.accountId),
     projectId: projectId(row.projectId),
-    captureIds: row.captureIds as readonly CaptureId[],
+    captureIds: readJsonStringArray(row.captureIds) as readonly CaptureId[],
+    sceneIds: readJsonStringArray(row.sceneIds).map((id) => sceneId(id)),
+    bookIds: readJsonStringArray(row.bookIds).map((id) => bookId(id)),
+    assignmentIds: readJsonStringArray(row.assignmentIds).map((id) =>
+      storyWorkAssignmentId(id)
+    ),
+    coordinationIds: readJsonStringArray(row.coordinationIds).map((id) =>
+      storyWorkCoordinationId(id)
+    ),
+    allowProjectStructureRead: row.allowProjectStructureRead === true,
     tools: row.tools as readonly McpGrantToolName[],
     tokenHash: mcpGrantTokenHash(row.tokenHash),
     tokenHint: row.tokenHint,
@@ -41,6 +61,11 @@ function grantToRow(grant: McpGrantRecord) {
     accountId: candidate.accountId,
     projectId: candidate.projectId,
     captureIds: [...candidate.captureIds],
+    sceneIds: [...candidate.sceneIds],
+    bookIds: [...candidate.bookIds],
+    assignmentIds: [...candidate.assignmentIds],
+    coordinationIds: [...candidate.coordinationIds],
+    allowProjectStructureRead: candidate.allowProjectStructureRead,
     tools: [...candidate.tools],
     tokenHash: candidate.tokenHash,
     tokenHint: candidate.tokenHint,

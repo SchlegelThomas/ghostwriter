@@ -129,12 +129,14 @@ ADR 0005 establishes the identity spine used by all real project access:
   remain read-only until immutable scene/project revisions exist.
 - Canonical MCP command bindings are explicit security exceptions, not omissions: direct external
   writes wait for scoped grants. Fixture MCP reads continue to exercise the shared navigator
-  projection. ADR 0011 scoped grants now bind Capture reflection propose-only tools
-  (`ghostwriter_get_grant`, `ghostwriter_read_capture`,
-  `ghostwriter_assemble_capture_reflection_context`, `ghostwriter_propose_capture_reflection`)
-  under server-minted opaque tokens; apply, credential access, grant mutation, and project
-  enumeration remain unavailable to external MCP clients. Production remote MCP OAuth remains later;
-  v1 proves capability parity via injectable grant services in local/tests.
+  projection only when `GHOSTWRITER_MCP_FIXTURE=1`. ADR 0011 scoped grants bind a closed **15-tool**
+  propose/read enum (discover, three Capture reflection tools, eleven story-work tools) under
+  server-minted opaque tokens with extended allowlists (`sceneIds`, `bookIds`, `assignmentIds`,
+  `coordinationIds`, `allowProjectStructureRead`) and assignment/coordination MCP origin columns
+  (migration `0030`, checked in; not production-deployed). Local/test stdio grant mode calls a
+  flag-gated Bearer bridge (`GHOSTWRITER_ENABLE_LOCAL_MCP_BRIDGE=1`) on `/local-mcp/v1/*`; apply,
+  review, recovery manage, credential access, grant mutation, and project enumeration remain
+  unavailable to external MCP clients. Production remote MCP OAuth remains later.
 
 See [ADR 0005](adr/0005-authenticated-accounts-and-project-access.md).
 
@@ -167,7 +169,13 @@ metadata persistence now updates stable canonical rows rather than deleting/rebu
   or sign-out; it is not an offline project replica.
 - Canvas uses relational current-state boards/objects/links, immutable snapshots, personal viewport
   preferences, a manuscript-derived spine, and a separate board version. The combined unit of work
-  atomically creates a manuscript scene, genesis document, and Canvas card.
+  atomically creates a manuscript scene, genesis document, and Canvas card. ADR0018 adds explicit
+  scope membership without reinterpreting legacy geometry rows, separates Canvas inspection from
+  the active Draft, and records restore provenance for bounded Undo/history traversal. Personal
+  per-scope camera/selection/lens/focus is persisted in a bounded aggregate on the existing preference
+  row (migration0026), with independent CAS and serialized coalescing client saves. Legacy viewport
+  clients advance that same preference version. Passive Canvas opening hydrates saved return state;
+  explicit scene navigation takes precedence. This preference never owns canonical story content.
 - The responsive client exposes Draft, Canvas, Split, and Project setup. Wide web supports spatial
   editing and inspectors; narrow web defaults to an ordered keyboard/screen-reader representation.
   Canvas position and story-order hints expose drift but never reorder the manuscript.
@@ -207,9 +215,11 @@ BYOK agents on `feat/capture-to-story-agents`:
   assignment; capabilities remain enforced outside the model.
 - Models and external MCP clients may create typed noncanonical proposals. Only an authenticated
   first-party human interaction may apply an exact hash after core revalidates every version.
-- Project-scoped MCP grants persist token hashes (never plaintext), closed Capture/tool allowlists,
-  expiry, and revocation. Owner admin routes mint/revoke grants; proposals created under a grant
-  appear in the same Inbox projection as first-party UI runs.
+- Project-scoped MCP grants persist token hashes (never plaintext), closed tool and resource
+  allowlists, expiry, and revocation. Owner session routes mint/revoke grants; Capture and story-work
+  proposals created under a grant appear in the same Inbox/story-work projections as first-party UI
+  runs. MCP-created story-work rows record `{ kind: "mcp", grantId }` origin for scoped list/read and
+  submit authorization (allowlisted ∪ grant-origin; foreign-origin read via allowlist only).
 - Workspace Agent dock (`POST /api/workspace/chat`) uses BYOK chat completion with server-assembled
   navigator/selection context; mode/model/effort are client prefs. **Plan** mode can persist outlines
   via `POST /api/projects/{projectId}/agent/plan-outlines` (workflow `plan-mode.outline`, schema
@@ -317,3 +327,61 @@ and a platform-agnostic core remain non-negotiable. Server-authoritative online-
 state is an explicit exception to the repository's earlier local-first direction, recorded by ADR
 0002 and reflected in `AGENTS.md`. Do not introduce a second canonical store or imply offline
 editing without a later accepted plan and ADR.
+
+## Story workflow foundation changes (2026-09-12, in progress)
+
+[ADR 0018](adr/0018-story-work-assignments-and-review.md) is accepted for the story workflow epic.
+Canvas inspection is distinct from the active writing scene. Create/place commands can atomically
+include an initial typed scope placement in the same board version transaction; invalid new scope
+references are refused. Scope placement grants visibility independently of a story edge, with legacy
+graph visibility preserved during compatibility work. Scoped geometry uses one completed command;
+Undo traverses writer actions while retaining append-only audit snapshots.
+
+Durable assignments, attempts and immutable reviewed artifacts now support the local character and
+scene checkpoints. Scene apply is one transaction across the assignment/proposal and its
+mode-specific canonical stores: project + genesis + optional Canvas for create, scene revision +
+variant for a named variant, or leased working-head replacement for an applied revision. Exact
+request replay is recorded on the assignment; update lease authority comes only from the
+authenticated session. Provider work remains outside these transactions.
+
+Continuity checks use the same durable assignment/run/receipt/proposal spine but no canonical apply
+path. The provider returns candidate findings only; core attaches server IDs, exact target,
+receipt-derived coverage, validated scene/quote/block evidence, explicit dependency vectors and
+known downstream scene links before persistence. Applied scene heads and noncanonical scene
+proposals are distinct target modes. Freshness rebuilds only consumed dependencies and is a
+read-only projection; changed prose/intent/structure marks Needs recheck without spending or
+mutating assignment status. Finding resolution creates immutable review proposal versions, while
+review completion records `reviewed`, not `applied`.
+
+Outline/structure work (`taskKind: outline`) adds `story-structure-proposal-v1`: provider-local
+candidates lower to trusted operations with immutable server IDs, explicit dependency edges and
+semantic-only human review edits. Pure preview lowers selected operations through the existing
+project-command kernel without writes, surfaces manuscript/narrative-anchor/check-staleness impact,
+and refuses incomplete selections with explicit required operations. Apply is one project CAS plus
+optional Canvas transaction: empty genesis for each new scene, no prose mutation, durable
+`story-structure` result references (resolved operations, created scenes, versions, optional Canvas
+IDs) with exact replay in memory/Postgres UOWs. Check-impact preview is read-only and does not rerun
+providers.
+
+**Story-work recovery (CP5a, local):** cancel and mark-interrupted commands use a dedicated
+recovery unit of work in core with memory/Postgres parity. Only the active run and assignment
+transition; attempts stay immutable/incomplete until a separate completion path pairs with result
+artifacts. Idempotent replay keys on run, action, and prior assignment version. Assignment detail
+projections expose uncertain/active recovery state without provider polling. Explicit retry remains
+on the attempt route with new caller idempotency keys.
+
+**Multi-step coordination (CP5, complete locally):** pure core `StoryWorkCoordination` domain;
+memory/Postgres repositories and migration `0029_material_rachel_grey.sql` (checked in; not
+production-deployed); atomic create/bind UOW with replay-before-ID and all-or-nothing rollback;
+backend `/story-work/coordinations` (v1 create exposes one check; domain allows 1–7); client
+foreground driver/UI with explicit Start/Continue/Start check/Open reviews, reload asserts no
+auto action, and distinct step projections; hermetic browser full chain validated. Child step
+status projects from canonical assignment rows. Recovery replay (CP5d fix): idempotent recover
+matches run + action + prior assignment version and returns stored run timestamps — not a fresh
+server `completedAt` comparison. Capability registry records `story-work.coordination.*` and
+`story-work.recovery.*` with CP6 exceptions. Post-CP5 extensions (applied-revision deps,
+multi-check UI fan-out, coordination cancel route, templates/workers) are documented deferrals.
+**Scoped MCP parity (CP6, complete locally):** extended grants, origin persistence, local bridge,
+stdio grant mode, capability registry bindings, and hermetic stdio walkthrough on
+`feat/agent-story-workflow` (uncommitted atop `6cc0455`; migrations `0029`/`0030` not
+production-deployed). **CP7** original-story acceptance is next. Epic remains active.

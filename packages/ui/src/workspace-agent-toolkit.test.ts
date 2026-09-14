@@ -115,21 +115,29 @@ describe("resolveAgentToolkitAction", () => {
     });
   });
 
-  it("refuses Scene Partner without a capture", () => {
+  it("stays on the open scene when Scene Partner has no Plans capture", () => {
+    const result = resolveAgentToolkitAction(
+      "scene-partner",
+      selection({ sceneId })
+    );
+    expect(result).toEqual({ ok: true, kind: "workspace-scene" });
+  });
+
+  it("stays on the open scene when the Plans capture is not partnerable", () => {
+    const result = resolveAgentToolkitAction(
+      "scene-partner",
+      selection({ captureId, capturePartnerable: false, sceneId })
+    );
+    expect(result).toEqual({ ok: true, kind: "workspace-scene" });
+  });
+
+  it("refuses Scene Partner without a scene or Plans idea", () => {
     const result = resolveAgentToolkitAction("scene-partner", selection());
     expect(result).toEqual({
       ok: false,
       refusalMessage:
-        "Select an idea in Plans (draft or ready) before Scene Partner."
+        "Open a scene, or select an idea in Plans, before Scene Partner."
     });
-  });
-
-  it("refuses Scene Partner when capture is not partnerable", () => {
-    const result = resolveAgentToolkitAction(
-      "scene-partner",
-      selection({ captureId, capturePartnerable: false })
-    );
-    expect(result.ok).toBe(false);
   });
 
   it("opens Sketch Partner with craft auto-start when capture and scene exist", () => {

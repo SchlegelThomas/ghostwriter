@@ -1,10 +1,17 @@
+import {
+  canvasObjectId,
+  projectId,
+  type CanvasObject
+} from "@ghostwriter/core";
 import { describe, expect, it } from "vitest";
 import {
   attachPointOnFrame,
   cardMenuAnchor,
   clampMenuPosition,
+  displayCanvasObject,
   fittedCanvasCardSize,
   liveGeometryEquals,
+  minimumCanvasCardSize,
   nearestAttachPair,
   needsCanvasCardFit,
   pushRecentCanvasAction,
@@ -15,6 +22,19 @@ import {
   withLiveCanvasGeometry,
   type RecentCanvasAction
 } from "./canvas-chrome.js";
+
+const openingSceneCard: CanvasObject = {
+  id: canvasObjectId("canvas-object-opening-scene"),
+  projectId: projectId("project-canvas-chrome"),
+  kind: "scene-card",
+  x: 0,
+  y: 0,
+  width: 160,
+  height: 80,
+  z: 1,
+  authority: "confirmed",
+  label: "Opening scene"
+};
 
 describe("surfaceLocalPoint", () => {
   it("subtracts surface origin from page coordinates", () => {
@@ -63,13 +83,6 @@ describe("cardMenuAnchor", () => {
 });
 
 describe("fittedCanvasCardSize", () => {
-  const openingSceneCard = {
-    kind: "scene-card" as const,
-    width: 160,
-    height: 80,
-    label: "Opening scene"
-  };
-
   it("converts zoom-aware screen budgets to world units at zoom 1", () => {
     // screen: width 220; height 118 + 14 (title wrap) + 39 (3 detail lines) = 171
     expect(fittedCanvasCardSize(openingSceneCard, { selected: false })).toEqual({
@@ -133,6 +146,35 @@ describe("needsCanvasCardFit", () => {
   });
 });
 
+describe("minimumCanvasCardSize", () => {
+  it("returns the intrinsic chrome minimum without preserving a larger saved size", () => {
+    const large = { ...openingSceneCard, width: 800, height: 600 };
+    const minimum = minimumCanvasCardSize(large, {
+      selected: true,
+      zoom: 1
+    });
+
+    expect(minimum.width).toBeLessThan(large.width);
+    expect(minimum.height).toBeLessThan(large.height);
+  });
+});
+
+describe("displayCanvasObject", () => {
+  it("combines live scope geometry with fitted painted bounds", () => {
+    const displayed = displayCanvasObject(
+      openingSceneCard,
+      { x: 40, y: 60, width: 80, height: 50 },
+      { selected: true, zoom: 1, displayLabel: "A longer canonical scene title" }
+    );
+
+    expect(displayed.x).toBe(40);
+    expect(displayed.y).toBe(60);
+    expect(displayed.width).toBeGreaterThan(80);
+    expect(displayed.height).toBeGreaterThan(50);
+    expect(displayed.label).toBe(openingSceneCard.label);
+  });
+});
+
 describe("resizeCursorForEdge", () => {
   it("maps north and south edges to ns-resize", () => {
     expect(resizeCursorForEdge("n")).toBe("ns-resize");
@@ -189,6 +231,21 @@ describe("resizeObjectByEdge", () => {
       y: 84,
       width: 200,
       height: 96
+    });
+  });
+
+  it("moves both origins and dimensions from corner handles", () => {
+    expect(resizeObjectByEdge(origin, "nw", 20, 10, minSize)).toEqual({
+      x: 60,
+      y: 70,
+      width: 180,
+      height: 110
+    });
+    expect(resizeObjectByEdge(origin, "se", 30, 40, minSize)).toEqual({
+      x: 40,
+      y: 60,
+      width: 230,
+      height: 160
     });
   });
 

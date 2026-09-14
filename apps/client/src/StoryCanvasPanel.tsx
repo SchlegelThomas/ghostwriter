@@ -6,6 +6,7 @@ import type {
   CanvasObjectId,
   CanvasRevisionId,
   CanvasScopePlacement,
+  ProjectCommand,
   ProjectNavigator,
   ProjectNavigatorScene,
   SceneId,
@@ -19,6 +20,7 @@ import {
   chapterBoundOverlays,
   currentDrillScope,
   easeOutCubic,
+  filterObjectsForScope,
   ghostwriterTheme,
   interpolateCanvasViewport,
   projectCanvasLensProjection,
@@ -26,6 +28,8 @@ import {
   sceneDrillScope,
   targetViewportForDrillScope,
   workflowLensLabel,
+  StoryContextCompanion,
+  STORY_CONTEXT_DIRTY_NAVIGATION_MESSAGE,
   type CanvasDrillScope,
   type CanvasDrillStack,
   type CanvasWorkflowLens
@@ -40,6 +44,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
+  Modal,
   PanResponder,
   Pressable,
   ScrollView,
@@ -52,7 +57,6 @@ import {
   type LayoutChangeEvent
 } from "react-native";
 import type {
-  CanvasPreferenceResponse,
   CanvasHistoryResponse,
   CanvasSceneGeometryInput,
   CanvasScenePlacementInput,
@@ -63,14 +67,14 @@ import {
   attachPointOnFrame,
   cardMenuAnchor,
   clampMenuPosition,
-  fittedCanvasCardSize,
+  displayCanvasObject,
   liveGeometryEquals,
+  minimumCanvasCardSize,
   nearestAttachPair,
   resizeCursorForEdge,
   resizeObjectByEdge,
   splitToolTip,
   surfaceLocalPoint,
-  withLiveCanvasGeometry,
   type AttachSide,
   type LiveCanvasGeometry,
   type RecentCanvasAction,
@@ -91,12 +95,12 @@ import {
   type LinkDragState
 } from "./canvas-interaction.js";
 import {
-  availableCanvasStoryKnowledge,
   canvasChapterAggregates,
   canvasCapturePosition,
   canvasCanonicalReferenceState,
   canvasDriftLabel,
   canvasHistoryLabel,
+  canvasObjectTitle,
   canvasPositionAfterDrag,
   canvasScreenFrame,
   canvasWorldPointFromScreen,
@@ -105,13 +109,29 @@ import {
   clampCanvasZoom,
   fitCanvasObjects,
   projectCanvasOutline,
-  searchCanvasObjects,
+  searchCanvasStory,
   visibleCanvasObjects,
   zoomViewportAtScreenPoint,
   type CanvasTool,
   type CanvasViewport,
   type CanvasViewportSize
 } from "./canvas-model.js";
+import type {
+  CanvasScopeViewState,
+  CanvasViewMode
+} from "./canvas-view-state.js";
+import {
+  canvasEmptyPresentation,
+  canvasLensDescription,
+  canvasSearchPresentation
+} from "./canvas-discovery-presentation.js";
+import {
+  canvasExplicitMemberships,
+  canvasMembershipDestinations,
+  canvasScopeTitle,
+  type CanvasMembershipDestination
+} from "./canvas-membership.js";
+import { canvasOrderedWindow } from "./canvas-ordered-window.js";
 import {
   listManuscriptHandoffChoices,
   manuscriptHandoffStoryOrderHintText,
@@ -165,7 +185,6 @@ export type CanvasPanelMessage = Readonly<{
 export type StoryCanvasPanelProps = Readonly<{
   project: ProjectNavigator;
   workspace?: CanvasWorkspaceResponse;
-  preference?: CanvasPreferenceResponse | null;
   selectedSceneId?: SceneId;
   selectedObjectId?: CanvasObjectId;
   loading?: boolean;
@@ -179,18 +198,15 @@ export type StoryCanvasPanelProps = Readonly<{
   historyOpen?: boolean;
   onHistoryOpenChange?(open: boolean): void;
   onCommand(command: CanvasCommand): Promise<boolean>;
+  onStoryContextCommand?(command: ProjectCommand): Promise<boolean>;
+  onStoryContextDirtyChange?(dirty: boolean): void;
   onCreateScene(input: {
     title: string;
     manuscriptPlacement: CanvasScenePlacementInput;
     canvas: CanvasSceneGeometryInput;
   }): Promise<SceneId | undefined>;
-  onPreferenceChange(input: {
-    x: number;
-    y: number;
-    zoom: number;
-    selectedObjectId?: CanvasObjectId | null;
-  }): Promise<void>;
   onLoadHistory(): Promise<void>;
+  onLoadOlderHistory?(): Promise<void>;
   onReload(): Promise<void>;
   onRestoreRevision(revisionId: CanvasRevisionId): Promise<boolean>;
   onSelectObject(objectId: CanvasObjectId | undefined): void;
@@ -202,6 +218,12 @@ export type StoryCanvasPanelProps = Readonly<{
   workflowLens?: CanvasWorkflowLens;
   onWorkflowLensChange?(lens: CanvasWorkflowLens): void;
   onDrillBack?(): void;
+  onDrillTo?(scope: CanvasDrillScope): void;
+  getScopeViewState?(scope: CanvasDrillScope): CanvasScopeViewState | undefined;
+  onScopeViewStateChange?(
+    scope: CanvasDrillScope,
+    patch: CanvasScopeViewState
+  ): void;
   onDrillIntoChapter?(
     scope: Extract<CanvasDrillScope, { kind: "chapter" }>
   ): void;
@@ -210,7 +232,7 @@ export type StoryCanvasPanelProps = Readonly<{
   ): void;
 }>;
 
-type CanvasView = "spatial" | "outline";
+type CanvasView = CanvasViewMode;
 
 function CanvasButton({
   label,
@@ -327,6 +349,15 @@ function objectKindLabel(object: CanvasObject): string {
   }
 }
 
+function archiveActionLabel(object: CanvasObject): string {
+  if (object.kind === "scene-card" || object.kind === "story-knowledge-card") {
+    return "Remove from Canvas";
+  }
+  if (object.kind === "note") return "Archive note";
+  if (object.kind === "region") return "Archive region";
+  return "Archive image reference";
+}
+
 function objectDetail(
   object: CanvasObject,
   scenes: ReadonlyMap<SceneId, ProjectNavigatorScene>,
@@ -366,7 +397,7 @@ function linkStateLabel(link: CanvasLink): string {
   if (link.dismissedAt !== undefined) return "Dismissed";
   if (link.archivedAt !== undefined) return "Archived";
   return link.authority === "provisional"
-    ? "Provisional fixture"
+    ? "Provisional"
     : "Confirmed";
 }
 
@@ -618,10 +649,22 @@ function CanvasModal({
   footer?: ReactNode;
   onClose(): void;
 }>) {
+  const focusId = `canvas-modal-${accessibilityLabel
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")}`;
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    requestAnimationFrame(() => {
+      document.getElementById(focusId)?.focus();
+    });
+  }, [focusId]);
+
   return (
     <View
       accessibilityLabel={accessibilityLabel}
       accessibilityViewIsModal
+      nativeID={focusId}
+      {...({ id: focusId, tabIndex: -1 } as object)}
       style={styles.modalRoot}
     >
       <Pressable
@@ -776,6 +819,7 @@ function attachPointStyle(side: AttachSide) {
 
 function SpatialObjectCard({
   object,
+  title,
   viewport,
   selected,
   detail,
@@ -803,6 +847,7 @@ function SpatialObjectCard({
   resizeLocked = true
 }: Readonly<{
   object: CanvasObject;
+  title: string;
   viewport: CanvasViewport;
   selected: boolean;
   detail: string;
@@ -842,15 +887,27 @@ function SpatialObjectCard({
   const dragStartRef = useRef<{ x: number; y: number } | undefined>(undefined);
   const dragRafRef = useRef(0);
   const latestDeltaRef = useRef({ x: 0, y: 0 });
-  const geometry = withLiveCanvasGeometry(object, liveGeometry);
+  const activePointerCancelRef = useRef<
+    ((updateLocalState?: boolean) => void) | undefined
+  >(undefined);
+  const isSceneCard =
+    object.kind === "scene-card" && object.sceneId !== undefined;
+  const fitOptions = {
+    selected,
+    sceneCard: isSceneCard,
+    zoom: viewport.zoom,
+    detailLines: selected ? 2 : 3,
+    hasActionRow: selected && isSceneCard,
+    hasHint: false,
+    displayLabel: title
+  } as const;
+  const geometry = displayCanvasObject(object, liveGeometry, fitOptions);
   const frame = canvasScreenFrame(geometry, viewport);
   const showActions =
     linkHandleVisible && (selected || hovered || linkDropTarget);
   const showAttachPoints =
     linkHandleVisible && (selected || hovered || linkDropTarget);
   const showChrome = selected || hovered || linkDropTarget;
-  const isSceneCard =
-    object.kind === "scene-card" && object.sceneId !== undefined;
   const canResize = onResize !== undefined && !resizeLocked;
 
   function publishLiveGeometry(next: LiveCanvasGeometry | undefined): void {
@@ -859,6 +916,8 @@ function SpatialObjectCard({
 
   useEffect(() => {
     return () => {
+      activePointerCancelRef.current?.(false);
+      activePointerCancelRef.current = undefined;
       dragStartRef.current = undefined;
     };
   }, []);
@@ -881,6 +940,7 @@ function SpatialObjectCard({
   }
 
   function beginPointerDrag(clientX: number, clientY: number): void {
+    activePointerCancelRef.current?.();
     if (!dragEnabled) {
       onSelect(object);
       return;
@@ -929,6 +989,9 @@ function SpatialObjectCard({
     const handlePointerUp = (event: PointerEvent): void => {
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
+      window.removeEventListener("keydown", handleKeyDown, true);
+      activePointerCancelRef.current = undefined;
       if (dragRafRef.current !== 0) {
         cancelAnimationFrame(dragRafRef.current);
         dragRafRef.current = 0;
@@ -958,8 +1021,35 @@ function SpatialObjectCard({
       });
       void commitMove(object, next.x, next.y);
     };
+    const handlePointerCancel = (
+      updateLocalState: boolean | PointerEvent = true
+    ): void => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
+      window.removeEventListener("keydown", handleKeyDown, true);
+      if (dragRafRef.current !== 0) {
+        cancelAnimationFrame(dragRafRef.current);
+        dragRafRef.current = 0;
+      }
+      dragStartRef.current = undefined;
+      draggedRef.current = false;
+      activePointerCancelRef.current = undefined;
+      if (updateLocalState !== false) setDragging(false);
+      onDragActiveChange?.(false);
+      publishLiveGeometry(undefined);
+    };
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      handlePointerCancel();
+    };
+    activePointerCancelRef.current = handlePointerCancel;
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerCancel);
+    window.addEventListener("keydown", handleKeyDown, true);
   }
 
   function openActionsMenu(clientX: number, clientY: number): void {
@@ -977,6 +1067,7 @@ function SpatialObjectCard({
     clientX: number,
     clientY: number
   ): void {
+    activePointerCancelRef.current?.();
     if (!canResize || onResize === undefined) return;
     onSelect(object);
     setResizing(true);
@@ -988,14 +1079,7 @@ function SpatialObjectCard({
       height: geometry.height
     };
     const pointerOrigin = { x: clientX, y: clientY };
-    const minSize = fittedCanvasCardSize(geometry, {
-      selected,
-      sceneCard: isSceneCard,
-      zoom: viewport.zoom,
-      detailLines: selected ? 2 : 3,
-      hasActionRow: selected,
-      hasHint: false
-    });
+    const minSize = minimumCanvasCardSize(geometry, fitOptions);
     let live = { ...origin };
     const onPointerMove = (event: PointerEvent): void => {
       const worldDx =
@@ -1008,6 +1092,9 @@ function SpatialObjectCard({
     const onPointerUp = (): void => {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
+      window.removeEventListener("keydown", onKeyDown, true);
+      activePointerCancelRef.current = undefined;
       setResizing(false);
       onDragActiveChange?.(false);
       if (
@@ -1020,8 +1107,29 @@ function SpatialObjectCard({
         onResize(object, live);
       }
     };
+    const onPointerCancel = (
+      updateLocalState: boolean | PointerEvent = true
+    ): void => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
+      window.removeEventListener("keydown", onKeyDown, true);
+      activePointerCancelRef.current = undefined;
+      if (updateLocalState !== false) setResizing(false);
+      onDragActiveChange?.(false);
+      publishLiveGeometry(undefined);
+    };
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      onPointerCancel();
+    };
+    activePointerCancelRef.current = onPointerCancel;
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerCancel);
+    window.addEventListener("keydown", onKeyDown, true);
   }
 
   const panOriginRef = useRef<LiveCanvasGeometry | undefined>(undefined);
@@ -1129,19 +1237,8 @@ function SpatialObjectCard({
         } as object)
       : panResponder.panHandlers;
 
-  const fitted = fittedCanvasCardSize(geometry, {
-    selected,
-    sceneCard: isSceneCard,
-    zoom: viewport.zoom,
-    detailLines: selected ? 2 : 3,
-    hasActionRow: selected && isSceneCard,
-    hasHint: false
-  });
-
-  const worldWidth = Math.max(fitted.width, geometry.width);
-  const worldHeight = Math.max(fitted.height, geometry.height);
-  const screenWidth = worldWidth * viewport.zoom;
-  const screenHeight = worldHeight * viewport.zoom;
+  const screenWidth = geometry.width * viewport.zoom;
+  const screenHeight = geometry.height * viewport.zoom;
   const resizeEdges: readonly ResizeEdge[] = [
     "n",
     "s",
@@ -1156,7 +1253,7 @@ function SpatialObjectCard({
   return (
     <View
       {...webPointer}
-      accessibilityLabel={`${objectKindLabel(object)} ${object.label}${
+      accessibilityLabel={`${objectKindLabel(object)} ${title}${
         selected
           ? isSceneCard
             ? ". Selected. Drag to move. Unlock top-left to resize. Side ports connect. Actions bottom-right. Double-click to enter scene."
@@ -1229,12 +1326,17 @@ function SpatialObjectCard({
         >
           {staleLabel ??
           (object.authority === "provisional"
-            ? "Provisional fixture · not confirmed"
+            ? "Provisional · not confirmed"
             : objectKindLabel(object))}
         </Text>
         <Text numberOfLines={2} style={styles.objectTitle}>
-          {object.label}
+          {title}
         </Text>
+        {object.label === title ? null : (
+          <Text numberOfLines={1} style={styles.objectDetail}>
+            Canvas annotation · {object.label}
+          </Text>
+        )}
         <Text numberOfLines={selected ? 2 : 3} style={styles.objectDetail}>
           {detail}
         </Text>
@@ -1243,7 +1345,7 @@ function SpatialObjectCard({
         <View style={styles.cardActionRow}>
           {onOpenDraft !== undefined ? (
             <Pressable
-              accessibilityLabel={`Open Draft for ${object.label}`}
+              accessibilityLabel={`Open Draft for ${title}`}
               accessibilityRole="button"
               onPress={(event) => {
                 event.stopPropagation();
@@ -1259,7 +1361,7 @@ function SpatialObjectCard({
           ) : null}
           {onOpenSplit !== undefined ? (
             <Pressable
-              accessibilityLabel={`Open Split for ${object.label}`}
+              accessibilityLabel={`Open Split for ${title}`}
               accessibilityRole="button"
               onPress={(event) => {
                 event.stopPropagation();
@@ -1275,7 +1377,7 @@ function SpatialObjectCard({
           ) : null}
           {onDrillIntoScene !== undefined ? (
             <Pressable
-              accessibilityLabel={`Enter scene layer for ${object.label}`}
+              accessibilityLabel={`Enter scene layer for ${title}`}
               accessibilityRole="button"
               onPress={(event) => {
                 event.stopPropagation();
@@ -1296,7 +1398,7 @@ function SpatialObjectCard({
       object.archivedAt === undefined ? (
         <View style={styles.quickActionRow}>
           <Pressable
-            accessibilityLabel={`Review provisional ${object.label}`}
+            accessibilityLabel={`Review provisional ${title}`}
             accessibilityRole="button"
             onPress={(event) => {
               event.stopPropagation();
@@ -1310,7 +1412,7 @@ function SpatialObjectCard({
             <Text style={styles.quickActionText}>Review</Text>
           </Pressable>
           <Pressable
-            accessibilityLabel={`Dismiss provisional ${object.label}`}
+            accessibilityLabel={`Dismiss provisional ${title}`}
             accessibilityRole="button"
             onPress={(event) => {
               event.stopPropagation();
@@ -1332,8 +1434,8 @@ function SpatialObjectCard({
         <View
           accessibilityLabel={
             resizeLocked
-              ? `Unlock resize for ${object.label}`
-              : `Lock size for ${object.label}`
+              ? `Unlock resize for ${title}`
+              : `Lock size for ${title}`
           }
           accessibilityRole="button"
           {...({
@@ -1362,7 +1464,7 @@ function SpatialObjectCard({
       ) : null}
       {showActions ? (
         <View
-          accessibilityLabel={`Actions for ${object.label}`}
+          accessibilityLabel={`Actions for ${title}`}
           accessibilityRole="button"
           {...({
             onPointerDown: (event: {
@@ -1388,7 +1490,7 @@ function SpatialObjectCard({
         ? ATTACH_SIDES.map((side) => (
             <View
               key={side}
-              accessibilityLabel={`Connect from ${side} of ${object.label}`}
+              accessibilityLabel={`Connect from ${side} of ${title}`}
               accessibilityRole="button"
               {...({
                 onPointerDown: (event: {
@@ -1414,10 +1516,10 @@ function SpatialObjectCard({
       {canResize && showChrome
         ? resizeEdges.map((edge) => (
             <View
+              accessibilityElementsHidden
               key={edge}
-              accessibilityLabel={`Resize ${object.label} from ${edge}`}
-              accessibilityRole="button"
               {...({
+                "aria-hidden": true,
                 onPointerDown: (event: {
                   button?: number;
                   clientX: number;
@@ -1489,10 +1591,12 @@ function ReadingSpine({
   project,
   workspace,
   onSelectObject,
-  onSelectScene
+  onSelectScene,
+  scope
 }: Readonly<{
   project: ProjectNavigator;
   workspace: CanvasWorkspaceResponse;
+  scope: CanvasDrillScope;
   onSelectObject(objectId: CanvasObjectId): void;
   onSelectScene(sceneId: SceneId): void;
 }>) {
@@ -1500,7 +1604,12 @@ function ReadingSpine({
   const [hoveredSceneId, setHoveredSceneId] = useState<SceneId>();
   const scenes = new Map(allScenes(project).map((scene) => [scene.id, scene]));
   const bookById = new Map(project.books.map((book) => [book.id, book]));
-  const count = workspace.spine.entries.length;
+  const [wholeStory, setWholeStory] = useState(false);
+  const entries = wholeStory || scope.kind === "project" ? workspace.spine.entries
+    : workspace.spine.entries.filter(entry => scope.kind === "chapter"
+      ? entry.chapterId === scope.chapterId
+      : scope.chapterId !== undefined ? entry.chapterId === scope.chapterId : entry.sceneId === scope.sceneId);
+  const count = entries.length;
 
   function cycleChrome(): void {
     setChrome((current) =>
@@ -1522,6 +1631,10 @@ function ReadingSpine({
       ]}
     >
       <View style={styles.spineHeading}>
+        {scope.kind === "project" ? null : <CanvasButton
+          label={wholeStory ? "Whole story · show this chapter" : "This chapter · show whole story"}
+          onPress={() => setWholeStory(value => !value)}
+        />}
         <Pressable
           accessibilityLabel={`Reading-order spine, ${count} scenes. Activate to change size.`}
           accessibilityRole="button"
@@ -1542,7 +1655,7 @@ function ReadingSpine({
           </Text>
         ) : null}
       </View>
-      {chrome === "minimized" ? null : workspace.spine.entries.length === 0 ? (
+      {chrome === "minimized" ? null : entries.length === 0 ? (
         <Text style={styles.spineEmpty}>
           Create a scene to begin the canonical reading spine.
         </Text>
@@ -1555,7 +1668,7 @@ function ReadingSpine({
           horizontal
           showsHorizontalScrollIndicator={chrome === "expanded"}
         >
-          {workspace.spine.entries.map((entry) => {
+          {entries.map((entry) => {
             const scene = scenes.get(entry.sceneId);
             const book = bookById.get(entry.bookId);
             const staleLabel = entry.archived
@@ -1678,7 +1791,6 @@ function canvasHistoryTime(value: string): string {
 export function StoryCanvasPanel({
   project,
   workspace,
-  preference,
   history,
   historyLoading = false,
   recentActions = [],
@@ -1690,11 +1802,13 @@ export function StoryCanvasPanel({
   busy = false,
   condensed = false,
   saveState = "saved",
-  message: _message,
+  message,
   onCommand,
+  onStoryContextCommand,
+  onStoryContextDirtyChange,
   onCreateScene,
   onLoadHistory,
-  onPreferenceChange,
+  onLoadOlderHistory = () => Promise.resolve(),
   onReload,
   onRestoreRevision,
   onSelectObject,
@@ -1706,22 +1820,34 @@ export function StoryCanvasPanel({
   workflowLens = "outline",
   onWorkflowLensChange,
   onDrillBack = () => undefined,
+  onDrillTo = () => undefined,
+  getScopeViewState = () => undefined,
+  onScopeViewStateChange = () => undefined,
   onDrillIntoChapter = () => undefined,
   onDrillIntoScene = () => undefined
 }: StoryCanvasPanelProps) {
   // Match workspace narrow breakpoint so ordered Canvas and shell modes agree.
   const compact = useWindowDimensions().width < 760;
-  const [view, setView] = useState<CanvasView>(compact ? "outline" : "spatial");
-  const [viewport, setViewport] = useState<CanvasViewport>({
-    x: 0,
-    y: 0,
-    zoom: 1
-  });
+  const drillScope = currentDrillScope(drillStack);
+  const drillScopeKey = canvasDrillScopeKey(drillScope);
+  const orderedWindowKey = `${drillScopeKey}:${workflowLens}`;
+  const initialViewState = getScopeViewState(drillScope);
+  const [view, setView] = useState<CanvasView>(
+    compact ? "outline" : (initialViewState?.viewMode ?? "spatial")
+  );
+  const [viewport, setViewport] = useState<CanvasViewport>(
+    initialViewState?.viewport ?? { x: 0, y: 0, zoom: 1 }
+  );
   const [surfaceSize, setSurfaceSize] = useState<CanvasViewportSize>({
     width: 900,
     height: 560
   });
-  const [showInspector, setShowInspector] = useState(false);
+  const [showInspector, setShowInspector] = useState(
+    initialViewState?.inspectorOpen ?? false
+  );
+  const [storyContextDirty, setStoryContextDirty] = useState(false);
+  const [storyContextNavigationMessage, setStoryContextNavigationMessage] =
+    useState<string>();
   const [activeTool, setActiveTool] = useState<CanvasTool>("select");
   const [spaceHeld, setSpaceHeld] = useState(false);
   const [draggingObject, setDraggingObject] = useState(false);
@@ -1745,6 +1871,15 @@ export function StoryCanvasPanel({
     | undefined
   >();
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchArchive, setSearchArchive] = useState(false);
+  const [membershipDestinationQuery, setMembershipDestinationQuery] =
+    useState("");
+  const [orderedPage, setOrderedPage] = useState(() => ({
+    key: orderedWindowKey,
+    limit: 100
+  }));
+  const orderedLimit =
+    orderedPage.key === orderedWindowKey ? orderedPage.limit : 100;
   const [showSceneForm, setShowSceneForm] = useState(false);
   const [showHistoryUncontrolled, setShowHistoryUncontrolled] = useState(false);
   const showHistory = historyOpen ?? showHistoryUncontrolled;
@@ -1782,16 +1917,24 @@ export function StoryCanvasPanel({
     () => new Map<CanvasObjectId, LiveCanvasGeometry>()
   );
   const animationFrameRef = useRef<number | undefined>(undefined);
-  const viewportByScopeRef = useRef(new Map<string, CanvasViewport>());
-  const drillScope = currentDrillScope(drillStack);
-  const previousDrillKeyRef = useRef(canvasDrillScopeKey(drillScope));
+  const previousDrillScopeRef = useRef(drillScope);
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const showInspectorRef = useRef(showInspector);
+  showInspectorRef.current = showInspector;
+  const focusTokenRef = useRef(
+    initialViewState?.focusToken ??
+      (initialViewState?.inspectorOpen === true ? "inspector" : "surface")
+  );
+  const getScopeViewStateRef = useRef(getScopeViewState);
+  getScopeViewStateRef.current = getScopeViewState;
+  const onScopeViewStateChangeRef = useRef(onScopeViewStateChange);
+  onScopeViewStateChangeRef.current = onScopeViewStateChange;
+  const onLoadHistoryRef = useRef(onLoadHistory);
+  onLoadHistoryRef.current = onLoadHistory;
   const panOriginRef = useRef(viewport);
-  const viewportPersistTimerRef = useRef<
-    ReturnType<typeof setTimeout> | undefined
-  >(undefined);
-  const viewportHydratedRef = useRef(false);
   const cameraInitializedRef = useRef(false);
   const activeToolRef = useRef(activeTool);
   activeToolRef.current = activeTool;
@@ -1812,45 +1955,96 @@ export function StoryCanvasPanel({
     | undefined
   >(undefined);
   const boardPanGestureRef = useRef(false);
-  const selectedObjectIdRef = useRef(selectedObjectId);
-  selectedObjectIdRef.current = selectedObjectId;
-
-  function scheduleViewportPersist(
-    next: CanvasViewport,
-    options: Readonly<{ immediate?: boolean }> = {}
+  function retainPanelViewState(
+    scope: CanvasDrillScope = drillScope,
+    patch: CanvasScopeViewState = {}
   ): void {
-    if (viewportPersistTimerRef.current !== undefined) {
-      clearTimeout(viewportPersistTimerRef.current);
-      viewportPersistTimerRef.current = undefined;
+    onScopeViewStateChangeRef.current(scope, {
+      viewport: viewportRef.current,
+      viewMode: viewRef.current,
+      inspectorOpen: showInspectorRef.current,
+      focusToken: focusTokenRef.current,
+      ...patch
+    });
+  }
+
+  function changeCanvasView(next: CanvasView): void {
+    setView(next);
+    viewRef.current = next;
+    retainPanelViewState(drillScope, { viewMode: next });
+  }
+
+  function changeInspector(open: boolean): void {
+    if (!open && blockDirtyStoryContextNavigation()) return;
+    setShowInspector(open);
+    showInspectorRef.current = open;
+    focusTokenRef.current = open ? "inspector" : "surface";
+    retainPanelViewState(drillScope, {
+      inspectorOpen: open,
+      focusToken: open ? "inspector" : "surface"
+    });
+    restoreCanvasFocus(open ? "inspector" : "surface");
+  }
+
+  function handleStoryContextDirtyChange(dirty: boolean): void {
+    setStoryContextDirty(dirty);
+    if (!dirty) setStoryContextNavigationMessage(undefined);
+    onStoryContextDirtyChange?.(dirty);
+  }
+
+  function blockDirtyStoryContextNavigation(): boolean {
+    if (!storyContextDirty) return false;
+    setStoryContextNavigationMessage(STORY_CONTEXT_DIRTY_NAVIGATION_MESSAGE);
+    return true;
+  }
+
+  function requestSelectScene(sceneId: SceneId): boolean {
+    if (sceneId !== selectedSceneId && blockDirtyStoryContextNavigation()) {
+      return false;
     }
-    const payload = {
-      ...next,
-      selectedObjectId:
-        selectedObjectIdRef.current === undefined
-          ? null
-          : selectedObjectIdRef.current
-    };
-    if (options.immediate) {
-      void onPreferenceChange(payload);
-      return;
-    }
-    viewportPersistTimerRef.current = setTimeout(() => {
-      viewportPersistTimerRef.current = undefined;
-      // Always persist the latest live camera, not the debounced snapshot.
-      void onPreferenceChange({
-        ...viewportRef.current,
-        ...(selectedObjectIdRef.current === undefined
-          ? { selectedObjectId: null }
-          : { selectedObjectId: selectedObjectIdRef.current })
-      });
-    }, 220);
+    onSelectScene(sceneId);
+    return true;
+  }
+
+  function requestDrillTo(scope: CanvasDrillScope): boolean {
+    if (blockDirtyStoryContextNavigation()) return false;
+    onDrillTo(scope);
+    return true;
+  }
+
+  function requestDrillBack(): void {
+    if (!blockDirtyStoryContextNavigation()) onDrillBack();
+  }
+
+  function requestDrillIntoChapter(
+    scope: Extract<CanvasDrillScope, { kind: "chapter" }>
+  ): void {
+    if (!blockDirtyStoryContextNavigation()) onDrillIntoChapter(scope);
+  }
+
+  function requestWorkflowLensChange(lens: CanvasWorkflowLens): void {
+    if (lens !== workflowLens && blockDirtyStoryContextNavigation()) return;
+    onWorkflowLensChange?.(lens);
+  }
+
+  function restoreCanvasFocus(token: CanvasScopeViewState["focusToken"]): void {
+    if (token === undefined || typeof document === "undefined") return;
+    requestAnimationFrame(() => {
+      const selector =
+        token === "search"
+          ? '[data-testid="canvas-search"]'
+          : token === "inspector"
+            ? '[data-testid="canvas-inspector"]'
+            : "#story-canvas-surface, #story-canvas-ordered";
+      document.querySelector<HTMLElement>(selector)?.focus();
+    });
   }
 
   function applyLiveViewport(next: CanvasViewport): void {
     const normalized = { ...next, zoom: clampCanvasZoom(next.zoom) };
     setViewport(normalized);
     viewportRef.current = normalized;
-    scheduleViewportPersist(normalized);
+    retainPanelViewState(drillScope, { viewport: normalized });
   }
 
   function rememberTouchPoint(
@@ -1885,6 +2079,22 @@ export function StoryCanvasPanel({
     () => new Map(allScenes(project).map((scene) => [scene.id, scene])),
     [project]
   );
+  const activeSceneIds = useMemo(
+    () =>
+      new Set(
+        project.books
+          .filter((book) => book.archivedAt === undefined)
+          .flatMap((book) => [
+            ...book.parts.flatMap((part) =>
+              part.chapters.flatMap((chapter) => chapter.scenes)
+            ),
+            ...book.unassignedScenes
+          ])
+          .filter((scene) => scene.archivedAt === undefined)
+          .map((scene) => scene.id)
+      ),
+    [project]
+  );
   const selectedObject = board?.objects.find(
     (object) => object.id === selectedObjectId
   );
@@ -1899,6 +2109,11 @@ export function StoryCanvasPanel({
   const selectedLink = board?.links.find((link) => link.id === selectedLinkId);
   const activeObjects =
     board?.objects.filter((object) => object.archivedAt === undefined) ?? [];
+  const scopedObjects =
+    board === undefined
+      ? []
+      : filterObjectsForScope(project, board, drillScope);
+  const scopedObjectIds = new Set(scopedObjects.map((object) => object.id));
   const lensProjection =
     board === undefined
       ? undefined
@@ -1925,9 +2140,26 @@ export function StoryCanvasPanel({
     ])
   );
 
-  function resolveLiveObject(object: CanvasObject): CanvasObject {
-    return withLiveCanvasGeometry(object, liveGeometryById.get(object.id));
+  function resolveDisplayObject(object: CanvasObject): CanvasObject {
+    const selected = object.id === selectedObjectId;
+    return displayCanvasObject(object, liveGeometryById.get(object.id), {
+      selected,
+      sceneCard: object.kind === "scene-card",
+      zoom: viewport.zoom,
+      detailLines: selected ? 2 : 3,
+      hasActionRow: selected && object.kind === "scene-card",
+      hasHint: false,
+      displayLabel: canvasObjectTitle(object, project)
+    });
   }
+
+  const displayProjectedObjects = projectedObjects.map(resolveDisplayObject);
+  const selectedRenderedObject =
+    selectedObjectDisplay === undefined
+      ? undefined
+      : resolveDisplayObject(selectedObjectDisplay);
+  const inspectorGeometry =
+    selectedRenderedObject ?? selectedObjectDisplay ?? selectedObject;
 
   function setLiveGeometry(
     objectId: CanvasObjectId,
@@ -1974,7 +2206,7 @@ export function StoryCanvasPanel({
   const outline =
     board === undefined || workspace === undefined
       ? []
-      : projectCanvasOutline(board, workspace.spine);
+      : projectCanvasOutline({ ...board, objects: board.objects.map(object => withResolvedGeometry(object, scopePlacements, drillScope)) }, workspace.spine);
   const projectedObjectIds = new Set(
     projectedObjects.map((object) => object.id)
   );
@@ -1983,8 +2215,25 @@ export function StoryCanvasPanel({
       projectedObjectIds.has(item.object.id) ||
       (drillScope.kind === "project" && item.object.archivedAt !== undefined)
   );
+  const orderedSelectionIndex = orderedOutline.findIndex(
+    (item) => item.object.id === selectedObjectId
+  );
+  const orderedWindow = canvasOrderedWindow(
+    orderedOutline,
+    orderedLimit,
+    orderedSelectionIndex
+  );
   const searchResults =
-    board === undefined ? [] : searchCanvasObjects(board.objects, searchQuery);
+    board === undefined
+      ? []
+      : searchCanvasStory(project, board.objects, searchQuery, {
+          includeArchived: searchArchive
+        });
+  const emptyPresentation = canvasEmptyPresentation({
+    lens: workflowLens,
+    scopeKind: drillScope.kind,
+    hiddenByLensCount: lensProjection?.hiddenObjectIds.size ?? 0
+  });
   const chapterAggregates =
     board === undefined || drillScope.kind !== "project"
       ? []
@@ -2009,7 +2258,11 @@ export function StoryCanvasPanel({
     board === undefined || drillScope.kind !== "project"
       ? []
       : chapterBoundOverlays(project, board);
-  const activeSceneCard = projectedObjects.find(
+  const activeSceneCard = scopedObjects.find(
+    (object) =>
+      object.kind === "scene-card" && object.sceneId === selectedSceneId
+  );
+  const selectedSceneCard = board?.objects.find(
     (object) =>
       object.kind === "scene-card" && object.sceneId === selectedSceneId
   );
@@ -2028,6 +2281,10 @@ export function StoryCanvasPanel({
       ? []
       : activeObjects.filter((object) => object.id !== selectedObject.id);
   const selectedScene =
+    selectedSceneId === undefined || !activeSceneIds.has(selectedSceneId)
+      ? undefined
+      : scenes.get(selectedSceneId);
+  const inspectedStoryContextScene =
     selectedSceneId === undefined ? undefined : scenes.get(selectedSceneId);
   const selectedSpineEntry =
     selectedObject?.sceneId === undefined
@@ -2035,14 +2292,61 @@ export function StoryCanvasPanel({
       : workspace?.spine.entries.find(
           (entry) => entry.sceneId === selectedObject.sceneId
         );
-  const availableKnowledge = useMemo(
-    () =>
-      board === undefined ? [] : availableCanvasStoryKnowledge(project, board),
-    [board, project]
-  );
+  const availableKnowledge = project.storyKnowledge.filter((knowledge) => {
+    if (knowledge.archivedAt !== undefined) return false;
+    const card = board?.objects.find(
+      (object) =>
+        object.kind === "story-knowledge-card" &&
+        object.storyKnowledgeId === knowledge.id
+    );
+    if (card === undefined) return true;
+    if (card.archivedAt !== undefined || card.dismissedAt !== undefined) {
+      return false;
+    }
+    return !scopedObjectIds.has(card.id);
+  });
   const selectedKnowledgeTarget = availableKnowledge.find(
     (knowledge) => knowledge.id === selectedKnowledgeTargetId
   );
+  const selectedKnowledgeCard =
+    selectedKnowledgeTarget === undefined
+      ? undefined
+      : board?.objects.find(
+          (object) =>
+            object.kind === "story-knowledge-card" &&
+            object.storyKnowledgeId === selectedKnowledgeTarget.id &&
+            object.archivedAt === undefined &&
+            object.dismissedAt === undefined
+        );
+  const currentScopeReference = canvasScopeRefFromDrill(drillScope);
+  const currentExplicitMembership =
+    drillScope.kind === "project" || selectedObject === undefined
+      ? undefined
+      : scopePlacements.find(
+          (placement) =>
+            placement.objectId === selectedObject.id &&
+            placement.scopeKind === currentScopeReference.scopeKind &&
+            placement.scopeId === currentScopeReference.scopeId &&
+            placement.membership === "explicit"
+        );
+  const currentScopeMembershipKey =
+    drillScope.kind === "project"
+      ? undefined
+      : `${drillScope.kind}:${
+          drillScope.kind === "chapter" ? drillScope.chapterId : drillScope.sceneId
+        }`;
+  const selectedExplicitMemberships =
+    selectedObject === undefined
+      ? []
+      : canvasExplicitMemberships(project, scopePlacements, selectedObject.id);
+  const otherExplicitMemberships = selectedExplicitMemberships.filter(
+    (membership) => membership.key !== currentScopeMembershipKey
+  );
+  const membershipDestinations = canvasMembershipDestinations(
+    project,
+    membershipDestinationQuery
+  );
+  const currentScopeTitle = canvasScopeTitle(project, drillScope);
   const priorCanvasSnapshots =
     history?.revisions.filter(
       (revision) => board !== undefined && revision.boardVersion < board.version
@@ -2050,10 +2354,13 @@ export function StoryCanvasPanel({
 
   useEffect(() => {
     if (compact) {
-      setView("outline");
-      setShowInspector(false);
+      changeCanvasView("outline");
     }
   }, [compact]);
+
+  useEffect(() => {
+    setMembershipDestinationQuery("");
+  }, [project.id, selectedObjectId]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -2063,12 +2370,48 @@ export function StoryCanvasPanel({
       Boolean(target?.isContentEditable);
 
     const chooseTool = (event: KeyboardEvent): void => {
+      if (event.key === "Escape" && (showInspector || showSceneForm || showHistory ||
+          contextMenu !== undefined || pendingLink !== undefined || linkDrag !== undefined || activeTool !== "select")) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (contextMenu !== undefined) setContextMenu(undefined);
+        else if (pendingLink !== undefined || linkDrag !== undefined) {
+          setPendingLink(undefined); setLinkDrag(undefined); setLinkDropTargetId(undefined);
+        } else if (showSceneForm) setShowSceneForm(false);
+        else if (showHistory) { setShowHistory(false); setConfirmHistoryRestore(false); }
+        else if (showInspector) changeInspector(false);
+        else setActiveTool("select");
+        if (
+          showInspector &&
+          (contextMenu !== undefined ||
+            pendingLink !== undefined ||
+            linkDrag !== undefined ||
+            showSceneForm ||
+            showHistory)
+        ) {
+          restoreCanvasFocus("inspector");
+        } else if (!showInspector) {
+          restoreCanvasFocus("surface");
+        }
+        return;
+      }
       const target = event.target as HTMLElement | null;
       if (
         typingTarget(target) ||
         event.metaKey ||
         event.ctrlKey ||
         event.altKey
+      ) {
+        return;
+      }
+      if (
+        showSceneForm ||
+        showHistory ||
+        contextMenu !== undefined ||
+        pendingLink !== undefined ||
+        linkDrag !== undefined ||
+        activeTool === "story" ||
+        (compact && showInspector)
       ) {
         return;
       }
@@ -2079,7 +2422,7 @@ export function StoryCanvasPanel({
       }
       if (event.key === "]") {
         event.preventDefault();
-        setShowInspector((current) => !current);
+        changeInspector(!showInspectorRef.current);
         return;
       }
       if (event.key === "+" || event.key === "=") {
@@ -2098,7 +2441,7 @@ export function StoryCanvasPanel({
         });
         return;
       }
-      if (event.key === "1" && event.shiftKey) {
+      if ((event.code === "Digit1" || event.key === "1" || event.key === "!") && event.shiftKey) {
         event.preventDefault();
         if (selectedObjectDisplay !== undefined) {
           changeViewport(
@@ -2107,7 +2450,7 @@ export function StoryCanvasPanel({
         }
         return;
       }
-      if (event.key === "2" && event.shiftKey) {
+      if ((event.code === "Digit2" || event.key === "2" || event.key === "@") && event.shiftKey) {
         event.preventDefault();
         changeViewport(fitCanvasObjects(projectedObjects, surfaceSize));
         return;
@@ -2115,7 +2458,7 @@ export function StoryCanvasPanel({
       if (event.key === "/") {
         event.preventDefault();
         const search = document.querySelector<HTMLInputElement>(
-          '[aria-label="Search or jump on Canvas"]'
+          '[data-testid="canvas-search"]'
         );
         search?.focus();
         return;
@@ -2130,17 +2473,6 @@ export function StoryCanvasPanel({
         r: "region",
         l: "connect"
       };
-      if (event.key === "Escape") {
-        setActiveTool("select");
-        setShowSceneForm(false);
-        setShowHistory(false);
-        setConfirmHistoryRestore(false);
-        setContextMenu(undefined);
-        setLinkDrag(undefined);
-        setLinkDropTargetId(undefined);
-        setPendingLink(undefined);
-        return;
-      }
       const tool = toolByKey[event.key.toLocaleLowerCase()];
       if (tool === undefined) return;
       event.preventDefault();
@@ -2151,10 +2483,10 @@ export function StoryCanvasPanel({
         setSpaceHeld(false);
       }
     };
-    document.addEventListener("keydown", chooseTool);
+    document.addEventListener("keydown", chooseTool, true);
     document.addEventListener("keyup", releaseSpace);
     return () => {
-      document.removeEventListener("keydown", chooseTool);
+      document.removeEventListener("keydown", chooseTool, true);
       document.removeEventListener("keyup", releaseSpace);
     };
   });
@@ -2162,57 +2494,48 @@ export function StoryCanvasPanel({
   useEffect(() => {
     if (workflowLens === "review") {
       setShowHistory(true);
-      void onLoadHistory();
+      void onLoadHistoryRef.current();
     }
-  }, [onLoadHistory, workflowLens]);
+  }, [workflowLens]);
 
   useEffect(() => {
-    viewportHydratedRef.current = false;
     cameraInitializedRef.current = false;
-    viewportByScopeRef.current.clear();
+    previousDrillScopeRef.current = drillScope;
   }, [project.id]);
-
-  // Hydrate the camera once from saved preference. Never re-apply later —
-  // persist echoes used to snap the board back mid pan/zoom.
-  useEffect(() => {
-    if (viewportHydratedRef.current) return;
-    if (preference === undefined || preference === null) return;
-    viewportHydratedRef.current = true;
-    const next = {
-      x: preference.x,
-      y: preference.y,
-      zoom: clampCanvasZoom(preference.zoom)
-    };
-    setViewport(next);
-    viewportRef.current = next;
-    viewportByScopeRef.current.set(
-      canvasDrillScopeKey(drillScope),
-      next
-    );
-  }, [drillScope, preference]);
 
   useEffect(() => {
     if (board === undefined || surfaceSize.width <= 0 || surfaceSize.height <= 0) {
       return;
     }
     const drillKey = canvasDrillScopeKey(drillScope);
-    const previousKey = previousDrillKeyRef.current;
+    const previousScope = previousDrillScopeRef.current;
+    const previousKey = canvasDrillScopeKey(previousScope);
     const scopeChanged = previousKey !== drillKey;
 
     // Same Map lens: keep the writer's live camera. Surface resizes and board
     // refreshes must not animate back to a stale fit target.
     if (cameraInitializedRef.current && !scopeChanged) {
-      viewportByScopeRef.current.set(drillKey, viewportRef.current);
+      retainPanelViewState(drillScope);
       return;
     }
 
     if (scopeChanged) {
-      viewportByScopeRef.current.set(previousKey, viewportRef.current);
-      previousDrillKeyRef.current = drillKey;
+      retainPanelViewState(previousScope);
+      previousDrillScopeRef.current = drillScope;
     }
     cameraInitializedRef.current = true;
 
-    const restored = viewportByScopeRef.current.get(drillKey);
+    const retained = getScopeViewStateRef.current(drillScope);
+    const restored = retained?.viewport;
+    const restoredView = compact ? "outline" : (retained?.viewMode ?? "spatial");
+    setView(restoredView);
+    viewRef.current = restoredView;
+    const restoredInspector = retained?.inspectorOpen ?? false;
+    setShowInspector(restoredInspector);
+    showInspectorRef.current = restoredInspector;
+    focusTokenRef.current =
+      retained?.focusToken ?? (restoredInspector ? "inspector" : "surface");
+    restoreCanvasFocus(focusTokenRef.current);
     const target =
       restored ??
       targetViewportForDrillScope(project, board, drillScope, surfaceSize);
@@ -2226,8 +2549,7 @@ export function StoryCanvasPanel({
     const commitTarget = (next: CanvasViewport): void => {
       setViewport(next);
       viewportRef.current = next;
-      viewportByScopeRef.current.set(drillKey, next);
-      scheduleViewportPersist(next, { immediate: true });
+      retainPanelViewState(drillScope, { viewport: next });
     };
 
     if (readPrefersReducedMotion() || !scopeChanged) {
@@ -2266,6 +2588,13 @@ export function StoryCanvasPanel({
       }
     };
   }, [board, drillScope, project, surfaceSize.height, surfaceSize.width]);
+
+  useEffect(
+    () => () => {
+      retainPanelViewState(previousDrillScopeRef.current);
+    },
+    []
+  );
 
   useEffect(() => {
     setObjectLabel(selectedObject?.label ?? "");
@@ -2320,8 +2649,63 @@ export function StoryCanvasPanel({
     );
   }
 
-  async function sendCommand(command: CanvasCommand): Promise<void> {
-    await onCommand(command);
+  async function sendCommand(command: CanvasCommand): Promise<boolean> {
+    try {
+      return await onCommand(command.type === "canvas.object.create" || command.type === "canvas.object.place"
+        ? { ...command, scope: canvasScopeRefFromDrill(drillScope) }
+        : command);
+    } finally {
+      if (command.type === "canvas.object.move" || command.type === "canvas.object.resize" ||
+          command.type === "canvas.object.setScopePlacement") {
+        setLiveGeometry(command.objectId, undefined);
+      }
+    }
+  }
+
+  async function setObjectScopeMembership(
+    object: CanvasObject,
+    scope: Extract<CanvasDrillScope, { kind: "chapter" | "scene" }>,
+    member: boolean,
+    navigateAfterInclude = false
+  ): Promise<boolean> {
+    if (navigateAfterInclude && blockDirtyStoryContextNavigation()) return false;
+    const scopeReference = canvasScopeRefFromDrill(scope);
+    const acknowledged = await sendCommand({
+      type: "canvas.object.setScopeMembership",
+      objectId: object.id,
+      ...scopeReference,
+      member
+    });
+    if (!acknowledged || !member) return acknowledged;
+
+    const target = withResolvedGeometry(object, scopePlacements, scope);
+    const targetViewport = fitCanvasObjects([target], surfaceSize);
+    onSelectObject(object.id);
+    requestWorkflowLensChange("outline");
+    if (navigateAfterInclude) {
+      retainPanelViewState(scope, {
+        viewport: targetViewport,
+        viewMode: compact ? "outline" : "spatial",
+        inspectorOpen: true,
+        focusToken: "inspector",
+        selectedObjectId: object.id,
+        inspectedSceneId: object.sceneId,
+        workflowLens: "outline"
+      });
+      requestDrillTo(scope);
+      return true;
+    }
+    changeCanvasView(compact ? "outline" : "spatial");
+    changeInspector(true);
+    changeViewport(targetViewport);
+    return true;
+  }
+
+  async function includeObjectAtDestination(
+    object: CanvasObject,
+    destination: CanvasMembershipDestination
+  ): Promise<void> {
+    await setObjectScopeMembership(object, destination.scope, true, true);
   }
 
   async function moveObject(
@@ -2358,26 +2742,25 @@ export function StoryCanvasPanel({
     if (object.sceneId === undefined) return;
     const scope = sceneDrillScope(project, object.sceneId);
     if (scope === undefined) return;
+    if (blockDirtyStoryContextNavigation()) return;
     onSelectScene(object.sceneId);
     onDrillIntoScene(scope);
   }
 
   function selectObject(object: CanvasObject): void {
+    if (
+      object.id !== selectedObjectId &&
+      blockDirtyStoryContextNavigation()
+    ) return;
     onSelectObject(object.id);
-    if (object.sceneId !== undefined) onSelectScene(object.sceneId);
-    if (compact) setShowInspector(true);
-    // Persist selection against the live camera — never a stale React viewport.
-    void onPreferenceChange({
-      ...viewportRef.current,
-      selectedObjectId: object.id
-    });
+    if (compact) changeInspector(true);
   }
 
   function changeViewport(next: CanvasViewport): void {
     const normalized = { ...next, zoom: clampCanvasZoom(next.zoom) };
     setViewport(normalized);
     viewportRef.current = normalized;
-    scheduleViewportPersist(normalized, { immediate: true });
+    retainPanelViewState(drillScope, { viewport: normalized });
   }
 
   useEffect(() => {
@@ -2445,7 +2828,12 @@ export function StoryCanvasPanel({
       case "note":
       case "image":
       case "region":
-        // Armed for click-to-place on the board (no auto grid drop).
+        if (compact) {
+          if (tool === "note") createNote();
+          else if (tool === "image") createImagePlaceholder();
+          else createRegion();
+          setActiveTool("select");
+        }
         break;
       case "story":
         break;
@@ -2488,9 +2876,40 @@ export function StoryCanvasPanel({
     return true;
   }
 
-  function jumpToObject(object: CanvasObject): void {
+  function jumpToObject(
+    object: CanvasObject,
+    options: Readonly<{ openInspector?: boolean }> = {}
+  ): void {
+    if (
+      object.id !== selectedObjectId &&
+      blockDirtyStoryContextNavigation()
+    ) return;
     selectObject(object);
-    setView(compact ? "outline" : "spatial");
+    if (!projectedObjectIds.has(object.id)) {
+      const targetScope: CanvasDrillScope = { kind: "project" };
+      const targetFocus =
+        compact || options.openInspector === true ? "inspector" : "surface";
+      const targetViewport = fitCanvasObjects(
+        [withResolvedGeometry(object, scopePlacements, targetScope)],
+        surfaceSize
+      );
+      retainPanelViewState(targetScope, {
+        viewport: targetViewport,
+        viewMode: compact ? "outline" : "spatial",
+        inspectorOpen: compact || options.openInspector === true,
+        focusToken: targetFocus,
+        selectedObjectId: object.id,
+        inspectedSceneId: object.sceneId,
+        workflowLens: "outline"
+      });
+      focusTokenRef.current = targetFocus;
+      if (!requestDrillTo(targetScope)) return;
+      requestWorkflowLensChange("outline");
+      restoreCanvasFocus(targetFocus);
+      return;
+    }
+    if (options.openInspector === true) changeInspector(true);
+    changeCanvasView(compact ? "outline" : "spatial");
     changeViewport(
       fitCanvasObjects([withResolvedGeometry(object, scopePlacements, drillScope)], surfaceSize)
     );
@@ -2552,13 +2971,22 @@ export function StoryCanvasPanel({
     });
   }
 
-  function placeSelectedScene(): void {
-    if (selectedScene === undefined || activeSceneCard !== undefined) return;
+  async function placeSelectedScene(): Promise<boolean> {
+    if (selectedScene === undefined || activeSceneCard !== undefined) return false;
+    if (
+      selectedSceneCard !== undefined &&
+      selectedSceneCard.archivedAt === undefined &&
+      selectedSceneCard.dismissedAt === undefined &&
+      drillScope.kind !== "project"
+    ) {
+      return setObjectScopeMembership(selectedSceneCard, drillScope, true);
+    }
+    if (selectedSceneCard !== undefined) return false;
     const position = defaultPosition();
     const spineEntry = workspace?.spine.entries.find(
       (entry) => entry.sceneId === selectedScene.id
     );
-    void sendCommand({
+    return sendCommand({
       type: "canvas.object.place",
       object: {
         kind: "scene-card",
@@ -2576,10 +3004,13 @@ export function StoryCanvasPanel({
     });
   }
 
-  function placeSelectedKnowledge(): void {
-    if (selectedKnowledgeTarget === undefined) return;
+  async function placeSelectedKnowledge(): Promise<boolean> {
+    if (selectedKnowledgeTarget === undefined) return false;
+    if (selectedKnowledgeCard !== undefined && drillScope.kind !== "project") {
+      return setObjectScopeMembership(selectedKnowledgeCard, drillScope, true);
+    }
     const position = defaultPosition();
-    void sendCommand({
+    return sendCommand({
       type: "canvas.object.place",
       object: {
         kind: "story-knowledge-card",
@@ -2652,7 +3083,7 @@ export function StoryCanvasPanel({
 
   function reviewObject(object: CanvasObject): void {
     selectObject(object);
-    setShowInspector(true);
+    changeInspector(true);
   }
 
   async function dismissObject(object: CanvasObject): Promise<void> {
@@ -2705,6 +3136,7 @@ export function StoryCanvasPanel({
     createLinkBetween(fromId, toId, authority);
     setPendingLink(undefined);
     setActiveTool("select");
+    restoreCanvasFocus(showInspector ? "inspector" : "surface");
   }
 
   const boardPanResponder = useMemo(
@@ -2787,24 +3219,16 @@ export function StoryCanvasPanel({
     object: CanvasObject,
     next: Readonly<{ x: number; y: number; width: number; height: number }>
   ): void {
-    const moved = next.x !== object.x || next.y !== object.y;
-    const resized =
-      next.width !== object.width || next.height !== object.height;
-    if (moved) {
-      void moveObject(object, next.x, next.y);
-    }
-    if (resized) {
-      void sendCommand({
-        type: "canvas.object.resize",
-        objectId: object.id,
-        width: next.width,
-        height: next.height
-      });
-    }
+    void sendCommand({
+      type: "canvas.object.setScopePlacement",
+      objectId: object.id,
+      ...canvasScopeRefFromDrill(drillScope),
+      ...next
+    });
   }
 
-  const projectedObjectsRef = useRef(projectedObjects);
-  projectedObjectsRef.current = projectedObjects;
+  const projectedObjectsRef = useRef(displayProjectedObjects);
+  projectedObjectsRef.current = displayProjectedObjects;
   const linkDragRef = useRef(linkDrag);
   linkDragRef.current = linkDrag;
 
@@ -2876,11 +3300,28 @@ export function StoryCanvasPanel({
         point?.y ?? fallback?.y ?? 0
       );
     };
+    const handlePointerCancel = (): void => {
+      setLinkDrag(undefined);
+      setLinkDropTargetId(undefined);
+      setPendingLink(undefined);
+      setActiveTool("select");
+    };
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      handlePointerCancel();
+      restoreCanvasFocus("surface");
+    };
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerCancel);
+    window.addEventListener("keydown", handleKeyDown, true);
     return () => {
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
+      window.removeEventListener("keydown", handleKeyDown, true);
     };
   }, [linkDrag?.fromObjectId]);
 
@@ -2908,6 +3349,7 @@ export function StoryCanvasPanel({
       title: sceneTitle.trim(),
       manuscriptPlacement,
       canvas: {
+        scope: canvasScopeRefFromDrill(drillScope),
         x: position.x,
         y: position.y,
         width,
@@ -2924,6 +3366,8 @@ export function StoryCanvasPanel({
       setActiveTool("select");
       if (options.openSplit) {
         onOpenSplit?.(createdSceneId);
+      } else {
+        restoreCanvasFocus(showInspector ? "inspector" : "surface");
       }
     }
   }
@@ -2942,24 +3386,55 @@ export function StoryCanvasPanel({
     scenePlacement.length > 0 &&
     parseStoryOrderHint(sceneStoryOrderHint) !== undefined;
 
+  const canvasStoryContext =
+    inspectedStoryContextScene === undefined ||
+    onStoryContextCommand === undefined ? null : (
+      <View style={styles.storyContextSection}>
+        <StoryContextCompanion
+          busy={busy}
+          key={inspectedStoryContextScene.id}
+          onCommand={onStoryContextCommand}
+          onDirtyChange={handleStoryContextDirtyChange}
+          onOpenScene={(sceneId) => {
+            requestSelectScene(sceneId);
+          }}
+          project={project}
+          sceneId={inspectedStoryContextScene.id}
+        />
+      </View>
+    );
+
   let inspector: ReactNode = null;
   if (showInspector) {
     inspector = (
       <View
         accessibilityLabel="Canvas inspector"
+        testID="canvas-inspector"
         style={[styles.inspector, (compact || condensed) && styles.inspectorStacked]}
+        {...({ tabIndex: -1 } as object)}
       >
         <View style={styles.inspectorHeading}>
           <Text style={styles.inspectorTitle}>Inspector</Text>
           <CanvasButton
             label="Close inspector"
-            onPress={() => setShowInspector(false)}
+            onPress={() => changeInspector(false)}
           />
         </View>
-        {selectedObject === undefined ? (
-          <Text style={styles.emptyText}>
-            Select a card, note, image reference, or region to inspect it.
+        {storyContextNavigationMessage === undefined ? null : (
+          <Text
+            accessibilityLiveRegion="polite"
+            style={styles.inspectorHelpWarning}
+          >
+            {storyContextNavigationMessage}
           </Text>
+        )}
+        {selectedObject === undefined ? (
+          <>
+            <Text style={styles.emptyText}>
+              Select a card, note, image reference, or region to inspect it.
+            </Text>
+            {canvasStoryContext}
+          </>
         ) : (
           <>
             <View
@@ -2974,7 +3449,7 @@ export function StoryCanvasPanel({
               <Text style={styles.authorityLabel}>
                 {selectedCanonicalState?.label ??
                   (selectedObject.authority === "provisional"
-                    ? "Provisional fixture · not confirmed"
+                    ? "Provisional · not confirmed"
                     : "Confirmed · writer-created")}
               </Text>
               <Text style={styles.authorityMeta}>
@@ -2984,14 +3459,140 @@ export function StoryCanvasPanel({
                   : selectedObject.archivedAt !== undefined
                     ? "archived"
                     : "active"}{" "}
-                · x {Math.round(selectedObject.x)}, y{" "}
-                {Math.round(selectedObject.y)}
+                · rendered scope bounds x {Math.round(inspectorGeometry?.x ?? selectedObject.x)}, y{" "}
+                {Math.round(inspectorGeometry?.y ?? selectedObject.y)} · {Math.round(
+                  inspectorGeometry?.width ?? selectedObject.width
+                )} × {Math.round(inspectorGeometry?.height ?? selectedObject.height)}
               </Text>
             </View>
 
+            <Text style={styles.inspectorTitle}>
+              {canvasObjectTitle(selectedObject, project)}
+            </Text>
+            {canvasStoryContext}
+            {drillScope.kind === "project" ? (
+              <View>
+                <Text style={styles.inspectorSectionTitle}>
+                  Include in another Canvas scope
+                </Text>
+                <Text style={styles.inspectorHelp}>
+                  Reuse this object in a named chapter or scene. Inclusion keeps
+                  the object and its saved geometry; it does not create another
+                  canonical card or change the active Draft.
+                </Text>
+                <Field
+                  disabled={busy || selectedObject.archivedAt !== undefined}
+                  label="Find chapter or scene"
+                  onChangeText={setMembershipDestinationQuery}
+                  placeholder="Search scope title"
+                  value={membershipDestinationQuery}
+                />
+                <Text style={styles.inspectorHelp}>
+                  Showing up to 20 destinations. Refine the search for later
+                  chapters or scenes.
+                </Text>
+                {membershipDestinations.length === 0 ? (
+                  <Text style={styles.emptyText}>
+                    No active chapter or scene matches this search.
+                  </Text>
+                ) : null}
+                <View style={styles.choiceRow}>
+                  {membershipDestinations.map((destination) => {
+                    const included = selectedExplicitMemberships.some(
+                      (membership) => membership.key === destination.key
+                    );
+                    return (
+                      <CanvasButton
+                        disabled={
+                          busy ||
+                          included ||
+                          selectedObject.archivedAt !== undefined ||
+                          selectedObject.dismissedAt !== undefined
+                        }
+                        key={destination.key}
+                        label={
+                          included
+                            ? `Included · ${destination.label}`
+                            : `Include in ${destination.label}`
+                        }
+                        onPress={() =>
+                          void includeObjectAtDestination(
+                            selectedObject,
+                            destination
+                          )
+                        }
+                        selected={included}
+                      />
+                    );
+                  })}
+                </View>
+              </View>
+            ) : (
+              <View>
+                <Text style={styles.inspectorSectionTitle}>
+                  Current scope inclusion
+                </Text>
+                <Text style={styles.inspectorHelp}>
+                  {currentExplicitMembership === undefined
+                    ? "No explicit inclusion marker. A canonical scene or a related Canvas link can still keep this object visible here."
+                    : "Explicitly included here. Removing this marker keeps the object and its scope geometry; a canonical scene or related Canvas link can still keep it visible."}
+                </Text>
+                <CanvasButton
+                  disabled={
+                    busy ||
+                    (currentExplicitMembership === undefined &&
+                      (selectedObject.archivedAt !== undefined ||
+                        selectedObject.dismissedAt !== undefined))
+                  }
+                  label={
+                    currentExplicitMembership === undefined
+                      ? "Include here"
+                      : "Remove explicit inclusion"
+                  }
+                  onPress={() =>
+                    void setObjectScopeMembership(
+                      selectedObject,
+                      drillScope,
+                      currentExplicitMembership === undefined
+                    )
+                  }
+                  selected={currentExplicitMembership !== undefined}
+                />
+              </View>
+            )}
+            {otherExplicitMemberships.length === 0 ? null : (
+              <View>
+                <Text style={styles.inspectorSectionTitle}>
+                  Other explicit inclusions
+                </Text>
+                {otherExplicitMemberships.map((membership) => (
+                  <View key={membership.key} style={styles.historyRow}>
+                    <Text style={styles.historyReason}>{membership.label}</Text>
+                    <Text style={styles.inspectorHelp}>
+                      {membership.available
+                        ? "Saved inclusion and geometry"
+                        : "Historical inclusion; destination is unavailable"}
+                    </Text>
+                    <CanvasButton
+                      disabled={busy}
+                      label="Remove inclusion marker"
+                      onPress={() =>
+                        void sendCommand({
+                          type: "canvas.object.setScopeMembership",
+                          objectId: selectedObject.id,
+                          scopeKind: membership.scopeKind,
+                          scopeId: membership.scopeId,
+                          member: false
+                        })
+                      }
+                    />
+                  </View>
+                ))}
+              </View>
+            )}
             <Field
               disabled={busy || selectedObject.archivedAt !== undefined}
-              label="Selected object label"
+              label="Canvas annotation"
               onChangeText={setObjectLabel}
               value={objectLabel}
             />
@@ -3002,7 +3603,7 @@ export function StoryCanvasPanel({
                   selectedObject.archivedAt !== undefined ||
                   objectLabel.trim().length === 0
                 }
-                label="Save label"
+                label="Save annotation"
                 onPress={() =>
                   void sendCommand({
                     type: "canvas.object.update",
@@ -3016,7 +3617,7 @@ export function StoryCanvasPanel({
                 <CanvasButton
                   danger
                   disabled={busy}
-                  label="Archive object"
+                  label={archiveActionLabel(selectedObject)}
                   onPress={() =>
                     void sendCommand({
                       type: "canvas.object.archive",
@@ -3027,7 +3628,7 @@ export function StoryCanvasPanel({
               ) : (
                 <CanvasButton
                   disabled={busy}
-                  label="Restore object"
+                  label="Restore Canvas placement"
                   onPress={() =>
                     void sendCommand({
                       type: "canvas.object.restore",
@@ -3121,7 +3722,7 @@ export function StoryCanvasPanel({
               />
               <CanvasButton
                 disabled={busy || linkTargetId === undefined}
-                label={`Create provisional ${linkKind} fixture`}
+                label={`Create provisional ${linkKind} link`}
                 onPress={() => createLink("provisional")}
               />
             </View>
@@ -3432,64 +4033,46 @@ export function StoryCanvasPanel({
               ))}
             </View>
 
-            <Text style={styles.inspectorSectionTitle}>Resize</Text>
+            <Text style={styles.inspectorSectionTitle}>
+              Resize with keyboard controls
+            </Text>
+            <Text style={styles.inspectorHelp}>
+              Move one saved edge at a time. Combine a horizontal and vertical
+              edge move for the same result as a corner drag.
+            </Text>
             <View style={styles.actionRow}>
-              <CanvasButton
-                disabled={
-                  busy ||
-                  selectedObject.archivedAt !== undefined ||
-                  selectedObject.width <= OBJECT_RESIZE
-                }
-                label="Narrower"
-                onPress={() =>
-                  void sendCommand({
-                    type: "canvas.object.resize",
-                    objectId: selectedObject.id,
-                    width: selectedObject.width - OBJECT_RESIZE,
-                    height: selectedObject.height
-                  })
-                }
-              />
-              <CanvasButton
-                disabled={busy || selectedObject.archivedAt !== undefined}
-                label="Wider"
-                onPress={() =>
-                  void sendCommand({
-                    type: "canvas.object.resize",
-                    objectId: selectedObject.id,
-                    width: selectedObject.width + OBJECT_RESIZE,
-                    height: selectedObject.height
-                  })
-                }
-              />
-              <CanvasButton
-                disabled={
-                  busy ||
-                  selectedObject.archivedAt !== undefined ||
-                  selectedObject.height <= OBJECT_RESIZE
-                }
-                label="Shorter"
-                onPress={() =>
-                  void sendCommand({
-                    type: "canvas.object.resize",
-                    objectId: selectedObject.id,
-                    width: selectedObject.width,
-                    height: selectedObject.height - OBJECT_RESIZE
-                  })
-                }
-              />
-              <CanvasButton
-                disabled={busy || selectedObject.archivedAt !== undefined}
-                label="Taller"
-                onPress={() =>
-                  void sendCommand({
-                    type: "canvas.object.resize",
-                    objectId: selectedObject.id,
-                    width: selectedObject.width,
-                    height: selectedObject.height + OBJECT_RESIZE
-                  })
-                }
-              />
+              {([
+                ["Move left edge left", "w", -OBJECT_RESIZE, 0],
+                ["Move left edge right", "w", OBJECT_RESIZE, 0],
+                ["Move right edge left", "e", -OBJECT_RESIZE, 0],
+                ["Move right edge right", "e", OBJECT_RESIZE, 0],
+                ["Move top edge up", "n", 0, -OBJECT_RESIZE],
+                ["Move top edge down", "n", 0, OBJECT_RESIZE],
+                ["Move bottom edge up", "s", 0, -OBJECT_RESIZE],
+                ["Move bottom edge down", "s", 0, OBJECT_RESIZE]
+              ] as const).map(([label, edge, dx, dy]) => {
+                const geometry = inspectorGeometry ?? selectedObject;
+                const minimum = minimumCanvasCardSize(geometry, {
+                  selected: true,
+                  sceneCard: selectedObject.kind === "scene-card",
+                  zoom: viewport.zoom,
+                  detailLines: 2,
+                  hasActionRow: selectedObject.kind === "scene-card",
+                  hasHint: false,
+                  displayLabel: canvasObjectTitle(selectedObject, project)
+                });
+                const next = resizeObjectByEdge(
+                  geometry,
+                  edge,
+                  dx,
+                  dy,
+                  minimum
+                );
+                return <CanvasButton key={label} label={label}
+                  disabled={busy || selectedObject.archivedAt !== undefined || liveGeometryEquals(geometry, next)}
+                  onPress={() => resizeObject(selectedObject, next)}
+                />;
+              })}
             </View>
 
             <Text style={styles.inspectorSectionTitle}>Region membership</Text>
@@ -3543,6 +4126,10 @@ export function StoryCanvasPanel({
 
   return (
     <View accessibilityLabel="Story Canvas workspace" style={styles.panel}>
+      {message === undefined ? null : <View accessibilityRole="alert" style={[styles.message, message.kind === "conflict" && styles.messageConflict]}>
+        <Text style={styles.messageText}>{message.text}</Text>
+        <CanvasButton label="Reload saved Canvas" onPress={() => void onReload()} disabled={busy} />
+      </View>}
       <View
         accessibilityLabel="Canvas toolbar"
         style={styles.chromeHeader}
@@ -3551,17 +4138,24 @@ export function StoryCanvasPanel({
           <CanvasIconButton
             glyph="←"
             label="Back to parent Canvas scope · Esc"
-            onPress={() => onDrillBack()}
+            onPress={requestDrillBack}
             tip="Back · Esc"
           />
         ) : null}
+        <Text
+          accessibilityLabel={`Current Canvas scope: ${currentScopeTitle}`}
+          numberOfLines={1}
+          style={styles.scopeTitle}
+        >
+          {currentScopeTitle}
+        </Text>
         <View accessibilityLabel="Canvas tools" style={styles.chromeGroup}>
           {CANVAS_TOOL_DEFINITIONS.map((definition) => (
             <CanvasIconButton
               disabled={
                 busy ||
                 (compact &&
-                  (definition.tool === "hand" || definition.tool === "region"))
+                  definition.tool === "hand")
               }
               glyph={definition.glyph}
               key={definition.tool}
@@ -3586,7 +4180,7 @@ export function StoryCanvasPanel({
                   glyph={LENS_GLYPHS[lens]}
                   key={lens}
                   label={`${label} lens`}
-                  onPress={() => onWorkflowLensChange(lens)}
+                  onPress={() => requestWorkflowLensChange(lens)}
                   selected={workflowLens === lens}
                   tip={`${label} lens`}
                 />
@@ -3603,14 +4197,14 @@ export function StoryCanvasPanel({
               <CanvasIconButton
                 glyph="◫"
                 label="Spatial view"
-                onPress={() => setView("spatial")}
+                onPress={() => changeCanvasView("spatial")}
                 selected={view === "spatial"}
                 tip="Spatial view · board"
               />
               <CanvasIconButton
                 glyph="☰"
                 label="Outline view"
-                onPress={() => setView("outline")}
+                onPress={() => changeCanvasView("outline")}
                 selected={view === "outline"}
                 tip="Outline view · list"
               />
@@ -3618,26 +4212,77 @@ export function StoryCanvasPanel({
           ) : null}
           <View style={styles.searchBox}>
             <TextInput
+              testID="canvas-search"
               accessibilityLabel="Search or jump on Canvas · /"
               onChangeText={setSearchQuery}
+              onFocus={() => {
+                focusTokenRef.current = "search";
+                retainPanelViewState(drillScope, { focusToken: "search" });
+              }}
               placeholder="⌕ /"
               placeholderTextColor={colors.muted}
               style={styles.searchInput}
               value={searchQuery}
               {...({ title: "Jump / search · /" } as object)}
             />
-            {searchResults.length === 0 ? null : (
+            {searchQuery.trim().length === 0 ? null : (
               <View
                 accessibilityLabel="Canvas search results"
                 style={styles.searchResults}
               >
-                {searchResults.slice(0, 8).map((object) => (
+                <View style={styles.choiceRow}>
                   <CanvasButton
-                    key={object.id}
-                    label={`Jump to ${object.label}`}
-                    onPress={() => jumpToObject(object)}
+                    label="Active story only"
+                    onPress={() => setSearchArchive(false)}
+                    selected={!searchArchive}
                   />
-                ))}
+                  <CanvasButton
+                    label="Include archive"
+                    onPress={() => setSearchArchive(true)}
+                    selected={searchArchive}
+                  />
+                </View>
+                {searchResults.length === 0 ? (
+                  <Text style={styles.emptyText}>
+                    {searchArchive
+                      ? "No matching active or archived scenes, story records, or Canvas objects."
+                      : "No active matches. Choose Include archive to search removed records and placements."}
+                  </Text>
+                ) : null}
+                {searchResults.slice(0, 8).map((result) => {
+                  const presentation = canvasSearchPresentation(result);
+                  return (
+                    <CanvasButton
+                      disabled={presentation.disabled}
+                      key={result.key}
+                      label={presentation.label}
+                      onPress={() => {
+                        if (presentation.action === "none") return;
+                        setSearchQuery("");
+                        if (
+                          presentation.action === "inspect-object" &&
+                          result.object !== undefined
+                        ) {
+                          jumpToObject(result.object, {
+                            openInspector: result.archived === true
+                          });
+                        } else if (
+                          presentation.action === "select-scene" &&
+                          result.sceneId !== undefined
+                        ) {
+                          if (!requestSelectScene(result.sceneId)) return;
+                          setShowSceneForm(true);
+                        } else if (
+                          presentation.action === "select-knowledge" &&
+                          result.knowledgeId !== undefined
+                        ) {
+                          setSelectedKnowledgeTargetId(result.knowledgeId);
+                          activateTool("story");
+                        }
+                      }}
+                    />
+                  );
+                })}
               </View>
             )}
           </View>
@@ -3702,7 +4347,7 @@ export function StoryCanvasPanel({
           <CanvasIconButton
             glyph="▥"
             label={showInspector ? "Hide Details · ]" : "Show Details · ]"}
-            onPress={() => setShowInspector(!showInspector)}
+            onPress={() => changeInspector(!showInspector)}
             selected={showInspector}
             tip="Details · ]"
           />
@@ -3721,6 +4366,9 @@ export function StoryCanvasPanel({
           {saveStateLabel(saveState, loading)}
         </Text>
       </View>
+      <Text accessibilityLabel="Current Canvas lens behavior" style={styles.emptyText}>
+        {canvasLensDescription(workflowLens)}
+      </Text>
 
       {pendingLink === undefined ? null : (
         <CanvasModal
@@ -3729,6 +4377,7 @@ export function StoryCanvasPanel({
           onClose={() => {
             setPendingLink(undefined);
             setActiveTool("select");
+            restoreCanvasFocus(showInspector ? "inspector" : "surface");
           }}
           rule="The dashed drag line is not a saved link until you confirm."
           title="Confirm Canvas link"
@@ -3739,9 +4388,11 @@ export function StoryCanvasPanel({
                 onPress={() => {
                   setPendingLink(undefined);
                   setActiveTool("select");
+                  restoreCanvasFocus(showInspector ? "inspector" : "surface");
                 }}
               />
               <CanvasButton
+                disabled={busy}
                 label={`Create ${linkKind} link`}
                 onPress={() => createLink("confirmed")}
                 primary
@@ -3781,6 +4432,7 @@ export function StoryCanvasPanel({
           onClose={() => {
             setShowHistory(false);
             setConfirmHistoryRestore(false);
+            restoreCanvasFocus(showInspector ? "inspector" : "surface");
           }}
           rule="Recent Map actions stay here instead of toasts. Restoring a snapshot creates a new current Canvas; Draft prose and manuscript order stay unchanged."
           title="Recent actions & snapshots"
@@ -3788,7 +4440,10 @@ export function StoryCanvasPanel({
             selectedHistoryRevisionId === undefined ? (
               <CanvasButton
                 label="Close"
-                onPress={() => setShowHistory(false)}
+                onPress={() => {
+                  setShowHistory(false);
+                  restoreCanvasFocus(showInspector ? "inspector" : "surface");
+                }}
               />
             ) : confirmHistoryRestore ? (
               <>
@@ -3857,7 +4512,7 @@ export function StoryCanvasPanel({
           <Text style={[styles.historySectionTitle, styles.historySectionSpaced]}>
             Board snapshots
           </Text>
-          {historyLoading ? (
+          {historyLoading && priorCanvasSnapshots.length === 0 ? (
             <Text style={styles.emptyText}>Loading Canvas history…</Text>
           ) : priorCanvasSnapshots.length === 0 ? (
             <Text style={styles.emptyText}>
@@ -3899,6 +4554,13 @@ export function StoryCanvasPanel({
               ))}
             </View>
           )}
+          {history?.nextBeforeVersion === undefined ? null : (
+            <CanvasButton
+              disabled={historyLoading}
+              label={historyLoading ? "Loading older snapshots…" : "Load older snapshots"}
+              onPress={() => void onLoadOlderHistory()}
+            />
+          )}
           {confirmHistoryRestore ? (
             <Text style={styles.historyConfirm}>
               Restore this Canvas snapshot? A new current Canvas version is created.
@@ -3911,25 +4573,40 @@ export function StoryCanvasPanel({
         <CanvasModal
           accessibilityLabel="Story knowledge placement"
           eyebrow="Canonical story knowledge"
-          onClose={() => setActiveTool("select")}
+          onClose={() => {
+            setActiveTool("select");
+            restoreCanvasFocus(showInspector ? "inspector" : "surface");
+          }}
           rule="Writer placement is confirmed. Archived records are not new targets."
           title="Place an active story record"
           footer={
             <>
               <CanvasButton
                 label="Cancel"
-                onPress={() => setActiveTool("select")}
+                onPress={() => {
+                  setActiveTool("select");
+                  restoreCanvasFocus(showInspector ? "inspector" : "surface");
+                }}
               />
               <CanvasButton
                 disabled={busy || selectedKnowledgeTarget === undefined}
                 label={
                   selectedKnowledgeTarget === undefined
                     ? "Choose story knowledge"
-                    : `Place ${selectedKnowledgeTarget.label} on Canvas`
+                    : selectedKnowledgeCard === undefined
+                      ? `Place ${selectedKnowledgeTarget.label} on Canvas`
+                      : `Include ${selectedKnowledgeTarget.label} here`
                 }
                 onPress={() => {
-                  placeSelectedKnowledge();
-                  setActiveTool("select");
+                  void (async () => {
+                    if (!(await placeSelectedKnowledge())) return;
+                    setActiveTool("select");
+                    restoreCanvasFocus(
+                      showInspector || selectedKnowledgeCard !== undefined
+                        ? "inspector"
+                        : "surface"
+                    );
+                  })();
                 }}
                 primary
               />
@@ -3964,9 +4641,10 @@ export function StoryCanvasPanel({
           onClose={() => {
             setShowSceneForm(false);
             setActiveTool("select");
+            restoreCanvasFocus(showInspector ? "inspector" : "surface");
           }}
-          rule="One acknowledged transaction creates the scene in Canvas and Draft. The board stays put under this dialog."
-          title="Create a scene"
+          rule="Place an existing scene or create a new one in a chosen chapter. Canvas placement never copies or replaces prose."
+          title="Add a scene to Canvas"
           footer={
             <>
               <CanvasButton
@@ -3974,6 +4652,7 @@ export function StoryCanvasPanel({
                 onPress={() => {
                   setShowSceneForm(false);
                   setActiveTool("select");
+                  restoreCanvasFocus(showInspector ? "inspector" : "surface");
                 }}
               />
               {!compact ? (
@@ -3997,17 +4676,39 @@ export function StoryCanvasPanel({
           <View style={styles.actionRow}>
             <CanvasButton
               disabled={
-                busy || selectedScene === undefined || activeSceneCard !== undefined
+                busy ||
+                selectedScene === undefined ||
+                activeSceneCard !== undefined ||
+                (selectedSceneCard !== undefined &&
+                  (drillScope.kind === "project" ||
+                    selectedSceneCard.archivedAt !== undefined ||
+                    selectedSceneCard.dismissedAt !== undefined))
               }
               label={
-                activeSceneCard === undefined
-                  ? "Place selected Draft scene"
-                  : "Selected scene is placed"
+                selectedScene === undefined
+                  ? "Select an existing scene first"
+                  : activeSceneCard !== undefined
+                    ? "Selected scene is visible here"
+                    : selectedSceneCard === undefined
+                      ? `Place ${selectedScene.title}`
+                      : selectedSceneCard.archivedAt !== undefined ||
+                          selectedSceneCard.dismissedAt !== undefined
+                        ? "Restore the existing Canvas placement first"
+                        : drillScope.kind === "project"
+                          ? "Selected scene is placed"
+                          : `Include ${selectedScene.title} here`
               }
               onPress={() => {
-                placeSelectedScene();
-                setShowSceneForm(false);
-                setActiveTool("select");
+                void (async () => {
+                  if (!(await placeSelectedScene())) return;
+                  setShowSceneForm(false);
+                  setActiveTool("select");
+                  restoreCanvasFocus(
+                    showInspector || selectedSceneCard !== undefined
+                      ? "inspector"
+                      : "surface"
+                  );
+                })();
               }}
             />
             {selectedScene !== undefined && !compact ? (
@@ -4023,13 +4724,13 @@ export function StoryCanvasPanel({
           </View>
           <Field
             disabled={busy}
-            label="Canvas scene title"
+            label="New scene title"
             onChangeText={setSceneTitle}
             placeholder="The turn at the lighthouse"
             value={sceneTitle}
           />
           <Text style={styles.fieldLabel}>
-            Explicit book and chapter-or-Unassigned placement
+            New scene destination
           </Text>
           <View style={styles.choiceRow}>
             {listManuscriptHandoffChoices(project).map((choice) => (
@@ -4071,7 +4772,7 @@ export function StoryCanvasPanel({
               accessibilityRole="button"
               key={aggregate.chapterId}
               onPress={() =>
-                onDrillIntoChapter({
+                requestDrillIntoChapter({
                   kind: "chapter",
                   bookId: aggregate.bookId,
                   partId: aggregate.partId,
@@ -4105,9 +4806,13 @@ export function StoryCanvasPanel({
 
       {loading || workspace === undefined || board === undefined ? (
         <View style={styles.loading}>
-          <Text style={styles.emptyTitle}>Opening Story Canvas…</Text>
+          <Text style={styles.emptyTitle}>
+            {loading ? "Opening Story Canvas…" : "Story Canvas could not open"}
+          </Text>
           <Text style={styles.emptyText}>
-            Loading the server-acknowledged board and personal view.
+            {loading
+              ? "Loading the server-acknowledged board and personal view."
+              : "Reload the server-acknowledged board and personal view to try again."}
           </Text>
         </View>
       ) : (
@@ -4234,6 +4939,7 @@ export function StoryCanvasPanel({
                     onLayout={updateSurfaceSize}
                     {...({
                       id: "story-canvas-surface",
+                      tabIndex: -1,
                       onContextMenu: (event: {
                         preventDefault?: () => void;
                         nativeEvent?: {
@@ -4444,10 +5150,10 @@ export function StoryCanvasPanel({
                           accessibilityLabel={`Enter chapter ${overlay.label}`}
                           accessibilityRole="button"
                           key={`${overlay.scope.chapterId}`}
-                          onPress={() => onDrillIntoChapter(overlay.scope)}
+                          onPress={() => requestDrillIntoChapter(overlay.scope)}
                           {...({
                             onDoubleClick: () =>
-                              onDrillIntoChapter(overlay.scope)
+                              requestDrillIntoChapter(overlay.scope)
                           } as object)}
                           style={({ pressed }) => [
                             styles.chapterOverlay,
@@ -4479,10 +5185,10 @@ export function StoryCanvasPanel({
                       }
                       return (
                         <SpatialLink
-                          from={resolveLiveObject(from)}
+                          from={resolveDisplayObject(from)}
                           key={link.id}
                           link={link}
-                          to={resolveLiveObject(to)}
+                          to={resolveDisplayObject(to)}
                           viewport={viewport}
                         />
                       );
@@ -4493,7 +5199,7 @@ export function StoryCanvasPanel({
                           const from = objectById.get(linkDrag.fromObjectId);
                           if (from === undefined) return null;
                           const fromFrame = canvasScreenFrame(
-                            resolveLiveObject(from),
+                            resolveDisplayObject(from),
                             viewport
                           );
                           const origin = attachPointOnFrame(
@@ -4519,12 +5225,15 @@ export function StoryCanvasPanel({
                         <SpatialObjectCard
                           detail={objectDetail(object, scenes, project)}
                           dimmed={lensProjection?.dimmedObjectIds.has(object.id)}
-                          dragEnabled={shouldDragObjects(activeTool, spaceHeld)}
+                          dragEnabled={
+                            !busy && shouldDragObjects(activeTool, spaceHeld)
+                          }
                           key={object.id}
                           linkDropTarget={object.id === linkDropTargetId}
                           linkHandleVisible={!compact}
                           liveGeometry={liveGeometryById.get(object.id)}
                           object={object}
+                          title={canvasObjectTitle(object, project)}
                           onContextMenu={(card, x, y) => {
                             selectObject(card);
                             openContextMenu(x, y, card.id, {
@@ -4538,7 +5247,7 @@ export function StoryCanvasPanel({
                               ? undefined
                               : enterSceneFromObject
                           }
-                          onLinkDragStart={beginLinkDragFromObject}
+                          onLinkDragStart={busy ? undefined : beginLinkDragFromObject}
                           onLiveGeometryChange={setLiveGeometry}
                           onMove={moveObject}
                           onNodeActions={(card, _x, _y) => {
@@ -4565,7 +5274,7 @@ export function StoryCanvasPanel({
                                   }
                                 }
                           }
-                          onResize={resizeObject}
+                          onResize={busy ? undefined : resizeObject}
                           onReview={reviewObject}
                           onSelect={selectObject}
                           onToggleResizeLock={(card) =>
@@ -4583,21 +5292,36 @@ export function StoryCanvasPanel({
                     })}
                     {projectedObjects.length === 0 ? (
                       <View style={styles.surfaceEmpty}>
-                        <Text style={styles.emptyTitle}>An open board</Text>
+                        <Text style={styles.emptyTitle}>
+                          {emptyPresentation.title}
+                        </Text>
                         <Text style={styles.emptyText}>
-                          Click the board with Note, Region, or Image armed — or
-                          right-click for create actions. Scene still needs
-                          placement.
+                          {emptyPresentation.detail}
                         </Text>
                         <View style={styles.actionRow}>
-                          <CanvasButton
-                            label="Arm note · N"
-                            onPress={() => activateTool("note")}
-                          />
-                          <CanvasButton
-                            label="New scene… · S"
-                            onPress={() => activateTool("scene")}
-                          />
+                          {emptyPresentation.resetLens ? (
+                            <CanvasButton
+                              label="Reset Map lens"
+                              onPress={() => requestWorkflowLensChange("outline")}
+                            />
+                          ) : (
+                            <>
+                              <CanvasButton
+                                label="Arm note · N"
+                                onPress={() => activateTool("note")}
+                              />
+                              <CanvasButton
+                                label="Add a scene to Canvas · S"
+                                onPress={() => activateTool("scene")}
+                              />
+                            </>
+                          )}
+                          {emptyPresentation.showWholeStory ? (
+                            <CanvasButton
+                              label="Show whole-story Canvas"
+                              onPress={() => requestDrillTo({ kind: "project" })}
+                            />
+                          ) : null}
                         </View>
                       </View>
                     ) : null}
@@ -4756,7 +5480,7 @@ export function StoryCanvasPanel({
                                       ],
                                       [
                                         "Open Details · ]",
-                                        () => setShowInspector(true)
+                                        () => changeInspector(true)
                                       ],
                                       [
                                         "Bring forward",
@@ -4797,6 +5521,11 @@ export function StoryCanvasPanel({
                                   onPress={() => {
                                     action();
                                     setContextMenu(undefined);
+                                    restoreCanvasFocus(
+                                      showInspector || label === "Open Details · ]"
+                                        ? "inspector"
+                                        : "surface"
+                                    );
                                   }}
                                   style={({ pressed }) => [
                                     styles.contextMenuItem,
@@ -4811,7 +5540,12 @@ export function StoryCanvasPanel({
                               <Pressable
                                 accessibilityLabel="Close context menu"
                                 accessibilityRole="menuitem"
-                                onPress={() => setContextMenu(undefined)}
+                                onPress={() => {
+                                  setContextMenu(undefined);
+                                  restoreCanvasFocus(
+                                    showInspector ? "inspector" : "surface"
+                                  );
+                                }}
                                 style={({ pressed }) => [
                                   styles.contextMenuItem,
                                   pressed && styles.pressed
@@ -4830,12 +5564,17 @@ export function StoryCanvasPanel({
                   </View>
                 </View>
               ) : (
-                <View accessibilityLabel="Ordered Canvas outline" style={styles.outline}>
-                  <View style={styles.outlineHeading}>
+                <View
+                  accessibilityLabel="Ordered Canvas outline"
+                  nativeID="story-canvas-ordered"
+                  style={styles.outline}
+                  {...({ id: "story-canvas-ordered", tabIndex: -1 } as object)}
+                >
+                  <View style={[styles.outlineHeading, compact && { flexDirection: "column", alignItems: "stretch" }]}>
                     <View style={styles.headingCopy}>
                       <Text style={styles.outlineEyebrow}>Ordered view</Text>
                       <Text style={styles.outlineTitle}>
-                        Every object, without spatial gestures
+                        Objects in this view
                       </Text>
                     </View>
                     <Text style={styles.outlineRule}>
@@ -4845,23 +5584,55 @@ export function StoryCanvasPanel({
                   </View>
                   {orderedOutline.length === 0 ? (
                     <View style={styles.outlineEmpty}>
-                      <Text style={styles.emptyTitle}>Nothing placed yet</Text>
-                      <Text style={styles.emptyText}>
-                        Canvas actions above create the first confirmed or provisional
-                        object.
+                      <Text style={styles.emptyTitle}>
+                        {emptyPresentation.title}
                       </Text>
+                      <Text style={styles.emptyText}>
+                        {emptyPresentation.detail}
+                      </Text>
+                      <View style={styles.actionRow}>
+                        {emptyPresentation.resetLens ? (
+                          <CanvasButton
+                            label="Reset Map lens"
+                            onPress={() => requestWorkflowLensChange("outline")}
+                          />
+                        ) : null}
+                        {emptyPresentation.showWholeStory ? (
+                          <CanvasButton
+                            label="Show whole-story Canvas"
+                            onPress={() => requestDrillTo({ kind: "project" })}
+                          />
+                        ) : null}
+                      </View>
                     </View>
                   ) : (
-                    <View style={styles.outlineList}>
-                      {orderedOutline.map((item, index) => {
+                    <>
+                      <Text
+                        accessibilityLabel={`Showing ${orderedWindow.shownCount} of ${orderedWindow.totalCount} objects in this view${
+                          orderedWindow.renderedCount > orderedWindow.shownCount
+                            ? "; selected object outside the loaded range is also shown"
+                            : ""
+                        }`}
+                        style={styles.outlineRule}
+                      >
+                        Showing {orderedWindow.shownCount} of {orderedWindow.totalCount}{" "}
+                        objects in this view
+                        {orderedWindow.renderedCount > orderedWindow.shownCount
+                          ? " · selected object outside the loaded range is also shown"
+                          : ""}
+                      </Text>
+                      <View style={styles.outlineList}>
+                      {orderedWindow.items.map((entry) => {
+                        const { item, sourceIndex, outsideLoadedRange } = entry;
                         const canonicalState = canvasCanonicalReferenceState(
                           item.object,
                           project
                         );
+                        const title = canvasObjectTitle(item.object, project);
                         return (
                           <Pressable
-                            accessibilityLabel={`Canvas object ${index + 1}: ${
-                              item.object.label
+                            accessibilityLabel={`Canvas object ${sourceIndex + 1}: ${
+                              title
                             }, ${item.authorityLabel}, ${item.stateLabel}, ${
                               canonicalState.label === undefined
                                 ? ""
@@ -4891,23 +5662,36 @@ export function StoryCanvasPanel({
                               pressed && styles.pressed
                             ]}
                           >
-                            <Text style={styles.outlineIndex}>{index + 1}</Text>
+                            <Text style={styles.outlineIndex}>
+                              {sourceIndex + 1}
+                            </Text>
                             <View style={styles.outlineCopy}>
+                              {outsideLoadedRange ? (
+                                <Text style={styles.outlineOrder}>
+                                  Selected object outside loaded range · original
+                                  Canvas position {sourceIndex + 1}
+                                </Text>
+                              ) : null}
                               <View style={styles.outlineTitleRow}>
                                 <Text style={styles.outlineObjectTitle}>
-                                  {item.object.label}
+                                  {title}
                                 </Text>
                                 <Text style={styles.outlineAuthority}>
                                   {item.authorityLabel} · {item.stateLabel}
                                 </Text>
                               </View>
+                              {item.object.label === title ? null : (
+                                <Text style={styles.outlineMeta}>
+                                  Canvas annotation · {item.object.label}
+                                </Text>
+                              )}
                               {canonicalState.label === undefined ? null : (
                                 <Text style={styles.outlineStale}>
                                   {canonicalState.label}
                                 </Text>
                               )}
                               <Text style={styles.outlineMeta}>
-                                {objectKindLabel(item.object)} ·{" "}
+                                {objectKindLabel(item.object)} · saved scope bounds ·{" "}
                                 {item.positionLabel}
                               </Text>
                               {item.orderLabel === undefined ? null : (
@@ -4922,19 +5706,44 @@ export function StoryCanvasPanel({
                           </Pressable>
                         );
                       })}
-                    </View>
+                      </View>
+                      {orderedWindow.nextLimit === undefined ? null : (
+                        <View style={styles.actionRow}>
+                          <CanvasButton
+                            label="Show more objects"
+                            onPress={() =>
+                              setOrderedPage({
+                                key: orderedWindowKey,
+                                limit:
+                                  orderedWindow.nextLimit ?? orderedLimit
+                              })
+                            }
+                          />
+                        </View>
+                      )}
+                    </>
                   )}
                 </View>
               )}
             </View>
-            {inspector}
+            {compact ? <Modal visible={showInspector} transparent animationType="none"
+              onRequestClose={() => changeInspector(false)}>
+              <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.28)", justifyContent: "flex-end" }}>
+                <ScrollView style={{ maxHeight: "85%", backgroundColor: colors.paper }}>
+                  {inspector}
+                </ScrollView>
+              </View>
+            </Modal> : inspector}
           </View>
           <ReadingSpine
+            scope={drillScope}
             onSelectObject={(objectId) => {
               const object = objectById.get(objectId);
               if (object !== undefined) selectObject(object);
             }}
-            onSelectScene={onSelectScene}
+            onSelectScene={(sceneId) => {
+              requestSelectScene(sceneId);
+            }}
             project={project}
             workspace={workspace}
           />
@@ -4988,6 +5797,14 @@ const styles = StyleSheet.create({
   chromeSpacer: {
     flex: 1,
     minWidth: 8
+  },
+  scopeTitle: {
+    color: colors.ink,
+    flexShrink: 1,
+    fontFamily: fonts.uiSemibold,
+    fontSize: 10,
+    maxWidth: 260,
+    minWidth: 72
   },
   heading: {
     alignItems: "flex-start",
@@ -6291,6 +7108,14 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
     minWidth: 0,
     width: "100%"
+  },
+  storyContextSection: {
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    maxHeight: 560,
+    minHeight: 260
   },
   inspectorHeading: {
     alignItems: "center",
