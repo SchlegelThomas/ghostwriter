@@ -47,13 +47,40 @@ require_jq() {
 cmd_create_branch() {
   local branch_id="$1"
   local ttl="${2:-172800}" # default 2 days
+  local attempt=1
+  local max_attempts=5
+  local delay=15
+  local output=""
+  local status=0
   echo "Creating Lakebase branch '$branch_id' from '$SOURCE_BRANCH' (ttl ${ttl}s)..." >&2
-  dbx postgres create-branch "projects/${LAKEBASE_PROJECT_ID}" "$branch_id" --json "{
-    \"spec\": {
-      \"source_branch\": \"projects/${LAKEBASE_PROJECT_ID}/branches/${SOURCE_BRANCH}\",
-      \"ttl\": \"${ttl}s\"
-    }
-  }"
+  while true; do
+    set +e
+    output="$(dbx postgres create-branch "projects/${LAKEBASE_PROJECT_ID}" "$branch_id" --json "{
+      \"spec\": {
+        \"source_branch\": \"projects/${LAKEBASE_PROJECT_ID}/branches/${SOURCE_BRANCH}\",
+        \"ttl\": \"${ttl}s\"
+      }
+    }" 2>&1)"
+    status=$?
+    set -e
+    if [ "$status" -eq 0 ]; then
+      printf '%s\n' "$output"
+      return 0
+    fi
+    if
+      printf '%s' "$output" | grep -qi "please try again later" &&
+      [ "$attempt" -lt "$max_attempts" ]
+    then
+      echo "Lakebase create-branch transient failure (attempt ${attempt}/${max_attempts}); retrying in ${delay}s..." >&2
+      echo "$output" >&2
+      sleep "$delay"
+      attempt=$((attempt + 1))
+      delay=$((delay * 2))
+      continue
+    fi
+    echo "$output" >&2
+    return "$status"
+  done
 }
 
 cmd_delete_branch() {
