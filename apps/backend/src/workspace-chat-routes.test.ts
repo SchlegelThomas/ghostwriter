@@ -98,6 +98,16 @@ describe("assembleWorkspaceChatContext", () => {
     expect(text).toContain(`chapter="${chapter.title}"`);
     expect(text).toContain(`book="${book.title}"`);
   });
+
+  it("includes the open scene draft excerpt for writer-facing chat", () => {
+    const text = assembleWorkspaceChatContext({
+      navigator: BELLWETHER_FIXTURE_NAVIGATOR,
+      selection: { kind: "scene" },
+      openSceneDraft: "The harbor bell sounded once."
+    });
+    expect(text).toContain("Open scene draft:");
+    expect(text).toContain("The harbor bell sounded once.");
+  });
 });
 
 describe("buildWorkspaceChatInputText", () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  insertableDraftFromAgentReply,
   resolveAssistantFollowUpChips,
   resolveSystemFollowUpChips
 } from "./workspace-chat-follow-ups.js";
@@ -13,6 +14,35 @@ describe("workspace-chat-follow-ups", () => {
       canOpenScene: true
     });
     expect(chips.map((chip) => chip.id)).toEqual(["save-plan", "open-scene"]);
+  });
+
+  it("offers Open draft when the reply includes insertable prose", () => {
+    const chips = resolveAssistantFollowUpChips({
+      mode: "chat",
+      canSavePlan: false,
+      canOpenScene: true,
+      sceneAlreadyOpen: true,
+      hasInsertableDraft: true
+    });
+    expect(chips).toEqual([{ id: "open-scene", label: "Open draft" }]);
+  });
+
+  it("extracts continuation prose and drops the closing question", () => {
+    expect(
+      insertableDraftFromAgentReply(
+        "The parchment warmed against his thumbs.\n\nWant it darker, quieter, or dropped into the scene?"
+      )
+    ).toBe("The parchment warmed against his thumbs.");
+  });
+
+  it("hides Open scene when the draft is already on screen", () => {
+    const chips = resolveAssistantFollowUpChips({
+      mode: "chat",
+      canSavePlan: false,
+      canOpenScene: true,
+      sceneAlreadyOpen: true
+    });
+    expect(chips).toEqual([]);
   });
 
   it("caps assistant chips and skips empty plan text", () => {

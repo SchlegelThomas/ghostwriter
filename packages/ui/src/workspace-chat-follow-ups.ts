@@ -9,11 +9,26 @@ export type WorkspaceChatFollowUpChip = Readonly<{
 
 const MAX_FOLLOW_UP_CHIPS = 3;
 
+export function insertableDraftFromAgentReply(body: string): string | undefined {
+  const parts = body
+    .trim()
+    .split(/\n\n+/u)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  const draftParts = parts.filter((part) => !part.endsWith("?"));
+  const draft = draftParts.join("\n\n").trim();
+  if (draft.length < 40) return undefined;
+  if (/^(?:On |If we |Two ways |What do you)/u.test(draft)) return undefined;
+  return draft;
+}
+
 export function resolveAssistantFollowUpChips(input: Readonly<{
   mode: WorkspaceAgentMode;
   planOutlineText?: string;
   canSavePlan: boolean;
   canOpenScene: boolean;
+  sceneAlreadyOpen?: boolean;
+  hasInsertableDraft?: boolean;
 }>): readonly WorkspaceChatFollowUpChip[] {
   const chips: WorkspaceChatFollowUpChip[] = [];
   if (
@@ -24,8 +39,16 @@ export function resolveAssistantFollowUpChips(input: Readonly<{
   ) {
     chips.push(Object.freeze({ id: "save-plan", label: "Save to Plans" }));
   }
-  if (input.canOpenScene) {
-    chips.push(Object.freeze({ id: "open-scene", label: "Open scene" }));
+  const showOpenScene =
+    input.canOpenScene &&
+    (input.hasInsertableDraft === true || input.sceneAlreadyOpen !== true);
+  if (showOpenScene) {
+    chips.push(
+      Object.freeze({
+        id: "open-scene",
+        label: input.hasInsertableDraft === true ? "Open draft" : "Open scene"
+      })
+    );
   }
   return Object.freeze(chips.slice(0, MAX_FOLLOW_UP_CHIPS));
 }

@@ -38,6 +38,7 @@ import {
 } from "@ghostwriter/storage/pglite";
 import {
   createFakeStructuredCompletionProvider,
+  createFakeToolLoopProvider,
   createProviderAdapter
 } from "@ghostwriter/ai";
 import { createApp } from "./app.js";
@@ -52,6 +53,7 @@ import { createTestAgentProviderRuntime } from "./agent-provider-runtime.js";
 import { createTestProviderKekRuntimeConfig } from "./provider-kek-config.js";
 import type { ScenePartnerImageGenerator } from "./scene-partner-routes.js";
 import { createCanvasCapacityFixture } from "@ghostwriter/storage/capacity-fixture";
+import { buildHermeticWorkspaceChatReply } from "./hermetic-workspace-chat-reply.js";
 import { seedHermeticHarryPotter } from "./hermetic-seed.js";
 import {
   e2eHermeticWriterAccountId,
@@ -259,15 +261,9 @@ const hermeticFakeProvider = createFakeStructuredCompletionProvider((input) => {
     schemaName === "workspace-chat-turn-v1" ||
     schemaName === "workspace_chat_turn_v1"
   ) {
-    const projectLine =
-      input.inputText
-        .split("\n")
-        .find((line) => line.startsWith("Project:"))
-        ?.replace(/^Project:\s*/, "")
-        .trim() ?? "this project";
     return {
       output: {
-        reply: `Here is a propose-only note about ${projectLine}. I used the open manuscript context and will not claim canon was written.`
+        reply: buildHermeticWorkspaceChatReply(input.inputText).reply
       }
     };
   }
@@ -275,9 +271,9 @@ const hermeticFakeProvider = createFakeStructuredCompletionProvider((input) => {
     return {
       output: {
         schemaId: "scene-partner-turn-v1",
-        thinkingSteps: ["Reading idea", "Scanning scenes", "Drafting response"],
+        thinkingSteps: ["Reading the idea", "Finding the pressure", "Drafting a beat"],
         assistantMessage:
-          "I scanned the manuscript and this idea feels ready to become a new scene.",
+          "The idea wants a scene where the pressure is already in the room. Start from the first glance, or from the choice they can't undo?",
         phase: "new-scene",
         matchedSceneId: null,
         proseDraft: "Soft light holds for a breath; the moment waits for the next line.",
@@ -412,6 +408,12 @@ const providerFactory = liveProviders
   ? liveProviderFactory
   : hermeticProviderFactory;
 
+/** Catalog marks gpt-4.1 as tool-capable; do not send the seeded fake key to OpenAI. */
+const hermeticWorkspaceChatToolLoop = () =>
+  createFakeToolLoopProvider((input) => ({
+    text: buildHermeticWorkspaceChatReply(input.inputText).reply
+  }));
+
 const agentProvider = createTestAgentProviderRuntime({
   db: repositoryDatabase,
   projects,
@@ -460,7 +462,12 @@ const app = createApp({
   ...(process.env.GHOSTWRITER_ENABLE_LOCAL_MCP_BRIDGE === "1"
     ? { localMcpBridge: { enabled: true } }
     : {}),
-  ...(liveProviders ? {} : { scenePartnerGenerateImage: hermeticFakeImage })
+  ...(liveProviders
+    ? {}
+    : {
+        scenePartnerGenerateImage: hermeticFakeImage,
+        workspaceChatCreateToolLoopProvider: hermeticWorkspaceChatToolLoop
+      })
 });
 const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(`Ghostwriter hermetic backend listening on port ${info.port}`);

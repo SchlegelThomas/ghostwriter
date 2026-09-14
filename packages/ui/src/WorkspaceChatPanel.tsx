@@ -37,6 +37,7 @@ import {
   type WorkspaceAvailableModel
 } from "./workspace-agent-prefs.js";
 import {
+  insertableDraftFromAgentReply,
   resolveAssistantFollowUpChips,
   resolveSystemFollowUpChips,
   type WorkspaceChatFollowUpChip
@@ -138,7 +139,7 @@ export type WorkspaceChatPanelProps = Readonly<{
   providerConfigured?: boolean;
   onOpenSettings?: OpenSettingsHandler;
   selectionSummary?: string;
-  onToolkitAction?(id: AgentToolkitId): void;
+  onToolkitAction?(id: AgentToolkitId): boolean | void;
   onCatalogAgentRun?(id: CatalogAgentId, lens?: CatalogMemoLens): void;
   /** Latest Plan-mode assistant reply available to save. */
   planOutlineText?: string;
@@ -157,8 +158,9 @@ export type WorkspaceChatPanelProps = Readonly<{
   onForkMessage?(messageId: string): void;
   onRegenerateMessage?(messageId: string): void;
   onRetryFailedTurn?(): void;
-  onOpenScene?(sceneId?: SceneId): void;
+  onOpenScene?(sceneId?: SceneId, draftProse?: string): void;
   canOpenScene?: boolean;
+  sceneAlreadyOpen?: boolean;
   /** Scene id for manual next-steps coach (Agent selection chip). */
   manualNextActionSceneId?: SceneId;
   /** Docked in the secondary shell — collapse control lives in the shell header. */
@@ -225,6 +227,7 @@ export function WorkspaceChatPanel({
   onRetryFailedTurn,
   onOpenScene,
   canOpenScene = false,
+  sceneAlreadyOpen = false,
   manualNextActionSceneId,
   variant = "floating",
   dictating = false,
@@ -395,7 +398,14 @@ export function WorkspaceChatPanel({
       onSavePlanToPlans !== undefined &&
       planOutlineText !== undefined &&
       planOutlineText.trim().length > 0,
-    canOpenScene: canOpenScene && onOpenScene !== undefined
+    canOpenScene: canOpenScene && onOpenScene !== undefined,
+    sceneAlreadyOpen,
+    hasInsertableDraft:
+      lastAssistantMessageId !== undefined &&
+      insertableDraftFromAgentReply(
+        messages.find((message) => message.id === lastAssistantMessageId)
+          ?.body ?? ""
+      ) !== undefined
   });
   const modelPickerOptions = workspaceAgentModelPickerOptions(
     availableModels,
@@ -826,7 +836,10 @@ export function WorkspaceChatPanel({
                     return;
                   }
                   if (chip.id === "open-scene") {
-                    onOpenScene?.(message.nextActionSceneId);
+                    onOpenScene?.(
+                      message.nextActionSceneId,
+                      insertableDraftFromAgentReply(message.body)
+                    );
                     return;
                   }
                   if (chip.id === "retry") {
@@ -935,7 +948,11 @@ export function WorkspaceChatPanel({
                         key={entry.id}
                         onPress={() => {
                           if (toolkitId !== undefined) {
-                            onToolkitAction?.(toolkitId);
+                            const ok = onToolkitAction?.(toolkitId);
+                            if (ok === false) {
+                              setOpenStageMenu(null);
+                              return;
+                            }
                           } else if (catalogAgentId !== undefined) {
                             onCatalogAgentRun?.(
                               catalogAgentId,
@@ -1357,7 +1374,7 @@ function ChatTurn({
   onEditResend?(): void;
   onFollowUpChip?(chip: WorkspaceChatFollowUpChip): void;
   onMessageActionChip?(chip: SceneSaveNextActionChip): void;
-  onOpenScene?(sceneId?: SceneId): void;
+  onOpenScene?(sceneId?: SceneId, draftProse?: string): void;
   onFork?(): void;
   onRegenerate?(): void;
   onToggleMenu?(): void;

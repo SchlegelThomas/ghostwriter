@@ -568,6 +568,8 @@ export default function App() {
   );
   const [requestOpenAgentPanel, setRequestOpenAgentPanel] = useState(0);
   const [requestFocusDraftScene, setRequestFocusDraftScene] = useState(0);
+  const [requestInsertDraft, setRequestInsertDraft] = useState(0);
+  const [requestInsertDraftText, setRequestInsertDraftText] = useState<string>();
   const autoSuggestionsEnabledRef = useRef(autoSuggestionsEnabled);
   autoSuggestionsEnabledRef.current = autoSuggestionsEnabled;
   const nextActionIdleTimerRef = useRef<
@@ -3218,6 +3220,9 @@ export default function App() {
           ? {}
           : { toolTraces: result.toolTraces }),
         ...(result.workPlan === undefined ? {} : { workPlan: result.workPlan }),
+        ...(selectedSceneId === undefined
+          ? {}
+          : { nextActionSceneId: selectedSceneId }),
         statusLabel: undefined
       });
     } catch (cause) {
@@ -3248,6 +3253,9 @@ export default function App() {
             ...(result.workPlan === undefined
               ? {}
               : { workPlan: result.workPlan }),
+            ...(selectedSceneId === undefined
+              ? {}
+              : { nextActionSceneId: selectedSceneId }),
             statusLabel: undefined
           });
           return;
@@ -3344,7 +3352,10 @@ export default function App() {
     });
   }
 
-  async function handleOpenChatScene(sceneId?: SceneId | string): Promise<boolean> {
+  async function handleOpenChatScene(
+    sceneId?: SceneId | string,
+    draftProse?: string
+  ): Promise<boolean> {
     const targetSceneId =
       sceneId !== undefined ? toSceneId(sceneId) : selectedSceneId;
     if (targetSceneId === undefined) return false;
@@ -3358,6 +3369,11 @@ export default function App() {
     }
     setWriteComposition("page");
     setRequestFocusDraftScene((current) => current + 1);
+    const prose = draftProse?.trim();
+    if (prose !== undefined && prose.length > 0) {
+      setRequestInsertDraftText(prose);
+      setRequestInsertDraft((current) => current + 1);
+    }
     return true;
   }
 
@@ -3410,16 +3426,19 @@ export default function App() {
   function handleAgentToolkitAction(
     id: AgentToolkitId,
     toolkitSelection: Parameters<typeof resolveAgentToolkitAction>[1]
-  ): void {
+  ): boolean {
     const result = resolveAgentToolkitAction(id, toolkitSelection);
     if (!result.ok) {
       appendChatStatusMessage(result.refusalMessage);
-      return;
+      return false;
+    }
+    if (result.kind === "workspace-scene") {
+      return true;
     }
     if (result.kind === "cover") {
       setCoverReviewBookId(result.bookId);
       appendChatStatusMessage(result.statusMessage);
-      return;
+      return true;
     }
     if (result.deepLink.captureId !== undefined) {
       setInboxSelectedCaptureId(result.deepLink.captureId);
@@ -3427,6 +3446,7 @@ export default function App() {
     setPlansAgentDeepLink(result.deepLink);
     void openInboxWorkspace();
     appendChatStatusMessage(result.statusMessage);
+    return true;
   }
 
   async function handleCatalogAgentRun(
@@ -4997,6 +5017,8 @@ export default function App() {
                     }
                   : undefined
               }
+              requestInsertDraft={requestInsertDraft}
+              requestInsertDraftText={requestInsertDraftText}
               sceneId={scene.id}
               scenePosition={context.positionLabel}
               sceneSketch={scene.sketch}

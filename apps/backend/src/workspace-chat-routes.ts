@@ -13,9 +13,14 @@ import {
   providerForAvailableModel,
   ProviderCredentialNotFoundError,
   projectId,
+  SceneNotFoundError,
+  sceneId,
+  sliceCaptureProviderText,
+  type AccountId,
   type AgentModelId,
   type CaptureServices,
   type GhostwriterServices,
+  type ProjectId,
   type ProjectNavigator,
   type SceneWritingServices,
   type WorkPlanV1
@@ -166,6 +171,12 @@ const EFFORT_LIMITS: Readonly<
   high: Object.freeze({ maxOutputTokens: 3_200, maxDurationMs: 60_000 })
 });
 
+const WRITER_FACING_CONSTRAINTS = [
+  "Talk about the open draft and the writer's question. Offer concrete story ideas they can take or leave.",
+  "Never mention propose-only, canon, tools, or how Ghostwriter works. Do not narrate system constraints.",
+  "Do not claim the manuscript, Plans, or captures were written, saved, or changed."
+].join(" ");
+
 const TOOL_READ_INSTRUCTIONS = [
   "You MAY call read tools to inspect the open project:",
   "- project_navigator_read — manuscript hierarchy (books → scenes)",
@@ -174,28 +185,27 @@ const TOOL_READ_INSTRUCTIONS = [
   "When proposing a multi-step bundle the writer can Submit, call propose_work_plan with a work-plan-v1 object (catalog agents, story-knowledge drafts, Scene Partner brief, cast/continuity checks). Do not invent fake job queues — attachment is enough; the writer Submits.",
   "Use scene reads iteratively for whole-book questions; do not dump or assume unseen scenes.",
   "When citing prose, name the scene title.",
-  "Propose only. Never claim manuscript canon was written, saved, or changed.",
-  "Reply in plain writer-facing text."
+  WRITER_FACING_CONSTRAINTS
 ].join("\n");
 
 const MODE_INSTRUCTIONS: Readonly<Record<WorkspaceChatMode, string>> = Object.freeze({
   chat: [
     "You are Ghostwriter's writing agent in chat mode.",
     "Answer questions, research the open project, and draft ideas the writer can revise.",
-    "Propose only. Never claim manuscript canon was written, saved, or changed.",
-    "Stay concise and writer-facing. Return only the workspace-chat-turn-v1 object."
+    WRITER_FACING_CONSTRAINTS,
+    "Stay concise. Return only the workspace-chat-turn-v1 object."
   ].join("\n"),
   plan: [
     "You are Ghostwriter's writing agent in Plan mode.",
     "Produce outlines, plans, and proposal drafts the writer can save to Plans.",
-    "Propose only. Never claim Plans, captures, or manuscript canon were written or saved.",
+    WRITER_FACING_CONSTRAINTS,
     "Structure the reply so it is easy to save as a plan outline. Return only the workspace-chat-turn-v1 object."
   ].join("\n"),
   agent: [
     "You are Ghostwriter's writing-agent harness in agent mode.",
     "Suggest next toolkit jobs and structured next steps (Scene Partner, cover concepts, craft partners).",
-    "Propose only. Do not invent that Scene Partner or another toolkit job already ran.",
-    "Never claim manuscript canon was written, saved, or changed.",
+    "Do not invent that Scene Partner or another toolkit job already ran.",
+    WRITER_FACING_CONSTRAINTS,
     "Return only the workspace-chat-turn-v1 object."
   ].join("\n")
 });
@@ -278,9 +288,67 @@ function findSceneTitle(
     ?.title;
 }
 
+const OPEN_SCENE_DRAFT_EXCERPT_CHARS = 800;
+
+async function loadOpenSceneDraftExcerpt(input: Readonly<{
+  writing: Pick<SceneWritingServices, "getSceneWorkspace">;
+  accountId: AccountId;
+  projectId: ProjectId;
+  sceneId: string;
+}>): Promise<string | undefined> {
+  try {
+    const workspace = await input.writing.getSceneWorkspace({
+      accountId: input.accountId,
+      projectId: input.projectId,
+      sceneId: sceneId(input.sceneId)
+    });
+    const excerpt = sliceCaptureProviderText(workspace.head.document)
+      .providerPlainText
+      .replace(/\s+/gu, " ")
+      .trim();
+    if (excerpt.length === 0) return undefined;
+    return excerpt.length <= OPEN_SCENE_DRAFT_EXCERPT_CHARS
+      ? excerpt
+      : excerpt.slice(0, OPEN_SCENE_DRAFT_EXCERPT_CHARS);
+  } catch (error) {
+    if (
+      error instanceof DomainValidationError ||
+      error instanceof ProjectAccessDeniedError ||
+      error instanceof SceneNotFoundError
+    ) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+async function assembleRequestContextText(input: Readonly<{
+  writing: Pick<SceneWritingServices, "getSceneWorkspace">;
+  accountId: AccountId;
+  projectId?: string;
+  navigator?: ProjectNavigator;
+  selection?: WorkspaceChatSelection;
+}>): Promise<string> {
+  const openSceneDraft =
+    input.projectId !== undefined && input.selection?.sceneId !== undefined
+      ? await loadOpenSceneDraftExcerpt({
+          writing: input.writing,
+          accountId: input.accountId,
+          projectId: projectId(input.projectId),
+          sceneId: input.selection.sceneId
+        })
+      : undefined;
+  return assembleWorkspaceChatContext({
+    navigator: input.navigator,
+    selection: input.selection,
+    ...(openSceneDraft === undefined ? {} : { openSceneDraft })
+  });
+}
+
 export function assembleWorkspaceChatContext(input: Readonly<{
   navigator?: ProjectNavigator;
   selection?: WorkspaceChatSelection;
+  openSceneDraft?: string;
 }>): string {
   if (input.navigator === undefined) {
     return "No project is open.";
@@ -315,6 +383,10 @@ export function assembleWorkspaceChatContext(input: Readonly<{
     lines.push(`Selection focus: ${focusParts.join(" · ")}`);
   } else {
     lines.push("Selection focus: (none)");
+  }
+  const openSceneDraft = input.openSceneDraft?.trim();
+  if (openSceneDraft !== undefined && openSceneDraft.length > 0) {
+    lines.push("Open scene draft:", openSceneDraft);
   }
   return lines.join("\n");
 }
@@ -598,7 +670,11 @@ export function registerWorkspaceChatRoutes(
       }
     }
 
-    const contextText = assembleWorkspaceChatContext({
+    const account = accountId(context.get("authSession").account.id);
+    const contextText = await assembleRequestContextText({
+      writing,
+      accountId: account,
+      projectId: parsed.data.projectId,
       navigator,
       selection: parsed.data.selection
     });
@@ -612,7 +688,6 @@ export function registerWorkspaceChatRoutes(
       }
 
       const authSession = context.get("authSession");
-      const account = accountId(authSession.account.id);
       const configured = await agentProvider.providerCredentials.listCredentialStatuses(
         account
       );
@@ -903,7 +978,11 @@ export function registerWorkspaceChatRoutes(
         }
       }
 
-      const contextText = assembleWorkspaceChatContext({
+      const account = accountId(context.get("authSession").account.id);
+      const contextText = await assembleRequestContextText({
+        writing,
+        accountId: account,
+        projectId: parsed.data.projectId,
         navigator,
         selection: parsed.data.selection
       });
@@ -917,7 +996,6 @@ export function registerWorkspaceChatRoutes(
         }
 
         const authSession = context.get("authSession");
-        const account = accountId(authSession.account.id);
         const configured = await agentProvider.providerCredentials.listCredentialStatuses(
           account
         );

@@ -55,7 +55,8 @@ const SCENE_PARTNER_TURN_INSTRUCTIONS = [
   "Always scan the provided manuscript scenes for a plausible match before proposing a new scene.",
   "If the idea is thin or unclear, stay in interview and ask one focused clarifying question.",
   "When ready, draft short prose the writer can revise; offer apply-new-scene and/or propose-image.",
-  "Propose only. NEVER claim the manuscript was written, saved, or changed.",
+  "Talk about the idea and the draft. Never mention propose-only, canon, or how Ghostwriter works.",
+  "Do not claim the manuscript was written, saved, or changed.",
   "Never invent that an image was saved. Image prompts are proposals only.",
   "Keep thinkingSteps as 1–6 short writer-visible labels.",
   "Return only the scene-partner-turn-v1 structured object."

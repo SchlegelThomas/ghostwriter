@@ -145,6 +145,8 @@ export type DraftPanelProps = Readonly<{
   onProblemResolved?(id: string): void;
   onOpenCastStudio?(storyKnowledgeId: string): void;
   focusBlockRequest?: SceneEditorFocusBlockRequest;
+  requestInsertDraft?: number;
+  requestInsertDraftText?: string;
 }>;
 
 export type DraftActivity = "idle" | "saving" | "problem";
@@ -680,7 +682,9 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
       onProblem,
       onProblemResolved,
       onOpenCastStudio,
-      focusBlockRequest
+      focusBlockRequest,
+      requestInsertDraft,
+      requestInsertDraftText
     },
     ref
   ) {
@@ -729,6 +733,17 @@ export const DraftPanel = forwardRef<DraftPanelHandle, DraftPanelProps>(
     activityCallbackRef.current = onActivityChange;
     problemCallbackRef.current = onProblem;
     problemResolvedCallbackRef.current = onProblemResolved;
+
+    useEffect(() => {
+      if (requestInsertDraft === undefined || requestInsertDraft < 1) return;
+      const text = requestInsertDraftText?.trim();
+      if (text === undefined || text.length === 0) return;
+      insertSeqRef.current += 1;
+      setInsertTextRequest({
+        id: insertSeqRef.current,
+        text: `\n\n${text}`
+      });
+    }, [requestInsertDraft, requestInsertDraftText]);
 
     const refreshHistory = useCallback(
       async (currentCheckpointRevisionId?: string): Promise<void> => {

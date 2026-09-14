@@ -47,6 +47,7 @@ export type AgentToolkitActionResult =
       statusMessage: string;
     }
   | { ok: true; kind: "cover"; bookId: BookId; statusMessage: string }
+  | { ok: true; kind: "workspace-scene" }
   | { ok: false; refusalMessage: string };
 
 const PLANS_CAPTURE_REFUSAL =
@@ -59,26 +60,27 @@ export function resolveAgentToolkitAction(
 ): AgentToolkitActionResult {
   switch (id) {
     case "scene-partner": {
-      if (selection.captureId === undefined) {
+      if (
+        selection.captureId !== undefined &&
+        selection.capturePartnerable !== false
+      ) {
         return {
-          ok: false,
-          refusalMessage: `${PLANS_CAPTURE_REFUSAL} Scene Partner.`
+          ok: true,
+          kind: "plans",
+          deepLink: {
+            captureId: selection.captureId,
+            workflowStep: "scene-partner"
+          },
+          statusMessage: "Opened Scene Partner in Plans."
         };
       }
-      if (selection.capturePartnerable === false) {
-        return {
-          ok: false,
-          refusalMessage: `${PLANS_CAPTURE_REFUSAL} Scene Partner.`
-        };
+      if (selection.sceneId !== undefined) {
+        return { ok: true, kind: "workspace-scene" };
       }
       return {
-        ok: true,
-        kind: "plans",
-        deepLink: {
-          captureId: selection.captureId,
-          workflowStep: "scene-partner"
-        },
-        statusMessage: "Opened Scene Partner in Plans."
+        ok: false,
+        refusalMessage:
+          "Open a scene, or select an idea in Plans, before Scene Partner."
       };
     }
     case "sketch-partner": {
@@ -377,7 +379,7 @@ export const AGENT_CATALOG_STAGES: readonly AgentCatalogStage[] = Object.freeze(
       Object.freeze({
         id: "scene-partner",
         label: "Scene Partner",
-        blurb: "Run scene craft from a Plans capture.",
+        blurb: "Continue the open scene, or run craft from a Plans idea.",
         status: "shipped"
       }),
       Object.freeze({

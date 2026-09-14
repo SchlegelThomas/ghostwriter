@@ -349,7 +349,7 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   onForkChatMessage?(messageId: string): void;
   onRegenerateChatMessage?(messageId: string): void;
   onRetryChatTurn?(): void;
-  onOpenChatScene?(sceneId?: SceneId): void;
+  onOpenChatScene?(sceneId?: SceneId, draftProse?: string): void;
   canOpenChatScene?: boolean;
   chatDictating?: boolean;
   onChatToggleDictation?(): void;
@@ -359,7 +359,7 @@ export type AuthenticatedProjectWorkspaceProps = Readonly<{
   onAgentToolkitAction?(
     id: AgentToolkitId,
     selection: AgentToolkitSelection
-  ): void;
+  ): boolean | void;
   onCatalogAgentRun?(
     id: CatalogAgentId,
     selection: AgentToolkitSelection,
@@ -697,9 +697,9 @@ export function AuthenticatedProjectWorkspace({
     onOpenInbox?.();
   }
 
-  function handleAgentToolkitAction(id: AgentToolkitId): void {
+  function handleAgentToolkitAction(id: AgentToolkitId): boolean | void {
     if (onAgentToolkitAction === undefined) return;
-    onAgentToolkitAction(
+    return onAgentToolkitAction(
       id,
       buildAgentToolkitSelection(selection, selectedSceneId, inboxSelectedCaptureId)
     );
@@ -3058,6 +3058,11 @@ export function AuthenticatedProjectWorkspace({
                   canOpenScene={
                     canOpenChatScene || selection.kind === "scene"
                   }
+                  sceneAlreadyOpen={
+                    !inboxOpen &&
+                    mode === "draft" &&
+                    selection.kind === "scene"
+                  }
                   chatHistorySessions={chatHistorySessions}
                   chatSessions={chatSessions}
                   chatStreaming={chatStreaming}
@@ -3084,16 +3089,16 @@ export function AuthenticatedProjectWorkspace({
                   manualNextActionSceneId={
                     selection.kind === "scene" ? selection.sceneId : undefined
                   }
-                  onOpenScene={(sceneId) => {
+                  onOpenScene={(sceneId, draftProse) => {
                     if (sceneId !== undefined) {
-                      onOpenChatScene?.(sceneId);
+                      onOpenChatScene?.(sceneId, draftProse);
                       return;
                     }
                     if (selection.kind === "scene") {
-                      onOpenChatScene?.(selection.sceneId);
+                      onOpenChatScene?.(selection.sceneId, draftProse);
                       return;
                     }
-                    onOpenChatScene?.();
+                    onOpenChatScene?.(undefined, draftProse);
                   }}
                   onOpenSettings={onOpenSettings}
                   onRegenerateMessage={onRegenerateChatMessage}
