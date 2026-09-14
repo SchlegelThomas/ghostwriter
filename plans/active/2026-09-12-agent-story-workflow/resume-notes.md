@@ -1,15 +1,13 @@
-# Resume here — 2026-09-13
+# Resume here — 2026-09-14
 
-## Current frontier — read this first (September 13, CP7 in progress)
+## Current frontier — read this first (September 14, CP7 walkthrough complete)
 
 This section supersedes older chronological notes below.
 
-- **CP1b–CP4:** character, scene, grounded checks and outline/structure loops implemented and browser-verified locally (see record log). CP4 baseline commit **`6cc0455`**.
-- **CP5 — complete locally (uncommitted atop `6cc0455`):** [`cp5-coordination-contract.md`](cp5-coordination-contract.md), migration **`0029`**, record log CP5d. Not production-deployed.
-- **CP6 — complete locally (uncommitted atop `6cc0455`):** [`cp6-mcp-parity-contract.md`](cp6-mcp-parity-contract.md) — 15 closed bridge tools, flag-gated **`/local-mcp/v1/*`**, migration **`0030`**, hermetic stdio walkthrough. Final **`pnpm verify`**: **1,914** tests / 3 skipped. Not production-deployed.
-- **CP7 — in progress (AC10 original-story browser):** see [`cp7-original-story-acceptance.md`](cp7-original-story-acceptance.md). Cumulative **`pnpm verify`** passed: **1,922 tests / 3 skipped**, **230 files / 1 skipped**, typecheck/lint/17 routing green. **Epic not complete.**
+- **CP1b–CP6:** implemented and locally verified (see record log). PR [#26](https://github.com/SchlegelThomas/ghostwriter/pull/26) on `feat/agent-story-workflow` through **`15eb3cb`**. Required CI `checks` is green. Lakebase `provision` failed four times on Databricks create-branch (not a required check).
+- **CP7 — parent AC10 walkthrough complete:** [`cp7-original-story-acceptance.md`](cp7-original-story-acceptance.md). Clockwork Orchard still lives on hermetic **`:8787`**. Reader chapter isolation, blank verso, Under the Engine, Draft↔Canvas Map return, and stale-check **Needs recheck** were re-verified 2026-09-14. Present to Thomas. **Epic not archived.** Playwright still gated.
 
-### Clockwork Orchard walkthrough (browser, UI-only)
+### Clockwork Orchard walkthrough (browser, UI-only; closed 2026-09-14)
 
 - New project **The Clockwork Orchard** / book **The Brass Harvest** — no API or manual IDs.
 - Character **Elian Voss** — proposal edited (motive/wound/voice), applied; Explorer Story knowledge shows Elian.
@@ -18,31 +16,28 @@ This section supersedes older chronological notes below.
 - Deliberate contradiction in **Rot:** letter author **Elian**, **root warning omitted**; applied check on Rot + source **The Brass Letter** — Fresh, exact scope/heads, one anchored finding; **hermetic claim was generic** (gap until content-sensitive helper + recheck).
 - Revision from finding handoff: exact brief, revision restored **Mira authorship + root warning**, kept oil map; **Replace working Draft**; check **stale** (expected).
 - Canvas Map spine **3 scenes**; note **“Open thread · Where is Mira?”** in all three scopes — reload preserved title/body/inclusions; Draft→Canvas same Map; **390×844** inspector shows thread.
-- **Reader defects found/fixed in UI:** short chapters shared spread 0; tab switch left **The Letter** header and concatenated chapters — **chapter-scoped pagination** fixed; rebuild on **:8081** verified **Forecast** shows **Rot only**. **Blank verso** “no acknowledged prose” — unit fixed; **browser recheck pending**. **Under the Engine** Reader pass **pending**.
-- **Code repair (uncommitted):** hermetic finding helper now content-sensitive for authorship/root-warning (**exact substring anchor**); focused tests green — **restart backend or fresh process** needed before browser claim recheck (live **:8787** may still load old module).
+- **Reader (re-verified 2026-09-14, 1600×1000):** chapter-scoped pagination — Letter / Forecast / Under the Engine isolate their scenes; blank verso has **no** false empty-prose message.
+- **Check after revision:** **Needs recheck** (`scene-prose-changed`); Complete review disabled until a fresh check. Live hermetic claim text remains generic on this process; helper is unit-tested.
+- **Evidence:** [`evidence/cp7/`](evidence/cp7/).
 
 ### CP7 still open
 
-1. Browser recheck **specific** continuity claim after backend reload.
-2. Reader **blank verso** post-fix browser check.
-3. Reader **Under the Engine** chapter tab/spreads.
-4. Finding **resolution/complete** state if contract requires after revision apply.
-5. Wide + narrow AC10 screenshots/coherence; present outcome to Thomas.
-6. **No Playwright** until user-verified complete epic.
+1. Thomas accepts the complete AC10 outcome.
+2. Playwright only after `GHOSTWRITER_PLAYWRIGHT_GATE=user-verified`.
+3. Optional: new hermetic process to browser-recheck the specific brass-letter claim (wipes Clockwork Orchard).
+4. Lakebase PR migrate when Databricks create-branch recovers.
 
 ### Branch and runtime
 
-- **Branch:** `feat/agent-story-workflow` — CP5+CP6+CP7 repairs **uncommitted atop `6cc0455`**; no push/PR/deploy unless authorized.
-- **Backend:** bridge-capable hermetic **`:8787`** — **in-memory PGlite holds the walkthrough project**; **restart wipes browser data**.
-- **Frontend:** static **`http://localhost:8081`** (latest Reader bundle).
-- **Viewport at handoff:** **390×844** Canvas inspector. **No live provider.**
+- **Branch / PR:** `feat/agent-story-workflow` · [#26](https://github.com/SchlegelThomas/ghostwriter/pull/26).
+- **Backend:** hermetic **`:8787`** still holds Clockwork Orchard — **restart wipes it**.
+- **Frontend:** static **`http://localhost:8081`**.
+- **No live provider.**
 
 ### Exact next
 
-1. Browser: continuity check claim recheck (restart backend only if needed for new hermetic module — accept data loss).
-2. Browser Reader: blank verso + **Under the Engine**.
-3. Browser: wide/narrow AC10 closure; update [`cp7-original-story-acceptance.md`](cp7-original-story-acceptance.md) checkboxes and evidence paths.
-4. Update record log and WHERE-I-LEFT-OFF; do **not** mark epic or CP7 done until Thomas accepts AC10.
+1. Thomas reviews walkthrough + PR.
+2. After explicit complete-outcome verification: focused Playwright, then archive.
 
 ---
 

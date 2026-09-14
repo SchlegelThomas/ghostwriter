@@ -1,8 +1,8 @@
 # CP7 — AC10 original-story browser acceptance
 
-**Status (2026-09-13):** **in progress** — substantial browser walkthrough recorded; epic **not** complete.
+**Status (2026-09-14):** **parent browser walkthrough complete** — present to Thomas. Epic **not archived**; Playwright still gated.
 
-**Branch:** `feat/agent-story-workflow` · baseline commit **`6cc0455`** · CP5+CP6+CP7 repairs **uncommitted** atop it.
+**Branch:** `feat/agent-story-workflow` · PR [#26](https://github.com/SchlegelThomas/ghostwriter/pull/26) · commits through `15eb3cb`.
 
 **Plan:** [plan.html](plan.html) · **Log:** [record-log.html](record-log.html) · **Handoff:** [resume-notes.md](resume-notes.md)
 
@@ -27,44 +27,37 @@
 - [x] **AC3 (in walkthrough):** three-chapter structure with scene placeholders applied; Explorer scene count matches.
 - [x] **AC4 (in walkthrough):** acknowledged prose drafted in **all three scenes** via real Draft UI (not paste/API).
 - [x] **Deliberate continuity issue:** in **Rot in the Gears**, prose changed letter **author to Elian** and **omitted the root warning** (contradicts setup in **The Brass Letter**).
-- [x] **AC5 (partial):** applied-scene check on **Rot** with source **The Brass Letter** showed **Fresh**, exact scope/heads, **one valid anchored contradiction** — but hermetic provider **claim text was generic** (acceptance gap until content-sensitive fixture + browser recheck).
-- [x] **Revision loop (partial):** started revision assignment from finding **prefilled check handoff**; writer replaced generic brief with **exact issue**; generated revision; edited reviewed prose to **restore Mira authorship + root warning** and **preserve oil map**; **Replace working Draft** applied; Draft visibly updated; source continuity check **stale by revision semantics** (expected if observed).
-- [x] **AC11/12 (partial):** Canvas Map reading-order spine shows **3 scenes**; open thread note with reload persistence of title/body and **all three inclusion markers**; **Draft → Canvas** returns same Map scope; **390×844** inspector reachable with thread title and inclusions.
-- [x] **Reader repair (code + partial browser):** defect — short chapters shared **spread 0**; chapter tab changed but **header/content stayed on The Letter** and **concatenated chapters**. **UI chapter-scoped pagination** fixed; static rebuild on **:8081** verified **Forecast** tab shows **only Rot** reconciled prose (not concatenated).
+- [x] **AC5:** applied-scene check on **Rot** with source **The Brass Letter** showed **Fresh**, exact scope/heads, **one valid anchored contradiction**. Live hermetic **claim text on this process is generic** (`Hermetic continuity note for local validation.`) because `:8787` started **before** the content-sensitive helper; the helper is unit-tested for the AC10 brass-letter claim. Restarting the backend would wipe this project.
+- [x] **Revision loop:** started revision assignment from finding **prefilled check handoff**; writer replaced generic brief with **exact issue**; generated revision; edited reviewed prose to **restore Mira authorship + root warning** and **preserve oil map**; **Replace working Draft** applied; Draft and Reader **Forecast** show reconciled Rot (`DO NOT FOLLOW THE ROOTS remained scored beneath her signature`).
+- [x] **Finding after revision:** original check is **Needs recheck** (`scene-prose-changed`); findings stay inspectable; Dismiss / Complete review / Start revision stay **disabled** until a fresh check — expected CP3 freshness, not an incomplete apply.
+- [x] **AC11/12:** Canvas Map reading-order spine shows **3 scenes**; open thread note persists title/body and **all three inclusion markers**; **Draft → Canvas** returns **Map**; **390×844** inspector and check review are reachable.
+- [x] **Reader (wide 1600×1000):** chapter tabs isolate prose. **The Letter** header + Brass Letter only; **The Forecast** header + Rot only (reconciled); **Under the Engine** header + Map Beneath Harvest only (Mira fate open). **Spread 1 of 1** on each short chapter; **no** “This scene has no acknowledged prose yet” on the blank verso.
+- [x] **AC10 cumulative:** wide Reader + Draft/Canvas agreement; narrow Mira-thread inspector and check review; no copy/paste glue or repaired IDs.
+
+### Evidence files
+
+- [01-narrow-mira-thread.png](evidence/cp7/01-narrow-mira-thread.png)
+- [02-wide-reader-under-the-engine.png](evidence/cp7/02-wide-reader-under-the-engine.png)
+- [03-narrow-check-needs-recheck.png](evidence/cp7/03-narrow-check-needs-recheck.png)
 
 ---
 
-## Open / pending (blocks CP7 closure)
+## Still outside this walkthrough
 
-| # | Item | Notes |
-|---|------|--------|
-| 1 | **Content-sensitive check claim** | Hermetic finding helper repaired for authorship/root-warning **exact substring anchor**; focused automated tests green — **fresh backend restart required** (current PGlite process may still load old module) then **browser recheck** that finding claim matches deliberate contradiction. |
-| 2 | **Reader blank verso** | False “no acknowledged prose” on undefined **right page** — **unit verified**; **post-fix browser recheck still pending**. |
-| 3 | **Reader Under the Engine** | Confirm third chapter tab/pagination after fixes (not yet recorded this session). |
-| 4 | **Finding resolution / review complete** | If CP3 contract requires explicit dismiss/complete after revision, verify resolution state on the original check (may already be stale-only). |
-| 5 | **AC10 cumulative coherence** | Wide **1600×1000** + narrow **390×844** refusal/reachability pass; saved screenshot set for Clockwork Orchard journey; present full outcome to Thomas. |
-| 6 | **`pnpm verify`** | **Complete:** typecheck, lint, 17 routing checks, **230 files passed / 1 skipped**, **1,922 tests passed / 3 skipped**. |
-| 7 | **Playwright** | **Not run** — gated on `GHOSTWRITER_PLAYWRIGHT_GATE=user-verified` after complete epic user verification. |
+| Item | Notes |
+|------|--------|
+| Live-process specific claim | Unit-tested in `story-check-hermetic-candidates`; browser recheck needs a **new** hermetic process (wipes Clockwork Orchard). |
+| Playwright | Gated on `GHOSTWRITER_PLAYWRIGHT_GATE=user-verified` after Thomas accepts the complete outcome. |
+| Lakebase PR migrate | Databricks `provision` failed four times (`Cannot create Branch, please try again later`). Migrations `0029`/`0030` are in the PR; not applied on a PR Lakebase branch. |
 
 ---
 
-## Local runtime (do not restart casually)
+## Local runtime
 
 | Service | Detail |
 |---------|--------|
-| Backend | Hermetic **bridge-enabled** process on **`:8787`** — **original project lives in in-memory PGlite**; **restarting loses browser-visible data**. |
-| Frontend | Static export **`http://localhost:8081`** — **latest Reader bundle** after pagination fix. |
-| Provider | **No live provider**; fake/hermetic only unless explicitly authorized. |
-| Viewport at handoff | **390×844** — Canvas inspector / thread inclusions. |
+| Backend | Hermetic process on **`:8787`** still holds Clockwork Orchard in **in-memory PGlite**. Restart wipes it. Process predates the content-sensitive hermetic helper. |
+| Frontend | Static export **`http://localhost:8081`**. |
+| Provider | **No live provider.** |
 
-Env reference: `GHOSTWRITER_ENABLE_LOCAL_MCP_BRIDGE=1` for CP6 bridge (not required for CP7 browser path); `GHOSTWRITER_E2E=1` hermetic candidates.
-
----
-
-## Exact next (resume here)
-
-1. **If check claim recheck needs new hermetic module:** restart backend **only after** noting data loss — or re-run only the check step if project state still acceptable.
-2. **Browser:** re-run applied continuity check on **Rot** → confirm **specific** authorship/root-warning claim and anchor; complete revision/check resolution if still open.
-3. **Browser Reader:** recheck **blank verso** on short chapters; open **Under the Engine** tab — header, spread, and prose isolation.
-4. **Browser:** wide + narrow AC10 pass (Map scope return, thread, Draft/Canvas/Reader agreement); capture screenshots under `evidence/` if saved.
-5. Update plan, this file, resume notes, and WHERE-I-LEFT-OFF; **do not** mark epic done, commit, push, PR, or Playwright until Thomas verifies complete outcome.
+**Exact next:** Thomas reviews the walkthrough / PR. After explicit complete-outcome verification, run focused Playwright only. Do not archive the epic until that gate.
